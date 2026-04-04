@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment
+.env
+.env.local
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated outputs (PII)
+applications/*/
+!applications/INDEX.md
+
+# Third-party brand assets (copyright)
+Logos/
+
+# Generated PDFs (PII)
+*.pdf
+
+# Archives
+*.zip
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Old spec drafts (not part of product)
+SPEC-v1-resume-mcp.md
+SPEC-v2-resume-mcp.md
+SELF-PROMPT-SPEC-v2.md
+ADVERSARIAL-REVIEW-v2.md
+ADVERSARIAL-REVIEW-v3.md
+spec-v2-section*.md
+v4-development-self-prompt.md
+linkright-blueprint.jsx
+*.textClipping
+
+# Legacy resume files (not part of engine)
+Satvik*.pdf
+Satvik*.html
+resume-attentive*.html
+
+# Miscellaneous
+Miscellaneous/
