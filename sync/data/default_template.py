@@ -130,7 +130,7 @@ DEFAULT_TEMPLATE_CONFIG = {
         "identity_horizon": 1.06,
         "header_block": 21.34,
         "section_title": 7.68,
-        "section_spacing": 4.0,
+        "section_spacing": 3.5,
         "entry_header": 4.44,
         "entry_subhead": 5.24,
         "entry_spacing": 2.5,

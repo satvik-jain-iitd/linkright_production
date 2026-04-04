@@ -23,7 +23,7 @@ def parse_bold_segments(text_html: str) -> list[tuple[str, bool]]:
         All HTML tags are stripped; only visible text is included.
     """
     segments = []
-    pattern = re.compile(r'<(b|strong)(?:\s[^>]*)?>(.?)</\1>', re.DOTALL | re.IGNORECASE)
+    pattern = re.compile(r'<(b|strong)(?:\s[^>]*)?>(.+?)</\1>', re.DOTALL | re.IGNORECASE)
 
     last_end = 0
     for match in pattern.finditer(text_html):

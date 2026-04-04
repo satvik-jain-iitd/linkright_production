@@ -371,6 +371,7 @@ For each section and entry, write bullets using the **XYZ format** in the order 
 **Gate 2: Width Validation** (run in Phase 5 but plan for it here)
 - Every bullet must PASS `sync_measure_width` (**95-100% fill** — strict range)
 - Write bullets targeting ~97-100 weighted character-units
+- **Character budget hint:** Bullet visible text target: 88-96 characters (excluding HTML tags). Edge-to-edge line target: 92-100 characters. Before calling sync_measure_width, count visible characters. If count exceeds 100, trim proactively before measuring.
 
 **Gate 3: Font & Readability**
 - Bullets use `--font-size-body: 9.5pt` — no inline overrides below 9pt

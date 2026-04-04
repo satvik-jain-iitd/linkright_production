@@ -424,7 +424,11 @@ def _replace_header_content(html: str, header: HeaderData) -> str:
     contact_html = []
     for contact in header.contacts:
         label, value, link_type = _extract_contact_value(contact)
-        link = _create_contact_link(value, link_type)
+        # Bug fix: avoid double-wrapping if value already contains an <a> tag
+        if re.search(r'<a\s', value, re.IGNORECASE):
+            link = value
+        else:
+            link = _create_contact_link(value, link_type)
         if label:
             contact_html.append(f'<span><strong>{label}</strong>: {link}</span>')
         else:
@@ -526,9 +530,11 @@ def _replace_section_content(html: str, sections: list[SectionContent]) -> str:
         if section_end == -1:
             continue
 
-        # Replace: comment + whitespace + entire section div → comment + new section HTML
+        # Replace: comment + whitespace + entire section div → comment + new wrapped section HTML
         # Keep the comment for readability, replace everything from section start to section end
-        result = result[:section_start] + section.section_html + result[section_end:]
+        # Bug fix: always wrap in <div class="section"> so callers only provide inner content
+        wrapped = f'<div class="section">{section.section_html}</div>'
+        result = result[:section_start] + wrapped + result[section_end:]
 
     return result
 
