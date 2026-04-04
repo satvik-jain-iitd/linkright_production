@@ -6,6 +6,8 @@
 
 **v2.1 Changes:** Added Brand Guideline Confirmation (Phase 2.3), Professional Summary section (Phase 4.0), Page Height Budget (Phase 3.0), Pyramid Principle grouping (Phase 3.5.1), metric color highlighting (`.li-content b`), file naming convention (`{folder-name}.html`), increased `--ul-group-gap` to 3mm. Rules 27-31 added.
 
+**v3.0 Changes:** Added Anti-AI Writing Audit (Phase 4.6), Application Form Assistance (Phase 12), character budget hints in Phase 4.2. Rules 32-33 added. Fixed 6 bugs (bold regex, link nesting, section wrappers, spacing defaults, CSS standardization, character budgets).
+
 ---
 
 ## INPUTS REQUIRED FROM USER
@@ -417,6 +419,38 @@ When presenting bullets to the user, include: "Self-review completed (N passes).
 
 ---
 
+## PHASE 4.6: AI WRITING AUDIT
+
+Scan every bullet, summary line, and edge-to-edge line for AI-detectable patterns per Rule 32.
+
+### 4.6.1 — Vocabulary Scan
+Check all text for banned words and phrases from Rule 32. For each violation:
+1. Flag the specific word/phrase and its location
+2. Replace with a direct, human-sounding alternative
+3. Re-verify the replacement doesn't change the meaning or break width
+
+Common replacements:
+- "crucial" → "core" or just remove
+- "pivotal" → "key" or rephrase without it
+- "leveraged" → "used" or name the specific tool
+- "spearheaded" → "led" or "ran"
+- "comprehensive" → cut it, be specific instead
+- "innovative" → describe what was actually new, don't label it
+- "fostered" → "built" or "grew"
+- "showcasing" → remove, just state the fact
+
+### 4.6.2 — Structural Pattern Scan
+- Count adjective chains — flag any with 3+ adjectives in a row
+- Check for "Not just X, but also Y" — rewrite as two simple statements
+- Check bullet openings — if 3+ bullets start with -ing verbs, vary them
+- Count em dashes — max 1 per resume
+- Check for elegant variation (forced synonym cycling) — it's fine to repeat a term if it's the right one
+
+### 4.6.3 — Read-Aloud Test
+Read every bullet as if you're telling a colleague what you did over coffee. If it sounds like a press release or LinkedIn post, rewrite it to sound like a person talking.
+
+---
+
 ## PHASE 5: WIDTH OPTIMIZATION LOOP
 
 For EVERY line of content (bullets, headers, section titles, name, role):
@@ -575,6 +609,42 @@ Instruct user: Open `resume.html` in Chrome → Print → Save as PDF (A4, no ma
 
 ---
 
+## PHASE 12: APPLICATION FORM ASSISTANCE (Optional)
+
+When the user shares application form questions after the resume is finalized:
+
+### 12.1 — Parse the Question
+Identify what type each question is:
+- Compensation expectations
+- Notice period / availability
+- Work authorization / visa status
+- "Why this company?" / motivation
+- "Tell us about yourself" / personal story
+- "Additional information" / cover-letter-style narrative
+- Technical screening questions
+
+### 12.2 — Draft Answer
+For each question, draft an answer following these rules:
+- Source ALL facts from the career profile (Rule 1) — no fabrication
+- Match the company's tone (formal for banks/consulting, casual for startups/consumer tech)
+- Anti-AI writing rules apply (Rule 32) — no banned words, no corporate platitudes
+- Write in first person, conversational tone
+- Keep answers concise: 3-5 sentences for short fields, 2-3 paragraphs max for long fields
+- Include specific numbers, project names, and client names (not vague claims)
+- Show personality — mention real motivations, not what "sounds good"
+- Vary sentence length — some short (5 words), some longer
+
+### 12.3 — Special Handling by Question Type
+- **Compensation:** User provides the number. Format it properly for the field. Don't negotiate or advise.
+- **"Why this company?":** Research the company briefly, but write from the user's genuine perspective. Reference specific things about the company that connect to the user's actual experience.
+- **Personal stories:** User provides the real story. We help structure it — setup, conflict, resolution, takeaway. Keep it honest, not polished.
+- **"Additional information":** This is the user's chance to address gaps, add context, or make a personal pitch. Write it like a letter to a friend who works there — warm, specific, direct.
+
+### 12.4 — User Reviews Before Submission
+Present drafted answers and ask for feedback. User edits or approves. Never submit anything on the user's behalf.
+
+---
+
 ## HARD RULES
 
 1. **Career profile is READ-ONLY.** Never edit `/Users/satvikjain/Documents/Claude/linkright/satvik_jain_career_profile.md`.
@@ -608,3 +678,5 @@ Instruct user: Open `resume.html` in Chrome → Print → Save as PDF (A4, no ma
 29. **Metrics pop in brand color.** Bold text within bullets (`<b>` inside `.li-content`) renders in `--brand-primary-color` via CSS rule `.li-content b { color: var(--brand-primary-color); }`. Only wrap quantified metrics and key outcomes in `<b>` tags — never phrases or descriptions. The brand_primary MUST pass WCAG AA contrast on the page background.
 30. **Professional summary is mandatory.** Every resume includes a 2-3 line Professional Summary section between the header and Professional Experience. Lines use edge-to-edge justified format. Content mirrors JD language and reads as a recruiter-focused sales pitch. Summary is distilled from the Phase 1.5 narrative draft.
 31. **Page budget before bullets.** In Phase 3, calculate the vertical page budget accounting for all fixed sections (header, summary, skills, education, interests) BEFORE deciding bullet counts. If adding Professional Summary causes overflow, reduce bullet counts (drop lowest-BRS) rather than removing the summary. Summary is mandatory (Rule 30); bullet counts are flexible (Rule 21).
+32. **No AI-detectable writing.** Every line must pass the "human test" — would a hiring manager reading this think a human PM wrote it? Banned words: crucial, pivotal, delve, foster, cultivate, encompass, garner, underscore, bolster, meticulous, intricate, vibrant, groundbreaking, renowned, profound, furthermore, moreover, notably. Banned phrases: "a testament to", "serves as", "stands as", "plays a key role", "it is worth noting", "setting the stage", "in the heart of". No triple-adjective chains. No "Not just X, but also Y" constructions. No starting every bullet with a gerund (-ing). Max 1 em dash per resume. Write like a Slack message to your skip-level manager — direct, specific, no fluff. Let numbers speak without over-explaining their significance. Use industry jargon from the JD, not generic business-speak.
+33. **Application answers are human.** When writing job application form answers (Phase 12), use first person, conversational tone. No corporate platitudes. Source all claims from career profile. Show the candidate's real personality and motivations. Rule 32 (anti-AI writing) applies to all application text — short sentences, specific examples, personality showing through.
