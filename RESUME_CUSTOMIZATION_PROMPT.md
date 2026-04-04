@@ -267,12 +267,14 @@ Based on career level and strategy, plan the resume sections:
 - **Professional Summary:** 2-3 edge-to-edge lines. Sales-oriented copy mirroring JD language. Distilled from Phase 1.5 narrative. Placed between header and Professional Experience.
 - **Sections:** Determine which sections to include (Experience, Projects, Skills, Education, etc.), how many entries per section, and bullets per entry
 
-### 3.2 — Run `sync_validate_page_fit` (Tool 4)
+### 3.2 — Run `sync_validate_page_fit` (Tool 4) — HARD GATE
 Pass the planned section structure. Confirm everything fits on one A4 page.
-- If `recommendation: "overflow"` → reduce bullets or entries
-- If `recommendation: "tight"` → proceed with caution
+- If `recommendation: "overflow"` → reduce bullets or entries. **DO NOT proceed to Phase 4 until page fit passes.**
+- If `recommendation: "tight"` → proceed with caution, note margin
 - If `recommendation: "fits"` → proceed
 - If `recommendation: "underfill"` → add more content (bullets, edge-to-edge lines, or new sections like voluntary work / scholastic achievements) and re-run page fit. Follow the `underfill_suggestion` in the output.
+
+**GATE:** Phase 4 is blocked until page_fit returns "fits" or "tight". No bullets are written for a layout that will overflow.
 
 ---
 
@@ -468,7 +470,10 @@ Get word replacement suggestions in the needed direction (`expand` or `trim`).
 Apply the best synonym suggestion(s) while maintaining meaning and XYZ format. Re-run `sync_measure_width` to confirm PASS.
 
 ### 5.4 — Iterate (Max 3 Attempts per Line)
-If still not PASS after 3 attempts, accept the closest result and note it as a warning.
+If still not PASS after 3 attempts:
+- If fill is 93-95% or 100-102%: accept the closest result and note it as a warning
+- If fill is <93% or >102%: **flag to user** — "This bullet couldn't hit 95-100% after 3 attempts. Current fill: X%. Should I keep trying, rewrite from scratch, or accept as-is?"
+Do not silently accept significantly off-target lines.
 
 ---
 
@@ -522,6 +527,15 @@ If not already run in this session, parse `templates/cv-a4-standard.html` to ini
 
 **NOTE:** Tool 1 MUST be called before any Tool 2 (measure_width) calls. If the session is fresh, run this at the start of Phase 5, not here. Listed here for completeness.
 
+### 8.1.5 — Pre-Assembly Checklist (GATE)
+Before calling assemble_html, verify:
+- [ ] All sections have proper HTML structure (no orphaned tags)
+- [ ] Contact values are plain text (not pre-wrapped in `<a>` tags — assemble_html handles linking)
+- [ ] All CSS color variables are set and contrast-validated
+- [ ] Page fit was validated (Phase 3.2 gate passed)
+- [ ] All bullets passed width optimization (Phase 5) or have documented warnings
+If any check fails, fix before proceeding.
+
 ### 8.2 — Run `sync_assemble_html` (Tool 7)
 Pass:
 - `template_html` — The cv-a4-standard.html template
@@ -530,7 +544,13 @@ Pass:
 - `sections` — All section HTML in order
 - `logo` (optional) — Company logo as base64 data URI
 
-### 8.3 — Save Outputs
+### 8.3 — Post-Assembly Validation (GATE)
+After assembly, verify the final HTML:
+- Run `sync_validate_page_fit` one final time on the assembled section counts
+- If overflow detected, identify the cause (spacing accumulation, extra section) and fix before saving
+- Spot-check: open the HTML in preview and confirm no visual overflow
+
+### 8.4 — Save Outputs
 - Save `final_html` to `{folder-name}.html` (using `output_filename` from config.json)
 - Save `config.json` with final state
 
