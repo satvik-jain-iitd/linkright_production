@@ -62,3 +62,9 @@ resume-attentive*.html
 
 # Miscellaneous
 Miscellaneous/
+
+# Website build outputs
+website/.next/
+website/node_modules/
+website/.env
+website/.env.local
