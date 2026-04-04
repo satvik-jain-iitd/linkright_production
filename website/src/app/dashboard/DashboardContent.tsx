@@ -12,8 +12,8 @@ export function DashboardContent({ user }: { user: User }) {
 
   const handleSignOut = async () => {
     const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/");
+    await supabase.auth.signOut({ scope: "global" });
+    router.push("/auth");
   };
 
   return (
