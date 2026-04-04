@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 
 const plans = [
   {
@@ -93,7 +94,13 @@ function CrossIcon() {
   );
 }
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isLoggedIn = !!user;
+  const ctaHref = isLoggedIn ? "/dashboard" : "/auth";
+  const ctaLabel = isLoggedIn ? "\u2190 Dashboard" : "Get Started";
+
   return (
     <div className="min-h-screen">
       {/* Navbar */}
@@ -107,10 +114,10 @@ export default function PricingPage() {
               Features
             </Link>
             <Link
-              href="/auth"
+              href={ctaHref}
               className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
             >
-              Get Started
+              {ctaLabel}
             </Link>
           </div>
         </div>
@@ -163,14 +170,14 @@ export default function PricingPage() {
                 </div>
                 <p className="mt-1 text-sm text-muted">{plan.unit}</p>
                 <Link
-                  href="/auth"
+                  href={ctaHref}
                   className={`mt-8 block rounded-full py-3 text-center text-sm font-semibold transition-colors ${
                     plan.highlighted
                       ? "bg-accent text-white hover:bg-accent-hover"
                       : "border border-border bg-transparent text-foreground hover:bg-surface-hover"
                   }`}
                 >
-                  Get Started
+                  {isLoggedIn ? "Select Plan" : "Get Started"}
                 </Link>
               </div>
             ))}
@@ -244,10 +251,10 @@ export default function PricingPage() {
               Start free. Upgrade when you need more.
             </p>
             <Link
-              href="/auth"
+              href={ctaHref}
               className="mt-6 inline-block rounded-full bg-accent px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover hover:shadow-xl hover:shadow-accent/30"
             >
-              Start for Free
+              {isLoggedIn ? "Go to Dashboard" : "Start for Free"}
             </Link>
           </div>
         </div>

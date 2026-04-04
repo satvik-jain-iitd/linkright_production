@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 
-function Navbar() {
+function Navbar({ isLoggedIn }: { isLoggedIn: boolean }) {
+  const ctaHref = isLoggedIn ? "/dashboard" : "/auth";
+  const ctaLabel = isLoggedIn ? "Dashboard" : "Get Started";
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
@@ -15,17 +19,17 @@ function Navbar() {
             Pricing
           </Link>
           <Link
-            href="/auth"
+            href={ctaHref}
             className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
           >
-            Get Started
+            {ctaLabel}
           </Link>
         </div>
         <Link
-          href="/auth"
+          href={ctaHref}
           className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white sm:hidden"
         >
-          Get Started
+          {ctaLabel}
         </Link>
       </div>
     </nav>
@@ -420,10 +424,14 @@ function Footer() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isLoggedIn = !!user;
+
   return (
     <>
-      <Navbar />
+      <Navbar isLoggedIn={isLoggedIn} />
       <Hero />
       <Features />
       <HowItWorks />
