@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: linkright-sync-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore
+    plan: free
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: WORKER_SECRET
+        sync: false
+    healthCheckPath: /health
