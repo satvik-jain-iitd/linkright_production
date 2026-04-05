@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-const WORKER_URL = process.env.WORKER_URL!; // https://sync-resume-engine.onrender.com
+const WORKER_URL = process.env.WORKER_URL!;
 const WORKER_SECRET = process.env.WORKER_SECRET!;
 
 export async function POST(request: Request) {
@@ -13,11 +14,45 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // In-memory rate limit: 3 requests/minute per user
+  if (!rateLimit(`start:${user.id}`, 3)) {
+    return rateLimitResponse("job creation");
+  }
+
   const body = await request.json();
   const { jd_text, career_text, model_provider, model_id, api_key, template_id, qa_answers } = body;
 
   if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // Per-user throttle: max 1 concurrent job
+  const { count: activeCount } = await supabase
+    .from("resume_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .in("status", ["queued", "processing"]);
+
+  if (activeCount && activeCount >= 1) {
+    return Response.json(
+      { error: "You already have a resume being generated. Please wait for it to finish." },
+      { status: 429 }
+    );
+  }
+
+  // Per-user throttle: max 5 jobs per hour
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count: hourlyCount } = await supabase
+    .from("resume_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("created_at", oneHourAgo);
+
+  if (hourlyCount && hourlyCount >= 5) {
+    return Response.json(
+      { error: "Rate limit: max 5 resumes per hour. Please try again later." },
+      { status: 429 }
+    );
   }
 
   // Create job row in Supabase

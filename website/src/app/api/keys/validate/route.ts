@@ -1,4 +1,18 @@
+import { createClient } from "@/lib/supabase/server";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Rate limit: 10 validations per minute (by user or IP)
+  const key = user ? `validate:${user.id}` : `validate:anon`;
+  if (!rateLimit(key, 10)) {
+    return rateLimitResponse("key validation");
+  }
+
   const { provider, api_key } = await request.json();
 
   if (!provider || !api_key) {

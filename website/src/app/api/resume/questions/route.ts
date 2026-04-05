@@ -1,4 +1,21 @@
+import { createClient } from "@/lib/supabase/server";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 5 question generations per minute per user
+  if (!rateLimit(`questions:${user.id}`, 5)) {
+    return rateLimitResponse("question generation");
+  }
+
   const { jd_text, career_text, model_provider, model_id, api_key } =
     await request.json();
 

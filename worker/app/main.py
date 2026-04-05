@@ -6,6 +6,7 @@ and updates Supabase with progress and output.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -21,6 +22,9 @@ from .db import create_supabase, update_job
 from .pipeline.orchestrator import run_pipeline
 
 app = FastAPI(title="LinkRight Sync Worker", version="0.1.0")
+
+# Concurrency limiter — max 3 simultaneous pipelines
+_pipeline_semaphore = asyncio.Semaphore(3)
 
 
 # ── Request / Response Models ────────────────────────────────────────────
@@ -58,19 +62,32 @@ async def process_job(req: JobRequest):
     sb = create_supabase()
     started = time.time()
 
-    ctx = PipelineContext(
-        job_id=req.job_id,
-        user_id=req.user_id,
-        jd_text=req.jd_text,
-        career_text=req.career_text,
-        model_provider=req.model_provider,
-        model_id=req.model_id,
-        api_key=req.api_key,
-        template_id=req.template_id,
-        qa_answers=req.qa_answers or [],
-    )
+    # Wait for a pipeline slot (max 120s, then reject)
+    try:
+        await asyncio.wait_for(_pipeline_semaphore.acquire(), timeout=120.0)
+    except asyncio.TimeoutError:
+        logger.warning(f"Job {req.job_id}: rejected — worker at capacity")
+        update_job(
+            sb, req.job_id,
+            status="failed",
+            error_message="Worker busy — please try again in a few minutes",
+            duration_ms=int((time.time() - started) * 1000),
+        )
+        return
 
     try:
+        ctx = PipelineContext(
+            job_id=req.job_id,
+            user_id=req.user_id,
+            jd_text=req.jd_text,
+            career_text=req.career_text,
+            model_provider=req.model_provider,
+            model_id=req.model_id,
+            api_key=req.api_key,
+            template_id=req.template_id,
+            qa_answers=req.qa_answers or [],
+        )
+
         logger.info(f"Job {req.job_id}: starting pipeline ({req.model_provider}/{req.model_id})")
         update_job(sb, req.job_id, status="processing", current_phase="starting", phase_number=0)
         await run_pipeline(ctx, sb)
@@ -95,13 +112,20 @@ async def process_job(req: JobRequest):
             error_message=str(e)[:500],
             duration_ms=duration,
         )
+    finally:
+        _pipeline_semaphore.release()
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "linkright-sync-worker"}
+    return {
+        "status": "ok",
+        "service": "linkright-sync-worker",
+        "active_jobs": 3 - _pipeline_semaphore._value,
+        "max_concurrent": 3,
+    }
 
 
 @app.post("/jobs/start", response_model=JobResponse, status_code=202)

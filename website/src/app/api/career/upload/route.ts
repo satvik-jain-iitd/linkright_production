@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -8,6 +9,11 @@ export async function POST(request: Request) {
 
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 10 uploads per minute per user
+  if (!rateLimit(`upload:${user.id}`, 10)) {
+    return rateLimitResponse("career upload");
   }
 
   const { career_text } = await request.json();

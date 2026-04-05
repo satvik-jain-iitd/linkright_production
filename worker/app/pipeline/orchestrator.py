@@ -6,10 +6,14 @@ Each phase updates Supabase with progress for the frontend to display.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("worker")
 
 from supabase import Client
 
@@ -64,19 +68,43 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
 
 
+MAX_LLM_RETRIES = 3
+
 async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
-    """Call LLM and track tokens + timing."""
-    start = time.time()
-    resp = await llm.complete(system, user, temperature=temperature)
-    duration = int((time.time() - start) * 1000)
-    ctx._llm_log.append({
-        "phase": phase,
-        "input_tokens": resp.input_tokens,
-        "output_tokens": resp.output_tokens,
-        "duration_ms": duration,
-        "model": resp.model,
-    })
-    return resp
+    """Call LLM with retry on rate limit (429) and track tokens + timing."""
+    import httpx
+
+    for attempt in range(MAX_LLM_RETRIES + 1):
+        try:
+            start = time.time()
+            resp = await llm.complete(system, user, temperature=temperature)
+            duration = int((time.time() - start) * 1000)
+            ctx._llm_log.append({
+                "phase": phase,
+                "input_tokens": resp.input_tokens,
+                "output_tokens": resp.output_tokens,
+                "duration_ms": duration,
+                "model": resp.model,
+            })
+            return resp
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429 and attempt < MAX_LLM_RETRIES:
+                # Rate limited — exponential backoff
+                retry_after = e.response.headers.get("retry-after")
+                if retry_after:
+                    try:
+                        wait = min(float(retry_after), 60)
+                    except ValueError:
+                        wait = 2 ** attempt
+                else:
+                    wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning(
+                    f"Job {ctx.job_id} phase {phase}: rate limited (429), "
+                    f"retrying in {wait:.1f}s (attempt {attempt + 1}/{MAX_LLM_RETRIES})"
+                )
+                await asyncio.sleep(wait)
+                continue
+            raise
 
 
 def _parse_json(text: str) -> dict:
