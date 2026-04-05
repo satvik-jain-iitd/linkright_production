@@ -6,8 +6,11 @@ and updates Supabase with progress and output.
 
 from __future__ import annotations
 
-import asyncio
+import logging
 import time
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("worker")
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -66,10 +69,12 @@ async def process_job(req: JobRequest):
     )
 
     try:
-        await update_job(sb, req.job_id, status="processing", current_phase="starting", phase_number=0)
+        logger.info(f"Job {req.job_id}: starting pipeline ({req.model_provider}/{req.model_id})")
+        update_job(sb, req.job_id, status="processing", current_phase="starting", phase_number=0)
         await run_pipeline(ctx, sb)
         duration = int((time.time() - started) * 1000)
-        await update_job(
+        logger.info(f"Job {req.job_id}: completed in {duration}ms")
+        update_job(
             sb, req.job_id,
             status="completed",
             current_phase="done",
@@ -81,7 +86,8 @@ async def process_job(req: JobRequest):
         )
     except Exception as e:
         duration = int((time.time() - started) * 1000)
-        await update_job(
+        logger.error(f"Job {req.job_id}: FAILED after {duration}ms — {e}")
+        update_job(
             sb, req.job_id,
             status="failed",
             error_message=str(e)[:500],

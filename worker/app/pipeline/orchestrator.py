@@ -61,7 +61,7 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
 async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct: int):
     ctx.current_phase = phase
     ctx.phase_message = msg
-    await update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
+    update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
 
 
 async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
@@ -108,14 +108,19 @@ async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
         await resume_parse_template(ParseTemplateInput(template_html=template_html), ctx=ctx)
     )
 
+    if ctx.template_config is None:
+        raise RuntimeError("Template parsing failed: template_config not set")
+
     # Call LLM to analyze JD + career profile
     user_msg = prompts.PHASE_1_USER.format(jd_text=ctx.jd_text, career_text=ctx.career_text)
     resp = await _llm_call(ctx, llm, prompts.PHASE_1_SYSTEM, user_msg, phase=1)
-    data = _parse_json(resp.text)
-
-    ctx.career_level = data["career_level"]
-    ctx.jd_keywords = data["jd_keywords"]
-    ctx._parsed = data  # stash for later phases
+    try:
+        data = _parse_json(resp.text)
+        ctx.career_level = data["career_level"]
+        ctx.jd_keywords = data["jd_keywords"]
+    except (json.JSONDecodeError, KeyError) as e:
+        raise ValueError(f"Phase 1: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
+    ctx._parsed = data
 
     ctx._phase_timings["phase_1"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 1, "JD analysis complete", 12)
@@ -143,10 +148,12 @@ async def phase_2_strategy(ctx: PipelineContext, sb: Client, llm):
         company_name=parsed.get("company_name", ""),
     )
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=2)
-    data = _parse_json(resp.text)
-
-    ctx.strategy = data["strategy"]
-    ctx.theme_colors = data["theme_colors"]
+    try:
+        data = _parse_json(resp.text)
+        ctx.strategy = data["strategy"]
+        ctx.theme_colors = data["theme_colors"]
+    except (json.JSONDecodeError, KeyError) as e:
+        raise ValueError(f"Phase 2: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
     ctx._section_order = data.get("section_order", [])
     ctx._bullet_budget = data.get("bullet_budget", {})
 
@@ -261,9 +268,14 @@ async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
         career_level=ctx.career_level,
     )
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.4)
-    data = _parse_json(resp.text)
+    try:
+        data = _parse_json(resp.text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Phase 4: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
 
     ctx._raw_bullets = data.get("bullets", [])
+    if not ctx._raw_bullets:
+        raise ValueError(f"Phase 4: LLM returned no bullets. Response: {resp.text[:300]}")
 
     # Register all verbs
     verbs = [b["verb"] for b in ctx._raw_bullets if b.get("verb")]
@@ -443,7 +455,10 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
         template_css_reference="section, section-title, section-divider, entry, entry-header, entry-subhead, project-title, li-content, edge-to-edge-line",
     )
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=8, temperature=0.1)
-    data = _parse_json(resp.text)
+    try:
+        data = _parse_json(resp.text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Phase 8: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
 
     # Build tool inputs
     contact = parsed.get("contact_info", {})

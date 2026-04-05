@@ -16,6 +16,10 @@ def create_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
-async def update_job(sb: Client, job_id: str, **fields: Any) -> None:
-    """Update a resume_jobs row. Accepts any column as a keyword arg."""
+def update_job(sb: Client, job_id: str, **fields: Any) -> None:
+    """Update a resume_jobs row. Accepts any column as a keyword arg.
+
+    NOTE: This is synchronous — the supabase-py client is sync.
+    Callers should NOT await this function.
+    """
     sb.table("resume_jobs").update(fields).eq("id", job_id).execute()
