@@ -233,107 +233,26 @@ function HowItWorks() {
   );
 }
 
-const plans = [
-  {
-    name: "Starter",
-    price: "499",
-    unit: "5 resumes",
-    features: [
-      "5 tailored resumes",
-      "Brand color matching",
-      "Width optimization",
-      "PDF export",
-    ],
-    highlighted: false,
-  },
-  {
-    name: "Pro",
-    price: "999",
-    unit: "15 resumes",
-    features: [
-      "15 tailored resumes",
-      "Everything in Starter",
-      "Application Q&A",
-      "Priority generation",
-    ],
-    highlighted: true,
-  },
-  {
-    name: "Unlimited",
-    price: "1,999",
-    unit: "30 days",
-    features: [
-      "Unlimited resumes",
-      "Everything in Pro",
-      "Bulk generation",
-      "Early access to new features",
-    ],
-    highlighted: false,
-  },
-];
-
 function Pricing() {
   return (
     <section id="pricing" className="border-t border-border px-6 py-24">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-16 text-center">
+        <div className="text-center">
           <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
             Pricing
           </p>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Simple, transparent pricing
+            We&apos;re figuring out pricing
           </h2>
           <p className="mx-auto mt-4 max-w-md text-muted">
-            First resume free. No credit card required.
+            Your first resume is free. Help us decide what comes next.
           </p>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-3">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`relative rounded-2xl border p-8 transition-all ${
-                plan.highlighted
-                  ? "border-accent bg-accent/5 shadow-lg shadow-accent/10"
-                  : "border-border bg-surface hover:border-accent/30"
-              }`}
-            >
-              {plan.highlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
-                  Most Popular
-                </div>
-              )}
-              <h3 className="text-lg font-semibold">{plan.name}</h3>
-              <p className="mt-1 text-sm text-muted">{plan.unit}</p>
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-sm text-muted">Rs.</span>
-                <span className="text-4xl font-bold">{plan.price}</span>
-              </div>
-              <ul className="mt-6 space-y-3">
-                {plan.features.map((f) => (
-                  <li
-                    key={f}
-                    className="flex items-center gap-2 text-sm text-muted"
-                  >
-                    <svg className="h-4 w-4 shrink-0 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/auth"
-                className={`mt-8 block rounded-full py-3 text-center text-sm font-semibold transition-colors ${
-                  plan.highlighted
-                    ? "bg-accent text-white hover:bg-accent-hover"
-                    : "border border-border bg-transparent text-foreground hover:bg-surface-hover"
-                }`}
-              >
-                Get Started
-              </Link>
-            </div>
-          ))}
+          <Link
+            href="/pricing"
+            className="mt-8 inline-block rounded-full bg-accent px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover hover:shadow-xl hover:shadow-accent/30"
+          >
+            Share Your Thoughts
+          </Link>
         </div>
       </div>
     </section>

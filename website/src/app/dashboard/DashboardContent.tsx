@@ -54,15 +54,15 @@ export function DashboardContent({ user }: { user: User }) {
         <div className="mt-8 rounded-2xl border border-border bg-surface p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted">Credits remaining</p>
+              <p className="text-sm text-muted">Free resumes</p>
               <p className="mt-1 text-3xl font-bold">1</p>
-              <p className="mt-1 text-xs text-muted">First resume is free</p>
+              <p className="mt-1 text-xs text-muted">Help us decide pricing</p>
             </div>
             <Link
               href="/pricing"
               className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90"
             >
-              Buy credits
+              Share feedback
             </Link>
           </div>
         </div>

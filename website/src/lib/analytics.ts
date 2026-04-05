@@ -53,6 +53,16 @@ type SyncEvent =
   | {
       event: "nps_submitted";
       properties: { score: number; feedback?: string };
+    }
+  | {
+      event: "survey_submitted";
+      properties: {
+        would_pay: "yes" | "no" | "maybe";
+        price_range: string;
+        feature_count: number;
+        has_feedback: boolean;
+        is_authenticated: boolean;
+      };
     };
 
 export function track(eventData: SyncEvent) {
