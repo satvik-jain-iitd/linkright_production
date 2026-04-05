@@ -32,7 +32,7 @@ export default async function PricingPage() {
             </Link>
             <Link
               href={isLoggedIn ? "/dashboard" : "/auth"}
-              className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+              className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
               {isLoggedIn ? "\u2190 Dashboard" : "Get Started"}
             </Link>

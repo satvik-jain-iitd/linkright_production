@@ -1,14 +1,68 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #0A0A0A;
-  --color-foreground: #EDEDED;
-  --color-accent: #2896FB;
-  --color-accent-hover: #1a7de0;
-  --color-surface: #111111;
-  --color-surface-hover: #1A1A1A;
-  --color-border: #222222;
-  --color-muted: #888888;
+  /* Primary — Teal (trust, reliability, professionalism) */
+  --color-primary-50: #E6FAF8;
+  --color-primary-100: #B3F0EA;
+  --color-primary-200: #80E6DC;
+  --color-primary-300: #4DDCCE;
+  --color-primary-400: #26D4C2;
+  --color-primary-500: #0FBEAF;
+  --color-primary-600: #0C9A8E;
+  --color-primary-700: #09766D;
+  --color-primary-800: #06534D;
+  --color-primary-900: #03302D;
+
+  /* Secondary — Coral/Orange (action, energy, CTAs) */
+  --color-secondary-50: #FFF1ED;
+  --color-secondary-100: #FFD9CF;
+  --color-secondary-200: #FFB3A0;
+  --color-secondary-300: #FF8D71;
+  --color-secondary-400: #FF6F4A;
+  --color-secondary-500: #FF5733;
+  --color-secondary-600: #E04425;
+  --color-secondary-700: #B3341C;
+  --color-secondary-800: #862714;
+  --color-secondary-900: #591A0D;
+
+  /* Tertiary — Purple (creativity, premium) */
+  --color-tertiary-50: #F3EEFA;
+  --color-tertiary-100: #DCC8F0;
+  --color-tertiary-200: #C5A6E6;
+  --color-tertiary-300: #AE84DC;
+  --color-tertiary-400: #9B6BD5;
+  --color-tertiary-500: #8B5CF6;
+  --color-tertiary-600: #7044D4;
+  --color-tertiary-700: #5A36AB;
+  --color-tertiary-800: #432882;
+  --color-tertiary-900: #2D1B59;
+
+  /* Quaternary — Gold (warmth, success, premium accents) */
+  --color-gold-50: #FEFBF0;
+  --color-gold-100: #FDF3D3;
+  --color-gold-200: #FAE5A0;
+  --color-gold-300: #F7D76D;
+  --color-gold-400: #F4C93A;
+  --color-gold-500: #E5B80B;
+  --color-gold-600: #C49B09;
+  --color-gold-700: #9A7A07;
+  --color-gold-800: #705905;
+  --color-gold-900: #463803;
+
+  /* Semantic tokens (light theme) */
+  --color-background: #FAFBFC;
+  --color-foreground: #1A202C;
+  --color-accent: #0FBEAF;
+  --color-accent-hover: #0C9A8E;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F7FAFC;
+  --color-border: #E2E8F0;
+  --color-muted: #718096;
+
+  /* CTA uses coral for high-contrast action buttons */
+  --color-cta: #FF5733;
+  --color-cta-hover: #E04425;
+
   --font-sans: var(--font-inter);
 }
 

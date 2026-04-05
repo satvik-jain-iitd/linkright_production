@@ -91,7 +91,7 @@ export function WtpSurveyForm({ isLoggedIn, userId, alreadySubmitted }: WtpSurve
           </p>
           <Link
             href={isLoggedIn ? "/dashboard" : "/"}
-            className="mt-6 inline-block rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+            className="mt-6 inline-block rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
           >
             {isLoggedIn ? "Back to dashboard" : "Back to home"}
           </Link>
@@ -112,7 +112,7 @@ export function WtpSurveyForm({ isLoggedIn, userId, alreadySubmitted }: WtpSurve
           </p>
           <Link
             href={isLoggedIn ? "/dashboard" : "/"}
-            className="mt-6 inline-block rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+            className="mt-6 inline-block rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
           >
             {isLoggedIn ? "Back to dashboard" : "Back to home"}
           </Link>
@@ -227,7 +227,7 @@ export function WtpSurveyForm({ isLoggedIn, userId, alreadySubmitted }: WtpSurve
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || submitting}
-          className="w-full rounded-full bg-accent py-3.5 text-sm font-semibold text-white transition-all hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full rounded-full bg-cta py-3.5 text-sm font-semibold text-white transition-all hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? (
             <span className="flex items-center justify-center gap-2">

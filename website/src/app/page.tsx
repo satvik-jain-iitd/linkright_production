@@ -20,14 +20,14 @@ function Navbar({ isLoggedIn }: { isLoggedIn: boolean }) {
           </Link>
           <Link
             href={ctaHref}
-            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+            className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             {ctaLabel}
           </Link>
         </div>
         <Link
           href={ctaHref}
-          className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white sm:hidden"
+          className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white sm:hidden"
         >
           {ctaLabel}
         </Link>
@@ -40,7 +40,7 @@ function Hero() {
   return (
     <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 pt-16">
       {/* Background gradient */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(40,150,251,0.08)_0%,_transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(15,190,175,0.08)_0%,_transparent_70%)]" />
 
       <div className="relative z-10 mx-auto max-w-3xl text-center">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-muted">
@@ -61,13 +61,13 @@ function Hero() {
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link
             href="/auth"
-            className="rounded-full bg-accent px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover hover:shadow-xl hover:shadow-accent/30"
+            className="rounded-full bg-cta px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl hover:shadow-cta/30"
           >
             Start for Free
           </Link>
           <a
             href="#features"
-            className="rounded-full border border-border px-8 py-3.5 text-base font-medium text-muted transition-colors hover:border-foreground/20 hover:text-foreground"
+            className="rounded-full border border-border px-8 py-3.5 text-base font-medium text-foreground/70 transition-colors hover:border-accent hover:text-accent"
           >
             See how it works
           </a>
@@ -164,7 +164,7 @@ function Features() {
           {features.map((f) => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-border bg-surface p-6 transition-all hover:border-accent/30 hover:bg-surface-hover"
+              className="group rounded-2xl border border-border bg-surface p-6 shadow-sm transition-all hover:border-accent/30 hover:shadow-md"
             >
               <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
                 {f.icon}
@@ -249,7 +249,7 @@ function Pricing() {
           </p>
           <Link
             href="/pricing"
-            className="mt-8 inline-block rounded-full bg-accent px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent-hover hover:shadow-xl hover:shadow-accent/30"
+            className="mt-8 inline-block rounded-full bg-cta px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl hover:shadow-cta/30"
           >
             Share Your Thoughts
           </Link>
@@ -280,7 +280,7 @@ function SocialProof() {
         </div>
 
         <div className="mb-12 grid gap-6 sm:grid-cols-2">
-          <div className="rounded-2xl border border-border bg-surface p-8">
+          <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
             <p className="text-lg font-medium leading-relaxed">
               Built by a Product Manager at American Express
             </p>
@@ -288,7 +288,7 @@ function SocialProof() {
               Enterprise product experience. Understands what hiring managers look for.
             </p>
           </div>
-          <div className="rounded-2xl border border-border bg-surface p-8">
+          <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
             <p className="text-lg font-medium leading-relaxed">
               Tested across 36+ enterprise implementations at Sprinklr
             </p>
@@ -302,7 +302,7 @@ function SocialProof() {
           {stats.map((s) => (
             <div
               key={s.label}
-              className="rounded-2xl border border-border bg-surface p-6 text-center"
+              className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm"
             >
               <div className="text-3xl font-bold text-accent">{s.value}</div>
               <div className="mt-1 text-sm text-muted">{s.label}</div>

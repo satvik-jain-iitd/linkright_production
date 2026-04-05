@@ -32,7 +32,7 @@ function AuthContent() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6">
       {/* Background gradient */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(40,150,251,0.06)_0%,_transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(15,190,175,0.06)_0%,_transparent_70%)]" />
 
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
@@ -53,7 +53,7 @@ function AuthContent() {
         )}
 
         {/* Auth card */}
-        <div className="rounded-2xl border border-border bg-surface p-8">
+        <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           <h1 className="text-center text-xl font-semibold">
             Get started
           </h1>

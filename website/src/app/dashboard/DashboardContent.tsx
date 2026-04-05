@@ -51,7 +51,7 @@ export function DashboardContent({ user }: { user: User }) {
         <p className="mt-2 text-muted">Your AI-powered resume dashboard.</p>
 
         {/* Credits */}
-        <div className="mt-8 rounded-2xl border border-border bg-surface p-6">
+        <div className="mt-8 rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted">Free resumes</p>
@@ -60,7 +60,7 @@ export function DashboardContent({ user }: { user: User }) {
             </div>
             <Link
               href="/pricing"
-              className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+              className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
               Share feedback
             </Link>
@@ -78,7 +78,7 @@ export function DashboardContent({ user }: { user: User }) {
             </p>
             <button
               onClick={() => setShowComingSoon(true)}
-              className="mt-6 rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+              className="mt-6 rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
               Create resume
             </button>
@@ -88,11 +88,11 @@ export function DashboardContent({ user }: { user: User }) {
 
       {showComingSoon && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
           onClick={() => setShowComingSoon(false)}
         >
           <div
-            className="mx-4 w-full max-w-md rounded-2xl border border-border bg-surface p-8"
+            className="mx-4 w-full max-w-md rounded-2xl border border-border bg-surface p-8 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center">
@@ -104,7 +104,7 @@ export function DashboardContent({ user }: { user: User }) {
               </p>
               <button
                 onClick={() => setShowComingSoon(false)}
-                className="mt-6 rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+                className="mt-6 rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
               >
                 Got it
               </button>
