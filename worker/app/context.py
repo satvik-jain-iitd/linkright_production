@@ -42,6 +42,8 @@ class PipelineContext:
     _section_specs: list = field(default_factory=list)    # list[SectionSpec]
     _raw_bullets: list[dict] = field(default_factory=list)
     _optimized_bullets: list[dict] = field(default_factory=list)
+    _llm_log: list[dict] = field(default_factory=list)       # per-call token/timing log
+    _phase_timings: dict[str, int] = field(default_factory=dict)  # phase_N → ms
 
     # Pipeline progress
     current_phase: int = 0

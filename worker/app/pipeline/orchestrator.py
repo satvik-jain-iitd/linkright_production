@@ -7,7 +7,7 @@ Each phase updates Supabase with progress for the frontend to display.
 from __future__ import annotations
 
 import json
-import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,7 @@ from supabase import Client
 from ..context import PipelineContext
 from ..db import update_job
 from ..llm import get_provider
+from ..llm.base import LLMResponse
 from ..data.strategies import STRATEGIES
 from ..tools.parse_template import resume_parse_template, ParseTemplateInput
 from ..tools.measure_width import resume_measure_width, MeasureWidthInput
@@ -47,6 +48,13 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     await phase_7_validation(ctx, sb)
     await phase_8_assembly(ctx, sb, llm)
 
+    # Aggregate token/timing stats
+    ctx.stats["llm_calls"] = len(ctx._llm_log)
+    ctx.stats["total_input_tokens"] = sum(c["input_tokens"] for c in ctx._llm_log)
+    ctx.stats["total_output_tokens"] = sum(c["output_tokens"] for c in ctx._llm_log)
+    ctx.stats["total_llm_time_ms"] = sum(c["duration_ms"] for c in ctx._llm_log)
+    ctx.stats["phase_timings"] = ctx._phase_timings
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -54,6 +62,21 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     ctx.current_phase = phase
     ctx.phase_message = msg
     await update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
+
+
+async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
+    """Call LLM and track tokens + timing."""
+    start = time.time()
+    resp = await llm.complete(system, user, temperature=temperature)
+    duration = int((time.time() - start) * 1000)
+    ctx._llm_log.append({
+        "phase": phase,
+        "input_tokens": resp.input_tokens,
+        "output_tokens": resp.output_tokens,
+        "duration_ms": duration,
+        "model": resp.model,
+    })
+    return resp
 
 
 def _parse_json(text: str) -> dict:
@@ -76,6 +99,7 @@ def _load_template(template_id: str) -> str:
 # ── Phase 1: JD + Career Profile Parsing ─────────────────────────────────
 
 async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
+    t0 = time.time()
     await _progress(ctx, sb, 1, "Analyzing job description", 5)
 
     # Load and parse template first
@@ -86,19 +110,21 @@ async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
 
     # Call LLM to analyze JD + career profile
     user_msg = prompts.PHASE_1_USER.format(jd_text=ctx.jd_text, career_text=ctx.career_text)
-    resp = await llm.complete(prompts.PHASE_1_SYSTEM, user_msg)
+    resp = await _llm_call(ctx, llm, prompts.PHASE_1_SYSTEM, user_msg, phase=1)
     data = _parse_json(resp.text)
 
     ctx.career_level = data["career_level"]
     ctx.jd_keywords = data["jd_keywords"]
     ctx._parsed = data  # stash for later phases
 
+    ctx._phase_timings["phase_1"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 1, "JD analysis complete", 12)
 
 
 # ── Phase 2: Strategy + Brand Colors ─────────────────────────────────────
 
 async def phase_2_strategy(ctx: PipelineContext, sb: Client, llm):
+    t0 = time.time()
     await _progress(ctx, sb, 2, "Picking strategy & colors", 15)
 
     parsed = ctx._parsed
@@ -116,7 +142,7 @@ async def phase_2_strategy(ctx: PipelineContext, sb: Client, llm):
         career_level=ctx.career_level,
         company_name=parsed.get("company_name", ""),
     )
-    resp = await llm.complete(system_msg, user_msg)
+    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=2)
     data = _parse_json(resp.text)
 
     ctx.strategy = data["strategy"]
@@ -124,6 +150,7 @@ async def phase_2_strategy(ctx: PipelineContext, sb: Client, llm):
     ctx._section_order = data.get("section_order", [])
     ctx._bullet_budget = data.get("bullet_budget", {})
 
+    ctx._phase_timings["phase_2"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 2, f"Strategy: {ctx.strategy}", 25)
 
 
@@ -217,9 +244,9 @@ async def phase_3_page_fit(ctx: PipelineContext, sb: Client):
 # ── Phase 4: Bullet Writing + Verb Tracking ───────────────────────────────
 
 async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
+    t0 = time.time()
     await _progress(ctx, sb, 4, "Writing bullets", 40)
 
-    parsed = ctx._parsed
     strategy_info = STRATEGIES.get(ctx.strategy, STRATEGIES["HYBRID_BALANCED"])
 
     user_msg = prompts.PHASE_4_USER.format(
@@ -233,7 +260,7 @@ async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
         strategy_description=strategy_info["description"],
         career_level=ctx.career_level,
     )
-    resp = await llm.complete(system_msg, user_msg, temperature=0.4)
+    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.4)
     data = _parse_json(resp.text)
 
     ctx._raw_bullets = data.get("bullets", [])
@@ -245,12 +272,14 @@ async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
         ctx=ctx,
     )
 
+    ctx._phase_timings["phase_4"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 4, f"Wrote {len(ctx._raw_bullets)} bullets", 50)
 
 
 # ── Phase 5: Width Optimization Loop ─────────────────────────────────────
 
 async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
+    t0 = time.time()
     await _progress(ctx, sb, 5, "Optimizing bullet widths", 55)
 
     optimized = []
@@ -304,7 +333,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
                 fill_percentage=fill_pct,
                 status=status,
             )
-            resp = await llm.complete(system_msg, user_msg, temperature=0.2)
+            resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=5, temperature=0.2)
             try:
                 revised = _parse_json(resp.text)
                 text_html = revised["revised_text_html"]
@@ -320,6 +349,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             await _progress(ctx, sb, 5, f"Optimized {i + 1}/{total} bullets", pct)
 
     ctx._optimized_bullets = optimized
+    ctx._phase_timings["phase_5"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 5, "Width optimization complete", 70)
 
 
@@ -397,6 +427,7 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
 # ── Phase 8: HTML Assembly ────────────────────────────────────────────────
 
 async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
+    t0 = time.time()
     await _progress(ctx, sb, 8, "Assembling final HTML", 88)
 
     parsed = ctx._parsed
@@ -411,7 +442,7 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
     system_msg = prompts.PHASE_8_SYSTEM.format(
         template_css_reference="section, section-title, section-divider, entry, entry-header, entry-subhead, project-title, li-content, edge-to-edge-line",
     )
-    resp = await llm.complete(system_msg, user_msg, temperature=0.1)
+    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=8, temperature=0.1)
     data = _parse_json(resp.text)
 
     # Build tool inputs
@@ -456,4 +487,5 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
     ctx.output_html = assemble_result.get("final_html", "")
     ctx.stats["assembly_warnings"] = assemble_result.get("warnings", [])
 
+    ctx._phase_timings["phase_8"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 8, "Resume complete", 98)

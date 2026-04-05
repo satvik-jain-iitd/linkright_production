@@ -91,7 +91,7 @@ export function StepReview({ data }: { data: WizardData }) {
 
       {/* Stats bar */}
       {stats && (
-        <div className="mt-6 flex gap-4">
+        <div className="mt-6 flex flex-wrap gap-3">
           {stats.avg_brs !== undefined && (
             <div className="rounded-xl border border-border bg-surface px-4 py-3">
               <div className="text-xs text-muted">Avg BRS</div>
@@ -113,6 +113,28 @@ export function StepReview({ data }: { data: WizardData }) {
               <div className="text-xs text-muted">One Page</div>
               <div className="text-lg font-bold text-accent">
                 {(stats.final_fits_page as boolean) ? "Yes" : "No"}
+              </div>
+            </div>
+          )}
+          {stats.llm_calls !== undefined && (
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="text-xs text-muted">LLM Calls</div>
+              <div className="text-lg font-bold">{stats.llm_calls as number}</div>
+            </div>
+          )}
+          {stats.total_input_tokens !== undefined && (
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="text-xs text-muted">Tokens (in/out)</div>
+              <div className="text-lg font-bold">
+                {Math.round((stats.total_input_tokens as number) / 1000)}K / {Math.round((stats.total_output_tokens as number) / 1000)}K
+              </div>
+            </div>
+          )}
+          {stats.total_llm_time_ms !== undefined && (
+            <div className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="text-xs text-muted">LLM Time</div>
+              <div className="text-lg font-bold">
+                {Math.round((stats.total_llm_time_ms as number) / 1000)}s
               </div>
             </div>
           )}
