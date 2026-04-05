@@ -39,7 +39,33 @@ export function StepGenerate({ data, update, next }: Props) {
     started.current = true;
 
     const run = async () => {
-      // 1. Start the job
+      // If we already have a job_id (e.g. page refresh), resume watching it
+      if (data.job_id) {
+        try {
+          const resp = await fetch(`/api/resume/${data.job_id}`);
+          if (resp.ok) {
+            const job = await resp.json();
+            if (job.status === "completed") {
+              setPhase("done");
+              setProgress(100);
+              setTimeout(next, 500);
+              return;
+            } else if (job.status === "failed") {
+              setError(job.error_message || "Generation failed");
+              return;
+            }
+            // Still processing — resume subscription
+            setPhase(job.current_phase || "processing");
+            setProgress(job.progress_pct || 0);
+            subscribeToJob(data.job_id);
+            return;
+          }
+        } catch {
+          // Fallback: start a new job
+        }
+      }
+
+      // Start a new job
       try {
         const resp = await fetch("/api/resume/start", {
           method: "POST",

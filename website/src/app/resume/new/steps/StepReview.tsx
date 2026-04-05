@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { WizardData } from "../WizardShell";
 
-export function StepReview({ data }: { data: WizardData }) {
+export function StepReview({ data, onNewResume }: { data: WizardData; onNewResume: () => void }) {
   const [html, setHtml] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +74,12 @@ export function StepReview({ data }: { data: WizardData }) {
           </p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={onNewResume}
+            className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
+          >
+            + New Resume
+          </button>
           <button
             onClick={downloadHtml}
             className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { StepJD } from "./steps/StepJD";
 import { StepCareer } from "./steps/StepCareer";
@@ -18,23 +18,64 @@ export interface WizardData {
 }
 
 const STEPS = ["Paste JD", "Career Profile", "Configure", "Generate", "Review"];
+const STORAGE_KEY = "linkright_wizard";
+
+function loadSaved(): { step: number; data: WizardData } | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 export function WizardShell({ userId }: { userId: string }) {
-  const [step, setStep] = useState(0);
-  const [data, setData] = useState<WizardData>({
-    jd_text: "",
-    career_text: "",
-    model_provider: "openrouter",
-    model_id: "meta-llama/llama-3.1-8b-instruct:free",
-    api_key: "",
-    job_id: null,
-  });
+  const saved = typeof window !== "undefined" ? loadSaved() : null;
 
-  const update = (fields: Partial<WizardData>) =>
-    setData((prev) => ({ ...prev, ...fields }));
+  // If there's a saved job_id and it was on step 3 (Generate), resume there
+  const initialStep = saved?.data?.job_id
+    ? saved.step >= 3 ? saved.step : 3
+    : saved?.step ?? 0;
+
+  const [step, setStep] = useState(initialStep);
+  const [data, setData] = useState<WizardData>(
+    saved?.data ?? {
+      jd_text: "",
+      career_text: "",
+      model_provider: "openrouter",
+      model_id: "meta-llama/llama-3.1-8b-instruct:free",
+      api_key: "",
+      job_id: null,
+    }
+  );
+
+  // Auto-save to sessionStorage on every change
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ step, data }));
+  }, [step, data]);
+
+  const update = useCallback(
+    (fields: Partial<WizardData>) =>
+      setData((prev) => ({ ...prev, ...fields })),
+    []
+  );
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
+
+  const reset = () => {
+    sessionStorage.removeItem(STORAGE_KEY);
+    setStep(0);
+    setData({
+      jd_text: "",
+      career_text: "",
+      model_provider: "openrouter",
+      model_id: "meta-llama/llama-3.1-8b-instruct:free",
+      api_key: "",
+      job_id: null,
+    });
+  };
 
   return (
     <>
@@ -100,7 +141,7 @@ export function WizardShell({ userId }: { userId: string }) {
         {step === 3 && (
           <StepGenerate data={data} update={update} next={next} />
         )}
-        {step === 4 && <StepReview data={data} />}
+        {step === 4 && <StepReview data={data} onNewResume={reset} />}
       </div>
     </>
   );
