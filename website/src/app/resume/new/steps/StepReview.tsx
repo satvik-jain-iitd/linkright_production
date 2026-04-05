@@ -9,7 +9,10 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!data.job_id) return;
+    if (!data.job_id) {
+      setLoading(false);
+      return;
+    }
 
     const fetchJob = async () => {
       try {

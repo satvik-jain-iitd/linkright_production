@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { StepJD } from "./steps/StepJD";
 import { StepCareer } from "./steps/StepCareer";
@@ -74,7 +74,13 @@ export function WizardShell({ userId }: { userId: string }) {
     []
   );
 
-  const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  const stepping = useRef(false);
+  const next = () => {
+    if (stepping.current) return; // prevent rapid double-click
+    stepping.current = true;
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setTimeout(() => { stepping.current = false; }, 300);
+  };
   const back = () => setStep((s) => Math.max(s - 1, 0));
 
   const reset = () => {

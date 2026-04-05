@@ -16,6 +16,37 @@ export function StepEnrich({ data, update, next, back }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const [autoFilled, setAutoFilled] = useState<Set<number>>(new Set());
+  const [searching, setSearching] = useState<Set<number>>(new Set());
+
+  const autoFillFromProfile = async (qs: string[]) => {
+    setSearching(new Set(qs.map((_, i) => i)));
+    try {
+      const results = await Promise.allSettled(
+        qs.map((q) =>
+          fetch("/api/career/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q }),
+          }).then((r) => r.json())
+        )
+      );
+      const newAnswers: Record<number, string> = {};
+      const filled = new Set<number>();
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value.chunks?.length > 0) {
+          newAnswers[i] = r.value.chunks.join("\n\n");
+          filled.add(i);
+        }
+      });
+      setAnswers((prev) => ({ ...prev, ...newAnswers }));
+      setAutoFilled(filled);
+    } catch {
+      // Auto-fill is best-effort
+    } finally {
+      setSearching(new Set());
+    }
+  };
 
   useEffect(() => {
     if (started.current) return;
@@ -34,6 +65,9 @@ export function StepEnrich({ data, update, next, back }: Props) {
       return;
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
     const generate = async () => {
       try {
         const resp = await fetch("/api/resume/questions", {
@@ -46,16 +80,24 @@ export function StepEnrich({ data, update, next, back }: Props) {
             model_id: data.model_id,
             api_key: data.api_key,
           }),
+          signal: controller.signal,
         });
         const result = await resp.json();
         if (!resp.ok) {
           setError(result.error || "Failed to generate questions");
           return;
         }
-        setQuestions(result.questions || []);
-      } catch {
-        setError("Network error — please try again");
+        const qs = result.questions || [];
+        setQuestions(qs);
+        if (qs.length > 0) autoFillFromProfile(qs);
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") {
+          setError("Question generation timed out — you can skip this step");
+        } else {
+          setError("Network error — please try again");
+        }
       } finally {
+        clearTimeout(timeout);
         setLoading(false);
       }
     };
@@ -137,17 +179,32 @@ export function StepEnrich({ data, update, next, back }: Props) {
       <div className="mt-8 space-y-6">
         {questions.map((q, i) => (
           <div key={i} className="rounded-xl border border-border bg-surface p-5">
-            <label className="text-sm font-medium text-foreground">
-              {i + 1}. {q}
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-foreground">
+                {i + 1}. {q}
+              </label>
+              {searching.has(i) && (
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+              )}
+              {autoFilled.has(i) && !searching.has(i) && (
+                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                  Auto-filled from profile
+                </span>
+              )}
+            </div>
             <textarea
               value={answers[i] || ""}
-              onChange={(e) =>
-                setAnswers((prev) => ({ ...prev, [i]: e.target.value }))
-              }
-              placeholder="Your answer (optional)..."
+              onChange={(e) => {
+                setAnswers((prev) => ({ ...prev, [i]: e.target.value }));
+                setAutoFilled((prev) => {
+                  const next = new Set(prev);
+                  next.delete(i);
+                  return next;
+                });
+              }}
+              placeholder={searching.has(i) ? "Searching your profile..." : "Your answer (optional)..."}
               className="mt-3 w-full resize-none rounded-lg border border-border bg-background p-3 text-sm text-foreground placeholder-muted transition-colors focus:border-accent/50 focus:outline-none"
-              rows={2}
+              rows={3}
             />
           </div>
         ))}

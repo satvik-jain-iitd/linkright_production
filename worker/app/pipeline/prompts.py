@@ -1,38 +1,66 @@
-"""LLM prompts for the 8-phase web pipeline.
+"""LLM prompts for the resume pipeline.
 
 Each prompt instructs the user's LLM (via BYOK key) to produce
 structured JSON that the orchestrator can parse and feed to tools.
+
+Optimized: Phase 1+2 merged (1 call), Phase 4 batched (1 call), Phase 5 batched (1 call) = 3 total.
 """
 
-# ── Phase 1: Parse JD + Career Profile ───────────────────────────────────
+# ── Phase 1+2: Parse JD + Career Profile + Strategy + Brand Colors ──────
 
-PHASE_1_SYSTEM = """You are a resume optimization AI. Analyze the job description and candidate career profile.
-Return ONLY valid JSON with this exact structure — no markdown, no commentary:
+PHASE_1_2_SYSTEM = """You are a resume optimization AI. Analyze the job description and candidate career profile, then pick an optimization strategy and brand colors.
+Return ONLY valid JSON — no markdown, no commentary:
 
-{
+{{
   "career_level": "fresher|entry|mid|senior|executive",
-  "jd_keywords": [
-    {"keyword": "string", "category": "skill|tool|action|domain"}
-  ],
+  "jd_keywords": ["keyword1", "keyword2"],
   "target_role": "exact role title from JD",
   "company_name": "company name from JD",
-  "contact_info": {
-    "name": "candidate full name",
-    "phone": "phone number or empty string",
-    "email": "email or empty string",
-    "linkedin": "linkedin URL or empty string",
-    "portfolio": "portfolio URL or empty string"
-  },
-  "career_summary": "2-sentence summary of candidate's career trajectory"
-}
+  "contact_info": {{
+    "name": "", "phone": "", "email": "", "linkedin": "", "portfolio": ""
+  }},
+  "career_summary": "2-sentence career trajectory summary",
+  "companies": [
+    {{"name": "", "location": "city, country", "date_range": "Mon YYYY – Mon YYYY", "title": "", "team": ""}}
+  ],
+  "education": [
+    {{"institution": "", "degree": "", "year": "", "gpa": "", "highlights": ""}}
+  ],
+  "skills": {{"Category": ["skill1", "skill2"]}},
+  "awards": [{{"title": "", "detail": ""}}],
+  "interests": "comma-separated list",
+  "voluntary": [{{"title": "", "detail": ""}}],
+  "strategy": "METRIC_BOMBARDMENT|SKILL_MATCHING|LEADERSHIP_NARRATIVE|TRANSFORMATION_STORY|BALANCED",
+  "strategy_reason": "1-sentence justification",
+  "theme_colors": {{
+    "brand_primary": "#hex", "brand_secondary": "#hex",
+    "brand_tertiary": "#hex", "brand_quaternary": "#hex"
+  }},
+  "section_order": ["Professional Experience", "Awards & Recognitions", "Education", "Skills", "Interests"],
+  "bullet_budget": {{
+    "company_1_total": 6, "company_2_total": 4, "awards": 2, "voluntary": 2
+  }}
+}}
 
-Rules:
-- Extract 15-30 JD keywords covering skills, tools, action verbs, and domain terms
+Parsing rules:
+- Extract 15-30 JD keywords as plain strings (skills, tools, action verbs, domain terms)
 - Detect career level from years of experience and seniority signals
-- Pull contact info from the career profile text
-- target_role should match the JD exactly, not the candidate's current title"""
+- target_role: match JD exactly, not candidate's current title
+- companies: ALL roles in REVERSE chronological order (most recent first)
+- education: ALL entries — institution, degree, year, GPA, highlights
+- skills: 2-4 categories relevant to JD
+- If a section has no data, use empty array/string — do NOT invent data
 
-PHASE_1_USER = """## Job Description
+Strategy definitions:
+{strategies_json}
+
+Strategy rules:
+- Pick strategy that best matches JD emphasis
+- Use actual brand colors of the target company
+- section_order: follow career level defaults, adjust for JD emphasis
+- bullet_budget: total ~12-15 bullets for one A4 page"""
+
+PHASE_1_2_USER = """## Job Description
 {jd_text}
 
 ## Candidate Career Profile
@@ -40,202 +68,101 @@ PHASE_1_USER = """## Job Description
 {qa_context}"""
 
 
-# ── Phase 2: Strategy + Brand Colors ─────────────────────────────────────
+# ── Phase 3: Page Fit Planning (tool-only — no LLM prompt) ──────────────
 
-PHASE_2_SYSTEM = """You are a resume strategy AI. Based on the JD analysis, pick the best optimization strategy and brand colors.
+
+# ── Phase 4: Batched Bullet Writing (all companies in one call) ─────────
+
+PHASE_4_BATCHED_SYSTEM = """You are a resume bullet writer. Write achievement-oriented bullets for ALL companies in a single response.
 Return ONLY valid JSON:
 
 {{
-  "strategy": "METRIC_BOMBARDMENT|SKILL_MATCHING|NARRATIVE_WEAVING|LEADERSHIP_LADDER|HYBRID_BALANCED",
-  "strategy_reason": "1-sentence justification",
-  "theme_colors": {{
-    "brand_primary": "#hex (company's primary brand color)",
-    "brand_secondary": "#hex (company's secondary color)",
-    "brand_tertiary": "#hex (complementary — auto-pick if unknown)",
-    "brand_quaternary": "#hex (complementary — auto-pick if unknown)"
-  }},
-  "section_order": ["Professional Experience", "Awards & Recognitions", "Education", "Skills", "Interests"],
-  "bullet_budget": {{
-    "company_1_total": 6,
-    "company_2_total": 4,
-    "awards": 2,
-    "voluntary": 2
-  }}
-}}
-
-Strategy definitions:
-{strategies_json}
-
-Career level: {career_level}
-Company: {company_name}
-
-Rules:
-- Pick the strategy that best matches the JD emphasis
-- Use the actual brand colors of the target company (research common tech company colors)
-- section_order should follow career level defaults but adjust for JD emphasis
-- bullet_budget must total to a number that fits one A4 page (~12-15 bullets max)"""
-
-PHASE_2_USER = """## JD Keywords
-{jd_keywords_json}
-
-## Career Summary
-{career_summary}
-
-## Target Role
-{target_role} at {company_name}"""
-
-
-# ── Phase 3: Page Fit Planning ────────────────────────────────────────────
-
-PHASE_3_SYSTEM = """You are a resume layout planner. Plan section structure so everything fits on one A4 page.
-Return ONLY valid JSON:
-
-{{
-  "sections": [
-    {{
-      "section_type": "header|experience|education|skills|awards|voluntary|interests|achievements",
-      "entry_count": 1,
-      "project_count_per_entry": [3, 2],
-      "bullets_per_project": 2,
-      "edge_to_edge_lines": 0,
-      "has_entry_subhead": true
-    }}
-  ]
-}}
-
-Rules:
-- Header is always first (section_type: "header", entry_count: 1)
-- Experience section: entry_count = number of companies, project_count_per_entry = list of project group counts per company
-- bullets_per_project: how many bullets in each project group (2-4 typical)
-- Total bullet count across all companies should match the bullet budget
-- Interests section always last (push to bottom)
-- Skills use edge_to_edge_lines (1-2 lines), not bullets
-
-Career level: {career_level}
-Bullet budget: {bullet_budget_json}
-Section order: {section_order_json}"""
-
-PHASE_3_USER = """Plan the page layout for a {career_level} candidate applying to {target_role} at {company_name}.
-
-Must fit sections: {section_order_json}
-Bullet budget: {bullet_budget_json}"""
-
-
-# ── Phase 4: Bullet Writing ──────────────────────────────────────────────
-
-PHASE_4_SYSTEM = """You are a resume bullet writer. Write achievement-oriented bullets optimized for the target role.
-Return ONLY valid JSON:
-
-{{
-  "bullets": [
+  "companies": [
     {{
       "company_index": 0,
-      "project_group": 0,
-      "project_title": "string (initiative/project name)",
-      "text_html": "<b>Bold metric lead</b> rest of bullet with justify-worthy length",
-      "verb": "Led|Drove|Spearheaded|etc"
+      "bullets": [
+        {{
+          "project_group": 0,
+          "project_title": "initiative name",
+          "text_html": "<b>Bold metric lead</b> rest of bullet",
+          "verb": "Led"
+        }}
+      ]
     }}
   ]
 }}
 
-CRITICAL RULES:
-1. Every bullet MUST start with <b>Bold text</b> — the metric or key achievement first
-2. Each bullet must be exactly one line long (~95-110 characters rendered) — not too short, not overflowing
-3. ZERO verb repetition across ALL bullets — every bullet starts with a unique action verb
-4. Use JD keywords naturally — don't stuff them
-5. Quantify everything: percentages, dollar amounts, team sizes, timelines
-6. Project titles should be real initiative names, not generic like "Top Project 1"
-7. text_html contains inline HTML (<b> tags only, no other HTML)
+RULES:
+1. Every bullet starts with <b>Bold text</b> — metric or key achievement first
+2. Each bullet ~95-110 characters rendered — one justified line
+3. ZERO verb repetition across ALL companies — every bullet uses a unique action verb
+4. Bold JD keywords naturally with <b> tags — not just the lead metric
+5. Quantify everything: %, $, team sizes, timelines
+6. Project titles: real initiative names from career context, not generic
+7. XYZ format: "<b>Accomplished X</b> as measured by Y by doing Z"
+8. All verbs MUST be past tense (Led, Drove, Built — NOT Lead, Drive, Build)
+9. Group bullets into project_groups (0, 1, 2...) — each group = 2-3 related bullets under one project_title
+10. Write EXACTLY the requested number of bullets per company
 
 Strategy: {strategy}
 Strategy emphasis: {strategy_description}
 Career level: {career_level}"""
 
-PHASE_4_USER = """## JD Keywords
-{jd_keywords_json}
+PHASE_4_BATCHED_USER = """## JD Keywords
+{jd_keywords_compact}
 
-## Candidate Career Profile
-{career_text}
-{qa_context}
-## Bullet Budget
-{bullet_budget_json}
+{companies_section}
 
-## Section Layout
-{sections_json}
-
-Write bullets for each company/project group. Follow the budget exactly."""
+Write bullets for ALL companies above. ZERO verb repetition across all bullets."""
 
 
-# ── Phase 5: Width Optimization ───────────────────────────────────────────
+# ── Phase 5 Batched: Width Optimization (single call) ───────────────��────
 
-PHASE_5_SYSTEM = """You are a text width optimizer. A bullet was measured and needs adjustment.
-Return ONLY valid JSON:
+PHASE_5_BATCHED_SYSTEM = """You are a resume bullet width optimizer for the Roboto font.
 
+Each bullet on a resume must fill exactly 90-100% of its line width
+(measured in "character-units" where one digit = 1.000 CU).
+The budget for a bullet line is {raw_budget} CU. Target: {range_min_90}-{raw_budget} CU.
+
+I have pre-measured every word's width using exact Roboto font metrics.
+Your job: revise ONLY the bullets marked NEEDS_FIX to hit {range_min_90}-{raw_budget} CU.
+
+RULES:
+1. NEVER change numbers, metrics, or percentages (e.g., "20+", "$9M", "85%", "1,500+")
+2. NEVER change words inside <b>...</b> tags — these are JD keywords
+3. NEVER change the first word (the leading action verb)
+4. Preserve the XYZ structure: [Accomplished X] [by doing Y] [resulting in Z]
+5. Preserve all <b> and </b> tags exactly as they appear
+6. One space = 0.516 CU (always, regardless of bold/regular)
+7. Keep the same professional tone and factual accuracy
+8. You may: swap synonyms, add/remove qualifiers, rephrase clauses
+9. After your changes, compute the estimated new total by adding/subtracting
+   the known word widths. Show your arithmetic.
+
+Return ONLY valid JSON in this format:
 {{
-  "revised_text_html": "<b>Bold lead</b> adjusted text matching target width",
-  "change_description": "what you changed and why"
-}}
-
-Rules:
-- Keep the same meaning, same bold structure, same verb
-- If TOO_SHORT: add detail, lengthen phrases, use longer synonyms
-- If OVERFLOW: trim filler words, use shorter synonyms, abbreviate
-- Target: 95-100% fill (edge-to-edge justified look)
-- Current fill: {fill_percentage}%
-- Status: {status}"""
-
-PHASE_5_USER = """Original bullet: {text_html}
-Measured width: {weighted_total} / budget: {budget}
-Fill: {fill_percentage}% (target: 95-100%)
-Status: {status}
-
-Synonym suggestions from tool: {suggestions_json}
-
-Revise the bullet to hit 95-100% fill."""
-
-
-# ── Phase 6: BRS Scoring (no LLM needed — tool only) ─────────────────────
-# Phase 6 is pure tool call — no prompt needed.
-
-
-# ── Phase 7: Validation (no LLM needed — tool only) ──────────────────────
-# Phase 7 is pure tool calls — no prompt needed.
-
-
-# ── Phase 8: Assembly ─────────────────────────────────────────────────────
-
-PHASE_8_SYSTEM = """You are a resume HTML assembler. Build section HTML from the final bullets and layout.
-Return ONLY valid JSON:
-
-{{
-  "sections": [
+  "revised_bullets": [
     {{
-      "section_order": 1,
-      "section_html": "<div class=\\"section\\">...full HTML for this section...</div>"
+      "bullet_index": <int>,
+      "revised_text_html": "<string with <b> tags preserved>",
+      "changes": "<what you changed and the width arithmetic>",
+      "estimated_new_total": <float>
     }}
-  ],
-  "css_overrides": ""
-}}
+  ]
+}}"""
 
-CRITICAL RULES:
-1. Use EXACTLY the CSS classes from the template: section, section-title, section-divider, entry, entry-header, entry-subhead, project-title, li-content, edge-to-edge-line
-2. Bullets go inside <li><span class="li-content">...</span></li> within <ul> blocks
-3. Project titles use <div class="project-title">
-4. Each <ul> block = one project group
-5. Skills/education/interests use <span class="edge-to-edge-line">
-6. Do NOT invent new CSS classes
-7. Header section is NOT included — it's injected separately by the assembly tool
+PHASE_5_BATCHED_USER = """REFERENCE — Common word widths (Roboto Regular):
+──────────────��─────────────────────────────────
+{reference_table}
 
-Template reference (CSS classes only):
-{template_css_reference}"""
+Bold words are ~5% wider. Space = 0.516 CU always.
+Budget: {raw_budget} CU | Target range: {range_min_90} – {raw_budget} CU
 
-PHASE_8_USER = """## Final Bullets (width-optimized)
-{final_bullets_json}
+══════���════════════════════════════════════════════
 
-## Section Layout
-{sections_json}
+{bullets_section}"""
 
-## Contact Info
-{contact_json}
 
-Build the section HTML for each section in order. Header is handled separately."""
+# ── Phase 6: BRS Scoring (tool-only — no LLM) ──────────────────────────
+# ── Phase 7: Validation (tool-only — no LLM) ───────────────────────────
+# ── Phase 8: Assembly (programmatic HTML — no LLM) ─────────────────────

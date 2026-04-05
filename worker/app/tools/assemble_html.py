@@ -241,11 +241,11 @@ def _set_metric_colors(theme_colors: ThemeColors) -> tuple[ThemeColors, list[str
     """
     warnings = []
 
-    # Set defaults
+    # Set defaults — WCAG AA 4.5:1 contrast-safe on white
     if not theme_colors.metric_positive:
-        theme_colors.metric_positive = "#34A853"  # Google Green
+        theme_colors.metric_positive = "#1B7D2C"  # Dark green (5.1:1 on white)
     if not theme_colors.metric_negative:
-        theme_colors.metric_negative = "#EA4335"  # Google Red
+        theme_colors.metric_negative = "#C62828"  # Dark red (5.3:1 on white)
 
     # Validate contrast
     try:
@@ -398,21 +398,21 @@ def _replace_header_content(html: str, header: HeaderData) -> str:
     """
     result = html
 
-    # Replace name (template uses <div class="name">, not <span>)
+    # Replace name — use .*? with DOTALL to match any content (plain text or <!-- PLACEHOLDER -->)
     result = re.sub(
-        r'<div[^>]*class="name"[^>]*>[^<]*</div>',
+        r'<div[^>]*class="name"[^>]*>.*?</div>',
         f'<div class="name">{header.name}</div>',
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE | re.DOTALL
     )
 
-    # Replace role (template uses <div class="role">, not <span>)
+    # Replace role — same DOTALL approach for HTML comment placeholders
     role_style = f' style="font-size: {header.role_font_size};"' if header.role_font_size else ''
     result = re.sub(
-        r'<div[^>]*class="role"[^>]*>[^<]*</div>',
+        r'<div[^>]*class="role"[^>]*>.*?</div>',
         f'<div class="role"{role_style}>{header.role}</div>',
         result,
-        flags=re.IGNORECASE
+        flags=re.IGNORECASE | re.DOTALL
     )
 
     # Replace or create contact info
@@ -501,9 +501,11 @@ def _replace_section_content(html: str, sections: list[SectionContent]) -> str:
     sorted_sections = sorted(sections, key=lambda s: s.section_order, reverse=True)
 
     for section in sorted_sections:
-        # Find the comment marker
-        comment_pattern = r'<!--\s*' + str(section.section_order) + r'\.\s*[^-]*-->'
-        comment_match = re.search(comment_pattern, result, flags=re.IGNORECASE)
+        # Find the comment marker — use .*? with DOTALL to handle:
+        #   - Multi-line comments (e.g. Professional Experience with layout rules)
+        #   - Dashes in comment text (e.g. "2-4 bullets")
+        comment_pattern = r'<!--\s*' + str(section.section_order) + r'\.\s*.*?-->'
+        comment_match = re.search(comment_pattern, result, flags=re.IGNORECASE | re.DOTALL)
 
         if not comment_match:
             continue
@@ -551,9 +553,9 @@ def _remove_unmatched_sections(html: str, matched_orders: set) -> tuple:
     result = html
     removed = 0
 
-    # Find all comment markers with section numbers
-    comment_pattern = r'<!--\s*(\d+)\.\s*[^-]*-->'
-    all_comments = list(re.finditer(comment_pattern, result, flags=re.IGNORECASE))
+    # Find all comment markers with section numbers — DOTALL for multi-line comments
+    comment_pattern = r'<!--\s*(\d+)\.\s*.*?-->'
+    all_comments = list(re.finditer(comment_pattern, result, flags=re.IGNORECASE | re.DOTALL))
 
     # Process in reverse order to avoid position shifts
     for comment_match in reversed(all_comments):

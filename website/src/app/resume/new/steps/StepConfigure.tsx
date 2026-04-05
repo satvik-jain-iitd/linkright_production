@@ -9,8 +9,8 @@ const PROVIDERS = [
     name: "OpenRouter",
     description: "200+ models, free tier available",
     models: [
-      { id: "meta-llama/llama-3.1-8b-instruct:free", name: "Llama 3.1 8B (Free)" },
-      { id: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B" },
+      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (Free)" },
+      { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
       { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash" },
       { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
     ],
@@ -20,8 +20,8 @@ const PROVIDERS = [
     name: "Groq",
     description: "Ultra-fast inference",
     models: [
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B" },
       { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant" },
-      { id: "llama-3.1-70b-versatile", name: "Llama 3.1 70B" },
       { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B" },
     ],
   },

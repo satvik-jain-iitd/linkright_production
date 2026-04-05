@@ -27,7 +27,9 @@ from ..tools.measure_width import resume_measure_width, MeasureWidthInput
 from ..tools.validate_contrast import resume_validate_contrast, ContrastInput
 from ..tools.validate_page_fit import resume_validate_page_fit, PageFitInput, SectionSpec
 from ..tools.suggest_synonyms import resume_suggest_synonyms, SynonymInput
+from ..tools.measure_width import compute_word_widths
 from ..tools.track_verbs import resume_track_verbs, TrackVerbsInput
+from ..data.reference_widths import format_reference_table
 from ..tools.assemble_html import (
     resume_assemble_html, AssembleInput, ThemeColors, HeaderData, SectionContent,
 )
@@ -36,15 +38,13 @@ from . import prompts
 
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
-MAX_WIDTH_RETRIES = 3
 
 
 async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     """Execute all 8 phases sequentially."""
     llm = get_provider(ctx.model_provider, ctx.api_key, ctx.model_id)
 
-    await phase_1_parse(ctx, sb, llm)
-    await phase_2_strategy(ctx, sb, llm)
+    await phase_1_parse_and_strategy(ctx, sb, llm)
     await phase_3_page_fit(ctx, sb)
     await phase_4_bullets(ctx, sb, llm)
     await phase_5_width_opt(ctx, sb, llm)
@@ -68,11 +68,12 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
 
 
-MAX_LLM_RETRIES = 3
+MAX_LLM_RETRIES = 5
 
 async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
     """Call LLM with retry on rate limit (429) and track tokens + timing."""
     import httpx
+    import random
 
     for attempt in range(MAX_LLM_RETRIES + 1):
         try:
@@ -89,15 +90,18 @@ async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: in
             return resp
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 and attempt < MAX_LLM_RETRIES:
-                # Rate limited — exponential backoff
+                # Rate limited — exponential backoff with jitter
                 retry_after = e.response.headers.get("retry-after")
                 if retry_after:
                     try:
                         wait = min(float(retry_after), 60)
                     except ValueError:
-                        wait = 2 ** attempt
+                        wait = min(2 ** (attempt + 1), 30)
                 else:
-                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    # 2s, 4s, 8s, 16s, 30s base — with ±25% jitter
+                    base = min(2 ** (attempt + 1), 30)
+                    jitter = base * 0.25 * (2 * random.random() - 1)
+                    wait = base + jitter
                 logger.warning(
                     f"Job {ctx.job_id} phase {phase}: rate limited (429), "
                     f"retrying in {wait:.1f}s (attempt {attempt + 1}/{MAX_LLM_RETRIES})"
@@ -108,20 +112,49 @@ async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: in
 
 
 def _parse_json(text: str) -> dict:
-    """Extract JSON from LLM response, handling markdown code fences."""
+    """Extract JSON from LLM response, handling markdown fences and trailing commas."""
+    import re
     text = text.strip()
     if text.startswith("```"):
-        # Remove ```json ... ``` wrapper
         lines = text.split("\n")
         start = 1 if lines[0].startswith("```") else 0
         end = -1 if lines[-1].strip() == "```" else len(lines)
         text = "\n".join(lines[start:end])
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Fix trailing commas (common with smaller models): ,} → } and ,] → ]
+        fixed = re.sub(r',\s*([}\]])', r'\1', text)
+        return json.loads(fixed)
 
 
 def _load_template(template_id: str) -> str:
     path = TEMPLATES_DIR / f"{template_id}.html"
     return path.read_text()
+
+
+def _extract_company_keys(budget: dict) -> list[str]:
+    """Extract company bullet keys from budget dict.
+
+    Handles LLM format variations:
+      - "company_1_total", "company_2_total" (canonical)
+      - "American Express_total", "Flipkart_total" (real names + _total)
+      - "American Express", "Flipkart" (just company names, no suffix)
+    """
+    NON_COMPANY = {"awards", "voluntary", "awards_total", "voluntary_total"}
+    # Try canonical format first
+    keys = sorted([k for k in budget if k.startswith("company_") and k.endswith("_total")])
+    if keys:
+        return keys
+    # Fallback: any key ending in _total that isn't awards/voluntary
+    keys = sorted([k for k in budget if k.endswith("_total") and k not in NON_COMPANY])
+    if keys:
+        return keys
+    # Fallback: any key that isn't a known non-company key (LLM used raw company names)
+    keys = sorted([k for k in budget if k not in NON_COMPANY and not isinstance(budget[k], str)])
+    if keys:
+        return keys
+    return ["company_1_total"]
 
 
 def _format_qa_context(ctx: PipelineContext) -> str:
@@ -144,8 +177,10 @@ def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]
     if not keywords:
         return []
     try:
-        # Build tsquery: 'keyword1' | 'keyword2' | ...
-        terms = [k.replace("'", "").strip() for k in keywords[:10] if k.strip()]
+        import re
+        # Sanitize keywords: strip tsquery special chars, filter empties
+        sanitized = [re.sub(r"[|&!:()'\"]", "", k).strip() for k in keywords[:10]]
+        terms = [t for t in sanitized if t]
         if not terms:
             return []
         query = " | ".join(f"'{t}'" for t in terms)
@@ -153,86 +188,63 @@ def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]
             sb.table("career_chunks")
             .select("chunk_text")
             .eq("user_id", ctx.user_id)
-            .text_search("search_vector", query)
             .limit(10)
+            .text_search("search_vector", query)
             .execute()
         )
         if result.data:
             return [c["chunk_text"] for c in result.data]
-    except Exception:
-        pass  # Table may not exist yet — fall back to full text
+    except Exception as e:
+        logger.warning(f"Job {ctx.job_id}: chunk fetch failed — {e}")
     return []
 
 
-# ── Phase 1: JD + Career Profile Parsing ─────────────────────────────────
+# ── Phase 1+2: Parse JD + Strategy + Brand Colors (merged — 1 LLM call) ──
 
-async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
+async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
+    """Merged Phase 1+2: parse JD/career + pick strategy + brand colors in ONE LLM call."""
     t0 = time.time()
     await _progress(ctx, sb, 1, "Analyzing job description", 5)
 
     # Load and parse template first
     template_html = _load_template(ctx.template_id)
-    parse_result = json.loads(
+    json.loads(
         await resume_parse_template(ParseTemplateInput(template_html=template_html), ctx=ctx)
     )
 
     if ctx.template_config is None:
         raise RuntimeError("Template parsing failed: template_config not set")
 
-    # Call LLM to analyze JD + career profile
     qa_context = _format_qa_context(ctx)
-    user_msg = prompts.PHASE_1_USER.format(
-        jd_text=ctx.jd_text, career_text=ctx.career_text, qa_context=qa_context
-    )
-    resp = await _llm_call(ctx, llm, prompts.PHASE_1_SYSTEM, user_msg, phase=1)
-    try:
-        data = _parse_json(resp.text)
-        ctx.career_level = data["career_level"]
-        ctx.jd_keywords = data["jd_keywords"]
-    except (json.JSONDecodeError, KeyError) as e:
-        raise ValueError(f"Phase 1: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
-    ctx._parsed = data
-
-    # Fetch relevant career chunks via full-text search (if available)
-    keyword_strs = [kw["keyword"] if isinstance(kw, dict) else kw for kw in ctx.jd_keywords]
-    ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
-
-    ctx._phase_timings["phase_1"] = int((time.time() - t0) * 1000)
-    await _progress(ctx, sb, 1, "JD analysis complete", 12)
-
-
-# ── Phase 2: Strategy + Brand Colors ─────────────────────────────────────
-
-async def phase_2_strategy(ctx: PipelineContext, sb: Client, llm):
-    t0 = time.time()
-    await _progress(ctx, sb, 2, "Picking strategy & colors", 15)
-
-    parsed = ctx._parsed
-    user_msg = prompts.PHASE_2_USER.format(
-        jd_keywords_json=json.dumps(ctx.jd_keywords, indent=2),
-        career_summary=parsed.get("career_summary", ""),
-        target_role=parsed.get("target_role", ""),
-        company_name=parsed.get("company_name", ""),
-    )
-    system_msg = prompts.PHASE_2_SYSTEM.format(
+    system_msg = prompts.PHASE_1_2_SYSTEM.format(
         strategies_json=json.dumps(
             {k: {"description": v["description"], "trigger": v["trigger"]} for k, v in STRATEGIES.items()},
             indent=2,
         ),
-        career_level=ctx.career_level,
-        company_name=parsed.get("company_name", ""),
     )
-    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=2)
+    user_msg = prompts.PHASE_1_2_USER.format(
+        jd_text=ctx.jd_text, career_text=ctx.career_text, qa_context=qa_context
+    )
+
+    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=1)
     try:
         data = _parse_json(resp.text)
+        ctx.career_level = data["career_level"]
+        ctx.jd_keywords = data["jd_keywords"]
         ctx.strategy = data["strategy"]
         ctx.theme_colors = data["theme_colors"]
     except (json.JSONDecodeError, KeyError) as e:
-        raise ValueError(f"Phase 2: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
+        raise ValueError(f"Phase 1+2: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
+
+    ctx._parsed = data
     ctx._section_order = data.get("section_order", [])
     ctx._bullet_budget = data.get("bullet_budget", {})
 
-    ctx._phase_timings["phase_2"] = int((time.time() - t0) * 1000)
+    # Fetch relevant career chunks via full-text search
+    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+    ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
+
+    ctx._phase_timings["phase_1_2"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 2, f"Strategy: {ctx.strategy}", 25)
 
 
@@ -253,7 +265,7 @@ async def phase_3_page_fit(ctx: PipelineContext, sb: Client):
         s_lower = section_name.lower()
         if "experience" in s_lower or "professional" in s_lower:
             # Experience section: derive from budget
-            company_keys = sorted([k for k in budget if k.startswith("company_")], key=lambda x: x)
+            company_keys = _extract_company_keys(budget)
             entry_count = len(company_keys)
             project_counts = []
             for ck in company_keys:
@@ -269,7 +281,7 @@ async def phase_3_page_fit(ctx: PipelineContext, sb: Client):
                 section_type="experience",
                 entry_count=entry_count,
                 project_count_per_entry=project_counts,
-                bullets_per_project=max(budget.get("company_1_total", 4) // max(project_counts[0] if project_counts else 1, 1), 2),
+                bullets_per_project=max(budget.get(company_keys[0], 4) // max(project_counts[0] if project_counts else 1, 1), 2),
                 has_entry_subhead=True,
             ))
         elif "award" in s_lower or "recognition" in s_lower:
@@ -323,42 +335,165 @@ async def phase_3_page_fit(ctx: PipelineContext, sb: Client):
     await _progress(ctx, sb, 3, "Layout planned", 35)
 
 
-# ── Phase 4: Bullet Writing + Verb Tracking ───────────────────────────────
+# ── Phase 4: Batched Bullet Writing (all companies in 1 LLM call) ────────
+
+def _get_company_context(ctx: PipelineContext, company_index: int) -> str:
+    """Extract career context for a specific company.
+
+    Strategy:
+    1. Use company name from Phase 1 parsed companies list
+    2. Search career_text for ALL paragraphs mentioning that company (not just ## headings)
+    3. Fall back to relevant_chunks if FTS was available
+    4. Truncate to ~5000 chars to fit in small context windows (Groq 8K)
+    """
+    companies = ctx._parsed.get("companies", [])
+    company_name = companies[company_index]["name"] if company_index < len(companies) else ""
+
+    if not company_name:
+        # Fallback: split career text by ## sections and pick by index
+        import re as _re
+        sections = _re.split(r'\n(?=## )', ctx.career_text)
+        if company_index < len(sections):
+            return sections[company_index][:5000]
+        return ctx.career_text[:5000]
+
+    # Split into paragraphs (double newline) and find ALL that mention this company
+    paragraphs = ctx.career_text.split("\n\n")
+    relevant = []
+    company_lower = company_name.lower()
+
+    for para in paragraphs:
+        if company_lower in para.lower():
+            relevant.append(para.strip())
+
+    # If no paragraph-level matches, try section-level (## headings)
+    if not relevant:
+        import re as _re
+        sections = _re.split(r'\n(?=## )', ctx.career_text)
+        for section in sections:
+            if company_lower in section.lower():
+                relevant.append(section.strip())
+
+    if relevant:
+        context = "\n\n".join(relevant)[:5000]
+        logger.info(f"Job {ctx.job_id}: Company '{company_name}' context: {len(relevant)} paragraphs, {len(context)} chars")
+    elif ctx._relevant_chunks:
+        # Fall back to FTS chunks
+        context = "\n\n---\n\n".join(ctx._relevant_chunks)[:5000]
+        logger.info(f"Job {ctx.job_id}: Company '{company_name}' — no direct match, using {len(ctx._relevant_chunks)} FTS chunks")
+    else:
+        # Last resort: full career text truncated
+        context = ctx.career_text[:5000]
+        logger.warning(f"Job {ctx.job_id}: Company '{company_name}' — no context found, using truncated career text")
+
+    # Prepend Q&A context if available
+    qa_context = _format_qa_context(ctx)
+    if qa_context:
+        context = qa_context + "\n\n" + context
+
+    return context
+
+
+def _build_companies_section(
+    ctx: PipelineContext,
+    companies: list[dict],
+    company_keys: list[str],
+    budget: dict,
+    target_role: str,
+) -> str:
+    """Build the companies section for the batched Phase 4 prompt."""
+    sections = []
+    for idx, ck in enumerate(company_keys):
+        num_bullets = budget.get(ck, 4)
+        co = companies[idx] if idx < len(companies) else {}
+        co_name = co.get("name", f"Company {idx + 1}")
+        location = co.get("location", "")
+        title = co.get("title", "")
+        team = co.get("team", "")
+        date_range = co.get("date_range", "")
+
+        header_parts = [f"COMPANY {idx}: {co_name}"]
+        if location:
+            header_parts.append(location)
+        if title:
+            header_parts.append(title)
+        if team:
+            header_parts.append(team)
+        if date_range:
+            header_parts.append(date_range)
+        header = " | ".join(header_parts)
+
+        context = _get_company_context(ctx, idx)
+
+        # Determine project groups from budget
+        if num_bullets <= 3:
+            groups = 1
+        elif num_bullets <= 6:
+            groups = 2
+        else:
+            groups = 3
+
+        section = (
+            f"=== {header} ===\n"
+            f"Budget: {num_bullets} bullets in {groups} project groups\n"
+            f"Target role: {target_role}\n\n"
+            f"Context:\n{context}"
+        )
+        sections.append(section)
+
+    return "\n\n".join(sections)
+
 
 async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
+    """Batched Phase 4: write bullets for ALL companies in ONE LLM call."""
     t0 = time.time()
     await _progress(ctx, sb, 4, "Writing bullets", 40)
 
-    strategy_info = STRATEGIES.get(ctx.strategy, STRATEGIES["HYBRID_BALANCED"])
+    strategy_info = STRATEGIES.get(ctx.strategy, STRATEGIES["BALANCED"])
+    budget = ctx._bullet_budget
+    parsed = ctx._parsed
+    companies = parsed.get("companies", [])
+    target_role = parsed.get("target_role", "")
 
-    # Use relevant chunks if available, otherwise full career text
-    career_context = (
-        "\n\n---\n\n".join(ctx._relevant_chunks)
-        if ctx._relevant_chunks
-        else ctx.career_text
-    )
-    qa_context = _format_qa_context(ctx)
-    user_msg = prompts.PHASE_4_USER.format(
-        jd_keywords_json=json.dumps(ctx.jd_keywords, indent=2),
-        career_text=career_context,
-        qa_context=qa_context,
-        bullet_budget_json=json.dumps(ctx._bullet_budget, indent=2),
-        sections_json=json.dumps([s.model_dump() for s in ctx._section_specs], indent=2),
-    )
-    system_msg = prompts.PHASE_4_SYSTEM.format(
+    # Compact keywords: comma-separated string instead of JSON array
+    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+    jd_keywords_compact = ", ".join(keyword_strs)
+
+    # Collect company keys from budget (handles both "company_N_total" and "CompanyName_total")
+    company_keys = _extract_company_keys(budget)
+
+    logger.info(f"Job {ctx.job_id}: Phase 4 batched — {len(company_keys)} companies, budget={budget}")
+
+    # Build companies section for the batched prompt
+    companies_section = _build_companies_section(ctx, companies, company_keys, budget, target_role)
+
+    system_msg = prompts.PHASE_4_BATCHED_SYSTEM.format(
         strategy=ctx.strategy,
         strategy_description=strategy_info["description"],
         career_level=ctx.career_level,
     )
+    user_msg = prompts.PHASE_4_BATCHED_USER.format(
+        jd_keywords_compact=jd_keywords_compact,
+        companies_section=companies_section,
+    )
+
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.4)
     try:
         data = _parse_json(resp.text)
     except json.JSONDecodeError as e:
         raise ValueError(f"Phase 4: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
 
-    ctx._raw_bullets = data.get("bullets", [])
+    # Flatten batched response into bullet list
+    all_bullets = []
+    for co_data in data.get("companies", []):
+        co_idx = co_data.get("company_index", 0)
+        for b in co_data.get("bullets", []):
+            b["company_index"] = co_idx
+            all_bullets.append(b)
+
+    ctx._raw_bullets = all_bullets
     if not ctx._raw_bullets:
-        raise ValueError(f"Phase 4: LLM returned no bullets. Response: {resp.text[:300]}")
+        raise ValueError("Phase 4: No bullets written")
 
     # Register all verbs
     verbs = [b["verb"] for b in ctx._raw_bullets if b.get("verb")]
@@ -377,75 +512,207 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
     t0 = time.time()
     await _progress(ctx, sb, 5, "Optimizing bullet widths", 55)
 
-    optimized = []
-    total = len(ctx._raw_bullets)
+    # Get bullet budget numbers for prompts
+    bullet_budget = ctx.template_config.get("budgets", {}).get("bullet", {})
+    if hasattr(bullet_budget, "model_dump"):
+        bullet_budget = bullet_budget.model_dump()
+    raw_budget = bullet_budget.get("raw_budget", 101.4)
+    range_min_90 = bullet_budget.get("range_min_90", 91.3)
 
+    # Step 1: Measure ALL bullets locally (instant)
+    measurements = []
     for i, bullet in enumerate(ctx._raw_bullets):
-        text_html = bullet["text_html"]
+        result = json.loads(
+            await resume_measure_width(
+                MeasureWidthInput(text_html=bullet["text_html"], line_type="bullet"),
+                template_config=ctx.template_config,
+            )
+        )
+        measurements.append({
+            "index": i,
+            "text_html": bullet["text_html"],
+            "weighted_total": result.get("weighted_total", 0),
+            "fill_percentage": result.get("fill_percentage", 0),
+            "status": result.get("status", "PASS"),
+        })
 
-        for attempt in range(MAX_WIDTH_RETRIES):
-            # Measure width
-            measure_result = json.loads(
+    needs_fix = [m for m in measurements if m["status"] != "PASS"]
+    logger.info(f"Job {ctx.job_id} phase 5: {len(measurements)} bullets measured, {len(needs_fix)} need fixing")
+
+    if not needs_fix:
+        # All bullets already pass — skip LLM entirely
+        for m in measurements:
+            ctx._raw_bullets[m["index"]]["fill_percentage"] = m["fill_percentage"]
+        ctx._optimized_bullets = ctx._raw_bullets
+        ctx._phase_timings["phase_5"] = int((time.time() - t0) * 1000)
+        await _progress(ctx, sb, 5, "All bullets pass — no LLM needed", 70)
+        return
+
+    # Step 2: Compute per-word width breakdowns for bullets that need fixing
+    for m in needs_fix:
+        m["word_widths"] = compute_word_widths(m["text_html"])
+
+    # Step 3: Split into chunks (8 bullets/batch to fit smaller context windows)
+    MAX_PHASE_5_BATCH = 8
+    chunks = [needs_fix[i:i + MAX_PHASE_5_BATCH] for i in range(0, len(needs_fix), MAX_PHASE_5_BATCH)]
+    logger.info(f"Job {ctx.job_id} phase 5: {len(needs_fix)} bullets in {len(chunks)} batch(es)")
+    await _progress(ctx, sb, 5, f"Optimizing {len(needs_fix)} bullets in {len(chunks)} batch(es)", 58)
+
+    system_msg = prompts.PHASE_5_BATCHED_SYSTEM.format(
+        raw_budget=raw_budget,
+        range_min_90=range_min_90,
+    )
+
+    still_failing = []
+    for chunk_idx, chunk in enumerate(chunks):
+        # Build subset of measurements for this chunk
+        chunk_indices = {m["index"] for m in chunk}
+        chunk_measurements = [m for m in measurements if m["index"] in chunk_indices or m["status"] == "PASS"]
+
+        bullets_section = _build_batched_bullets_section(chunk_measurements, chunk, raw_budget, range_min_90)
+        user_msg = prompts.PHASE_5_BATCHED_USER.format(
+            reference_table=format_reference_table(),
+            raw_budget=raw_budget,
+            range_min_90=range_min_90,
+            bullets_section=bullets_section,
+        )
+
+        resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=5, temperature=0.2)
+        try:
+            revisions = _parse_json(resp.text).get("revised_bullets", [])
+        except (json.JSONDecodeError, KeyError):
+            logger.warning(f"Job {ctx.job_id} phase 5 batch {chunk_idx}: failed to parse LLM response")
+            revisions = []
+
+        # Apply revisions + verify locally
+        for rev in revisions:
+            idx = rev.get("bullet_index")
+            new_html = rev.get("revised_text_html", "")
+            if idx is None or not new_html:
+                continue
+
+            verify = json.loads(
                 await resume_measure_width(
-                    MeasureWidthInput(text_html=text_html, line_type="bullet"),
+                    MeasureWidthInput(text_html=new_html, line_type="bullet"),
                     template_config=ctx.template_config,
                 )
             )
+            v_status = verify.get("status", "ERROR")
+            v_fill = verify.get("fill_percentage", 0)
 
-            status = measure_result.get("status", "PASS")
-            fill_pct = measure_result.get("fill_percentage", 95)
+            if v_status == "PASS" or v_fill >= 89:
+                ctx._raw_bullets[idx]["text_html"] = new_html
+                ctx._raw_bullets[idx]["fill_percentage"] = v_fill
+            else:
+                still_failing.append({
+                    "index": idx,
+                    "text_html": new_html,
+                    "weighted_total": verify.get("weighted_total", 0),
+                    "fill_percentage": v_fill,
+                    "status": v_status,
+                })
 
-            if status == "PASS" or (95 <= fill_pct <= 100):
-                break  # Good enough
+    # Apply fill_percentage for bullets that were already PASS (not sent to LLM)
+    for m in measurements:
+        if m["status"] == "PASS":
+            ctx._raw_bullets[m["index"]]["fill_percentage"] = m["fill_percentage"]
 
-            # Get synonym suggestions
-            suggestions = "[]"
-            if status in ("TOO_SHORT", "OVERFLOW"):
-                direction = "expand" if status == "TOO_SHORT" else "shrink"
-                try:
-                    syn_result = json.loads(
-                        await resume_suggest_synonyms(SynonymInput(
-                            text=text_html,
-                            current_width=measure_result.get("weighted_total", 0),
-                            target_width=measure_result.get("budget", 0),
-                            direction=direction,
-                        ))
-                    )
-                    suggestions = json.dumps(syn_result.get("suggestions", []))
-                except Exception:
-                    pass
+    # Step 6: Optional second pass for failures (rare)
+    if still_failing:
+        logger.info(f"Job {ctx.job_id} phase 5: {len(still_failing)} bullets still failing, second pass")
+        await _progress(ctx, sb, 5, f"Second pass for {len(still_failing)} bullets", 65)
 
-            # Ask LLM to revise
-            user_msg = prompts.PHASE_5_USER.format(
-                text_html=text_html,
-                weighted_total=measure_result.get("weighted_total", 0),
-                budget=measure_result.get("budget", 0),
-                fill_percentage=fill_pct,
-                status=status,
-                suggestions_json=suggestions,
+        for m in still_failing:
+            m["word_widths"] = compute_word_widths(m["text_html"])
+
+        retry_section = _build_batched_bullets_section(still_failing, still_failing, raw_budget, range_min_90)
+        retry_user = prompts.PHASE_5_BATCHED_USER.format(
+            reference_table=format_reference_table(),
+            raw_budget=raw_budget,
+            range_min_90=range_min_90,
+            bullets_section=retry_section,
+        )
+        resp2 = await _llm_call(ctx, llm, system_msg, retry_user, phase=5, temperature=0.2)
+        try:
+            revisions2 = _parse_json(resp2.text).get("revised_bullets", [])
+        except (json.JSONDecodeError, KeyError):
+            revisions2 = []
+
+        for rev in revisions2:
+            idx = rev.get("bullet_index")
+            new_html = rev.get("revised_text_html", "")
+            if idx is None or not new_html:
+                continue
+            verify = json.loads(
+                await resume_measure_width(
+                    MeasureWidthInput(text_html=new_html, line_type="bullet"),
+                    template_config=ctx.template_config,
+                )
             )
-            system_msg = prompts.PHASE_5_SYSTEM.format(
-                fill_percentage=fill_pct,
-                status=status,
-            )
-            resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=5, temperature=0.2)
-            try:
-                revised = _parse_json(resp.text)
-                text_html = revised["revised_text_html"]
-            except (json.JSONDecodeError, KeyError):
-                break  # Can't parse revision — keep current
+            v_fill = verify.get("fill_percentage", 0)
+            # Accept if PASS or close enough (89%+)
+            if verify.get("status") == "PASS" or v_fill >= 89:
+                ctx._raw_bullets[idx]["text_html"] = new_html
+                ctx._raw_bullets[idx]["fill_percentage"] = v_fill
+            else:
+                # Keep whatever we have — close enough after 2 attempts
+                ctx._raw_bullets[idx]["fill_percentage"] = v_fill
 
-        bullet["text_html"] = text_html
-        bullet["fill_percentage"] = fill_pct
-        optimized.append(bullet)
-
-        if (i + 1) % 3 == 0:
-            pct = 55 + int((i + 1) / total * 15)
-            await _progress(ctx, sb, 5, f"Optimized {i + 1}/{total} bullets", pct)
-
-    ctx._optimized_bullets = optimized
+    ctx._optimized_bullets = ctx._raw_bullets
     ctx._phase_timings["phase_5"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 5, "Width optimization complete", 70)
+
+
+def _build_batched_bullets_section(
+    all_measurements: list[dict],
+    needs_fix: list[dict],
+    raw_budget: float,
+    range_min_90: float,
+) -> str:
+    """Build the bullets section of the batched Phase 5 prompt."""
+    needs_fix_indices = {m["index"] for m in needs_fix}
+    lines = []
+
+    for m in all_measurements:
+        idx = m["index"]
+        fill = m["fill_percentage"]
+        total = m["weighted_total"]
+        status = m["status"]
+
+        if idx not in needs_fix_indices:
+            lines.append(f"── BULLET {idx} — PASS ({fill}%) — no changes needed ──")
+            lines.append(f'"{m["text_html"]}"')
+            lines.append(f"Total: {total} / Budget: {raw_budget}")
+            lines.append("")
+        else:
+            # Determine gap description
+            if status == "TOO_SHORT":
+                gap_min = round(range_min_90 - total, 1)
+                gap_max = round(raw_budget - total, 1)
+                gap_desc = f"need +{gap_min} to +{gap_max} CU"
+            else:  # OVERFLOW
+                excess_min = round(total - raw_budget, 1)
+                excess_max = round(total - range_min_90, 1)
+                gap_desc = f"need to remove {excess_min} to {excess_max} CU"
+
+            lines.append(f"── BULLET {idx} — NEEDS_FIX ({fill}% — {status}, {gap_desc}) ──")
+            lines.append(f'"{m["text_html"]}"')
+            lines.append("Word widths:")
+
+            word_widths = m.get("word_widths", [])
+            word_parts = []
+            space_count = 0
+            for ww in word_widths:
+                tag = "[b]" if ww["is_bold"] else ""
+                word_parts.append(f"  {ww['word']}={ww['width']}{tag}")
+            if word_widths:
+                space_count = len(word_widths) - 1
+            lines.extend(word_parts)
+            lines.append(f"  Spaces: {space_count} × 0.516 = {round(space_count * 0.516, 2)}")
+            lines.append(f"Total: {total} / Budget: {raw_budget} / Gap: {gap_desc}")
+            lines.append("")
+
+    return "\n".join(lines)
 
 
 # ── Phase 6: BRS Scoring ──────────────────────────────────────────────────
@@ -466,7 +733,7 @@ async def phase_6_scoring(ctx: PipelineContext, sb: Client):
     score_result = json.loads(
         await resume_score_bullets(ScoreBulletsInput(
             bullets=candidate_bullets,
-            jd_keywords=ctx.jd_keywords,
+            jd_keywords=[{"keyword": kw, "category": "skill"} if isinstance(kw, str) else kw for kw in ctx.jd_keywords],
             career_level=ctx.career_level,
             total_bullet_budget=len(ctx._optimized_bullets),
         ))
@@ -513,35 +780,306 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
     )
 
     ctx.stats["final_fits_page"] = fit_result.get("fits_one_page", False)
+
+    # ── Quality Judge Checks (ported from CLI quality_judge.py) ──────────
+    bullets = ctx._optimized_bullets or []
+    quality_score = 0.0
+
+    # Check 1: Verb repetition — all verbs should be unique
+    verbs = [b.get("verb", "").lower() for b in bullets if b.get("verb")]
+    unique_verbs = set(verbs)
+    has_duplicates = len(verbs) != len(unique_verbs)
+    if has_duplicates:
+        dupes = [v for v in unique_verbs if verbs.count(v) > 1]
+        warnings.append(f"Duplicate verbs detected: {', '.join(dupes)}")
+    verb_score = 50.0 if has_duplicates else 100.0
+
+    # Check 2: Metric density — ≥60% of bullets should contain a number
+    import re as _re
+    metric_count = sum(1 for b in bullets if _re.search(r'\d', b.get("text_html", "")))
+    metric_pct = (metric_count / len(bullets) * 100) if bullets else 0
+    if metric_pct < 60:
+        warnings.append(f"Low metric density: {metric_pct:.0f}% of bullets contain numbers (target: ≥60%)")
+
+    # Check 3: Keyword coverage — ≥40% of JD keywords in bullets
+    all_bullet_text = " ".join(b.get("text_html", "").lower() for b in bullets)
+    kw_list = [kw["keyword"] if isinstance(kw, dict) else kw for kw in (ctx.jd_keywords or [])]
+    matched_kw = sum(1 for kw in kw_list if kw.lower() in all_bullet_text)
+    kw_coverage = (matched_kw / len(kw_list) * 100) if kw_list else 100
+    if kw_coverage < 40:
+        missing = [kw for kw in kw_list if kw.lower() not in all_bullet_text][:5]
+        warnings.append(f"Low keyword coverage: {kw_coverage:.0f}% (target: ≥40%). Missing: {', '.join(missing)}")
+
+    # Check 4: Width fill average
+    fills = [b.get("fill_percentage", 0) for b in bullets if b.get("fill_percentage")]
+    avg_fill = sum(fills) / len(fills) if fills else 0
+    overflow_count = sum(1 for b in bullets if b.get("fill_percentage", 0) > 102)
+    short_count = sum(1 for b in bullets if 0 < b.get("fill_percentage", 0) < 90)
+    if overflow_count:
+        warnings.append(f"{overflow_count} bullet(s) overflow (>102% fill)")
+    if short_count:
+        warnings.append(f"{short_count} bullet(s) too short (<90% fill)")
+
+    # Check 5: Tense consistency — all verbs should be past tense
+    present_tense = {"lead", "drive", "build", "manage", "develop", "create", "design",
+                     "implement", "optimize", "launch", "grow", "run", "own", "scale"}
+    bad_tense = [v for v in verbs if v in present_tense]
+    if bad_tense:
+        warnings.append(f"Present tense verbs detected (should be past): {', '.join(set(bad_tense))}")
+
+    # Compute weighted quality score (0-100)
+    quality_score = (
+        kw_coverage * 0.30 +
+        metric_pct * 0.25 +
+        verb_score * 0.15 +
+        (100.0 if ctx.stats.get("final_fits_page") else 0.0) * 0.15 +
+        avg_fill * 0.10 +
+        (100.0 if not bad_tense else 50.0) * 0.05
+    )
+    grade = "A" if quality_score >= 90 else "B" if quality_score >= 75 else "C" if quality_score >= 60 else "D" if quality_score >= 40 else "F"
+
+    ctx.stats["quality_score"] = round(quality_score, 1)
+    ctx.stats["quality_grade"] = grade
+    ctx.stats["keyword_coverage"] = round(kw_coverage, 1)
+    ctx.stats["metric_density"] = round(metric_pct, 1)
+    ctx.stats["avg_fill"] = round(avg_fill, 1)
     ctx.stats["validation_warnings"] = warnings
     ctx.theme_colors = colors
 
-    await _progress(ctx, sb, 7, "Validation complete", 85)
+    await _progress(ctx, sb, 7, f"Quality: {grade} ({quality_score:.0f}/100)", 85)
 
 
-# ── Phase 8: HTML Assembly ────────────────────────────────────────────────
+# ── Section Builders (programmatic HTML — no LLM) ────────────────────────
+
+def _get_section_order_map(section_order: list) -> dict:
+    """Map section names to template comment numbers.
+
+    Template convention:
+        1 = Professional Experience
+        2 = Awards & Recognitions
+        3 = Voluntary Work & Projects
+        4 = Academic Achievements / Education
+        5 = Core Competencies & Skills
+        6 = Additional Interests
+    """
+    mapping = {}
+    for name in section_order:
+        lower = name.lower()
+        if "experience" in lower or "professional" in lower:
+            mapping["experience"] = 1
+        elif "award" in lower or "recognition" in lower:
+            mapping["awards"] = 2
+        elif "voluntary" in lower or "project" in lower:
+            mapping["voluntary"] = 3
+        elif "education" in lower or "academic" in lower or "achievement" in lower:
+            mapping["education"] = 4
+        elif "skill" in lower or "competenc" in lower:
+            mapping["skills"] = 5
+        elif "interest" in lower:
+            mapping["interests"] = 6
+    return mapping
+
+
+def _build_experience_html(bullets: list, companies: list) -> str:
+    """Build Professional Experience section HTML from optimized bullets + company metadata."""
+    from collections import defaultdict
+    html_parts = [
+        '<div class="section-title">Professional Experience<div class="section-divider"></div></div>'
+    ]
+
+    # Group bullets by company_index
+    by_company = defaultdict(list)
+    for b in bullets:
+        by_company[b.get("company_index", 0)].append(b)
+
+    for idx in sorted(by_company.keys()):
+        company_bullets = by_company[idx]
+
+        # Get company metadata
+        co = companies[idx] if idx < len(companies) else {}
+        name = co.get("name", f"Company {idx + 1}")
+        location = co.get("location", "")
+        title = co.get("title", "")
+        team = co.get("team", "")
+        date_range = co.get("date_range", "")
+
+        right_header = " | ".join(filter(None, [location, date_range]))
+
+        html_parts.append('<div class="entry">')
+        html_parts.append(
+            f'<div class="entry-header"><span>{name}</span><span>{right_header}</span></div>'
+        )
+        if title or team:
+            html_parts.append(
+                f'<div class="entry-subhead"><span>{title}</span><span>{team}</span></div>'
+            )
+
+        # Group bullets by project_group
+        by_project = defaultdict(list)
+        for b in company_bullets:
+            by_project[b.get("project_group", 0)].append(b)
+
+        for pg_idx in sorted(by_project.keys()):
+            pg_bullets = by_project[pg_idx]
+            # Use project_title from first bullet in group
+            project_title = pg_bullets[0].get("project_title", "")
+            if project_title:
+                html_parts.append(f'<div class="project-title">{project_title}</div>')
+
+            html_parts.append("<ul>")
+            for b in pg_bullets:
+                text = b.get("text_html", "")
+                html_parts.append(f'<li><span class="li-content">{text}</span></li>')
+            html_parts.append("</ul>")
+
+        html_parts.append("</div>")  # close .entry
+
+    return "\n".join(html_parts)
+
+
+def _build_education_html(education: list) -> str:
+    """Build Academic Achievements section from structured education data."""
+    html_parts = [
+        '<div class="section-title">Academic Achievements<div class="section-divider"></div></div>'
+    ]
+    for edu in education:
+        institution = edu.get("institution", "")
+        degree = edu.get("degree", "")
+        year = edu.get("year", "")
+        gpa = edu.get("gpa", "")
+        highlights = edu.get("highlights", "")
+
+        html_parts.append('<div class="entry">')
+        html_parts.append(
+            f'<div class="entry-header"><span>{institution}</span><span>{year}</span></div>'
+        )
+        if degree or gpa:
+            html_parts.append(
+                f'<div class="entry-subhead"><span>{degree}</span><span>{gpa}</span></div>'
+            )
+        if highlights:
+            html_parts.append(
+                f'<span class="edge-to-edge-line">{highlights}</span>'
+            )
+        html_parts.append("</div>")
+
+    return "\n".join(html_parts)
+
+
+def _build_skills_html(skills: dict) -> str:
+    """Build Core Competencies & Skills section from skills dict."""
+    html_parts = [
+        '<div class="section-title">Core Competencies &amp; Skills<div class="section-divider"></div></div>'
+    ]
+    for category, skill_list in skills.items():
+        if isinstance(skill_list, list):
+            skills_str = ", ".join(skill_list)
+        else:
+            skills_str = str(skill_list)
+        html_parts.append(f'<div class="entry-header">{category}</div>')
+        html_parts.append(f'<span class="edge-to-edge-line">{skills_str}</span>')
+
+    return "\n".join(html_parts)
+
+
+def _build_awards_html(awards: list) -> str:
+    """Build Awards & Recognitions section from awards list."""
+    html_parts = [
+        '<div class="section-title">Awards &amp; Recognitions<div class="section-divider"></div></div>',
+        "<ul>",
+    ]
+    for award in awards:
+        title = award.get("title", "")
+        detail = award.get("detail", "")
+        text = f"<b>{title}</b> — {detail}" if detail else f"<b>{title}</b>"
+        html_parts.append(f'<li><span class="li-content">{text}</span></li>')
+    html_parts.append("</ul>")
+
+    return "\n".join(html_parts)
+
+
+def _build_voluntary_html(voluntary: list) -> str:
+    """Build Voluntary Experience & Projects section."""
+    html_parts = [
+        '<div class="section-title">Voluntary Experience &amp; Projects<div class="section-divider"></div></div>',
+        "<ul>",
+    ]
+    for item in voluntary:
+        title = item.get("title", "")
+        detail = item.get("detail", "")
+        text = f"<b>{title}</b> — {detail}" if detail else f"<b>{title}</b>"
+        html_parts.append(f'<li><span class="li-content">{text}</span></li>')
+    html_parts.append("</ul>")
+
+    return "\n".join(html_parts)
+
+
+def _build_interests_html(interests: str) -> str:
+    """Build Additional Interests section from comma-separated string."""
+    html_parts = [
+        '<div class="section-title">Additional Interests<div class="section-divider"></div></div>',
+        f'<span class="edge-to-edge-line">{interests}</span>',
+    ]
+    return "\n".join(html_parts)
+
+
+# ── Phase 8: HTML Assembly (Programmatic — no LLM) ──────────────────────
 
 async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
+    """Programmatic HTML assembly — no LLM call needed.
+
+    Builds section HTML from optimized bullets + structured career data
+    using pure functions, then feeds to assemble_html tool for injection.
+    """
     t0 = time.time()
     await _progress(ctx, sb, 8, "Assembling final HTML", 88)
 
     parsed = ctx._parsed
     template_html = _load_template(ctx.template_id)
+    section_order = ctx._section_order or ["Professional Experience", "Awards & Recognitions",
+                                            "Voluntary Work & Projects", "Academic Achievements",
+                                            "Core Competencies & Skills", "Additional Interests"]
+    order_map = _get_section_order_map(section_order)
+    companies = parsed.get("companies", [])
 
-    # Ask LLM to build section HTML from optimized bullets
-    user_msg = prompts.PHASE_8_USER.format(
-        final_bullets_json=json.dumps(ctx._optimized_bullets, indent=2),
-        sections_json=json.dumps([s.model_dump() for s in ctx._section_specs], indent=2),
-        contact_json=json.dumps(parsed.get("contact_info", {}), indent=2),
-    )
-    system_msg = prompts.PHASE_8_SYSTEM.format(
-        template_css_reference="section, section-title, section-divider, entry, entry-header, entry-subhead, project-title, li-content, edge-to-edge-line",
-    )
-    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=8, temperature=0.1)
-    try:
-        data = _parse_json(resp.text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Phase 8: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
+    # Build section HTML programmatically (no LLM)
+    sections = []
+
+    if "experience" in order_map and ctx._optimized_bullets:
+        sections.append(SectionContent(
+            section_html=_build_experience_html(ctx._optimized_bullets, companies),
+            section_order=order_map["experience"],
+        ))
+
+    if "education" in order_map and parsed.get("education"):
+        sections.append(SectionContent(
+            section_html=_build_education_html(parsed["education"]),
+            section_order=order_map["education"],
+        ))
+
+    if "skills" in order_map and parsed.get("skills"):
+        sections.append(SectionContent(
+            section_html=_build_skills_html(parsed["skills"]),
+            section_order=order_map["skills"],
+        ))
+
+    if "awards" in order_map and parsed.get("awards"):
+        sections.append(SectionContent(
+            section_html=_build_awards_html(parsed["awards"]),
+            section_order=order_map["awards"],
+        ))
+
+    if "voluntary" in order_map and parsed.get("voluntary"):
+        sections.append(SectionContent(
+            section_html=_build_voluntary_html(parsed["voluntary"]),
+            section_order=order_map["voluntary"],
+        ))
+
+    if "interests" in order_map and parsed.get("interests"):
+        sections.append(SectionContent(
+            section_html=_build_interests_html(parsed["interests"]),
+            section_order=order_map["interests"],
+        ))
 
     # Build tool inputs
     contact = parsed.get("contact_info", {})
@@ -554,23 +1092,22 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
         brand_quaternary=colors.get("brand_quaternary", ""),
     )
 
+    # Build contacts list — only include non-empty fields
+    contacts = []
+    if contact.get("phone"):
+        contacts.append(f"Phone: {contact['phone']}")
+    if contact.get("email"):
+        contacts.append(f"Email: {contact['email']}")
+    if contact.get("linkedin"):
+        contacts.append(f"LinkedIn: {contact['linkedin']}")
+    if contact.get("portfolio"):
+        contacts.append(f"Portfolio: {contact['portfolio']}")
+
     header = HeaderData(
         name=contact.get("name", ""),
         role=parsed.get("target_role", ""),
-        contacts=[
-            f"Phone: {contact.get('phone', '')}",
-            f"Email: {contact.get('email', '')}",
-            f"LinkedIn: {contact.get('linkedin', '')}",
-            f"Portfolio: {contact.get('portfolio', '')}",
-        ],
+        contacts=contacts,
     )
-
-    sections = []
-    for s in data.get("sections", []):
-        sections.append(SectionContent(
-            section_html=s["section_html"],
-            section_order=s["section_order"],
-        ))
 
     assemble_result = json.loads(
         await resume_assemble_html(AssembleInput(
@@ -578,12 +1115,13 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
             theme_colors=theme,
             header=header,
             sections=sections,
-            css_overrides=data.get("css_overrides", ""),
+            css_overrides="",
         ))
     )
 
     ctx.output_html = assemble_result.get("final_html", "")
     ctx.stats["assembly_warnings"] = assemble_result.get("warnings", [])
+    ctx.stats["sections_injected"] = len(sections)
 
     ctx._phase_timings["phase_8"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 8, "Resume complete", 98)

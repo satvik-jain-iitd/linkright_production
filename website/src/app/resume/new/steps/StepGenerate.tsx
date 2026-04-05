@@ -40,8 +40,17 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
     if (started.current) return;
     started.current = true;
 
+    let cleanupFn: (() => void) | null = null;
+    let lastPhase = 0;
+
+    const applyUpdate = (phase: string, pct: number, phaseNum: number) => {
+      if (phaseNum < lastPhase) return;
+      lastPhase = phaseNum;
+      setPhase(phase);
+      setProgress(pct);
+    };
+
     const run = async () => {
-      // If we already have a job_id (e.g. page refresh), resume watching it
       if (data.job_id) {
         try {
           const resp = await fetch(`/api/resume/${data.job_id}`);
@@ -56,18 +65,18 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
               setError(job.error_message || "Generation failed");
               return;
             }
-            // Still processing — resume subscription
             setPhase(job.current_phase || "processing");
             setProgress(job.progress_pct || 0);
-            subscribeToJob(data.job_id);
+            lastPhase = job.phase_number || 0;
+            cleanupFn = subscribeToJob(data.job_id);
             return;
           }
         } catch {
-          // Fallback: start a new job
+          setError("Could not check existing job — please try again");
+          return;
         }
       }
 
-      // Start a new job
       try {
         const resp = await fetch("/api/resume/start", {
           method: "POST",
@@ -87,7 +96,7 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
           return;
         }
         update({ job_id: result.job_id });
-        subscribeToJob(result.job_id);
+        cleanupFn = subscribeToJob(result.job_id);
       } catch {
         setError("Network error — please try again");
       }
@@ -95,8 +104,16 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
 
     const subscribeToJob = (jobId: string) => {
       const supabase = createClient();
+      let subscribed = true;
 
-      // Subscribe to realtime changes
+      const teardown = () => {
+        if (subscribed) {
+          subscribed = false;
+          channel.unsubscribe();
+        }
+        clearInterval(poll);
+      };
+
       const channel = supabase
         .channel(`job-${jobId}`)
         .on(
@@ -109,53 +126,55 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
           },
           (payload) => {
             const row = payload.new as Record<string, unknown>;
-            setPhase((row.current_phase as string) || "processing");
-            setProgress((row.progress_pct as number) || 0);
+            applyUpdate(
+              (row.current_phase as string) || "processing",
+              (row.progress_pct as number) || 0,
+              (row.phase_number as number) || 0
+            );
 
             if (row.status === "completed") {
-              setPhase("done");
-              setProgress(100);
-              channel.unsubscribe();
+              applyUpdate("done", 100, 999);
+              teardown();
               setTimeout(next, 1000);
             } else if (row.status === "failed") {
               setError((row.error_message as string) || "Generation failed");
-              channel.unsubscribe();
+              teardown();
             }
           }
         )
         .subscribe();
 
-      // Polling fallback — in case Realtime misses updates
       const poll = setInterval(async () => {
         try {
           const resp = await fetch(`/api/resume/${jobId}`);
           if (!resp.ok) return;
           const job = await resp.json();
-          setPhase(job.current_phase || "processing");
-          setProgress(job.progress_pct || 0);
+          applyUpdate(
+            job.current_phase || "processing",
+            job.progress_pct || 0,
+            job.phase_number || 0
+          );
           if (job.status === "completed") {
-            setPhase("done");
-            setProgress(100);
-            clearInterval(poll);
-            channel.unsubscribe();
+            applyUpdate("done", 100, 999);
+            teardown();
             setTimeout(next, 1000);
           } else if (job.status === "failed") {
             setError(job.error_message || "Generation failed");
-            clearInterval(poll);
-            channel.unsubscribe();
+            teardown();
           }
         } catch {
           // Polling error — ignore, will retry
         }
       }, 5000);
 
-      return () => {
-        channel.unsubscribe();
-        clearInterval(poll);
-      };
+      return teardown;
     };
 
     run();
+
+    return () => {
+      cleanupFn?.();
+    };
   }, []);
 
   const phaseLabel = PHASE_LABELS[phase] || phase;

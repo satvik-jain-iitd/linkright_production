@@ -86,6 +86,24 @@ class MeasureWidthOutput(BaseModel):
     )
 
 
+def compute_word_widths(text_html: str) -> list[dict]:
+    """Parse bullet HTML and compute per-word width breakdowns.
+
+    Uses the same font metrics as resume_measure_width for consistency.
+    Returns list of {"word": str, "width": float, "is_bold": bool} dicts.
+    """
+    segments = parse_bold_segments(text_html)
+    words = []
+    for text, is_bold in segments:
+        resolved = resolve_entities(text)
+        weights = ROBOTO_BOLD_WEIGHTS if is_bold else ROBOTO_REGULAR_WEIGHTS
+        default = BOLD_DEFAULT if is_bold else REGULAR_DEFAULT
+        for word in resolved.split():
+            width = sum(weights.get(c, default) for c in word)
+            words.append({"word": word, "width": round(width, 2), "is_bold": is_bold})
+    return words
+
+
 async def resume_measure_width(
     params: MeasureWidthInput,
     template_config: dict = None

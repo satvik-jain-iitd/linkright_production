@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   const systemPrompt = `You are a career coach preparing to write a targeted resume. Read the candidate's career profile and the job description carefully.
 
-Generate 5-8 specific, actionable questions that would help create a more compelling resume. Focus on:
+Generate EXACTLY 5 to 8 specific, actionable questions that would help create a more compelling resume. You MUST NOT return more than 8 questions. Focus on:
 - Missing quantifiable metrics (revenue, team size, percentages, timelines)
 - Career gaps or transitions that need context
 - Relevant skills, tools, or certifications not mentioned
@@ -79,7 +79,7 @@ ${career_text.slice(0, 8000)}`;
 
       const data = await resp.json();
       const text = data.choices?.[0]?.message?.content || "";
-      questions = parseJsonArray(text);
+      questions = parseJsonArray(text).slice(0, 8);
     } else if (model_provider === "gemini") {
       const resp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model_id}:generateContent?key=${api_key}`,
@@ -105,7 +105,7 @@ ${career_text.slice(0, 8000)}`;
       const data = await resp.json();
       const text =
         data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      questions = parseJsonArray(text);
+      questions = parseJsonArray(text).slice(0, 8);
     }
 
     if (questions.length === 0) {
