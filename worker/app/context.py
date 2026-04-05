@@ -22,6 +22,7 @@ class PipelineContext:
     model_id: str
     api_key: str
     template_id: str = "cv-a4-standard"
+    qa_answers: list[dict] = field(default_factory=list)  # [{question, answer}]
 
     # Populated by tools during the pipeline
     template_config: dict | None = None
@@ -42,6 +43,7 @@ class PipelineContext:
     _section_specs: list = field(default_factory=list)    # list[SectionSpec]
     _raw_bullets: list[dict] = field(default_factory=list)
     _optimized_bullets: list[dict] = field(default_factory=list)
+    _relevant_chunks: list[str] = field(default_factory=list)  # from pgvector/FTS
     _llm_log: list[dict] = field(default_factory=list)       # per-call token/timing log
     _phase_timings: dict[str, int] = field(default_factory=dict)  # phase_N → ms
 

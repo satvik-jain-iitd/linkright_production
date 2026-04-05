@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { WizardData } from "../WizardShell";
 
 interface Props {
@@ -11,6 +12,23 @@ interface Props {
 
 export function StepCareer({ data, update, next, back }: Props) {
   const valid = data.career_text.trim().length >= 200;
+  const [uploading, setUploading] = useState(false);
+
+  const handleNext = async () => {
+    // Upload career text as chunks (fire-and-forget, don't block wizard)
+    setUploading(true);
+    try {
+      await fetch("/api/career/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ career_text: data.career_text }),
+      });
+    } catch {
+      // Non-critical — worker falls back to full text if chunks don't exist
+    }
+    setUploading(false);
+    next();
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -66,11 +84,11 @@ export function StepCareer({ data, update, next, back }: Props) {
           </span>
         </div>
         <button
-          onClick={next}
-          disabled={!valid}
+          onClick={handleNext}
+          disabled={!valid || uploading}
           className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Next
+          {uploading ? "Processing..." : "Next"}
         </button>
       </div>
     </div>

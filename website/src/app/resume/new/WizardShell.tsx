@@ -5,6 +5,7 @@ import Link from "next/link";
 import { StepJD } from "./steps/StepJD";
 import { StepCareer } from "./steps/StepCareer";
 import { StepConfigure } from "./steps/StepConfigure";
+import { StepEnrich } from "./steps/StepEnrich";
 import { StepGenerate } from "./steps/StepGenerate";
 import { StepReview } from "./steps/StepReview";
 
@@ -15,10 +16,28 @@ export interface WizardData {
   model_id: string;
   api_key: string;
   job_id: string | null;
+  qa_answers: { question: string; answer: string }[];
 }
 
-const STEPS = ["Paste JD", "Career Profile", "Configure", "Generate", "Review"];
-const STORAGE_KEY = "linkright_wizard";
+const STEPS = [
+  "Paste JD",
+  "Career Profile",
+  "Configure",
+  "Enrich",
+  "Generate",
+  "Review",
+];
+const STORAGE_KEY = "linkright_wizard_v2";
+
+const EMPTY_DATA: WizardData = {
+  jd_text: "",
+  career_text: "",
+  model_provider: "openrouter",
+  model_id: "meta-llama/llama-3.1-8b-instruct:free",
+  api_key: "",
+  job_id: null,
+  qa_answers: [],
+};
 
 function loadSaved(): { step: number; data: WizardData } | null {
   try {
@@ -33,22 +52,16 @@ function loadSaved(): { step: number; data: WizardData } | null {
 export function WizardShell({ userId }: { userId: string }) {
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
-  // If there's a saved job_id and it was on step 3 (Generate), resume there
+  // If there's a saved job_id and it was on Generate or Review, resume there
   const initialStep = saved?.data?.job_id
-    ? saved.step >= 3 ? saved.step : 3
-    : saved?.step ?? 0;
+    ? saved.step >= 4
+      ? saved.step
+      : 4
+    : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
-  const [data, setData] = useState<WizardData>(
-    saved?.data ?? {
-      jd_text: "",
-      career_text: "",
-      model_provider: "openrouter",
-      model_id: "meta-llama/llama-3.1-8b-instruct:free",
-      api_key: "",
-      job_id: null,
-    }
-  );
+  const [data, setData] = useState<WizardData>(saved?.data ?? { ...EMPTY_DATA });
+  const [retryKey, setRetryKey] = useState(0);
 
   // Auto-save to sessionStorage on every change
   useEffect(() => {
@@ -67,14 +80,13 @@ export function WizardShell({ userId }: { userId: string }) {
   const reset = () => {
     sessionStorage.removeItem(STORAGE_KEY);
     setStep(0);
-    setData({
-      jd_text: "",
-      career_text: "",
-      model_provider: "openrouter",
-      model_id: "meta-llama/llama-3.1-8b-instruct:free",
-      api_key: "",
-      job_id: null,
-    });
+    setData({ ...EMPTY_DATA });
+    setRetryKey((k) => k + 1);
+  };
+
+  const retry = () => {
+    setData((prev) => ({ ...prev, job_id: null }));
+    setRetryKey((k) => k + 1);
   };
 
   return (
@@ -139,9 +151,24 @@ export function WizardShell({ userId }: { userId: string }) {
           <StepConfigure data={data} update={update} next={next} back={back} />
         )}
         {step === 3 && (
-          <StepGenerate data={data} update={update} next={next} />
+          <StepEnrich
+            data={data}
+            update={update}
+            next={next}
+            back={back}
+          />
         )}
-        {step === 4 && <StepReview data={data} onNewResume={reset} />}
+        {step === 4 && (
+          <StepGenerate
+            key={retryKey}
+            data={data}
+            update={update}
+            next={next}
+            onReset={reset}
+            onRetry={retry}
+          />
+        )}
+        {step === 5 && <StepReview data={data} onNewResume={reset} />}
       </div>
     </>
   );

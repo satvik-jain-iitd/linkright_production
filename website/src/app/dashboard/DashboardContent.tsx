@@ -87,6 +87,7 @@ export function DashboardContent({ user }: { user: User }) {
           </div>
           <Link
             href="/resume/new"
+            onClick={() => sessionStorage.removeItem("linkright_wizard_v2")}
             className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             + Create Resume
@@ -127,6 +128,7 @@ export function DashboardContent({ user }: { user: User }) {
               </p>
               <Link
                 href="/resume/new"
+                onClick={() => sessionStorage.removeItem("linkright_wizard_v2")}
                 className="mt-6 inline-block rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
               >
                 Create resume

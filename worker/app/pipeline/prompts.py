@@ -36,7 +36,8 @@ PHASE_1_USER = """## Job Description
 {jd_text}
 
 ## Candidate Career Profile
-{career_text}"""
+{career_text}
+{qa_context}"""
 
 
 # ── Phase 2: Strategy + Brand Colors ─────────────────────────────────────
@@ -155,7 +156,7 @@ PHASE_4_USER = """## JD Keywords
 
 ## Candidate Career Profile
 {career_text}
-
+{qa_context}
 ## Bullet Budget
 {bullet_budget_json}
 

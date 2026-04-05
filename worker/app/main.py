@@ -34,6 +34,7 @@ class JobRequest(BaseModel):
     model_id: str
     api_key: str         # user's BYOK key
     template_id: str = "cv-a4-standard"
+    qa_answers: list[dict] = []  # [{question, answer}]
 
 
 class JobResponse(BaseModel):
@@ -66,6 +67,7 @@ async def process_job(req: JobRequest):
         model_id=req.model_id,
         api_key=req.api_key,
         template_id=req.template_id,
+        qa_answers=req.qa_answers or [],
     )
 
     try:

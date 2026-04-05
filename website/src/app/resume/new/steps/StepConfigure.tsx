@@ -171,7 +171,7 @@ export function StepConfigure({ data, update, next, back }: Props) {
           disabled={!canProceed}
           className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Generate Resume
+          Next
         </button>
       </div>
     </div>

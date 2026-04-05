@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { jd_text, career_text, model_provider, model_id, api_key, template_id } = body;
+  const { jd_text, career_text, model_provider, model_id, api_key, template_id, qa_answers } = body;
 
   if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
         model_id,
         api_key,
         template_id: template_id || "cv-a4-standard",
+        qa_answers: qa_answers || [],
       }),
     });
   } catch {

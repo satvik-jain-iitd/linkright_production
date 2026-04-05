@@ -96,6 +96,46 @@ def _load_template(template_id: str) -> str:
     return path.read_text()
 
 
+def _format_qa_context(ctx: PipelineContext) -> str:
+    """Format Q&A answers into a string for LLM prompts."""
+    if not ctx.qa_answers:
+        return ""
+    lines = []
+    for qa in ctx.qa_answers:
+        q = qa.get("question", "")
+        a = qa.get("answer", "")
+        if q and a:
+            lines.append(f"Q: {q}\nA: {a}")
+    if not lines:
+        return ""
+    return "\n\n## Additional Context (from candidate Q&A)\n" + "\n\n".join(lines)
+
+
+def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]) -> list[str]:
+    """Query career_chunks via full-text search for relevant context."""
+    if not keywords:
+        return []
+    try:
+        # Build tsquery: 'keyword1' | 'keyword2' | ...
+        terms = [k.replace("'", "").strip() for k in keywords[:10] if k.strip()]
+        if not terms:
+            return []
+        query = " | ".join(f"'{t}'" for t in terms)
+        result = (
+            sb.table("career_chunks")
+            .select("chunk_text")
+            .eq("user_id", ctx.user_id)
+            .text_search("search_vector", query)
+            .limit(10)
+            .execute()
+        )
+        if result.data:
+            return [c["chunk_text"] for c in result.data]
+    except Exception:
+        pass  # Table may not exist yet — fall back to full text
+    return []
+
+
 # ── Phase 1: JD + Career Profile Parsing ─────────────────────────────────
 
 async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
@@ -112,7 +152,10 @@ async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
         raise RuntimeError("Template parsing failed: template_config not set")
 
     # Call LLM to analyze JD + career profile
-    user_msg = prompts.PHASE_1_USER.format(jd_text=ctx.jd_text, career_text=ctx.career_text)
+    qa_context = _format_qa_context(ctx)
+    user_msg = prompts.PHASE_1_USER.format(
+        jd_text=ctx.jd_text, career_text=ctx.career_text, qa_context=qa_context
+    )
     resp = await _llm_call(ctx, llm, prompts.PHASE_1_SYSTEM, user_msg, phase=1)
     try:
         data = _parse_json(resp.text)
@@ -121,6 +164,10 @@ async def phase_1_parse(ctx: PipelineContext, sb: Client, llm):
     except (json.JSONDecodeError, KeyError) as e:
         raise ValueError(f"Phase 1: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
     ctx._parsed = data
+
+    # Fetch relevant career chunks via full-text search (if available)
+    keyword_strs = [kw["keyword"] if isinstance(kw, dict) else kw for kw in ctx.jd_keywords]
+    ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
 
     ctx._phase_timings["phase_1"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 1, "JD analysis complete", 12)
@@ -256,9 +303,17 @@ async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
 
     strategy_info = STRATEGIES.get(ctx.strategy, STRATEGIES["HYBRID_BALANCED"])
 
+    # Use relevant chunks if available, otherwise full career text
+    career_context = (
+        "\n\n---\n\n".join(ctx._relevant_chunks)
+        if ctx._relevant_chunks
+        else ctx.career_text
+    )
+    qa_context = _format_qa_context(ctx)
     user_msg = prompts.PHASE_4_USER.format(
         jd_keywords_json=json.dumps(ctx.jd_keywords, indent=2),
-        career_text=ctx.career_text,
+        career_text=career_context,
+        qa_context=qa_context,
         bullet_budget_json=json.dumps(ctx._bullet_budget, indent=2),
         sections_json=json.dumps([s.model_dump() for s in ctx._section_specs], indent=2),
     )

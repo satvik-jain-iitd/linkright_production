@@ -26,9 +26,11 @@ interface Props {
   data: WizardData;
   update: (fields: Partial<WizardData>) => void;
   next: () => void;
+  onReset: () => void;
+  onRetry: () => void;
 }
 
-export function StepGenerate({ data, update, next }: Props) {
+export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
   const [phase, setPhase] = useState("queued");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function StepGenerate({ data, update, next }: Props) {
             model_provider: data.model_provider,
             model_id: data.model_id,
             api_key: data.api_key,
+            qa_answers: data.qa_answers || [],
           }),
         });
         const result = await resp.json();
@@ -166,12 +169,20 @@ export function StepGenerate({ data, update, next }: Props) {
             Generation Failed
           </h2>
           <p className="mt-2 text-sm text-red-600">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-6 rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-          >
-            Try Again
-          </button>
+          <div className="mt-6 flex justify-center gap-3">
+            <button
+              onClick={onReset}
+              className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
+            >
+              Start Over
+            </button>
+            <button
+              onClick={onRetry}
+              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     );
