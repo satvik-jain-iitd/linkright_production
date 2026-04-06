@@ -73,12 +73,15 @@ function loadSaved(): { step: number; data: WizardData } | null {
 export function WizardShell({ userId, jobId }: { userId: string; jobId?: string }) {
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
-  // If there's a saved job_id and it was on Build or Review, resume there
-  const initialStep = saved?.data?.job_id
-    ? saved.step >= 4
-      ? saved.step
-      : 4
-    : (saved?.step ?? 0);
+  // If jobId param present, always go straight to Review (step 5) — skip Build re-render
+  // If saved job_id and was on Build/Review, resume there
+  const initialStep = jobId
+    ? 5
+    : saved?.data?.job_id
+      ? saved.step >= 4
+        ? saved.step
+        : 4
+      : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
   const [data, setData] = useState<WizardData>(saved?.data ?? { ...EMPTY_DATA });

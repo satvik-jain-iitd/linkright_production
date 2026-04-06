@@ -12,6 +12,7 @@ export interface JDMatch {
   req_id: string;
   chunk: string;
   status: "met" | "partial";
+  score: number;
 }
 
 export interface JDGap {
@@ -26,6 +27,8 @@ export interface JDAnalysisResult {
   matches: JDMatch[];
   gaps: JDGap[];
 }
+
+// ── LLM helpers ─────────────────────────────────────────────────────────────
 
 const EXTRACTION_PROMPT = `You are a job description analyst. Extract a structured list of requirements from this job description.
 
@@ -45,14 +48,28 @@ Rules:
 - importance: "required" if mandatory, "preferred" if nice-to-have
 - Keep "text" concise (under 80 chars) but specific`;
 
-function buildLlmBody(
+const SCORING_PROMPT = `You are a career screener evaluating resume candidates.
+
+For each pair below, score 0-100 how well the candidate experience demonstrates the job requirement FROM A PROFESSIONAL/CAREER PERSPECTIVE ONLY.
+
+Rules:
+- Only professional work counts: roles held, projects delivered, quantified outcomes, technical skills used at work
+- Personal stories, exam/JEE scores, mentoring family members, hobbies, personal life = 0-15 max
+- 80-100: Clear direct professional evidence for this exact requirement
+- 50-79: Tangential or partial professional evidence (related but incomplete)
+- 0-49: Not professionally relevant, or is personal/life/educational content not about work output
+
+Return ONLY valid JSON array, no markdown:
+[{"req_id":"r1","score":85}, ...]`;
+
+function buildLlmCall(
   provider: string,
   modelId: string,
   apiKey: string,
-  jdText: string
+  systemPrompt: string,
+  userMsg: string,
+  maxTokens: number
 ) {
-  const userMsg = `Job Description:\n${jdText.slice(0, 4000)}`;
-
   if (provider === "groq" || provider === "openrouter") {
     const baseUrl =
       provider === "openrouter"
@@ -68,11 +85,11 @@ function buildLlmBody(
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: "system", content: EXTRACTION_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userMsg },
         ],
         temperature: 0.1,
-        max_tokens: 1500,
+        max_tokens: maxTokens,
       }),
     };
   } else {
@@ -80,14 +97,14 @@ function buildLlmBody(
       url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `${EXTRACTION_PROMPT}\n\n${userMsg}` }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1500 },
+        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userMsg}` }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens },
       }),
     };
   }
 }
 
-function extractText(provider: string, result: Record<string, unknown>): string {
+function extractLlmText(provider: string, result: Record<string, unknown>): string {
   if (provider === "gemini") {
     return (
       (
@@ -103,29 +120,34 @@ function extractText(provider: string, result: Record<string, unknown>): string 
   );
 }
 
-function parseRequirements(text: string): JDRequirement[] {
-  let clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+function parseJsonResponse<T>(text: string): T | null {
+  const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   try {
-    const parsed = JSON.parse(clean);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .filter((r) => r.id && r.text)
-        .map((r, i) => ({
-          id: r.id || `r${i + 1}`,
-          category: ["skill", "experience", "education", "certification", "other"].includes(r.category)
-            ? r.category
-            : "other",
-          text: String(r.text).slice(0, 120),
-          importance: r.importance === "preferred" ? "preferred" : "required",
-        }));
-    }
-    return [];
+    return JSON.parse(clean) as T;
   } catch {
-    return [];
+    return null;
   }
 }
 
-// Text search to match requirement against career chunks
+function parseRequirements(text: string): JDRequirement[] {
+  const parsed = parseJsonResponse<unknown[]>(text);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null && "id" in r && "text" in r)
+    .map((r, i) => ({
+      id: String(r.id || `r${i + 1}`),
+      category: (["skill", "experience", "education", "certification", "other"] as const).includes(
+        r.category as "skill"
+      )
+        ? (r.category as JDRequirement["category"])
+        : "other",
+      text: String(r.text).slice(0, 120),
+      importance: r.importance === "preferred" ? "preferred" : "required",
+    }));
+}
+
+// ── Career text search ───────────────────────────────────────────────────────
+
 async function searchChunks(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -142,7 +164,6 @@ async function searchChunks(
     .filter((w: string) => w.length >= 4 && !STOPWORDS.has(w.toLowerCase()))
     .map((w: string) => w.toLowerCase());
   const unique = [...new Set(words)].slice(0, 4);
-
   if (unique.length === 0) return [];
 
   const prefixQuery = unique.map((w) => `'${w}':*`).join(" | ");
@@ -151,10 +172,56 @@ async function searchChunks(
     .select("chunk_text")
     .eq("user_id", userId)
     .textSearch("chunk_text", prefixQuery, { config: "english" })
-    .limit(2);
+    .limit(5);
 
   return (data || []).map((row: { chunk_text: string }) => row.chunk_text);
 }
+
+// ── LLM batch relevance scoring ──────────────────────────────────────────────
+
+async function scoreRelevanceBatch(
+  pairs: { req_id: string; req_text: string; chunk: string }[],
+  provider: string,
+  modelId: string,
+  apiKey: string
+): Promise<Record<string, number>> {
+  if (pairs.length === 0) return {};
+
+  const userMsg = pairs
+    .map(
+      (p, i) =>
+        `${i + 1}. [${p.req_id}] Requirement: "${p.req_text}"\n   Experience: "${p.chunk.slice(0, 400)}"`
+    )
+    .join("\n\n");
+
+  try {
+    const { url, headers, body } = buildLlmCall(
+      provider,
+      modelId,
+      apiKey,
+      SCORING_PROMPT,
+      `Score these ${pairs.length} pairs:\n\n${userMsg}`,
+      800
+    );
+    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) return {};
+
+    const result = await resp.json();
+    const text = extractLlmText(provider, result);
+    const scores = parseJsonResponse<{ req_id: string; score: number }[]>(text);
+    if (!Array.isArray(scores)) return {};
+
+    return Object.fromEntries(
+      scores
+        .filter((s) => s.req_id && typeof s.score === "number")
+        .map((s) => [s.req_id, Math.max(0, Math.min(100, Math.round(s.score)))])
+    );
+  } catch {
+    return {}; // fallback: caller uses text-search result without scoring
+  }
+}
+
+// ── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -179,24 +246,18 @@ export async function POST(request: Request) {
   // Step 1: Extract requirements via LLM
   let requirements: JDRequirement[] = [];
   try {
-    const { url, headers, body } = buildLlmBody(
+    const { url, headers, body } = buildLlmCall(
       model_provider,
       model_id,
       api_key,
-      jd_text
+      EXTRACTION_PROMPT,
+      `Job Description:\n${jd_text.slice(0, 4000)}`,
+      1500
     );
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!resp.ok) {
-      return Response.json({ error: "LLM request failed" }, { status: 502 });
-    }
+    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) return Response.json({ error: "LLM request failed" }, { status: 502 });
     const result = await resp.json();
-    const text = extractText(model_provider, result);
-    requirements = parseRequirements(text);
+    requirements = parseRequirements(extractLlmText(model_provider, result));
   } catch {
     return Response.json({ error: "Failed to analyze JD" }, { status: 500 });
   }
@@ -205,29 +266,53 @@ export async function POST(request: Request) {
     return Response.json({ error: "Could not extract requirements" }, { status: 500 });
   }
 
-  // Step 2: For each requirement, search career chunks
-  const matches: JDMatch[] = [];
-  const gaps: JDGap[] = [];
+  // Step 2: Text search — gather top candidate chunk per requirement
+  const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
 
   await Promise.allSettled(
     requirements.map(async (req) => {
       const chunks = await searchChunks(supabase, user.id, req.text);
       if (chunks.length > 0) {
-        matches.push({
-          req_id: req.id,
-          chunk: chunks[0],
-          status: chunks.length >= 2 ? "met" : "partial",
-        });
-      } else {
-        gaps.push({
-          req_id: req.id,
-          text: req.text,
-          category: req.category,
-          importance: req.importance,
-        });
+        candidatePairs.push({ req_id: req.id, req_text: req.text, chunk: chunks[0] });
       }
     })
   );
+
+  // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
+  const scores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, api_key);
+  const scoringAvailable = Object.keys(scores).length > 0;
+
+  // Step 4: Classify matches vs gaps based on scores
+  const matches: JDMatch[] = [];
+  const gaps: JDGap[] = [];
+
+  const candidateByReqId = Object.fromEntries(candidatePairs.map((p) => [p.req_id, p.chunk]));
+
+  for (const req of requirements) {
+    const chunk = candidateByReqId[req.id];
+    const score = scores[req.id] ?? -1;
+
+    if (!chunk) {
+      // No text search hit at all
+      gaps.push({ req_id: req.id, text: req.text, category: req.category, importance: req.importance });
+      continue;
+    }
+
+    if (scoringAvailable) {
+      // Use LLM score with thresholds
+      if (score >= 80) {
+        matches.push({ req_id: req.id, chunk, status: "met", score });
+      } else if (score >= 50) {
+        matches.push({ req_id: req.id, chunk, status: "partial", score });
+      } else {
+        // Text search found something but LLM says not career-relevant
+        gaps.push({ req_id: req.id, text: req.text, category: req.category, importance: req.importance });
+      }
+    } else {
+      // LLM scoring unavailable — fallback to text-search-only (original behaviour)
+      matches.push({ req_id: req.id, chunk, status: "partial", score: 0 });
+    }
+  }
 
   const result: JDAnalysisResult = { requirements, matches, gaps };
   return Response.json(result);

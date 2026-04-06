@@ -13,6 +13,12 @@ interface AnswerStatus {
   message?: string;
 }
 
+interface ScoredChunk {
+  chunk: string;
+  chunk_index: number;
+  score: number;
+}
+
 interface Props {
   data: WizardData;
   update: (fields: Partial<WizardData>) => void;
@@ -38,6 +44,8 @@ export function StepEnrich({ data, update, next, back }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [autoFilled, setAutoFilled] = useState<Set<number>>(new Set());
   const [searching, setSearching] = useState<Set<number>>(new Set());
+  const [scoredChunks, setScoredChunks] = useState<Record<number, ScoredChunk[]>>({});
+  const [expandedVectors, setExpandedVectors] = useState<Set<number>>(new Set());
 
   const started = useRef(false);
   const gapStarted = useRef(false);
@@ -130,20 +138,25 @@ export function StepEnrich({ data, update, next, back }: Props) {
           fetch("/api/career/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q }),
+            body: JSON.stringify({ query: q, include_scores: true }),
           }).then((r) => r.json())
         )
       );
       const newAnswers: Record<number, string> = {};
       const filled = new Set<number>();
+      const newScored: Record<number, ScoredChunk[]> = {};
       results.forEach((r, i) => {
         if (r.status === "fulfilled" && r.value.chunks?.length > 0) {
           newAnswers[i] = r.value.chunks.join("\n\n");
           filled.add(i);
+          if (r.value.scored?.length > 0) {
+            newScored[i] = r.value.scored;
+          }
         }
       });
       setAnswers((prev) => ({ ...prev, ...newAnswers }));
       setAutoFilled(filled);
+      setScoredChunks((prev) => ({ ...prev, ...newScored }));
     } catch {
       // Best-effort
     } finally {
@@ -359,9 +372,26 @@ export function StepEnrich({ data, update, next, back }: Props) {
                     <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
                   )}
                   {autoFilled.has(i) && !searching.has(i) && (
-                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                      Auto-filled from profile
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                        Auto-filled from profile
+                      </span>
+                      {scoredChunks[i] && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedVectors((prev) => {
+                              const next = new Set(prev);
+                              next.has(i) ? next.delete(i) : next.add(i);
+                              return next;
+                            })
+                          }
+                          className="rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-accent"
+                        >
+                          {expandedVectors.has(i) ? "Hide sources" : `View sources (${scoredChunks[i].length})`}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
                 <textarea
@@ -378,6 +408,38 @@ export function StepEnrich({ data, update, next, back }: Props) {
                   className="mt-3 w-full resize-none rounded-lg border border-border bg-background p-3 text-sm text-foreground placeholder-muted transition-colors focus:border-accent/50 focus:outline-none"
                   rows={3}
                 />
+
+                {/* Contributing vectors panel */}
+                {expandedVectors.has(i) && scoredChunks[i] && (
+                  <div className="mt-3 overflow-hidden rounded-lg border border-border">
+                    <div className="border-b border-border bg-background px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                        Contributing career chunks
+                      </p>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {scoredChunks[i].map((sc, j) => (
+                        <div key={j} className="px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-xs text-muted">Chunk #{sc.chunk_index}</span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                sc.score >= 70
+                                  ? "bg-green-100 text-green-700"
+                                  : sc.score >= 40
+                                  ? "bg-amber-100 text-amber-700"
+                                  : "bg-red-100 text-red-600"
+                              }`}
+                            >
+                              {sc.score}% match
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted line-clamp-3">{sc.chunk}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

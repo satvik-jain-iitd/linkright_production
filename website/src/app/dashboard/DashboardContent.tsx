@@ -16,6 +16,8 @@ interface ResumeJob {
   duration_ms: number | null;
   model_provider: string;
   model_id: string;
+  target_company: string | null;
+  output_html: string | null;
 }
 
 export function DashboardContent({ user }: { user: User }) {
@@ -37,6 +39,18 @@ export function DashboardContent({ user }: { user: User }) {
     router.push("/auth");
   };
 
+  const handleDownload = (job: ResumeJob, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!job.output_html) return;
+    const blob = new Blob([job.output_html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `resume-${job.target_company || job.id}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const statusBadge = (status: string) => {
     const map: Record<string, string> = {
       queued: "bg-gold-100 text-gold-700",
@@ -46,6 +60,9 @@ export function DashboardContent({ user }: { user: User }) {
     };
     return map[status] || "bg-border text-muted";
   };
+
+  const jobLabel = (job: ResumeJob) =>
+    job.target_company || job.model_id.split("/").pop()?.replace(/:.*/, "") || "Resume";
 
   return (
     <div className="min-h-screen">
@@ -93,7 +110,7 @@ export function DashboardContent({ user }: { user: User }) {
           </div>
           <Link
             href="/resume/new"
-            onClick={() => sessionStorage.removeItem("linkright_wizard_v2")}
+            onClick={() => sessionStorage.removeItem("linkright_wizard_v4")}
             className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             + Create Resume
@@ -134,7 +151,7 @@ export function DashboardContent({ user }: { user: User }) {
               </p>
               <Link
                 href="/resume/new"
-                onClick={() => sessionStorage.removeItem("linkright_wizard_v2")}
+                onClick={() => sessionStorage.removeItem("linkright_wizard_v4")}
                 className="mt-6 inline-block rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
               >
                 Create resume
@@ -155,9 +172,7 @@ export function DashboardContent({ user }: { user: User }) {
                       {job.status}
                     </span>
                     <div>
-                      <p className="text-sm font-medium">
-                        {job.model_id.split("/").pop()?.replace(/:.*/, "")}
-                      </p>
+                      <p className="text-sm font-medium">{jobLabel(job)}</p>
                       <p className="text-xs text-muted">
                         {new Date(job.created_at).toLocaleDateString("en-IN", {
                           day: "numeric",
@@ -165,20 +180,32 @@ export function DashboardContent({ user }: { user: User }) {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
+                        {" · "}
+                        {job.model_id.split("/").pop()?.replace(/:.*/, "")}
                       </p>
                     </div>
                   </div>
-                  {job.status === "processing" && (
-                    <div className="flex items-center gap-2">
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-                      <span className="text-xs text-muted">{job.progress_pct}%</span>
-                    </div>
-                  )}
-                  {job.duration_ms && (
-                    <span className="text-xs text-muted">
-                      {Math.round(job.duration_ms / 1000)}s
-                    </span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {job.status === "processing" && (
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+                        <span className="text-xs text-muted">{job.progress_pct}%</span>
+                      </div>
+                    )}
+                    {job.duration_ms && (
+                      <span className="text-xs text-muted">
+                        {Math.round(job.duration_ms / 1000)}s
+                      </span>
+                    )}
+                    {job.status === "completed" && job.output_html && (
+                      <button
+                        onClick={(e) => handleDownload(job, e)}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent/50 hover:text-accent"
+                      >
+                        Download
+                      </button>
+                    )}
+                  </div>
                 </Link>
               ))}
             </div>

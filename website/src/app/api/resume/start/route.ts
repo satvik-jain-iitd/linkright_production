@@ -101,7 +101,13 @@ export async function POST(request: Request) {
         api_key,
         template_id: template_id || "cv-a4-standard",
         qa_answers: qa_answers || [],
-        override_theme_colors: override_theme_colors || null,
+        // Sanitize: worker Pydantic model requires str for all 4 color fields — no nulls allowed
+        override_theme_colors: override_theme_colors ? {
+          brand_primary: override_theme_colors.brand_primary,
+          brand_secondary: override_theme_colors.brand_secondary,
+          brand_tertiary: override_theme_colors.brand_tertiary || override_theme_colors.brand_secondary,
+          brand_quaternary: override_theme_colors.brand_quaternary || override_theme_colors.brand_primary,
+        } : null,
       }),
     });
   } catch {
