@@ -68,3 +68,7 @@ website/.next/
 website/node_modules/
 website/.env
 website/.env.local
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
