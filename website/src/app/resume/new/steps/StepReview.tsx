@@ -69,14 +69,14 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold">Your Resume</h2>
           <p className="mt-1 text-sm text-muted">
             Preview, download, or print.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={onNewResume}
             className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"

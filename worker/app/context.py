@@ -44,8 +44,14 @@ class PipelineContext:
     _raw_bullets: list[dict] = field(default_factory=list)
     _optimized_bullets: list[dict] = field(default_factory=list)
     _relevant_chunks: list[str] = field(default_factory=list)  # from pgvector/FTS
+    _company_chunks: dict[int, list[str]] = field(default_factory=dict)  # per-company QMD results
+    _verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4a output (200-400 char paragraphs)
+    _ranked_verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4b ranked by BRS
     _llm_log: list[dict] = field(default_factory=list)       # per-call token/timing log
     _phase_timings: dict[str, int] = field(default_factory=dict)  # phase_N → ms
+
+    # Progressive rendering
+    draft_html: str | None = None  # intermediate HTML, updated at each visual phase
 
     # Pipeline progress
     current_phase: int = 0

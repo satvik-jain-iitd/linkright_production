@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { StepJD } from "./steps/StepJD";
-import { StepCareer } from "./steps/StepCareer";
-import { StepConfigure } from "./steps/StepConfigure";
+import { VerticalStepper } from "@/components/VerticalStepper";
+import { StepJobDetails } from "./steps/StepJobDetails";
 import { StepEnrich } from "./steps/StepEnrich";
-import { StepGenerate } from "./steps/StepGenerate";
+import { StepBuild } from "./steps/StepBuild";
 import { StepReview } from "./steps/StepReview";
 
 export interface WizardData {
@@ -17,26 +16,34 @@ export interface WizardData {
   api_key: string;
   job_id: string | null;
   qa_answers: { question: string; answer: string }[];
+  target_company: string;
+  target_role: string;
 }
 
-const STEPS = [
-  "Paste JD",
-  "Career Profile",
-  "Configure",
+interface SubStep {
+  label: string;
+  done: boolean;
+}
+
+const STEP_LABELS = [
+  "Job Details",
   "Enrich",
-  "Generate",
+  "Build",
   "Review",
 ];
-const STORAGE_KEY = "linkright_wizard_v2";
+
+const STORAGE_KEY = "linkright_wizard_v3";
 
 const EMPTY_DATA: WizardData = {
   jd_text: "",
   career_text: "",
-  model_provider: "openrouter",
-  model_id: "meta-llama/llama-3.1-8b-instruct:free",
+  model_provider: "groq",
+  model_id: "llama-3.3-70b-versatile",
   api_key: "",
   job_id: null,
   qa_answers: [],
+  target_company: "",
+  target_role: "",
 };
 
 function loadSaved(): { step: number; data: WizardData } | null {
@@ -52,16 +59,38 @@ function loadSaved(): { step: number; data: WizardData } | null {
 export function WizardShell({ userId }: { userId: string }) {
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
-  // If there's a saved job_id and it was on Generate or Review, resume there
+  // If there's a saved job_id and it was on Build or Review, resume there
   const initialStep = saved?.data?.job_id
-    ? saved.step >= 4
+    ? saved.step >= 2
       ? saved.step
-      : 4
+      : 2
     : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
   const [data, setData] = useState<WizardData>(saved?.data ?? { ...EMPTY_DATA });
   const [retryKey, setRetryKey] = useState(0);
+  const [buildSubSteps, setBuildSubSteps] = useState<SubStep[]>([]);
+
+  // Load settings from user_settings (career_text, api_key, model)
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const resp = await fetch("/api/user/settings");
+        if (!resp.ok) return;
+        const settings = await resp.json();
+        setData((prev) => ({
+          ...prev,
+          career_text: prev.career_text || settings.career_text || "",
+          model_provider: prev.model_provider || settings.model_provider || "groq",
+          model_id: prev.model_id || settings.model_id || "llama-3.3-70b-versatile",
+          api_key: prev.api_key || settings.api_key || "",
+        }));
+      } catch {
+        // Settings not available yet — user will configure inline
+      }
+    }
+    loadSettings();
+  }, []);
 
   // Auto-save to sessionStorage on every change
   useEffect(() => {
@@ -76,9 +105,9 @@ export function WizardShell({ userId }: { userId: string }) {
 
   const stepping = useRef(false);
   const next = () => {
-    if (stepping.current) return; // prevent rapid double-click
+    if (stepping.current) return;
     stepping.current = true;
-    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    setStep((s) => Math.min(s + 1, STEP_LABELS.length - 1));
     setTimeout(() => { stepping.current = false; }, 300);
   };
   const back = () => setStep((s) => Math.max(s - 1, 0));
@@ -95,11 +124,17 @@ export function WizardShell({ userId }: { userId: string }) {
     setRetryKey((k) => k + 1);
   };
 
+  // Build step definitions for VerticalStepper
+  const stepDefs = STEP_LABELS.map((label, i) => ({
+    label,
+    subSteps: i === 2 ? buildSubSteps : undefined,
+  }));
+
   return (
     <>
       {/* Navbar */}
       <nav className="border-b border-border bg-surface/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-6">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
           <Link href="/dashboard" className="text-lg font-bold tracking-tight">
             Link<span className="text-accent">Right</span>
           </Link>
@@ -112,69 +147,38 @@ export function WizardShell({ userId }: { userId: string }) {
         </div>
       </nav>
 
-      {/* Step indicator */}
-      <div className="mx-auto max-w-4xl px-6 pt-8">
-        <div className="flex items-center gap-2">
-          {STEPS.map((label, i) => (
-            <div key={label} className="flex items-center gap-2">
-              <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                  i < step
-                    ? "bg-accent text-white"
-                    : i === step
-                      ? "bg-accent text-white ring-2 ring-accent/30 ring-offset-2"
-                      : "bg-border text-muted"
-                }`}
-              >
-                {i < step ? "\u2713" : i + 1}
-              </div>
-              <span
-                className={`hidden text-sm sm:block ${
-                  i === step ? "font-medium text-foreground" : "text-muted"
-                }`}
-              >
-                {label}
-              </span>
-              {i < STEPS.length - 1 && (
-                <div
-                  className={`h-px w-6 sm:w-10 ${
-                    i < step ? "bg-accent" : "bg-border"
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Sidebar + Content layout */}
+      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-3.5rem)]">
+        <VerticalStepper steps={stepDefs} currentStep={step} />
 
-      {/* Step content */}
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        {step === 0 && <StepJD data={data} update={update} next={next} />}
-        {step === 1 && (
-          <StepCareer data={data} update={update} next={next} back={back} />
-        )}
-        {step === 2 && (
-          <StepConfigure data={data} update={update} next={next} back={back} />
-        )}
-        {step === 3 && (
-          <StepEnrich
-            data={data}
-            update={update}
-            next={next}
-            back={back}
-          />
-        )}
-        {step === 4 && (
-          <StepGenerate
-            key={retryKey}
-            data={data}
-            update={update}
-            next={next}
-            onReset={reset}
-            onRetry={retry}
-          />
-        )}
-        {step === 5 && <StepReview data={data} onNewResume={reset} />}
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
+          <div className="mx-auto max-w-3xl">
+            {step === 0 && (
+              <StepJobDetails data={data} update={update} next={next} />
+            )}
+            {step === 1 && (
+              <StepEnrich
+                data={data}
+                update={update}
+                next={next}
+                back={back}
+              />
+            )}
+            {step === 2 && (
+              <StepBuild
+                key={retryKey}
+                data={data}
+                update={update}
+                next={next}
+                onReset={reset}
+                onRetry={retry}
+                onSubSteps={setBuildSubSteps}
+              />
+            )}
+            {step === 3 && <StepReview data={data} onNewResume={reset} />}
+          </div>
+        </main>
       </div>
     </>
   );

@@ -26,7 +26,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Per-user throttle: max 1 concurrent job
+  // Auto-cleanup stale jobs: mark any queued/processing jobs older than 10 min as failed
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  await supabase
+    .from("resume_jobs")
+    .update({ status: "failed", error_message: "Timed out after 10 minutes" })
+    .eq("user_id", user.id)
+    .in("status", ["queued", "processing"])
+    .lt("created_at", tenMinAgo);
+
+  // Per-user throttle: max 1 concurrent job (checked AFTER stale cleanup)
   const { count: activeCount } = await supabase
     .from("resume_jobs")
     .select("id", { count: "exact", head: true })

@@ -94,7 +94,7 @@ Return ONLY valid JSON:
 
 RULES:
 1. Every bullet starts with <b>Bold text</b> — metric or key achievement first
-2. Each bullet ~95-110 characters rendered — one justified line
+2. Each bullet ~95-110 characters rendered — one justified line. NEVER truncate mid-sentence — every bullet MUST be a complete grammatical thought
 3. ZERO verb repetition across ALL companies — every bullet uses a unique action verb
 4. Bold JD keywords naturally with <b> tags — not just the lead metric
 5. Quantify everything: %, $, team sizes, timelines
@@ -103,6 +103,7 @@ RULES:
 8. All verbs MUST be past tense (Led, Drove, Built — NOT Lead, Drive, Build)
 9. Group bullets into project_groups (0, 1, 2...) — each group = 2-3 related bullets under one project_title
 10. Write EXACTLY the requested number of bullets per company
+11. ZERO content duplication across companies — NEVER reuse the same achievement, metric, or project across different companies. Each company must have unique bullets specific to THAT company's context only
 
 Strategy: {strategy}
 Strategy emphasis: {strategy_description}
@@ -114,6 +115,85 @@ PHASE_4_BATCHED_USER = """## JD Keywords
 {companies_section}
 
 Write bullets for ALL companies above. ZERO verb repetition across all bullets."""
+
+
+# ── Phase 4A: Verbose Bullet Paragraphs (one call PER COMPANY) ─────────
+
+PHASE_4A_VERBOSE_SYSTEM = """You are a resume achievement writer. Write detailed achievement paragraphs for ONE company.
+Return ONLY valid JSON:
+
+{{
+  "paragraphs": [
+    {{
+      "project_group": 0,
+      "text_html": "<b>Bold metric lead</b> detailed achievement paragraph with full context",
+      "verb": "Led"
+    }}
+  ]
+}}
+
+RULES:
+1. Each paragraph is 200-400 characters — a full, rich description of the achievement
+2. Every paragraph starts with <b>Bold text</b> — metric or key achievement first
+3. XYZ format: "<b>Accomplished X</b> as measured by Y by doing Z" — with FULL context
+4. ZERO verb repetition — every paragraph uses a unique past-tense action verb
+5. Bold JD keywords naturally with <b> tags throughout
+6. Quantify everything: %, $, team sizes, timelines, user counts
+7. Include specific details: tool names, methodologies, team dynamics, business impact
+8. Group paragraphs into project_groups (0, 1, 2...) — each group = related achievements
+9. Write EXACTLY {bullet_count} paragraphs for this company
+10. Do NOT worry about line width — these will be condensed later
+11. Verbs already used by prior companies: {used_verbs}. Do NOT reuse any of these.
+
+Strategy: {strategy}
+Strategy emphasis: {strategy_description}
+Career level: {career_level}"""
+
+PHASE_4A_VERBOSE_USER = """## JD Keywords
+{jd_keywords_compact}
+
+## Company: {company_name}
+Title: {company_title}
+Date: {company_dates}
+Team: {company_team}
+
+## Relevant Career Context
+{company_chunks}
+
+Write {bullet_count} detailed achievement paragraphs for this company. ZERO verb repetition."""
+
+
+# ── Phase 4C: Condense Verbose Paragraphs to Bullets (batched) ─────────
+
+PHASE_4C_CONDENSE_SYSTEM = """You are a resume bullet condenser. Compress detailed paragraphs into concise, punchy resume bullets.
+Return ONLY valid JSON:
+
+{{
+  "bullets": [
+    {{
+      "paragraph_index": 0,
+      "text_html": "<b>Bold metric lead</b> concise bullet",
+      "verb": "Led"
+    }}
+  ]
+}}
+
+RULES:
+1. Each bullet MUST be 95-110 rendered characters — one justified line on an A4 resume
+2. Preserve the leading <b>Bold text</b> and all <b> keyword tags exactly
+3. Preserve the leading action verb exactly — do NOT change it
+4. Preserve all metrics, percentages, dollar amounts, team sizes exactly
+5. Preserve XYZ structure: compress by cutting filler words, not substance
+6. Every bullet must be a COMPLETE grammatical thought — never truncate mid-sentence
+7. Cut adjectives, adverbs, and setup clauses first. Keep metrics and outcomes.
+8. If a paragraph has multiple metrics, keep the strongest one
+9. Condense ALL {paragraph_count} paragraphs — one bullet per paragraph"""
+
+PHASE_4C_CONDENSE_USER = """## Paragraphs to Condense
+
+{paragraphs_section}
+
+Condense each paragraph to 95-110 rendered characters. Preserve <b> tags, verbs, and metrics exactly."""
 
 
 # ── Phase 5 Batched: Width Optimization (single call) ───────────────��────

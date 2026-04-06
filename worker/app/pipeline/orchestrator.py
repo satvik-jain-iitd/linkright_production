@@ -34,19 +34,96 @@ from ..tools.assemble_html import (
     resume_assemble_html, AssembleInput, ThemeColors, HeaderData, SectionContent,
 )
 from ..tools.score_bullets import resume_score_bullets, ScoreBulletsInput, CandidateBullet
+from ..qmd_search import hybrid_search as qmd_hybrid_search, fallback_fts_search
 from . import prompts
+import os
 
+REVIEW_PAUSE_SECONDS = int(os.environ.get("REVIEW_PAUSE_SECONDS", "6"))
+
+import re as _re
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
+# Keywords that signal a section contains professional experience or skills
+_PROF_KEYWORDS = {
+    "experience", "work", "role", "manager", "engineer", "analyst",
+    "consultant", "associate", "intern", "developer", "lead", "director",
+    "company", "startup", "sprinklr", "american express", "amex",
+    "contentstack", "navi", "skills", "tools", "education", "voluntary",
+}
+
+
+def _prepare_career_for_phase1(career_text: str, job_id: str) -> str:
+    """Extract professional sections from career text for Phase 1.
+
+    Long career profiles may have extensive personal/early-life narrative
+    before professional experience.  This function splits by ## headings,
+    keeps only sections relevant to resume generation (roles, skills,
+    education), and caps each section at 2500 chars.
+    """
+    MAX_TOTAL = 20000
+    MAX_PER_SECTION = 2500
+
+    # If short enough already, pass through
+    if len(career_text) <= MAX_TOTAL:
+        return career_text
+
+    # Split into (heading, body) pairs
+    sections = _re.split(r'\n(?=## )', career_text)
+    intro = sections[0] if sections else ""  # text before first ##
+
+    kept = []
+    # Always keep intro/header (first ~500 chars)
+    if intro.strip():
+        kept.append(intro.strip()[:500])
+
+    for section in sections[1:]:
+        heading_line = section.split("\n", 1)[0].lower()
+        # Keep sections that mention professional keywords
+        if any(kw in heading_line for kw in _PROF_KEYWORDS):
+            if len(section) > MAX_PER_SECTION:
+                # Keep heading + first 2500 chars of body
+                section = section[:MAX_PER_SECTION] + "\n[... section trimmed ...]"
+            kept.append(section.strip())
+
+    result = "\n\n".join(kept)
+
+    # Final cap
+    if len(result) > MAX_TOTAL:
+        result = result[:MAX_TOTAL] + "\n\n[... truncated ...]"
+
+    logger.info(
+        f"Job {job_id}: career_text condensed from {len(career_text)} to {len(result)} chars "
+        f"({len(kept)} sections kept) for Phase 1"
+    )
+    return result
+
 
 async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
-    """Execute all 8 phases sequentially."""
+    """Execute V2 pipeline: company-by-company verbose → condense → width opt.
+
+    Phase sequence:
+      1+2  → Parse JD + Strategy + Brand Colors (1 LLM call)
+      2.5  → Vector retrieval per company (QMD, no LLM)
+      3    → Page fit planning (no LLM)
+      3.5  → Stencil draft → draft_html (no LLM)
+      4a   → Verbose paragraphs per company (N LLM calls, review gates)
+      4b   → Rank verbose bullets by BRS (no LLM)
+      4c   → Condense all to bullets (1 LLM call)
+      5    → Width optimization (1-2 LLM calls)
+      6    → BRS scoring (no LLM)
+      7    → Validation (no LLM)
+      8    → Final assembly → output_html
+    """
     llm = get_provider(ctx.model_provider, ctx.api_key, ctx.model_id)
 
     await phase_1_parse_and_strategy(ctx, sb, llm)
+    await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
-    await phase_4_bullets(ctx, sb, llm)
+    await phase_3_5_stencil_draft(ctx, sb)
+    await phase_4a_verbose_bullets(ctx, sb, llm)
+    await phase_4b_ranking(ctx, sb)
+    await phase_4c_condense_bullets(ctx, sb, llm)
     await phase_5_width_opt(ctx, sb, llm)
     await phase_6_scoring(ctx, sb)
     await phase_7_validation(ctx, sb)
@@ -166,6 +243,9 @@ def _format_qa_context(ctx: PipelineContext) -> str:
         q = qa.get("question", "")
         a = qa.get("answer", "")
         if q and a:
+            # Cap individual answers — auto-fill can dump raw career text
+            if len(a) > 500:
+                a = a[:500] + "..."
             lines.append(f"Q: {q}\nA: {a}")
     if not lines:
         return ""
@@ -222,8 +302,11 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
             indent=2,
         ),
     )
+    # Smart truncation for Phase 1: prioritize professional sections over
+    # early-life narrative to avoid 413 Payload Too Large on Groq.
+    career_text_p1 = _prepare_career_for_phase1(ctx.career_text, ctx.job_id)
     user_msg = prompts.PHASE_1_2_USER.format(
-        jd_text=ctx.jd_text, career_text=ctx.career_text, qa_context=qa_context
+        jd_text=ctx.jd_text, career_text=career_text_p1, qa_context=qa_context
     )
 
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=1)
@@ -246,6 +329,366 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
 
     ctx._phase_timings["phase_1_2"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 2, f"Strategy: {ctx.strategy}", 25)
+
+
+# ── Phase 2.5: Vector Retrieval Per Company (QMD — no LLM) ──────────────
+
+async def phase_2_5_vector_retrieval(ctx: PipelineContext, sb: Client):
+    """Retrieve relevant career chunks per company via QMD hybrid search."""
+    t0 = time.time()
+    await _progress(ctx, sb, 2, "Retrieving relevant experience", 28)
+
+    companies = ctx._parsed.get("companies", [])
+    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+    jd_query = " ".join(keyword_strs[:10])
+
+    for idx, co in enumerate(companies):
+        co_name = co.get("name", "")
+        query = f"{co_name} {jd_query}"
+
+        # Try QMD first, fall back to Supabase FTS
+        chunks = qmd_hybrid_search(ctx.user_id, query, limit=8)
+        if not chunks:
+            chunks = fallback_fts_search(sb, ctx.user_id, query, limit=8)
+
+        ctx._company_chunks[idx] = chunks
+        logger.info(f"Job {ctx.job_id}: Company {idx} '{co_name}' — {len(chunks)} chunks retrieved")
+
+    ctx._phase_timings["phase_2_5"] = int((time.time() - t0) * 1000)
+
+
+# ── Phase 3.5: Stencil Draft (static sections + placeholder experience) ─
+
+async def phase_3_5_stencil_draft(ctx: PipelineContext, sb: Client):
+    """Build complete HTML for static sections and experience headers with placeholder bullets.
+
+    Static sections (Education, Skills, Awards, Interests, Header) are FINAL from this point.
+    Professional Experience shows company headers with '...' placeholders.
+    """
+    t0 = time.time()
+    await _progress(ctx, sb, 3, "Building layout stencil", 36)
+
+    parsed = ctx._parsed
+    template_html = _load_template(ctx.template_id)
+    section_order = ctx._section_order or ["Professional Experience", "Awards & Recognitions",
+                                            "Voluntary Work & Projects", "Academic Achievements",
+                                            "Core Competencies & Skills", "Additional Interests"]
+    order_map = _get_section_order_map(section_order)
+    companies = parsed.get("companies", [])
+
+    sections = []
+
+    # Experience section: company headers with placeholder bullets
+    if "experience" in order_map:
+        placeholder_bullets = []
+        budget = ctx._bullet_budget
+        company_keys = _extract_company_keys(budget)
+        for idx, ck in enumerate(company_keys):
+            num = budget.get(ck, 4)
+            for j in range(num):
+                placeholder_bullets.append({
+                    "company_index": idx,
+                    "project_group": 0,
+                    "text_html": "...",
+                    "verb": "",
+                    "fill_percentage": 0,
+                })
+        sections.append(SectionContent(
+            section_html=_build_experience_html(placeholder_bullets, companies),
+            section_order=order_map["experience"],
+        ))
+
+    # Static sections — built once, final from this point
+    if "education" in order_map and parsed.get("education"):
+        sections.append(SectionContent(
+            section_html=_build_education_html(parsed["education"]),
+            section_order=order_map["education"],
+        ))
+    if "skills" in order_map and parsed.get("skills"):
+        sections.append(SectionContent(
+            section_html=_build_skills_html(parsed["skills"]),
+            section_order=order_map["skills"],
+        ))
+    if "awards" in order_map and parsed.get("awards"):
+        sections.append(SectionContent(
+            section_html=_build_awards_html(parsed["awards"]),
+            section_order=order_map["awards"],
+        ))
+    if "voluntary" in order_map and parsed.get("voluntary"):
+        sections.append(SectionContent(
+            section_html=_build_voluntary_html(parsed["voluntary"]),
+            section_order=order_map["voluntary"],
+        ))
+    if "interests" in order_map and parsed.get("interests"):
+        sections.append(SectionContent(
+            section_html=_build_interests_html(parsed["interests"]),
+            section_order=order_map["interests"],
+        ))
+
+    # Assemble stencil HTML
+    contact = parsed.get("contact_info", {})
+    colors = ctx.theme_colors or {}
+    theme = ThemeColors(
+        brand_primary=colors.get("brand_primary", "#4285F4"),
+        brand_secondary=colors.get("brand_secondary", "#EA4335"),
+        brand_tertiary=colors.get("brand_tertiary", ""),
+        brand_quaternary=colors.get("brand_quaternary", ""),
+    )
+    contacts = []
+    if contact.get("phone"):
+        contacts.append(f"Phone: {contact['phone']}")
+    if contact.get("email"):
+        contacts.append(f"Email: {contact['email']}")
+    if contact.get("linkedin"):
+        contacts.append(f"LinkedIn: {contact['linkedin']}")
+    if contact.get("portfolio"):
+        contacts.append(f"Portfolio: {contact['portfolio']}")
+    header = HeaderData(
+        name=contact.get("name", ""),
+        role=parsed.get("target_role", ""),
+        contacts=contacts,
+    )
+
+    result = json.loads(
+        await resume_assemble_html(AssembleInput(
+            template_html=template_html,
+            theme_colors=theme,
+            header=header,
+            sections=sections,
+            css_overrides="",
+        ))
+    )
+
+    ctx.draft_html = result.get("final_html", "")
+    update_job(sb, ctx.job_id, draft_html=ctx.draft_html)
+
+    ctx._phase_timings["phase_3_5"] = int((time.time() - t0) * 1000)
+    await _progress(ctx, sb, 3, "Stencil ready", 38)
+
+
+# ── Phase 4A: Verbose Bullets (one LLM call PER COMPANY) ────────────────
+
+async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
+    """Write verbose 200-400 char paragraphs per company, with review gates."""
+    t0 = time.time()
+
+    strategy_info = STRATEGIES.get(ctx.strategy, STRATEGIES["BALANCED"])
+    budget = ctx._bullet_budget
+    parsed = ctx._parsed
+    companies = parsed.get("companies", [])
+    company_keys = _extract_company_keys(budget)
+
+    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+    jd_keywords_compact = ", ".join(keyword_strs)
+
+    all_verbose = []
+    used_verbs_so_far = []
+
+    for idx, ck in enumerate(company_keys):
+        co = companies[idx] if idx < len(companies) else {}
+        co_name = co.get("name", f"Company {idx + 1}")
+        num_bullets = budget.get(ck, 4)
+
+        await _progress(ctx, sb, 4, f"Writing paragraphs — {co_name}", 40 + idx * 5)
+
+        # Get per-company context: QMD chunks or career text fallback
+        if idx in ctx._company_chunks and ctx._company_chunks[idx]:
+            company_context = "\n\n---\n\n".join(ctx._company_chunks[idx])[:5000]
+        else:
+            company_context = _get_company_context(ctx, idx)
+
+        system_msg = prompts.PHASE_4A_VERBOSE_SYSTEM.format(
+            bullet_count=num_bullets,
+            used_verbs=", ".join(used_verbs_so_far) if used_verbs_so_far else "none",
+            strategy=ctx.strategy,
+            strategy_description=strategy_info["description"],
+            career_level=ctx.career_level,
+        )
+        user_msg = prompts.PHASE_4A_VERBOSE_USER.format(
+            jd_keywords_compact=jd_keywords_compact,
+            company_name=co_name,
+            company_title=co.get("title", ""),
+            company_dates=co.get("date_range", ""),
+            company_team=co.get("team", ""),
+            company_chunks=company_context,
+            bullet_count=num_bullets,
+        )
+
+        resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.4)
+        try:
+            data = _parse_json(resp.text)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Phase 4A ({co_name}): invalid JSON — {e}") from e
+
+        for p in data.get("paragraphs", []):
+            p["company_index"] = idx
+            all_verbose.append(p)
+            if p.get("verb"):
+                used_verbs_so_far.append(p["verb"])
+
+        # Update draft_html with verbose paragraphs for this company
+        _update_draft_with_verbose(ctx, all_verbose, companies)
+        update_job(sb, ctx.job_id, draft_html=ctx.draft_html)
+
+        # Review gate: pause between companies for natural pacing
+        if idx < len(company_keys) - 1 and REVIEW_PAUSE_SECONDS > 0:
+            logger.info(f"Job {ctx.job_id}: review gate after {co_name} — pausing {REVIEW_PAUSE_SECONDS}s")
+            await asyncio.sleep(REVIEW_PAUSE_SECONDS)
+
+    ctx._verbose_bullets = all_verbose
+
+    # Register all verbs
+    verbs = [b["verb"] for b in all_verbose if b.get("verb")]
+    await resume_track_verbs(TrackVerbsInput(action="register", verbs=verbs), ctx=ctx)
+
+    ctx._phase_timings["phase_4a"] = int((time.time() - t0) * 1000)
+    await _progress(ctx, sb, 4, f"Wrote {len(all_verbose)} paragraphs", 55)
+
+
+def _update_draft_with_verbose(ctx: PipelineContext, verbose_bullets: list, companies: list):
+    """Replace experience section in draft_html with current verbose paragraphs."""
+    if not ctx.draft_html:
+        return
+
+    # Build experience HTML from verbose paragraphs (using text_html directly)
+    exp_html = _build_experience_html(verbose_bullets, companies)
+
+    # Replace the Professional Experience section in draft_html
+    import re
+    pattern = r'(<div class="section-title">Professional Experience.*?)(?=<div class="section-title">|</div>\s*</div>\s*</div>\s*$)'
+    # Simpler: find and replace between experience section markers
+    marker_start = '<div class="section-title">Professional Experience'
+    idx = ctx.draft_html.find(marker_start)
+    if idx == -1:
+        return
+
+    # Find the next section-title after experience (or end of content)
+    next_section = ctx.draft_html.find('<div class="section-title">', idx + len(marker_start))
+    if next_section == -1:
+        # Experience is the last section before closing tags
+        # Find the closing </div> tags that close the page content
+        close_idx = ctx.draft_html.rfind('</div>')
+        if close_idx > idx:
+            next_section = close_idx
+
+    if next_section > idx:
+        ctx.draft_html = ctx.draft_html[:idx] + exp_html + "\n" + ctx.draft_html[next_section:]
+
+
+# ── Phase 4B: Rank Verbose Bullets by BRS (no LLM) ──────────────────────
+
+async def phase_4b_ranking(ctx: PipelineContext, sb: Client):
+    """Score and rank verbose bullets by BRS. Trim to budget."""
+    t0 = time.time()
+    await _progress(ctx, sb, 4, "Ranking by relevance", 57)
+
+    candidate_bullets = []
+    for i, b in enumerate(ctx._verbose_bullets):
+        candidate_bullets.append(CandidateBullet(
+            project_id=f"verbose_{i}",
+            raw_text=b.get("text_html", ""),
+            group_id=f"company_{b.get('company_index', 0)}",
+            group_theme=str(b.get("project_group", 0)),
+            position_in_group=i,
+        ))
+
+    score_result = json.loads(
+        await resume_score_bullets(ScoreBulletsInput(
+            bullets=candidate_bullets,
+            jd_keywords=[{"keyword": kw, "category": "skill"} if isinstance(kw, str) else kw for kw in ctx.jd_keywords],
+            career_level=ctx.career_level,
+            total_bullet_budget=len(ctx._verbose_bullets),
+        ))
+    )
+
+    # Sort by BRS within each company, keep all (trimming is optional)
+    scored = score_result.get("scored_bullets", [])
+    brs_map = {s["project_id"]: s["brs"] for s in scored}
+
+    for i, b in enumerate(ctx._verbose_bullets):
+        b["brs"] = brs_map.get(f"verbose_{i}", 0)
+
+    # Sort within each company by BRS descending
+    from collections import defaultdict
+    by_company = defaultdict(list)
+    for b in ctx._verbose_bullets:
+        by_company[b["company_index"]].append(b)
+
+    ranked = []
+    for idx in sorted(by_company.keys()):
+        company_bullets = sorted(by_company[idx], key=lambda x: x.get("brs", 0), reverse=True)
+        ranked.extend(company_bullets)
+
+    ctx._ranked_verbose_bullets = ranked
+    ctx._phase_timings["phase_4b"] = int((time.time() - t0) * 1000)
+    await _progress(ctx, sb, 4, "Bullets ranked", 58)
+
+
+# ── Phase 4C: Condense Verbose Paragraphs to Bullets (1 LLM call) ───────
+
+async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
+    """Condense all verbose paragraphs to 95-110 char bullets in one batched LLM call."""
+    t0 = time.time()
+    await _progress(ctx, sb, 4, "Condensing to bullet points", 59)
+
+    verbose = ctx._ranked_verbose_bullets or ctx._verbose_bullets
+    if not verbose:
+        raise ValueError("Phase 4C: No verbose bullets to condense")
+
+    # Build paragraphs section for prompt
+    para_lines = []
+    for i, b in enumerate(verbose):
+        para_lines.append(f"PARAGRAPH {i} (Company: {b.get('company_index', 0)}, Verb: {b.get('verb', '')}):")
+        para_lines.append(f'"{b.get("text_html", "")}"')
+        para_lines.append("")
+
+    system_msg = prompts.PHASE_4C_CONDENSE_SYSTEM.format(
+        paragraph_count=len(verbose),
+    )
+    user_msg = prompts.PHASE_4C_CONDENSE_USER.format(
+        paragraphs_section="\n".join(para_lines),
+    )
+
+    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.2)
+    try:
+        data = _parse_json(resp.text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Phase 4C: invalid JSON — {e}") from e
+
+    # Map condensed bullets back to their verbose originals
+    condensed_map = {}
+    for b in data.get("bullets", []):
+        condensed_map[b["paragraph_index"]] = b
+
+    all_bullets = []
+    for i, v in enumerate(verbose):
+        c = condensed_map.get(i)
+        if c:
+            bullet = {
+                "company_index": v["company_index"],
+                "project_group": v.get("project_group", 0),
+                "text_html": c["text_html"],
+                "verb": c.get("verb", v.get("verb", "")),
+            }
+        else:
+            # Fallback: use verbose text directly (condense missed this one)
+            bullet = {
+                "company_index": v["company_index"],
+                "project_group": v.get("project_group", 0),
+                "text_html": v["text_html"],
+                "verb": v.get("verb", ""),
+            }
+        all_bullets.append(bullet)
+
+    ctx._raw_bullets = all_bullets
+
+    # Update draft_html with condensed bullets
+    companies = ctx._parsed.get("companies", [])
+    _update_draft_with_verbose(ctx, all_bullets, companies)
+    update_job(sb, ctx.job_id, draft_html=ctx.draft_html)
+
+    ctx._phase_timings["phase_4c"] = int((time.time() - t0) * 1000)
+    await _progress(ctx, sb, 4, f"Condensed {len(all_bullets)} bullets", 62)
 
 
 # ── Phase 3: Page Fit Planning ────────────────────────────────────────────
@@ -555,8 +998,9 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
     # Step 3: Split into chunks (8 bullets/batch to fit smaller context windows)
     MAX_PHASE_5_BATCH = 8
     chunks = [needs_fix[i:i + MAX_PHASE_5_BATCH] for i in range(0, len(needs_fix), MAX_PHASE_5_BATCH)]
-    logger.info(f"Job {ctx.job_id} phase 5: {len(needs_fix)} bullets in {len(chunks)} batch(es)")
-    await _progress(ctx, sb, 5, f"Optimizing {len(needs_fix)} bullets in {len(chunks)} batch(es)", 58)
+    batch_word = "batch" if len(chunks) == 1 else "batches"
+    logger.info(f"Job {ctx.job_id} phase 5: {len(needs_fix)} bullets in {len(chunks)} {batch_word}")
+    await _progress(ctx, sb, 5, f"Optimizing {len(needs_fix)} bullets in {len(chunks)} {batch_word}", 58)
 
     system_msg = prompts.PHASE_5_BATCHED_SYSTEM.format(
         raw_budget=raw_budget,
@@ -600,7 +1044,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             v_status = verify.get("status", "ERROR")
             v_fill = verify.get("fill_percentage", 0)
 
-            if v_status == "PASS" or v_fill >= 89:
+            if v_status == "PASS":
                 ctx._raw_bullets[idx]["text_html"] = new_html
                 ctx._raw_bullets[idx]["fill_percentage"] = v_fill
             else:
@@ -650,8 +1094,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
                 )
             )
             v_fill = verify.get("fill_percentage", 0)
-            # Accept if PASS or close enough (89%+)
-            if verify.get("status") == "PASS" or v_fill >= 89:
+            if verify.get("status") == "PASS":
                 ctx._raw_bullets[idx]["text_html"] = new_html
                 ctx._raw_bullets[idx]["fill_percentage"] = v_fill
             else:
@@ -921,15 +1364,15 @@ def _build_experience_html(bullets: list, companies: list) -> str:
 
         for pg_idx in sorted(by_project.keys()):
             pg_bullets = by_project[pg_idx]
-            # Use project_title from first bullet in group
-            project_title = pg_bullets[0].get("project_title", "")
-            if project_title:
-                html_parts.append(f'<div class="project-title">{project_title}</div>')
-
+            # V2: No project-title divs — groups separated by ul-group-gap CSS
             html_parts.append("<ul>")
             for b in pg_bullets:
                 text = b.get("text_html", "")
-                html_parts.append(f'<li><span class="li-content">{text}</span></li>')
+                fill = b.get("fill_percentage", 0)
+                # Only justify when line fills ≥98% of budget — below that,
+                # word-spacing stretches visibly and looks artificial.
+                css_class = "li-content" if fill >= 98 else "li-content-natural"
+                html_parts.append(f'<li><span class="{css_class}">{text}</span></li>')
             html_parts.append("</ul>")
 
         html_parts.append("</div>")  # close .entry
@@ -958,8 +1401,9 @@ def _build_education_html(education: list) -> str:
                 f'<div class="entry-subhead"><span>{degree}</span><span>{gpa}</span></div>'
             )
         if highlights:
+            # Use text-line (no justify) — education highlights are not width-optimized
             html_parts.append(
-                f'<span class="edge-to-edge-line">{highlights}</span>'
+                f'<span class="text-line">{highlights}</span>'
             )
         html_parts.append("</div>")
 
@@ -977,7 +1421,8 @@ def _build_skills_html(skills: dict) -> str:
         else:
             skills_str = str(skill_list)
         html_parts.append(f'<div class="entry-header">{category}</div>')
-        html_parts.append(f'<span class="edge-to-edge-line">{skills_str}</span>')
+        # Use text-line (no justify) — skills are not width-optimized
+        html_parts.append(f'<span class="text-line">{skills_str}</span>')
 
     return "\n".join(html_parts)
 
@@ -992,7 +1437,8 @@ def _build_awards_html(awards: list) -> str:
         title = award.get("title", "")
         detail = award.get("detail", "")
         text = f"<b>{title}</b> — {detail}" if detail else f"<b>{title}</b>"
-        html_parts.append(f'<li><span class="li-content">{text}</span></li>')
+        # Use li-content-natural (no justify) — awards are not width-optimized
+        html_parts.append(f'<li><span class="li-content-natural">{text}</span></li>')
     html_parts.append("</ul>")
 
     return "\n".join(html_parts)
@@ -1008,7 +1454,8 @@ def _build_voluntary_html(voluntary: list) -> str:
         title = item.get("title", "")
         detail = item.get("detail", "")
         text = f"<b>{title}</b> — {detail}" if detail else f"<b>{title}</b>"
-        html_parts.append(f'<li><span class="li-content">{text}</span></li>')
+        # Use li-content-natural (no justify) — voluntary items are not width-optimized
+        html_parts.append(f'<li><span class="li-content-natural">{text}</span></li>')
     html_parts.append("</ul>")
 
     return "\n".join(html_parts)
@@ -1018,7 +1465,8 @@ def _build_interests_html(interests: str) -> str:
     """Build Additional Interests section from comma-separated string."""
     html_parts = [
         '<div class="section-title">Additional Interests<div class="section-divider"></div></div>',
-        f'<span class="edge-to-edge-line">{interests}</span>',
+        # Use text-line (no justify) — interests are not width-optimized
+        f'<span class="text-line">{interests}</span>',
     ]
     return "\n".join(html_parts)
 
