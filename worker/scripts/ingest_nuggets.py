@@ -27,12 +27,21 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 import os
 import sys
 import time
+import uuid
 
 # Must be set BEFORE importing app.config so the flag is True at module load
 os.environ["USE_NUGGETS"] = "true"
+
+# Configure logging so orchestrator progress is visible
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 _WORKER_ROOT = os.path.join(os.path.dirname(__file__), "..")
 if os.path.abspath(_WORKER_ROOT) not in sys.path:
@@ -70,6 +79,11 @@ async def main() -> None:
         default=None,
         help="Path to a .txt career file. If omitted, fetches from career_chunks in Supabase.",
     )
+    parser.add_argument(
+        "--yes", "-y",
+        action="store_true",
+        help="Skip the confirmation prompt (for non-interactive / scripted use).",
+    )
     args = parser.parse_args()
 
     _check_env()
@@ -103,18 +117,19 @@ async def main() -> None:
 
     # ── 2. Show estimate + confirm ────────────────────────────────────────
     print(_ESTIMATE)
-    try:
-        confirm = input("Proceed? [y/N] ").strip().lower()
-    except (KeyboardInterrupt, EOFError):
-        print("\nAborted.")
-        sys.exit(0)
-    if confirm != "y":
-        print("Aborted.")
-        sys.exit(0)
+    if not args.yes:
+        try:
+            confirm = input("Proceed? [y/N] ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print("\nAborted.")
+            sys.exit(0)
+        if confirm != "y":
+            print("Aborted.")
+            sys.exit(0)
 
     # ── 3. Build context ──────────────────────────────────────────────────
     ctx = PipelineContext(
-        job_id="nugget-seed",
+        job_id=str(uuid.uuid4()),  # valid UUID required by checkpoint saves
         user_id=args.user_id,
         career_text=career_text,
         jd_text="",

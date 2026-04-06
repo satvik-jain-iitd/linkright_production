@@ -272,6 +272,15 @@ async def extract_nuggets(
         all_nuggets: list[Nugget] = []
         global_index = 0
 
+        # --- DB: delete old nuggets for this user before starting ---
+        try:
+            sb.table("career_nuggets").delete().eq("user_id", user_id).execute()
+            logger.info("extract_nuggets: cleared old nuggets for user %s", user_id)
+        except Exception as exc:
+            logger.warning("extract_nuggets: failed to delete old nuggets: %s", exc)
+
+        consecutive_429s = 0  # track rate-limit failures to detect daily quota exhaustion
+
         for batch_num, batch_text in enumerate(batches):
             # Inter-batch delay (skip before very first call)
             if batch_num > 0:
@@ -298,8 +307,15 @@ async def extract_nuggets(
                     raw_text = None
 
             if raw_text is None:
-                logger.warning("extract_nuggets: both keys failed for batch %d, skipping", batch_num)
+                consecutive_429s += 1
+                logger.warning("extract_nuggets: batch %d failed (%d consecutive)", batch_num, consecutive_429s)
+                # Stop early if 2+ consecutive failures — daily quota likely exhausted
+                if consecutive_429s >= 2:
+                    logger.warning("extract_nuggets: stopping early — daily rate limit suspected (batch %d/%d)", batch_num, len(batches))
+                    break
                 continue
+
+            consecutive_429s = 0  # reset on success
 
             # --- JSON parse (with one retry) ---
             active_key = groq_api_key or byok_api_key
@@ -308,39 +324,40 @@ async def extract_nuggets(
                 continue
 
             # --- Convert to Nugget dataclasses ---
+            batch_nuggets: list[Nugget] = []
             for raw in nuggets_raw:
                 if not isinstance(raw, dict):
                     continue
                 nugget = _raw_to_nugget(raw, global_index)
                 all_nuggets.append(nugget)
+                batch_nuggets.append(nugget)
                 global_index += 1
 
-        if not all_nuggets:
-            return []
-
-        # --- DB: delete old nuggets for this user ---
-        try:
-            sb.table("career_nuggets").delete().eq("user_id", user_id).execute()
-        except Exception as exc:
-            logger.warning("extract_nuggets: failed to delete old nuggets: %s", exc)
-
-        # --- DB: insert new nuggets ---
-        try:
-            rows = [_nugget_to_row(n, user_id) for n in all_nuggets]
-            result = sb.table("career_nuggets").insert(rows).execute()
-            # Back-fill the DB-assigned id onto each Nugget
-            inserted = result.data or []
-            for nugget, row_data in zip(all_nuggets, inserted):
-                nugget.id = row_data.get("id")
-        except Exception as exc:
-            logger.warning("extract_nuggets: DB insert failed: %s", exc)
+            # --- DB: insert this batch immediately (incremental save) ---
+            if batch_nuggets:
+                try:
+                    rows = [_nugget_to_row(n, user_id) for n in batch_nuggets]
+                    result = sb.table("career_nuggets").insert(rows).execute()
+                    inserted = result.data or []
+                    for nugget, row_data in zip(batch_nuggets, inserted):
+                        nugget.id = row_data.get("id")
+                    logger.info("extract_nuggets: batch %d → %d nuggets saved (total=%d)", batch_num, len(batch_nuggets), len(all_nuggets))
+                except Exception as exc:
+                    logger.warning("extract_nuggets: DB insert failed for batch %d: %s", batch_num, exc)
 
         return all_nuggets
 
+    # Dynamic timeout: each batch needs up to (HTTP_TIMEOUT + BATCH_SLEEP) seconds.
+    # Add a 60s buffer. Minimum 120s for small profiles.
+    import math
+    n_batches = max(1, math.ceil(len(career_text) / 3000))
+    dynamic_timeout = max(120, n_batches * (_BATCH_SLEEP + 120) + 60)
+    logger.info("extract_nuggets: %d estimated batches, timeout=%.0fs", n_batches, dynamic_timeout)
+
     try:
-        return await asyncio.wait_for(_inner(), timeout=120)
+        return await asyncio.wait_for(_inner(), timeout=dynamic_timeout)
     except asyncio.TimeoutError:
-        logger.warning("extract_nuggets: timed out after 120s — returning partial results")
+        logger.warning("extract_nuggets: timed out after %.0fs — returning partial results", dynamic_timeout)
         # Can't retrieve partial from _inner() after timeout; return empty
         return []
     except Exception as exc:
