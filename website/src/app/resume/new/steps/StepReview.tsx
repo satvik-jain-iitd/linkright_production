@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { WizardData } from "../WizardShell";
+import { QualityPanel } from "@/components/QualityPanel";
+import type { QualityStats } from "@/components/QualityPanel";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -376,6 +378,9 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
           )}
         </div>
       )}
+
+      {/* Quality panel */}
+      {stats && <QualityPanel stats={stats as Partial<QualityStats>} />}
 
       {/* Two-column layout: resume + sidebar chat */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">

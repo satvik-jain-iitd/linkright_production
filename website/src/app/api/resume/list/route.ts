@@ -12,7 +12,7 @@ export async function GET() {
 
   const { data: jobs, error } = await supabase
     .from("resume_jobs")
-    .select("id, status, current_phase, phase_number, progress_pct, created_at, completed_at, duration_ms, model_provider, model_id, target_company, output_html")
+    .select("id, status, current_phase, phase_number, progress_pct, created_at, completed_at, duration_ms, model_provider, model_id, target_company, output_html, stats")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);

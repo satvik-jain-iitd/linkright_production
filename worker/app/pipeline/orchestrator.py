@@ -156,6 +156,32 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
 
 
+def _save_checkpoint(ctx: PipelineContext, sb: Client, phase_name: str, status: str = "completed") -> None:
+    """Persist phase checkpoint to resume_jobs.stats after each phase.
+
+    NOTE: update_job is synchronous — do NOT await this function.
+    """
+    import time as _time
+    if "checkpoints" not in ctx.stats:
+        ctx.stats["checkpoints"] = {}
+    ctx.stats["checkpoints"][phase_name] = {
+        "timestamp": int(_time.time()),
+        "duration_ms": ctx._phase_timings.get(phase_name, 0),
+        "status": status,
+    }
+    # Also update LLM totals
+    if ctx._llm_log:
+        ctx.stats["total_llm_calls"] = len(ctx._llm_log)
+        ctx.stats["total_input_tokens"] = sum(e.get("input_tokens", 0) for e in ctx._llm_log)
+        ctx.stats["total_output_tokens"] = sum(e.get("output_tokens", 0) for e in ctx._llm_log)
+        ctx.stats["total_llm_ms"] = sum(e.get("duration_ms", 0) for e in ctx._llm_log)
+    # Persist to DB
+    try:
+        update_job(sb, ctx.job_id, stats=ctx.stats)
+    except Exception as e:
+        logger.warning(f"Checkpoint save failed for {phase_name}: {e}")
+
+
 MAX_LLM_RETRIES = 5
 
 async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
@@ -382,6 +408,7 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
         ctx._nuggets = []
 
     ctx._phase_timings["phase_0"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_0")
 
 
 # ── Phase 1+2: Parse JD + Strategy + Brand Colors (merged — 1 LLM call) ──
@@ -455,6 +482,7 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
 
     ctx._phase_timings["phase_1_2"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_1_2")
     await _progress(ctx, sb, 2, f"Strategy: {ctx.strategy}", 25)
 
 
@@ -541,6 +569,7 @@ async def phase_2_5_vector_retrieval(ctx: PipelineContext, sb: Client):
             logger.info(f"Job {ctx.job_id}: Company {idx} '{co_name}' — {len(chunks)} chunks retrieved")
 
     ctx._phase_timings["phase_2_5"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_2_5")
 
 
 # ── Phase 3.5: Stencil Draft (static sections + placeholder experience) ─
@@ -780,6 +809,7 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
     await resume_track_verbs(TrackVerbsInput(action="register", verbs=verbs), ctx=ctx)
 
     ctx._phase_timings["phase_4a"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_4a")
     await _progress(ctx, sb, 4, f"Wrote {len(all_verbose)} paragraphs", 55)
 
 
@@ -964,6 +994,7 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
     update_job(sb, ctx.job_id, draft_html=ctx.draft_html)
 
     ctx._phase_timings["phase_4c"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_4c")
     await _progress(ctx, sb, 4, f"Condensed {len(all_bullets)} bullets", 62)
 
 
@@ -1473,6 +1504,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
 
     ctx._optimized_bullets = ctx._raw_bullets
     ctx._phase_timings["phase_5"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_5")
     await _progress(ctx, sb, 5, "Width optimization complete", 70)
 
 
@@ -1709,6 +1741,7 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
         await _progress(ctx, sb, 7, f"Quality: {grade} ({quality_score:.0f}/100)", 85)
 
     ctx._phase_timings["phase_7"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_7")
 
 
 # ── Section Builders (programmatic HTML — no LLM) ────────────────────────
