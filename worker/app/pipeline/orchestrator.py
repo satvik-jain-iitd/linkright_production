@@ -1101,6 +1101,14 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             else:
                 # Keep whatever we have — close enough after 2 attempts
                 ctx._raw_bullets[idx]["fill_percentage"] = v_fill
+                # Track width failures for quality report
+                if "width_failures" not in ctx.stats:
+                    ctx.stats["width_failures"] = []
+                ctx.stats["width_failures"].append({
+                    "bullet_index": idx,
+                    "fill_pct": v_fill,
+                    "text": new_html[:100],
+                })
 
     ctx._optimized_bullets = ctx._raw_bullets
     ctx._phase_timings["phase_5"] = int((time.time() - t0) * 1000)
@@ -1209,7 +1217,7 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
                 background_hex="#FFFFFF",
             ))
         )
-        if not contrast_result.get("passes_aa_normal", True):
+        if not contrast_result.get("passes_wcag_aa_normal_text", False):
             warnings.append(f"Primary color {colors['brand_primary']} fails WCAG AA contrast")
             # Use the suggested fix if available
             if contrast_result.get("suggested_fix"):
@@ -1248,10 +1256,10 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
     # Check 3: Keyword coverage — ≥40% of JD keywords in bullets
     all_bullet_text = " ".join(b.get("text_html", "").lower() for b in bullets)
     kw_list = [kw["keyword"] if isinstance(kw, dict) else kw for kw in (ctx.jd_keywords or [])]
-    matched_kw = sum(1 for kw in kw_list if kw.lower() in all_bullet_text)
+    matched_kw = sum(1 for kw in kw_list if _re.search(r'\b' + _re.escape(kw) + r'\b', all_bullet_text, _re.IGNORECASE))
     kw_coverage = (matched_kw / len(kw_list) * 100) if kw_list else 100
     if kw_coverage < 40:
-        missing = [kw for kw in kw_list if kw.lower() not in all_bullet_text][:5]
+        missing = [kw for kw in kw_list if not _re.search(r'\b' + _re.escape(kw) + r'\b', all_bullet_text, _re.IGNORECASE)][:5]
         warnings.append(f"Low keyword coverage: {kw_coverage:.0f}% (target: ≥40%). Missing: {', '.join(missing)}")
 
     # Check 4: Width fill average
