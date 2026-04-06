@@ -1255,11 +1255,13 @@ async def phase_6_scoring(ctx: PipelineContext, sb: Client):
 # ── Phase 7: Validation ──────────────────────────────────────────────────
 
 async def phase_7_validation(ctx: PipelineContext, sb: Client):
+    t0 = time.time()
     await _progress(ctx, sb, 7, "Validating colors & layout", 80)
 
     colors = ctx.theme_colors or {}
     warnings = []
 
+    # ── Always: contrast check + page-fit (needed by both code paths) ────────
     # Validate contrast for brand_primary on white
     if colors.get("brand_primary"):
         contrast_result = json.loads(
@@ -1283,73 +1285,99 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
     )
 
     ctx.stats["final_fits_page"] = fit_result.get("fits_one_page", False)
-
-    # ── Quality Judge Checks (ported from CLI quality_judge.py) ──────────
-    bullets = ctx._optimized_bullets or []
-    quality_score = 0.0
-
-    # Check 1: Verb repetition — all verbs should be unique
-    verbs = [b.get("verb", "").lower() for b in bullets if b.get("verb")]
-    unique_verbs = set(verbs)
-    has_duplicates = len(verbs) != len(unique_verbs)
-    if has_duplicates:
-        dupes = [v for v in unique_verbs if verbs.count(v) > 1]
-        warnings.append(f"Duplicate verbs detected: {', '.join(dupes)}")
-    verb_score = 50.0 if has_duplicates else 100.0
-
-    # Check 2: Metric density — ≥60% of bullets should contain a number
-    import re as _re
-    metric_count = sum(1 for b in bullets if _re.search(r'\d', b.get("text_html", "")))
-    metric_pct = (metric_count / len(bullets) * 100) if bullets else 0
-    if metric_pct < 60:
-        warnings.append(f"Low metric density: {metric_pct:.0f}% of bullets contain numbers (target: ≥60%)")
-
-    # Check 3: Keyword coverage — ≥40% of JD keywords in bullets
-    all_bullet_text = " ".join(b.get("text_html", "").lower() for b in bullets)
-    kw_list = [kw["keyword"] if isinstance(kw, dict) else kw for kw in (ctx.jd_keywords or [])]
-    matched_kw = sum(1 for kw in kw_list if _re.search(r'\b' + _re.escape(kw) + r'\b', all_bullet_text, _re.IGNORECASE))
-    kw_coverage = (matched_kw / len(kw_list) * 100) if kw_list else 100
-    if kw_coverage < 40:
-        missing = [kw for kw in kw_list if not _re.search(r'\b' + _re.escape(kw) + r'\b', all_bullet_text, _re.IGNORECASE)][:5]
-        warnings.append(f"Low keyword coverage: {kw_coverage:.0f}% (target: ≥40%). Missing: {', '.join(missing)}")
-
-    # Check 4: Width fill average
-    fills = [b.get("fill_percentage", 0) for b in bullets if b.get("fill_percentage")]
-    avg_fill = sum(fills) / len(fills) if fills else 0
-    overflow_count = sum(1 for b in bullets if b.get("fill_percentage", 0) > 102)
-    short_count = sum(1 for b in bullets if 0 < b.get("fill_percentage", 0) < 90)
-    if overflow_count:
-        warnings.append(f"{overflow_count} bullet(s) overflow (>102% fill)")
-    if short_count:
-        warnings.append(f"{short_count} bullet(s) too short (<90% fill)")
-
-    # Check 5: Tense consistency — all verbs should be past tense
-    present_tense = {"lead", "drive", "build", "manage", "develop", "create", "design",
-                     "implement", "optimize", "launch", "grow", "run", "own", "scale"}
-    bad_tense = [v for v in verbs if v in present_tense]
-    if bad_tense:
-        warnings.append(f"Present tense verbs detected (should be past): {', '.join(set(bad_tense))}")
-
-    # Compute weighted quality score (0-100)
-    quality_score = (
-        kw_coverage * 0.30 +
-        metric_pct * 0.25 +
-        verb_score * 0.15 +
-        (100.0 if ctx.stats.get("final_fits_page") else 0.0) * 0.15 +
-        avg_fill * 0.10 +
-        (100.0 if not bad_tense else 50.0) * 0.05
-    )
-    grade = "A" if quality_score >= 90 else "B" if quality_score >= 75 else "C" if quality_score >= 60 else "D" if quality_score >= 40 else "F"
-
-    ctx.stats["quality_score"] = round(quality_score, 1)
-    ctx.stats["quality_grade"] = grade
-    ctx.stats["keyword_coverage"] = round(kw_coverage, 1)
-    ctx.stats["metric_density"] = round(metric_pct, 1)
-    ctx.stats["avg_fill"] = round(avg_fill, 1)
-    ctx.stats["validation_warnings"] = warnings
+    # Store full page-fit result for quality_judge to consume
+    ctx._page_fit = fit_result
     ctx.theme_colors = colors
 
-    await _progress(ctx, sb, 7, f"Quality: {grade} ({quality_score:.0f}/100)", 85)
+    if USE_QUALITY_JUDGE:
+        # ── Story 2.1: delegate all quality scoring to quality_judge ─────────
+        report = judge_quality(ctx)
+
+        ctx.stats["quality_grade"] = report.grade
+        ctx.stats["quality_score"] = report.score
+        ctx.stats["quality_checks"] = [
+            {
+                "name": c.name,
+                "score": c.score,
+                "passed": c.passed,
+                "detail": c.detail,
+            }
+            for c in report.checks
+        ]
+        ctx.stats["quality_suggestions"] = report.suggestions
+        ctx.stats["ats_blocked"] = report.ats_blocked
+        ctx.stats["validation_warnings"] = warnings
+
+        await _progress(ctx, sb, 7, f"Quality: {report.grade} ({report.score:.0f}/100)", 85)
+
+    else:
+        # ── Legacy inline Phase 7 logic (preserved, feature-flagged off) ─────
+        bullets = ctx._optimized_bullets or []
+        quality_score = 0.0
+
+        # Check 1: Verb repetition — all verbs should be unique
+        verbs = [b.get("verb", "").lower() for b in bullets if b.get("verb")]
+        unique_verbs = set(verbs)
+        has_duplicates = len(verbs) != len(unique_verbs)
+        if has_duplicates:
+            dupes = [v for v in unique_verbs if verbs.count(v) > 1]
+            warnings.append(f"Duplicate verbs detected: {', '.join(dupes)}")
+        verb_score = 50.0 if has_duplicates else 100.0
+
+        # Check 2: Metric density — ≥60% of bullets should contain a number
+        import re as _re
+        metric_count = sum(1 for b in bullets if _re.search(r'\d', b.get("text_html", "")))
+        metric_pct = (metric_count / len(bullets) * 100) if bullets else 0
+        if metric_pct < 60:
+            warnings.append(f"Low metric density: {metric_pct:.0f}% of bullets contain numbers (target: ≥60%)")
+
+        # Check 3: Keyword coverage — ≥40% of JD keywords in bullets
+        all_bullet_text = " ".join(b.get("text_html", "").lower() for b in bullets)
+        kw_list = [kw["keyword"] if isinstance(kw, dict) else kw for kw in (ctx.jd_keywords or [])]
+        matched_kw = sum(1 for kw in kw_list if _re.search(r'\b' + _re.escape(kw) + r'\b', all_bullet_text, _re.IGNORECASE))
+        kw_coverage = (matched_kw / len(kw_list) * 100) if kw_list else 100
+        if kw_coverage < 40:
+            missing = [kw for kw in kw_list if not _re.search(r'\b' + _re.escape(kw) + r'\b', all_bullet_text, _re.IGNORECASE)][:5]
+            warnings.append(f"Low keyword coverage: {kw_coverage:.0f}% (target: ≥40%). Missing: {', '.join(missing)}")
+
+        # Check 4: Width fill average
+        fills = [b.get("fill_percentage", 0) for b in bullets if b.get("fill_percentage")]
+        avg_fill = sum(fills) / len(fills) if fills else 0
+        overflow_count = sum(1 for b in bullets if b.get("fill_percentage", 0) > 102)
+        short_count = sum(1 for b in bullets if 0 < b.get("fill_percentage", 0) < 90)
+        if overflow_count:
+            warnings.append(f"{overflow_count} bullet(s) overflow (>102% fill)")
+        if short_count:
+            warnings.append(f"{short_count} bullet(s) too short (<90% fill)")
+
+        # Check 5: Tense consistency — all verbs should be past tense
+        present_tense = {"lead", "drive", "build", "manage", "develop", "create", "design",
+                         "implement", "optimize", "launch", "grow", "run", "own", "scale"}
+        bad_tense = [v for v in verbs if v in present_tense]
+        if bad_tense:
+            warnings.append(f"Present tense verbs detected (should be past): {', '.join(set(bad_tense))}")
+
+        # Compute weighted quality score (0-100)
+        quality_score = (
+            kw_coverage * 0.30 +
+            metric_pct * 0.25 +
+            verb_score * 0.15 +
+            (100.0 if ctx.stats.get("final_fits_page") else 0.0) * 0.15 +
+            avg_fill * 0.10 +
+            (100.0 if not bad_tense else 50.0) * 0.05
+        )
+        grade = "A" if quality_score >= 90 else "B" if quality_score >= 75 else "C" if quality_score >= 60 else "D" if quality_score >= 40 else "F"
+
+        ctx.stats["quality_score"] = round(quality_score, 1)
+        ctx.stats["quality_grade"] = grade
+        ctx.stats["keyword_coverage"] = round(kw_coverage, 1)
+        ctx.stats["metric_density"] = round(metric_pct, 1)
+        ctx.stats["avg_fill"] = round(avg_fill, 1)
+        ctx.stats["validation_warnings"] = warnings
+
+        await _progress(ctx, sb, 7, f"Quality: {grade} ({quality_score:.0f}/100)", 85)
+
+    ctx._phase_timings["phase_7"] = int((time.time() - t0) * 1000)
 
 
 # ── Section Builders (programmatic HTML — no LLM) ────────────────────────
