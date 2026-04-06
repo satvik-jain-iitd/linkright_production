@@ -11,6 +11,39 @@ You are executing the Ship Quick skill. This orchestrates a complete product rel
 
 ---
 
+## HARD RULES — Context & Token Management
+
+### Token Discipline
+- **NEVER exceed 10,000 tokens** in any single tool call output, file write, or agent prompt
+- If content is large, split into multiple smaller writes/calls
+- Keep agent prompts focused and scoped — don't dump entire project context into one prompt
+
+### Fresh Worktree Per Phase
+- **Every phase starts in a NEW worktree** (`git worktree add`)
+- This ensures clean context with zero baggage from prior phases
+- Previous phase artifacts are committed to the branch before starting new worktree
+- Worktree naming: `ship-quick-phase-{N}-{date}`
+
+### Compact After Every Phase / Every 3 Tasks
+- After completing **every phase** OR **every 3 tasks** (whichever comes first):
+  1. Commit all work in current worktree
+  2. Write a **Phase Summary** (max 200 words, bullet points)
+  3. Save summary to `_bmad-output/summaries/phase-{N}-summary.md`
+  4. Close all completed bd tasks
+  5. `bd status` to confirm state
+
+### Phase Summaries (MANDATORY)
+- After each phase, present a summary to the user
+- Format: **Max 200 words**, bullet points only
+- Must include:
+  - What was done (actions taken)
+  - What was created (artifacts/files)
+  - Key findings (if any)
+  - What's next (next phase preview)
+- This is NOT optional — every phase ends with a summary
+
+---
+
 ## STEP 0: ROUTE — Ask the User
 
 Before anything else, determine the project type:
