@@ -36,7 +36,12 @@ from ..tools.assemble_html import (
 from ..tools.score_bullets import resume_score_bullets, ScoreBulletsInput, CandidateBullet
 from ..qmd_search import hybrid_search as qmd_hybrid_search, fallback_fts_search
 from . import prompts
+from ..tools.nugget_extractor import extract_nuggets
+from ..tools.nugget_embedder import embed_nuggets
+from ..tools.quality_judge import judge_quality
 import os
+
+USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
 
 REVIEW_PAUSE_SECONDS = int(os.environ.get("REVIEW_PAUSE_SECONDS", "6"))
 
@@ -117,6 +122,11 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     """
     llm = get_provider(ctx.model_provider, ctx.api_key, ctx.model_id)
 
+    await phase_0_nuggets(
+        ctx, sb,
+        groq_api_key=os.environ.get("GROQ_API_KEY"),
+        byok_api_key=ctx.api_key,
+    )
     await phase_1_parse_and_strategy(ctx, sb, llm)
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
@@ -277,6 +287,47 @@ def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]
     except Exception as e:
         logger.warning(f"Job {ctx.job_id}: chunk fetch failed — {e}")
     return []
+
+
+# ── Phase 0: Nugget extraction + embedding (USE_NUGGETS=true only) ──────
+
+async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | None = None, byok_api_key: str | None = None):
+    """Phase 0: LLM-powered nugget extraction + embedding (USE_NUGGETS=true only)."""
+    from ..config import USE_NUGGETS
+    if not USE_NUGGETS:
+        return
+
+    t0 = time.time()
+    logger.info(f"[Phase 0] Starting nugget extraction for user {ctx.user_id}")
+
+    try:
+        nuggets = await extract_nuggets(
+            user_id=ctx.user_id,
+            career_text=ctx.career_text,
+            sb=sb,
+            groq_api_key=groq_api_key,
+            byok_api_key=byok_api_key,
+        )
+
+        if nuggets:
+            gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+            embeddings = await embed_nuggets(
+                nuggets=nuggets,
+                gemini_api_key=gemini_api_key,
+                sb=sb,
+                user_id=ctx.user_id,
+            )
+            ctx._nuggets = nuggets
+            logger.info(f"[Phase 0] Extracted {len(nuggets)} nuggets, {sum(1 for e in embeddings if e)} embedded")
+        else:
+            logger.warning("[Phase 0] Nugget extraction returned empty — falling back to paragraph chunking")
+            ctx._nuggets = []
+
+    except Exception as e:
+        logger.warning(f"[Phase 0] Failed: {e} — falling back to paragraph chunking")
+        ctx._nuggets = []
+
+    ctx._phase_timings["phase_0"] = int((time.time() - t0) * 1000)
 
 
 # ── Phase 1+2: Parse JD + Strategy + Brand Colors (merged — 1 LLM call) ──
