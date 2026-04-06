@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +20,7 @@ from pydantic import BaseModel
 from .config import SUPABASE_SERVICE_KEY, SUPABASE_URL, WORKER_SECRET
 from .context import PipelineContext
 from .db import create_supabase, update_job
-from .pipeline.orchestrator import run_pipeline
+from .pipeline.orchestrator import phase_0_nuggets, run_pipeline
 
 app = FastAPI(title="LinkRight Sync Worker", version="0.1.0")
 
@@ -139,3 +140,55 @@ async def start_job(
     verify_secret(authorization)
     background_tasks.add_task(process_job, req)
     return JobResponse(job_id=req.job_id, status="accepted")
+
+
+# ── Nugget refresh endpoint ──────────────────────────────────────────────
+
+class NuggetRefreshRequest(BaseModel):
+    user_id: str
+
+
+async def _run_nugget_refresh(user_id: str) -> None:
+    """Background task: fetch career_chunks → delete old nuggets → re-extract + re-embed."""
+    try:
+        sb = create_supabase()
+        rows = (
+            sb.table("career_chunks")
+            .select("chunk_text, chunk_index")
+            .eq("user_id", user_id)
+            .order("chunk_index")
+            .execute()
+            .data or []
+        )
+        if not rows:
+            logger.warning("nugget_refresh: no career_chunks for user=%s", user_id)
+            return
+        career_text = "\n\n".join(r["chunk_text"] for r in rows)
+        logger.info("nugget_refresh: user=%s — %d chunks, %d chars", user_id, len(rows), len(career_text))
+
+        ctx = PipelineContext(
+            job_id=f"nugget-refresh-{user_id[:8]}",
+            user_id=user_id,
+            career_text=career_text,
+            jd_text="",
+            model_provider="groq",
+            model_id="llama-3.3-70b-versatile",
+            api_key=None,
+            template_id="cv-a4-standard",
+        )
+        await phase_0_nuggets(ctx, sb, groq_api_key=os.getenv("GROQ_API_KEY"), force=True)
+        nugget_count = len(ctx._nuggets) if ctx._nuggets else 0
+        logger.info("nugget_refresh: done user=%s, %d nuggets", user_id, nugget_count)
+    except Exception as exc:
+        logger.exception("nugget_refresh: failed for user=%s — %s", user_id, exc)
+
+
+@app.post("/nuggets/refresh", status_code=202)
+async def refresh_nuggets(
+    req: NuggetRefreshRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    verify_secret(authorization)
+    background_tasks.add_task(_run_nugget_refresh, req.user_id)
+    return {"status": "processing", "user_id": req.user_id}
