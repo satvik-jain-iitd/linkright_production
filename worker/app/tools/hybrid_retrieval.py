@@ -18,9 +18,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Gemini Embeddings config (same model as nugget_embedder)
-_GEMINI_EMBED_MODEL = "text-embedding-005"
-_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+# Jina AI Embeddings config (same model as nugget_embedder)
+_JINA_EMBED_MODEL = "jina-embeddings-v3"
+_JINA_BASE_URL = "https://api.jina.ai/v1"
+_JINA_DIMENSIONS = 768
 
 # Importance boost multipliers applied after RRF fusion
 IMPORTANCE_BOOST = {"P0": 1.5, "P1": 1.2, "P2": 1.0, "P3": 0.8}
@@ -51,7 +52,7 @@ class NuggetResult:
 # ---------------------------------------------------------------------------
 
 async def _embed_query(api_key: str, text: str) -> Optional[list[float]]:
-    """Embed query text using Gemini text-embedding-005.
+    """Embed query text using Jina AI jina-embeddings-v3.
 
     Returns the 768-dim vector or None on any failure.
     """
@@ -60,15 +61,17 @@ async def _embed_query(api_key: str, text: str) -> Optional[list[float]]:
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"{_GEMINI_BASE_URL}/models/{_GEMINI_EMBED_MODEL}:embedContent",
-                params={"key": api_key},
+                f"{_JINA_BASE_URL}/embeddings",
+                headers={"Authorization": f"Bearer {api_key}"},
                 json={
-                    "model": f"models/{_GEMINI_EMBED_MODEL}",
-                    "content": {"parts": [{"text": text}]},
+                    "model": _JINA_EMBED_MODEL,
+                    "input": [text],
+                    "dimensions": _JINA_DIMENSIONS,
+                    "task": "text-matching",
                 },
             )
             resp.raise_for_status()
-            return resp.json()["embedding"]["values"]
+            return resp.json()["data"][0]["embedding"]
     except Exception as exc:
         logger.warning("hybrid_retrieval: query embedding failed — %s", exc)
         return None
@@ -140,7 +143,7 @@ async def _vector_query(
     query: str,
     company: Optional[str],
     limit: int,
-    gemini_api_key: str,
+    jina_api_key: str,
 ) -> list[dict]:
     """Vector similarity search via Supabase RPC match_career_nuggets.
 
@@ -155,7 +158,7 @@ async def _vector_query(
             match_count     int   DEFAULT 20
         ) returns setof career_nuggets
     """
-    query_embedding = await _embed_query(gemini_api_key, query)
+    query_embedding = await _embed_query(jina_api_key, query)
     if query_embedding is None:
         raise RuntimeError("hybrid_retrieval: query embedding returned None")
 
@@ -181,11 +184,11 @@ async def _hybrid_search(
     query: str,
     company: Optional[str],
     limit: int,
-    gemini_api_key: str,
+    jina_api_key: str,
 ) -> list[dict]:
     """Run BM25 + vector for a single (user_id, company, query) scope and fuse."""
     bm25 = _bm25_query(sb, user_id, query, company, limit * 2)
-    vector = await _vector_query(sb, user_id, query, company, limit * 2, gemini_api_key)
+    vector = await _vector_query(sb, user_id, query, company, limit * 2, jina_api_key)
     fused = _fuse_results(bm25, vector)
     _apply_importance_boost(fused)
     return fused
@@ -315,18 +318,18 @@ async def hybrid_retrieve(
     Returns:
         Tuple of (ranked NuggetResult list, retrieval_method_used string).
     """
-    gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+    jina_api_key = os.environ.get("JINA_API_KEY", "")
 
     # ── Tier 1: Full hybrid (BM25 + vector) ──────────────────────────────────
     try:
         company_fused = await _hybrid_search(
-            sb, user_id, query, company, limit, gemini_api_key
+            sb, user_id, query, company, limit, jina_api_key
         )
         # Unscoped pass: transferable skills (resume_relevance filter done post-hoc
         # because Supabase JS client doesn't support gte in RPC params easily;
         # we filter here after fetching, keeping only resume_relevance >= 0.5)
         unscoped_fused_raw = await _hybrid_search(
-            sb, user_id, query, None, limit, gemini_api_key
+            sb, user_id, query, None, limit, jina_api_key
         )
         unscoped_fused = [
             item for item in unscoped_fused_raw

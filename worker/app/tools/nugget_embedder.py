@@ -1,4 +1,4 @@
-"""Tool: nugget_embedder - Embed career nugget answers using Gemini text-embedding-005.
+"""Tool: nugget_embedder - Embed career nugget answers using Jina AI embeddings.
 
 Generates 768-dimension embeddings for the `answer` field of each Nugget and
 writes them back to the career_nuggets table in Supabase. Handles rate-limits
@@ -16,9 +16,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Gemini Embeddings config
-_GEMINI_EMBED_MODEL = "text-embedding-005"
-_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+# Jina AI Embeddings config
+_JINA_EMBED_MODEL = "jina-embeddings-v3"
+_JINA_BASE_URL = "https://api.jina.ai/v1"
+_JINA_DIMENSIONS = 768
 
 # Rate-limit / retry config
 _BATCH_SLEEP = 10           # seconds between Gemini batch calls
@@ -31,23 +32,25 @@ _RETRY_BACKOFFS = [60, 120, 240, 300]  # seconds on 429
 # ---------------------------------------------------------------------------
 
 async def _embed_single(api_key: str, text: str) -> Optional[list[float]]:
-    """Call Gemini text-embedding-005 for a single text.
+    """Call Jina AI embeddings for a single text.
 
-    Returns the embedding vector or None on failure.
+    Returns the embedding vector (768 dims) or None on failure.
     Raises httpx.HTTPStatusError on non-2xx so callers can handle 429.
     """
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
-            f"{_GEMINI_BASE_URL}/models/{_GEMINI_EMBED_MODEL}:embedContent",
-            params={"key": api_key},
+            f"{_JINA_BASE_URL}/embeddings",
+            headers={"Authorization": f"Bearer {api_key}"},
             json={
-                "model": f"models/{_GEMINI_EMBED_MODEL}",
-                "content": {"parts": [{"text": text}]},
+                "model": _JINA_EMBED_MODEL,
+                "input": [text],
+                "dimensions": _JINA_DIMENSIONS,
+                "task": "text-matching",
             },
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["embedding"]["values"]
+        return data["data"][0]["embedding"]
 
 
 async def _embed_with_retry(api_key: str, text: str) -> Optional[list[float]]:
@@ -58,7 +61,7 @@ async def _embed_with_retry(api_key: str, text: str) -> Optional[list[float]]:
     for attempt, backoff in enumerate([0] + _RETRY_BACKOFFS):
         if backoff:
             logger.warning(
-                "nugget_embedder: Gemini 429 — backing off %ds (attempt %d)",
+                "nugget_embedder: Jina 429 — backing off %ds (attempt %d)",
                 backoff,
                 attempt,
             )
@@ -104,13 +107,13 @@ def _mark_needs_embedding(sb, nugget_id: str) -> None:
 
 async def embed_nuggets(
     nuggets: list,  # list[Nugget] from nugget_extractor
-    gemini_api_key: str,
+    jina_api_key: str,
     sb,             # Supabase client
     user_id: str,
 ) -> list[list[float]]:
     """Generate and store embeddings for a list of Nuggets.
 
-    Embeds the `answer` field of each nugget using Gemini text-embedding-005
+    Embeds the `answer` field of each nugget using Jina AI jina-embeddings-v3
     (768 dimensions), with a 10-second inter-batch delay and exponential
     back-off on rate-limit errors.
 
@@ -121,7 +124,7 @@ async def embed_nuggets(
 
     Args:
         nuggets: List of Nugget objects (expected to have .id after DB insert).
-        gemini_api_key: Gemini API key for embeddings.
+        jina_api_key: Jina AI API key for embeddings.
         sb: Supabase client (service-role key expected).
         user_id: Owner identifier — used only for logging context.
 
@@ -132,8 +135,8 @@ async def embed_nuggets(
     if not nuggets:
         return []
 
-    if not gemini_api_key:
-        logger.warning("embed_nuggets: no Gemini API key provided")
+    if not jina_api_key:
+        logger.warning("embed_nuggets: no Jina API key provided")
         return []
 
     results: list[list[float]] = []
@@ -166,7 +169,7 @@ async def embed_nuggets(
                     _mark_needs_embedding(sb, nugget_id)
                 continue
 
-            embedding = await _embed_with_retry(gemini_api_key, answer_text)
+            embedding = await _embed_with_retry(jina_api_key, answer_text)
 
             nugget_id = getattr(nugget, "id", None)
 
