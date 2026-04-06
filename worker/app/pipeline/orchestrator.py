@@ -390,10 +390,10 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
         )
 
         if nuggets:
-            gemini_api_key = os.environ.get("GOOGLE_API_KEY", "")
+            jina_api_key = os.environ.get("JINA_API_KEY", "")
             embeddings = await embed_nuggets(
                 nuggets=nuggets,
-                gemini_api_key=gemini_api_key,
+                jina_api_key=jina_api_key,
                 sb=sb,
                 user_id=ctx.user_id,
             )
