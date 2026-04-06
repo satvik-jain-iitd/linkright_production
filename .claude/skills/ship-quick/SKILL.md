@@ -59,43 +59,103 @@ You are executing the Ship Quick skill. This orchestrates a complete product rel
 
 ---
 
-## STEP 0: ROUTE — Ask the User
+## EPIC 1: Initiation (ALWAYS FIRST)
 
-Before anything else, determine the project type:
+This epic runs BEFORE any product work. It installs all dependencies and creates the Beads graph.
+
+### Story 1.1: Install All Dependencies
+
+**NEVER assume any tool is already installed.** Check and install each one. Ask the user for API keys where needed.
+
+```bash
+# 1. Check and install each tool (don't skip any)
+# If a tool is missing, install it. If it needs a key, ask the user.
+
+# --- Beads (bd) ---
+which bd || npm install -g @beads-dev/cli   # or brew install beads
+bd init                                      # Initialize in project
+# If Dolt missing: brew install dolt
+
+# --- Context Hub (chub) ---
+which chub || npm install -g @anthropic/context-hub
+# No key needed
+
+# --- QMD (semantic search) ---
+which qmd || npm install -g @tobilu/qmd
+# No key needed
+
+# --- agent-browser ---
+which agent-browser || cargo install agent-browser  # or npm
+# No key needed
+
+# --- AgentMail (MCP) ---
+# ASK USER: "AgentMail API key chahiye. Please provide your AM key."
+# Key format: am_us_...
+
+# --- mem0 / OpenMemory (MCP) ---
+# ASK USER: "Mem0 API key chahiye. Please provide your Mem0 key."
+# Key format: m0-...
+
+# --- Dolt (for Beads backend) ---
+which dolt || brew install dolt
+
+# --- BMAD ---
+# Check if _bmad/ folder exists in project or user's bmad_latest/
+# If not, ASK USER: "BMAD module files kahan hain?"
+```
+
+**Human-in-the-loop checkpoints during install:**
+- Ask for AgentMail API key
+- Ask for Mem0 API key
+- Ask for any LLM API keys (Groq, OpenRouter, etc.) if needed
+- Confirm BMAD module location
+- Verify all tools work: `bd status`, `chub --version`, `qmd --version`
+
+### Story 1.2: Route — Greenfield or Brownfield?
 
 ```
 Ask: "Is this a greenfield project (building from scratch) or brownfield (improving existing codebase)?"
 ```
 
-**If GREENFIELD** — User provides: product idea, target users, tech stack, constraints. No codebase to scan. Follow the Greenfield Flow below.
+**If GREENFIELD** — User provides: product idea, target users, tech stack, constraints.
+**If BROWNFIELD** — User provides: codebase path, reference implementation (optional), known issues.
 
-**If BROWNFIELD** — User provides: codebase path, reference implementation (optional), known issues, quality standards. Follow the Brownfield Flow below.
+### Story 1.3: Create Beads Dependency Graph
 
----
-
-## STEP 1: Create Beads Dependency Graph
-
-Before ANY execution, convert the entire plan into a `bd` dependency graph with 4 layers:
+Create the full 4-layer graph AFTER routing is decided.
 
 ```bash
-# Create the epic
-bd create --type=epic --title="Ship Quick: {project_name}"
+# Epic naming convention:
+# Epic 1: "Initiation" (this one — tools + graph)
+# Epic 2: "{YYYY-MM-DD_HH:MM}-Release-1" (first release)
+# Epic 3: "{YYYY-MM-DD_HH:MM}-Release-2" (next cycle)
+# etc.
 
-# For each phase, create features:
-bd create --type=feature --parent={epic_id} --title="Phase 1: Discovery"
+bd create --type=epic --title="Initiation"
+# ... install tasks as stories/tasks under this epic ...
 
-# For each workflow in a phase, create stories:
-bd create --type=story --parent={feature_id} --title="Generate Project Context"
-
-# For each granular step in a workflow, create tasks:
-bd create --type=task --parent={story_id} --title="Scan codebase structure"
+bd create --type=epic --title="{today_datetime}-Release-1"
+# ... all phase features/stories/tasks under this epic ...
 ```
 
 **4 layers:** Epic > Feature > Story > Task
+**Execution rule:** Always start at MOST GRANULAR task. Pick up > in_progress > close. Parent closes when ALL children close.
+**Session continuity:** `bd ready` at session start. Beads graph IS the context.
 
-**Execution rule:** Always start at the MOST GRANULAR task (leaf node). Pick up > mark in_progress > complete > close. Parent closes only when ALL children close.
+### Epic Naming Convention
 
-**Session continuity:** `bd ready` at session start shows what's unblocked. New session picks up exactly where previous left off — the Beads graph IS the context.
+| Epic | Name Format | Purpose |
+|------|-------------|---------|
+| 1 | `Initiation` | Install tools, create graph, route project |
+| 2 | `{YYYY-MM-DD_HH:MM}-Release-1` | First release cycle |
+| 3 | `{YYYY-MM-DD_HH:MM}-Release-2` | Second cycle (post-deploy loop) |
+| N | `{YYYY-MM-DD_HH:MM}-Release-{N-1}` | Subsequent cycles |
+
+The datetime stamp ensures every release epic is unique and traceable.
+
+---
+
+## EPIC 2+: {Today_Datetime}-Release-{N} (Product Work)
 
 ---
 
