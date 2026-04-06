@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { VerticalStepper } from "@/components/VerticalStepper";
 import { StepJobDetails } from "./steps/StepJobDetails";
+import { StepBrandColors } from "./steps/StepBrandColors";
 import { StepEnrich } from "./steps/StepEnrich";
 import { StepBuild } from "./steps/StepBuild";
 import { StepReview } from "./steps/StepReview";
@@ -18,6 +19,12 @@ export interface WizardData {
   qa_answers: { question: string; answer: string }[];
   target_company: string;
   target_role: string;
+  brand_colors: {
+    brand_primary: string;
+    brand_secondary: string;
+    brand_tertiary: string;
+    brand_quaternary: string;
+  } | null;
 }
 
 interface SubStep {
@@ -27,6 +34,7 @@ interface SubStep {
 
 const STEP_LABELS = [
   "Job Details",
+  "Brand Colors",
   "Enrich",
   "Build",
   "Review",
@@ -44,6 +52,7 @@ const EMPTY_DATA: WizardData = {
   qa_answers: [],
   target_company: "",
   target_role: "",
+  brand_colors: null,
 };
 
 function loadSaved(): { step: number; data: WizardData } | null {
@@ -61,9 +70,9 @@ export function WizardShell({ userId }: { userId: string }) {
 
   // If there's a saved job_id and it was on Build or Review, resume there
   const initialStep = saved?.data?.job_id
-    ? saved.step >= 2
+    ? saved.step >= 3
       ? saved.step
-      : 2
+      : 3
     : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
@@ -127,7 +136,7 @@ export function WizardShell({ userId }: { userId: string }) {
   // Build step definitions for VerticalStepper
   const stepDefs = STEP_LABELS.map((label, i) => ({
     label,
-    subSteps: i === 2 ? buildSubSteps : undefined,
+    subSteps: i === 3 ? buildSubSteps : undefined,
   }));
 
   return (
@@ -158,6 +167,9 @@ export function WizardShell({ userId }: { userId: string }) {
               <StepJobDetails data={data} update={update} next={next} />
             )}
             {step === 1 && (
+              <StepBrandColors data={data} update={update} next={next} back={back} />
+            )}
+            {step === 2 && (
               <StepEnrich
                 data={data}
                 update={update}
@@ -165,7 +177,7 @@ export function WizardShell({ userId }: { userId: string }) {
                 back={back}
               />
             )}
-            {step === 2 && (
+            {step === 3 && (
               <StepBuild
                 key={retryKey}
                 data={data}
@@ -176,7 +188,7 @@ export function WizardShell({ userId }: { userId: string }) {
                 onSubSteps={setBuildSubSteps}
               />
             )}
-            {step === 3 && <StepReview data={data} onNewResume={reset} />}
+            {step === 4 && <StepReview data={data} onNewResume={reset} />}
           </div>
         </main>
       </div>

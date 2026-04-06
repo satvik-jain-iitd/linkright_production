@@ -23,6 +23,7 @@ class PipelineContext:
     api_key: str
     template_id: str = "cv-a4-standard"
     qa_answers: list[dict] = field(default_factory=list)  # [{question, answer}]
+    override_theme_colors: dict | None = None  # pre-confirmed brand colors from wizard step
 
     # Populated by tools during the pipeline
     template_config: dict | None = None

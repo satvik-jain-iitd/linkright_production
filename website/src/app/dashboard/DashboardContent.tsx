@@ -55,6 +55,12 @@ export function DashboardContent({ user }: { user: User }) {
           Link<span className="text-accent">Right</span>
         </Link>
         <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/settings"
+            className="text-sm text-muted transition-colors hover:text-foreground"
+          >
+            Settings
+          </Link>
           <div className="flex items-center gap-3">
             {user.user_metadata?.avatar_url && (
               <img

@@ -315,7 +315,8 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
         ctx.career_level = data["career_level"]
         ctx.jd_keywords = data["jd_keywords"]
         ctx.strategy = data["strategy"]
-        ctx.theme_colors = data["theme_colors"]
+        # Use user-confirmed colors from wizard if provided, else use LLM-extracted
+        ctx.theme_colors = ctx.override_theme_colors or data["theme_colors"]
     except (json.JSONDecodeError, KeyError) as e:
         raise ValueError(f"Phase 1+2: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
 
@@ -1381,9 +1382,9 @@ def _build_experience_html(bullets: list, companies: list) -> str:
 
 
 def _build_education_html(education: list) -> str:
-    """Build Academic Achievements section from structured education data."""
+    """Build Education section from structured education data."""
     html_parts = [
-        '<div class="section-title">Academic Achievements<div class="section-divider"></div></div>'
+        '<div class="section-title">Education<div class="section-divider"></div></div>'
     ]
     for edu in education:
         institution = edu.get("institution", "")
@@ -1401,10 +1402,12 @@ def _build_education_html(education: list) -> str:
                 f'<div class="entry-subhead"><span>{degree}</span><span>{gpa}</span></div>'
             )
         if highlights:
-            # Use text-line (no justify) — education highlights are not width-optimized
-            html_parts.append(
-                f'<span class="text-line">{highlights}</span>'
-            )
+            # Split highlights on newlines or · separator into multiple edge-to-edge lines
+            lines = [h.strip() for h in highlights.replace(" · ", "\n").split("\n") if h.strip()]
+            for line in lines:
+                html_parts.append(
+                    f'<span class="edge-to-edge-line">{line}</span>'
+                )
         html_parts.append("</div>")
 
     return "\n".join(html_parts)

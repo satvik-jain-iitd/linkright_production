@@ -132,6 +132,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
             model_id: data.model_id,
             api_key: data.api_key,
             qa_answers: data.qa_answers || [],
+            override_theme_colors: data.brand_colors || null,
           }),
         });
         const result = await resp.json();

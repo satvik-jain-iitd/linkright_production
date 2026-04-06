@@ -39,6 +39,7 @@ class JobRequest(BaseModel):
     api_key: str         # user's BYOK key
     template_id: str = "cv-a4-standard"
     qa_answers: list[dict] = []  # [{question, answer}]
+    override_theme_colors: dict | None = None  # user-confirmed brand colors from wizard
 
 
 class JobResponse(BaseModel):
@@ -86,6 +87,7 @@ async def process_job(req: JobRequest):
             api_key=req.api_key,
             template_id=req.template_id,
             qa_answers=req.qa_answers or [],
+            override_theme_colors=req.override_theme_colors,
         )
 
         logger.info(f"Job {req.job_id}: starting pipeline ({req.model_provider}/{req.model_id})")
