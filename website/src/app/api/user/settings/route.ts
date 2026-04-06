@@ -29,7 +29,7 @@ export async function GET() {
     .eq("user_id", user.id)
     .order("chunk_index", { ascending: true });
 
-  const career_text = chunks?.map((c) => c.chunk_text).join("\n\n") || "";
+  const career_text = chunks?.map((c: { chunk_text: string }) => c.chunk_text).join("\n\n") || "";
 
   return Response.json({
     model_provider: settings?.model_provider || "",
