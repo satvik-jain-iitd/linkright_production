@@ -291,6 +291,13 @@ def _format_qa_context(ctx: PipelineContext) -> str:
 
 # ── Story 3.3: Post-LLM Validation Guards ────────────────────────────────
 
+_EDUCATION_FILLER_PHRASES = (
+    "passion for", "interest in", "dedicated to", "committed to",
+    "enthusiastic about", "skilled in", "love for", "desire to",
+    "aspiration", "driven by",
+)
+
+
 def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
     """Validate Phase 1+2 LLM output. Returns list of failure reasons."""
     import re
@@ -301,6 +308,18 @@ def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
     for key, val in colors.items():
         if val and not re.match(r'^#[0-9A-Fa-f]{6}$', val):
             failures.append(f"color {key}: invalid hex {val}")
+    # Education highlights must not contain generic filler phrases
+    for i, edu in enumerate(ctx._parsed.get("education", [])):
+        highlights = edu.get("highlights", "")
+        if highlights and isinstance(highlights, str):
+            lower = highlights.lower()
+            for phrase in _EDUCATION_FILLER_PHRASES:
+                if phrase in lower:
+                    failures.append(
+                        f"education[{i}].highlights: contains filler phrase '{phrase}' — "
+                        "must copy verbatim from career profile or use empty string"
+                    )
+                    break
     return failures
 
 

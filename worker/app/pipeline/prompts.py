@@ -48,7 +48,7 @@ Parsing rules:
 - target_role: match JD exactly, not candidate's current title
 - companies: ALL roles in REVERSE chronological order (most recent first)
 - education: ALL entries — institution, degree, year, GPA, highlights
-- highlights: Copy verbatim academic achievements, ranks, scores, and honours directly from the career profile — do NOT paraphrase, infer, or generate new content. If none listed, use empty array []
+- highlights: Copy verbatim academic achievements, exam ranks, test scores, and honours EXACTLY as written in the career profile. Do NOT paraphrase, infer, or generate any content not present word-for-word. Do NOT write generic phrases like "passion for", "interest in", "dedicated to", or "skilled in". If no specific achievement appears in the text, use "" (empty string)
 - skills: 2-4 categories relevant to JD
 - If a section has no data, use empty array/string — do NOT invent data
 

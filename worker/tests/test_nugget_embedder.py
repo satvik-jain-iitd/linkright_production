@@ -211,3 +211,24 @@ def test_no_exception_on_total_failure(httpx_mock, fake_sb):
 
     assert isinstance(result, list)
     assert all(slot == [] for slot in result)
+
+
+# ---------------------------------------------------------------------------
+# 7. test_empty_nuggets_list
+# ---------------------------------------------------------------------------
+
+def test_empty_nuggets_list(fake_sb):
+    """Empty nuggets list → returns [] immediately, no API calls."""
+    result = asyncio.run(embed_nuggets([], "fake-jina-key", fake_sb, "user-123"))
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# 8. test_no_api_key
+# ---------------------------------------------------------------------------
+
+def test_no_api_key(fake_sb):
+    """No Jina API key provided → returns [] immediately, no API calls."""
+    nuggets = [_make_nugget(0, nugget_id="nid-0")]
+    result = asyncio.run(embed_nuggets(nuggets, "", fake_sb, "user-123"))
+    assert result == []

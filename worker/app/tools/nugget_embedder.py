@@ -81,11 +81,14 @@ async def _embed_with_retry(api_key: str, text: str) -> Optional[list[float]]:
     return None
 
 
-def _mark_needs_embedding(sb, nugget_id: str) -> None:
+def _mark_needs_embedding(sb, nugget_id: str, user_id: str = "") -> None:
     """Add 'needs_embedding' tag to a career_nuggets row and clear any stale embedding."""
     try:
-        # Fetch current tags
-        result = sb.table("career_nuggets").select("tags").eq("id", nugget_id).execute()
+        # Fetch current tags — always scope by id AND user_id for defense-in-depth
+        q = sb.table("career_nuggets").select("tags").eq("id", nugget_id)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        result = q.execute()
         rows = result.data or []
         current_tags: list[str] = rows[0].get("tags", []) if rows else []
 
@@ -166,7 +169,7 @@ async def embed_nuggets(
                 # Mark in DB if we have an id
                 nugget_id = getattr(nugget, "id", None)
                 if nugget_id:
-                    _mark_needs_embedding(sb, nugget_id)
+                    _mark_needs_embedding(sb, nugget_id, user_id)
                 continue
 
             embedding = await _embed_with_retry(jina_api_key, answer_text)
@@ -181,7 +184,7 @@ async def embed_nuggets(
                 )
                 results.append([])
                 if nugget_id:
-                    _mark_needs_embedding(sb, nugget_id)
+                    _mark_needs_embedding(sb, nugget_id, user_id)
                 continue
 
             results.append(embedding)

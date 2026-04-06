@@ -75,6 +75,12 @@ export function DashboardContent({ user }: { user: User }) {
         </Link>
         <div className="flex items-center gap-4">
           <Link
+            href="/dashboard/profile"
+            className="text-sm text-muted transition-colors hover:text-foreground"
+          >
+            Profile
+          </Link>
+          <Link
             href="/dashboard/settings"
             className="text-sm text-muted transition-colors hover:text-foreground"
           >
