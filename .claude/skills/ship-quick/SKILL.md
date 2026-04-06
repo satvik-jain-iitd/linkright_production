@@ -34,13 +34,28 @@ You are executing the Ship Quick skill. This orchestrates a complete product rel
 
 ### Phase Summaries (MANDATORY)
 - After each phase, present a summary to the user
+- **Language: Romanized Hindi** (all summaries MUST be in Romanized Hindi)
 - Format: **Max 200 words**, bullet points only
 - Must include:
-  - What was done (actions taken)
-  - What was created (artifacts/files)
+  - Kya kiya (actions taken)
+  - Kya banaya (artifacts/files created)
   - Key findings (if any)
-  - What's next (next phase preview)
+  - Aage kya hoga (next phase preview)
 - This is NOT optional — every phase ends with a summary
+
+### Per-File Summaries (MANDATORY)
+- **Every file created** during Ship Quick must have a companion summary
+- Save to: `_bmad-output/summaries/file-{filename}-summary.md`
+- **Language: Romanized Hindi**
+- Format: **Max 200 words**, bullet points
+- Must include:
+  - File ka naam aur path
+  - Yeh file kya hai (purpose)
+  - Isme kya kya hai (contents overview)
+  - Key sections/data points
+  - Isko kaun use karega aur kab (who uses this, when)
+- Create these summaries IMMEDIATELY after creating each file
+- Present to user inline (in chat) AND save to summaries folder
 
 ---
 
