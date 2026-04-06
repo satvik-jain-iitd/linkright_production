@@ -47,6 +47,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // Trigger nugget re-extraction in background (fire-and-forget)
+  const workerUrl = process.env.WORKER_URL;
+  const workerSecret = process.env.WORKER_SECRET;
+  if (workerUrl && workerSecret) {
+    fetch(`${workerUrl}/nuggets/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${workerSecret}`,
+      },
+      body: JSON.stringify({ user_id: user.id }),
+    }).catch((err: Error) => {
+      console.warn("[career/upload] nuggets/refresh trigger failed:", err.message);
+    });
+  }
+
   return Response.json({ chunk_count: chunks.length });
 }
 

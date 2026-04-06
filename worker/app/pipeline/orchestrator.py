@@ -371,10 +371,14 @@ def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]
 
 # ── Phase 0: Nugget extraction + embedding (USE_NUGGETS=true only) ──────
 
-async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | None = None, byok_api_key: str | None = None):
-    """Phase 0: LLM-powered nugget extraction + embedding (USE_NUGGETS=true only)."""
+async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | None = None, byok_api_key: str | None = None, force: bool = False):
+    """Phase 0: LLM-powered nugget extraction + embedding (USE_NUGGETS=true only).
+
+    Args:
+        force: If True, bypass the USE_NUGGETS feature flag (used by /nuggets/refresh endpoint).
+    """
     from ..config import USE_NUGGETS
-    if not USE_NUGGETS:
+    if not USE_NUGGETS and not force:
         return
 
     t0 = time.time()

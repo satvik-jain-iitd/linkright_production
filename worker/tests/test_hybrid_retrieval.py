@@ -20,7 +20,7 @@ _env_patch = mock.patch.dict(
     {
         "SUPABASE_URL": "https://fake.supabase.co",
         "SUPABASE_KEY": "fake-key",
-        "GOOGLE_API_KEY": "fake-google-key",
+        "JINA_API_KEY": "fake-jina-key",
     },
 )
 _env_patch.start()
@@ -41,11 +41,8 @@ from app.tools.hybrid_retrieval import (  # noqa: E402
     IMPORTANCE_BOOST,
 )
 
-# Regex pattern matching Gemini embedContent URL regardless of query params
-_GEMINI_EMBED_URL = re.compile(
-    r"https://generativelanguage\.googleapis\.com/v1beta/models/"
-    r"text-embedding-005:embedContent"
-)
+# Jina AI embeddings URL
+_JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
 
 # ---------------------------------------------------------------------------
 # Extended FakeSupabaseClient for hybrid_retrieval
@@ -243,12 +240,12 @@ async def test_company_scoped_query(httpx_mock):
     amex_row = _nugget_row("n1", company="AmEx")
 
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
-        json={"embedding": {"values": [0.1] * 768}},
+        url=_JINA_EMBED_URL,
+        json={"data": [{"embedding": [0.1] * 768}]},
     )
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
-        json={"embedding": {"values": [0.1] * 768}},
+        url=_JINA_EMBED_URL,
+        json={"data": [{"embedding": [0.1] * 768}]},
     )
 
     sb = FakeHybridSupabaseClient(
@@ -256,7 +253,7 @@ async def test_company_scoped_query(httpx_mock):
         rpc_rows=[amex_row],
     )
 
-    with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": "fake-key"}):
+    with mock.patch.dict(os.environ, {"JINA_API_KEY": "fake-key"}):
         results, method = await hybrid_retrieve(
             sb, "user-123", "risk scoring", company="AmEx", limit=5
         )
@@ -286,12 +283,12 @@ async def test_unscoped_query(httpx_mock):
     high_rel = _nugget_row("n1", resume_relevance=0.9)
 
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
-        json={"embedding": {"values": [0.1] * 768}},
+        url=_JINA_EMBED_URL,
+        json={"data": [{"embedding": [0.1] * 768}]},
     )
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
-        json={"embedding": {"values": [0.1] * 768}},
+        url=_JINA_EMBED_URL,
+        json={"data": [{"embedding": [0.1] * 768}]},
     )
 
     sb = FakeHybridSupabaseClient(
@@ -299,7 +296,7 @@ async def test_unscoped_query(httpx_mock):
         rpc_rows=[high_rel],
     )
 
-    with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": "fake-key"}):
+    with mock.patch.dict(os.environ, {"JINA_API_KEY": "fake-key"}):
         results, method = await hybrid_retrieve(
             sb, "user-123", "risk scoring", company=None, limit=10
         )
@@ -339,20 +336,20 @@ def test_unscoped_filter_logic():
 
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 async def test_fallback_to_bm25_on_vector_error(httpx_mock):
-    """Gemini (vector embed) fails → falls back to bm25_only."""
+    """Jina AI (vector embed) fails → falls back to bm25_only."""
     import httpx as _httpx
 
-    # All Gemini calls fail
+    # All Jina calls fail
     for _ in range(10):
         httpx_mock.add_exception(
-            _httpx.ConnectError("Gemini unreachable"),
-            url=_GEMINI_EMBED_URL,
+            _httpx.ConnectError("Jina unreachable"),
+            url=_JINA_EMBED_URL,
         )
 
     row = _nugget_row("n1")
     sb = FakeHybridSupabaseClient(nugget_rows=[row], rpc_rows=[row])
 
-    with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": "fake-key"}):
+    with mock.patch.dict(os.environ, {"JINA_API_KEY": "fake-key"}):
         results, method = await hybrid_retrieve(
             sb, "user-123", "risk scoring", limit=5
         )
@@ -369,11 +366,11 @@ async def test_fallback_to_raw_on_all_errors(httpx_mock):
     """All tiers fail → returns [], 'raw_text_fallback'."""
     import httpx as _httpx
 
-    # Gemini fails → hybrid tier fails
+    # Jina fails → hybrid tier fails
     for _ in range(10):
         httpx_mock.add_exception(
-            _httpx.ConnectError("Gemini unreachable"),
-            url=_GEMINI_EMBED_URL,
+            _httpx.ConnectError("Jina unreachable"),
+            url=_JINA_EMBED_URL,
         )
 
     db_error = RuntimeError("DB down")
@@ -384,7 +381,7 @@ async def test_fallback_to_raw_on_all_errors(httpx_mock):
         rpc_raises=db_error,
     )
 
-    with mock.patch.dict(os.environ, {"GOOGLE_API_KEY": "fake-key"}):
+    with mock.patch.dict(os.environ, {"JINA_API_KEY": "fake-key"}):
         results, method = await hybrid_retrieve(
             sb, "user-123", "risk scoring", limit=5
         )
