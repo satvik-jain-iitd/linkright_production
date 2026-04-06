@@ -262,6 +262,59 @@ def _format_qa_context(ctx: PipelineContext) -> str:
     return "\n\n## Additional Context (from candidate Q&A)\n" + "\n\n".join(lines)
 
 
+# ── Story 3.3: Post-LLM Validation Guards ────────────────────────────────
+
+def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
+    """Validate Phase 1+2 LLM output. Returns list of failure reasons."""
+    import re
+    failures = []
+    if not ctx.jd_keywords:
+        failures.append("jd_keywords: empty list")
+    colors = ctx.theme_colors or {}
+    for key, val in colors.items():
+        if val and not re.match(r'^#[0-9A-Fa-f]{6}$', val):
+            failures.append(f"color {key}: invalid hex {val}")
+    return failures
+
+
+def _validate_phase_4a(bullets: list[dict]) -> list[str]:
+    """Validate Phase 4A verbose bullets. Returns list of failure reasons."""
+    import re
+    failures = []
+    for i, b in enumerate(bullets):
+        text = b.get("text_html", "")
+        plain = re.sub(r'<[^>]+>', '', text)
+        if not (150 <= len(plain) <= 500):
+            failures.append(f"bullet_{i}: length {len(plain)} outside 150-500")
+        if '<b>' not in text and '<strong>' not in text:
+            failures.append(f"bullet_{i}: missing bold tags")
+    return failures
+
+
+def _validate_phase_4c(bullets: list[dict]) -> list[str]:
+    """Validate Phase 4C condensed bullets. Returns list of failure reasons."""
+    import re
+    failures = []
+    for i, b in enumerate(bullets):
+        text = b.get("text_html", "")
+        plain = re.sub(r'<[^>]+>', '', text)
+        if not (80 <= len(plain) <= 130):
+            failures.append(f"bullet_{i}: length {len(plain)} outside 80-130")
+    return failures
+
+
+def _record_validation_failures(ctx: "PipelineContext", phase: str, failures: list[str]) -> None:
+    """Append validation failures to ctx.stats['validation_failures']."""
+    if not failures:
+        return
+    if "validation_failures" not in ctx.stats:
+        ctx.stats["validation_failures"] = []
+    ctx.stats["validation_failures"].extend([
+        {"phase": phase, "check": f} for f in failures
+    ])
+    logger.warning(f"[Phase {phase}] validation: {len(failures)} failure(s): {failures[:3]}")
+
+
 def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]) -> list[str]:
     """Query career_chunks via full-text search for relevant context."""
     if not keywords:
@@ -374,6 +427,27 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     ctx._parsed = data
     ctx._section_order = data.get("section_order", [])
     ctx._bullet_budget = data.get("bullet_budget", {})
+
+    # Guard 3.3c: validate Phase 1+2 output
+    p12_failures = _validate_phase_1_2(ctx)
+    if p12_failures:
+        logger.warning(f"Job {ctx.job_id} phase 1+2 validation failed — retrying once")
+        try:
+            resp_retry = await _llm_call(ctx, llm, system_msg, user_msg, phase=1)
+            data_retry = _parse_json(resp_retry.text)
+            ctx.career_level = data_retry.get("career_level", ctx.career_level)
+            ctx.jd_keywords = data_retry.get("jd_keywords", ctx.jd_keywords)
+            ctx.strategy = data_retry.get("strategy", ctx.strategy)
+            ctx.theme_colors = ctx.override_theme_colors or data_retry.get("theme_colors", ctx.theme_colors)
+            ctx._parsed = data_retry
+            ctx._section_order = data_retry.get("section_order", ctx._section_order)
+            ctx._bullet_budget = data_retry.get("bullet_budget", ctx._bullet_budget)
+            p12_failures_retry = _validate_phase_1_2(ctx)
+            if p12_failures_retry:
+                _record_validation_failures(ctx, "1_2", p12_failures_retry)
+        except Exception as e:
+            logger.warning(f"Job {ctx.job_id} phase 1+2 retry failed: {e} — proceeding best-effort")
+            _record_validation_failures(ctx, "1_2", p12_failures)
 
     # Fetch relevant career chunks via full-text search
     keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
@@ -589,6 +663,58 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
 
     ctx._verbose_bullets = all_verbose
 
+    # Guard 3.3a: validate Phase 4A verbose bullets
+    p4a_failures = _validate_phase_4a(ctx._verbose_bullets)
+    if p4a_failures:
+        logger.warning(f"Job {ctx.job_id} phase 4A validation failed — retrying once")
+        try:
+            # Retry: rebuild all companies in a fresh pass
+            all_verbose_retry: list[dict] = []
+            used_verbs_retry: list[str] = []
+            for idx, ck in enumerate(company_keys):
+                co = companies[idx] if idx < len(companies) else {}
+                co_name = co.get("name", f"Company {idx + 1}")
+                num_bullets = budget.get(ck, 4)
+                if idx in ctx._company_chunks and ctx._company_chunks[idx]:
+                    company_context = "\n\n---\n\n".join(ctx._company_chunks[idx])[:5000]
+                else:
+                    company_context = _get_company_context(ctx, idx)
+                sys_r = prompts.PHASE_4A_VERBOSE_SYSTEM.format(
+                    bullet_count=num_bullets,
+                    used_verbs=", ".join(used_verbs_retry) if used_verbs_retry else "none",
+                    strategy=ctx.strategy,
+                    strategy_description=strategy_info["description"],
+                    career_level=ctx.career_level,
+                )
+                usr_r = prompts.PHASE_4A_VERBOSE_USER.format(
+                    jd_keywords_compact=jd_keywords_compact,
+                    company_name=co_name,
+                    company_title=co.get("title", ""),
+                    company_dates=co.get("date_range", ""),
+                    company_team=co.get("team", ""),
+                    company_chunks=company_context,
+                    bullet_count=num_bullets,
+                )
+                resp_r = await _llm_call(ctx, llm, sys_r, usr_r, phase=4, temperature=0.4)
+                try:
+                    data_r = _parse_json(resp_r.text)
+                    for p in data_r.get("paragraphs", []):
+                        p["company_index"] = idx
+                        all_verbose_retry.append(p)
+                        if p.get("verb"):
+                            used_verbs_retry.append(p["verb"])
+                except json.JSONDecodeError:
+                    pass
+            if all_verbose_retry:
+                ctx._verbose_bullets = all_verbose_retry
+                all_verbose = all_verbose_retry
+            p4a_failures_retry = _validate_phase_4a(ctx._verbose_bullets)
+            if p4a_failures_retry:
+                _record_validation_failures(ctx, "4a", p4a_failures_retry)
+        except Exception as e:
+            logger.warning(f"Job {ctx.job_id} phase 4A retry failed: {e} — proceeding best-effort")
+            _record_validation_failures(ctx, "4a", p4a_failures)
+
     # Register all verbs
     verbs = [b["verb"] for b in all_verbose if b.get("verb")]
     await resume_track_verbs(TrackVerbsInput(action="register", verbs=verbs), ctx=ctx)
@@ -733,6 +859,44 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
         all_bullets.append(bullet)
 
     ctx._raw_bullets = all_bullets
+
+    # Guard 3.3b: validate Phase 4C condensed bullets
+    p4c_failures = _validate_phase_4c(ctx._raw_bullets)
+    if p4c_failures:
+        logger.warning(f"Job {ctx.job_id} phase 4C validation failed — retrying once")
+        try:
+            resp_retry = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.2)
+            data_retry = _parse_json(resp_retry.text)
+            condensed_map_retry: dict = {}
+            for b in data_retry.get("bullets", []):
+                condensed_map_retry[b["paragraph_index"]] = b
+            all_bullets_retry: list[dict] = []
+            for i, v in enumerate(verbose):
+                c = condensed_map_retry.get(i)
+                if c:
+                    bullet = {
+                        "company_index": v["company_index"],
+                        "project_group": v.get("project_group", 0),
+                        "text_html": c["text_html"],
+                        "verb": c.get("verb", v.get("verb", "")),
+                    }
+                else:
+                    bullet = {
+                        "company_index": v["company_index"],
+                        "project_group": v.get("project_group", 0),
+                        "text_html": v["text_html"],
+                        "verb": v.get("verb", ""),
+                    }
+                all_bullets_retry.append(bullet)
+            if all_bullets_retry:
+                ctx._raw_bullets = all_bullets_retry
+                all_bullets = all_bullets_retry
+            p4c_failures_retry = _validate_phase_4c(ctx._raw_bullets)
+            if p4c_failures_retry:
+                _record_validation_failures(ctx, "4c", p4c_failures_retry)
+        except Exception as e:
+            logger.warning(f"Job {ctx.job_id} phase 4C retry failed: {e} — proceeding best-effort")
+            _record_validation_failures(ctx, "4c", p4c_failures)
 
     # Update draft_html with condensed bullets
     companies = ctx._parsed.get("companies", [])
@@ -1161,9 +1325,116 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
                     "text": new_html[:100],
                 })
 
+    # ── Story 3.4: 3rd pass — per-bullet synonym retry for persistent failures ──
+    if ctx.stats.get("width_failures"):
+        await _progress(ctx, sb, 5, f"Synonym pass for {len(ctx.stats['width_failures'])} bullets", 68)
+        for failure in ctx.stats["width_failures"][:]:  # iterate copy
+            fail_idx = failure["bullet_index"]
+            fill_pct = failure["fill_pct"]
+            bullet = ctx._raw_bullets[fail_idx]
+            direction = "trim" if fill_pct > 100 else "expand"
+
+            # Strip HTML for synonym lookup
+            plain_text = _re.sub(r'<[^>]+>', '', bullet.get("text_html", ""))
+
+            # Measure current width for synonym input
+            try:
+                mw_result = json.loads(
+                    await resume_measure_width(
+                        MeasureWidthInput(text_html=bullet["text_html"], line_type="bullet"),
+                        template_config=ctx.template_config,
+                    )
+                )
+                current_width = mw_result.get("weighted_total", 0)
+                target_width = mw_result.get("target_95", raw_budget * 0.95)
+            except Exception:
+                current_width = 0.0
+                target_width = raw_budget * 0.95
+
+            # Get synonym suggestions
+            try:
+                syn_result = json.loads(
+                    await resume_suggest_synonyms(SynonymInput(
+                        text=plain_text,
+                        current_width=current_width,
+                        target_width=target_width,
+                        direction=direction,
+                    ))
+                )
+                suggestions = syn_result.get("suggestions", [])
+            except Exception as e:
+                logger.warning(f"[Phase 5 3rd pass] suggest_synonyms failed for bullet {fail_idx}: {e}")
+                continue
+
+            if not suggestions:
+                continue
+
+            syn_context = "\n".join(
+                f"- '{s['original_word']}' → '{s['replacement_word']}' (width delta {s.get('width_delta', 0):+.1f} CU)"
+                for s in suggestions[:3]
+            )
+
+            # Targeted LLM rewrite for this single bullet
+            try:
+                rewritten = await _rewrite_bullet_with_synonyms(ctx, llm, bullet, syn_context, direction)
+            except Exception as e:
+                logger.warning(f"[Phase 5 3rd pass] rewrite failed for bullet {fail_idx}: {e}")
+                continue
+
+            if not rewritten:
+                continue
+
+            # Re-measure
+            try:
+                new_verify = json.loads(
+                    await resume_measure_width(
+                        MeasureWidthInput(text_html=rewritten, line_type="bullet"),
+                        template_config=ctx.template_config,
+                    )
+                )
+                new_fill = new_verify.get("fill_percentage", 0)
+                ctx._raw_bullets[fail_idx]["text_html"] = rewritten
+                ctx._raw_bullets[fail_idx]["fill_percentage"] = new_fill
+                if 88 <= new_fill <= 102:
+                    ctx.stats["width_failures"] = [
+                        f for f in ctx.stats["width_failures"]
+                        if f["bullet_index"] != fail_idx
+                    ]
+                    logger.info(f"[Phase 5 3rd pass] bullet {fail_idx} fixed: {fill_pct:.1f}% → {new_fill:.1f}%")
+            except Exception as e:
+                logger.warning(f"[Phase 5 3rd pass] re-measure failed for bullet {fail_idx}: {e}")
+                continue
+
+        # Track remaining synonym failures
+        remaining = ctx.stats.get("width_failures", [])
+        if remaining:
+            ctx.stats["synonym_failures"] = ctx.stats.get("synonym_failures", 0) + len(remaining)
+            logger.info(f"[Phase 5 3rd pass] {len(remaining)} bullet(s) still failing after synonym pass")
+
     ctx._optimized_bullets = ctx._raw_bullets
     ctx._phase_timings["phase_5"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 5, "Width optimization complete", 70)
+
+
+async def _rewrite_bullet_with_synonyms(ctx: PipelineContext, llm, bullet: dict, syn_context: str, direction: str) -> str | None:
+    """Single targeted LLM call to rewrite one bullet using synonym suggestions."""
+    action = "shorten" if direction == "trim" else "expand slightly"
+    prompt = (
+        f"Rewrite this resume bullet to {action} it using the synonym suggestions below.\n\n"
+        f"Current bullet: {bullet.get('text_html', '')}\n\n"
+        f"Synonym suggestions:\n{syn_context}\n\n"
+        "Return ONLY the rewritten bullet HTML. Preserve all formatting tags. Same meaning, better width fit."
+    )
+    try:
+        resp = await _llm_call(ctx, llm, "", prompt, phase=5, temperature=0.1)
+        text = resp.text.strip() if resp else None
+        # Strip any accidental markdown fences
+        if text and text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        return text if text else None
+    except Exception:
+        return None
 
 
 def _build_batched_bullets_section(
