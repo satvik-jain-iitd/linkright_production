@@ -39,6 +39,7 @@ from . import prompts
 from ..tools.nugget_extractor import extract_nuggets
 from ..tools.nugget_embedder import embed_nuggets
 from ..tools.quality_judge import judge_quality
+from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
 import os
 
 USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
@@ -460,25 +461,84 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
 # ── Phase 2.5: Vector Retrieval Per Company (QMD — no LLM) ──────────────
 
 async def phase_2_5_vector_retrieval(ctx: PipelineContext, sb: Client):
-    """Retrieve relevant career chunks per company via QMD hybrid search."""
+    """Retrieve relevant career chunks per company via QMD hybrid search or hybrid_retrieve."""
+    from ..config import USE_NUGGETS
     t0 = time.time()
     await _progress(ctx, sb, 2, "Retrieving relevant experience", 28)
 
-    companies = ctx._parsed.get("companies", [])
-    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
-    jd_query = " ".join(keyword_strs[:10])
+    if USE_NUGGETS:
+        # New path: hybrid retrieval over career_nuggets
+        companies = ctx._parsed.get("companies", [])
+        keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
 
-    for idx, co in enumerate(companies):
-        co_name = co.get("name", "")
-        query = f"{co_name} {jd_query}"
+        all_results = []
+        method = "raw_text_fallback"
+        for co in companies:
+            co_name = co.get("name", "") if isinstance(co, dict) else str(co)
+            query = f"{co_name} {' '.join(keyword_strs[:5])}"
 
-        # Try QMD first, fall back to Supabase FTS
-        chunks = qmd_hybrid_search(ctx.user_id, query, limit=8)
-        if not chunks:
-            chunks = fallback_fts_search(sb, ctx.user_id, query, limit=8)
+            results, method = await hybrid_retrieve(
+                sb=sb,
+                user_id=ctx.user_id,
+                query=query,
+                company=co_name,
+                limit=8,
+            )
+            all_results.extend(results)
+            logger.info(f"[Phase 2.5] {co_name}: {len(results)} nuggets via {method}")
 
-        ctx._company_chunks[idx] = chunks
-        logger.info(f"Job {ctx.job_id}: Company {idx} '{co_name}' — {len(chunks)} chunks retrieved")
+        ctx._nugget_results = all_results
+
+        # Backward-compatible: populate _company_chunks from nugget answers (keyed by idx)
+        ctx._company_chunks = {}
+        for r in all_results:
+            key = r.company or "general"
+            # Find the index of this company in parsed companies list
+            matched_idx = next(
+                (i for i, co in enumerate(companies) if co.get("name", "") == r.company),
+                None,
+            )
+            bucket = matched_idx if matched_idx is not None else key
+            if bucket not in ctx._company_chunks:
+                ctx._company_chunks[bucket] = []
+            ctx._company_chunks[bucket].append(r.answer)
+
+        # Also populate _relevant_chunks for backward compat (non-company-specific usage)
+        ctx._relevant_chunks = [r.answer for r in all_results[:20]]
+
+        # Telemetry
+        ctx.stats["retrieval_method"] = method
+        ctx.stats["nuggets_retrieved"] = len(all_results)
+        ctx.stats["companies_with_zero_hits"] = [
+            co.get("name", "") if isinstance(co, dict) else str(co)
+            for co in companies
+            if not any(
+                r.company == (co.get("name", "") if isinstance(co, dict) else str(co))
+                for r in all_results
+            )
+        ]
+        logger.info(
+            f"Job {ctx.job_id}: [Phase 2.5] hybrid_retrieve total={len(all_results)} "
+            f"method={method} zero_hit_companies={ctx.stats['companies_with_zero_hits']}"
+        )
+
+    else:
+        # Old path: QMD/FTS logic unchanged
+        companies = ctx._parsed.get("companies", [])
+        keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+        jd_query = " ".join(keyword_strs[:10])
+
+        for idx, co in enumerate(companies):
+            co_name = co.get("name", "")
+            query = f"{co_name} {jd_query}"
+
+            # Try QMD first, fall back to Supabase FTS
+            chunks = qmd_hybrid_search(ctx.user_id, query, limit=8)
+            if not chunks:
+                chunks = fallback_fts_search(sb, ctx.user_id, query, limit=8)
+
+            ctx._company_chunks[idx] = chunks
+            logger.info(f"Job {ctx.job_id}: Company {idx} '{co_name}' — {len(chunks)} chunks retrieved")
 
     ctx._phase_timings["phase_2_5"] = int((time.time() - t0) * 1000)
 
@@ -1013,8 +1073,8 @@ def _get_company_context(ctx: PipelineContext, company_index: int) -> str:
         import re as _re
         sections = _re.split(r'\n(?=## )', ctx.career_text)
         if company_index < len(sections):
-            return sections[company_index][:5000]
-        return ctx.career_text[:5000]
+            return sections[company_index][:5000]  # TODO: replace with hybrid_retrieve in v2.0
+        return ctx.career_text[:5000]  # TODO: replace with hybrid_retrieve in v2.0
 
     # Split into paragraphs (double newline) and find ALL that mention this company
     paragraphs = ctx.career_text.split("\n\n")
@@ -1034,15 +1094,15 @@ def _get_company_context(ctx: PipelineContext, company_index: int) -> str:
                 relevant.append(section.strip())
 
     if relevant:
-        context = "\n\n".join(relevant)[:5000]
+        context = "\n\n".join(relevant)[:5000]  # TODO: replace with hybrid_retrieve in v2.0
         logger.info(f"Job {ctx.job_id}: Company '{company_name}' context: {len(relevant)} paragraphs, {len(context)} chars")
     elif ctx._relevant_chunks:
         # Fall back to FTS chunks
-        context = "\n\n---\n\n".join(ctx._relevant_chunks)[:5000]
+        context = "\n\n---\n\n".join(ctx._relevant_chunks)[:5000]  # TODO: replace with hybrid_retrieve in v2.0
         logger.info(f"Job {ctx.job_id}: Company '{company_name}' — no direct match, using {len(ctx._relevant_chunks)} FTS chunks")
     else:
         # Last resort: full career text truncated
-        context = ctx.career_text[:5000]
+        context = ctx.career_text[:5000]  # TODO: replace with hybrid_retrieve in v2.0
         logger.warning(f"Job {ctx.job_id}: Company '{company_name}' — no context found, using truncated career text")
 
     # Prepend Q&A context if available
