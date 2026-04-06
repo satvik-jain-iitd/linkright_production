@@ -4,7 +4,7 @@
 
 LinkRight is a resume optimization platform with two codebases:
 - **CLI** (`linkright/`) — Python, Anthropic API, 7-step pipeline, comprehensive quality gates
-- **Web App** (`Resume/`) — Next.js 16.2 frontend + FastAPI worker, 8-phase async pipeline, deployed at sync.linkride.in
+- **Web App** (`Resume/`) — Next.js 16.2 frontend + FastAPI worker, 8-phase async pipeline, deployed at sync.linkright.in
 
 ## Web App Architecture
 
