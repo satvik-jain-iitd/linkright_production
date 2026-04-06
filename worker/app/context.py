@@ -48,6 +48,8 @@ class PipelineContext:
     _company_chunks: dict[int, list[str]] = field(default_factory=dict)  # per-company QMD results
     _verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4a output (200-400 char paragraphs)
     _ranked_verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4b ranked by BRS
+    _nuggets: list = field(default_factory=list)              # Phase 0 extracted Nugget objects
+    _nugget_results: list = field(default_factory=list)      # Phase 2.5 NuggetResult objects from hybrid_retrieve
     _llm_log: list[dict] = field(default_factory=list)       # per-call token/timing log
     _phase_timings: dict[str, int] = field(default_factory=dict)  # phase_N → ms
 

@@ -182,8 +182,8 @@ def _find_keyword_matches(raw_text: str, jd_keywords: list[dict]) -> tuple[list[
         if not keyword:
             continue
 
-        # Case-insensitive substring match
-        if keyword in text_lower:
+        # Case-insensitive word-boundary match
+        if re.search(r'\b' + re.escape(keyword) + r'\b', raw_text, re.IGNORECASE):
             matches.append(keyword)
 
     # Calculate overlap score: count / total, capped at 1.0

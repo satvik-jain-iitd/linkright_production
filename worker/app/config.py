@@ -8,3 +8,6 @@ WORKER_SECRET = os.environ.get("WORKER_SECRET", "")
 
 # Render assigns PORT automatically
 PORT = int(os.environ.get("PORT", "8000"))
+
+# Feature flags
+USE_NUGGETS = os.getenv("USE_NUGGETS", "false").lower() == "true"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
+import { GRADE_COLORS } from "@/components/QualityPanel";
 
 interface ResumeJob {
   id: string;
@@ -18,6 +19,7 @@ interface ResumeJob {
   model_id: string;
   target_company: string | null;
   output_html: string | null;
+  stats?: { quality_grade?: string } | null;
 }
 
 export function DashboardContent({ user }: { user: User }) {
@@ -172,7 +174,17 @@ export function DashboardContent({ user }: { user: User }) {
                       {job.status}
                     </span>
                     <div>
-                      <p className="text-sm font-medium">{jobLabel(job)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{jobLabel(job)}</p>
+                        {job.stats?.quality_grade && (
+                          <span
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${GRADE_COLORS[job.stats.quality_grade] ?? "bg-gray-100 text-gray-600"}`}
+                            aria-label={`Quality grade: ${job.stats.quality_grade}`}
+                          >
+                            {job.stats.quality_grade}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted">
                         {new Date(job.created_at).toLocaleDateString("en-IN", {
                           day: "numeric",
