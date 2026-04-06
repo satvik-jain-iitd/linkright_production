@@ -19,6 +19,48 @@ Rules:
 - brand_primary should be the most recognizable brand color
 - Colors must pass WCAG AA contrast on white background when used as text`;
 
+function extractDomain(name: string): string {
+  const trimmed = name.trim();
+  // If it already looks like a domain (e.g. "tilde.bio", "acme.com"), use it as-is
+  if (/^[a-z0-9-]+\.[a-z]{2,}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  // Strip common suffixes and slugify
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/\b(inc|corp|ltd|llc|co|company|group|technologies|solutions|tech|labs|ai)\b/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+  return slug ? `${slug}.com` : "";
+}
+
+async function fetchFromBrandfetch(companyName: string): Promise<string[] | null> {
+  const apiKey = process.env.BRANDFETCH_API_KEY;
+  if (!apiKey) return null;
+
+  const domain = extractDomain(companyName);
+  if (!domain) return null;
+
+  try {
+    const resp = await fetch(`https://api.brandfetch.io/v2/brands/${domain}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+
+    const data = await resp.json();
+    const colors: string[] = ((data.colors ?? []) as { type: string; hex: string }[])
+      .sort((a, b) => (a.type === "primary" ? -1 : 1))
+      .map((c) => c.hex)
+      .filter(Boolean)
+      .slice(0, 4);
+
+    return colors.length >= 2 ? colors : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -40,7 +82,22 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Build provider base URL + headers
+  // Try Brandfetch first — accurate, no token cost
+  const bfColors = await fetchFromBrandfetch(company_name);
+  if (bfColors) {
+    const result = {
+      brand_primary: bfColors[0],
+      brand_secondary: bfColors[1],
+      brand_tertiary: bfColors[2] ?? null,
+      brand_quaternary: bfColors[3] ?? null,
+      company_name,
+    };
+    // Persist to cache (fire-and-forget)
+    persistBrandColors(result, "brandfetch").catch(() => {});
+    return Response.json(result);
+  }
+
+  // Fallback: LLM-based color extraction
   let url = "";
   let headers: Record<string, string> = { "Content-Type": "application/json" };
   let body: Record<string, unknown> = {};
@@ -103,25 +160,60 @@ export async function POST(request: Request) {
       text = result?.choices?.[0]?.message?.content || "";
     }
 
-    // Strip markdown code fences if present
     const jsonText = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
     const colors = JSON.parse(jsonText);
 
-    return Response.json({
+    const llmResult = {
       brand_primary: colors.brand_primary || "#1B2A4A",
       brand_secondary: colors.brand_secondary || "#93702b",
-      brand_tertiary: colors.brand_tertiary || "#3D5A80",
-      brand_quaternary: colors.brand_quaternary || "#D4B87A",
+      brand_tertiary: colors.brand_tertiary || null,
+      brand_quaternary: colors.brand_quaternary || null,
       company_name: colors.company_name || company_name,
-    });
+    };
+    // Persist to cache (fire-and-forget)
+    persistBrandColors(llmResult, "llm_extracted").catch(() => {});
+    return Response.json(llmResult);
   } catch {
-    // Fallback to neutral colors
     return Response.json({
       brand_primary: "#1B2A4A",
       brand_secondary: "#93702b",
-      brand_tertiary: "#3D5A80",
-      brand_quaternary: "#D4B87A",
+      brand_tertiary: null,
+      brand_quaternary: null,
       company_name,
     });
   }
+}
+
+async function persistBrandColors(
+  colors: {
+    company_name: string;
+    brand_primary: string;
+    brand_secondary: string;
+    brand_tertiary: string | null;
+    brand_quaternary: string | null;
+  },
+  source: string
+): Promise<void> {
+  const domain = extractDomain(colors.company_name);
+  if (!domain) return;
+
+  const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
+  const adminClient = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  await adminClient.from("company_brand_colors").upsert(
+    {
+      company_name: colors.company_name.trim(),
+      domain,
+      primary_color: colors.brand_primary,
+      secondary_color: colors.brand_secondary,
+      tertiary_color: colors.brand_tertiary ?? null,
+      quaternary_color: colors.brand_quaternary ?? null,
+      source,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "domain" }
+  );
 }
