@@ -32,20 +32,17 @@ from app.tools.nugget_extractor import Nugget  # noqa: E402
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Regex pattern matching Gemini embedContent URL regardless of query params
-_GEMINI_EMBED_URL = re.compile(
-    r"https://generativelanguage\.googleapis\.com/v1beta/models/"
-    r"text-embedding-005:embedContent"
-)
+# Jina AI embeddings URL
+_JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
 
 # Fake 768-dim vector
 _FAKE_VECTOR: list[float] = [0.1] * 768
 
 
-def _gemini_response(vector: list[float] | None = None) -> dict:
-    """Build a minimal Gemini embedContent response."""
+def _jina_response(vector: list[float] | None = None) -> dict:
+    """Build a minimal Jina AI embeddings response."""
     vec = vector if vector is not None else _FAKE_VECTOR
-    return {"embedding": {"values": vec}}
+    return {"data": [{"embedding": vec}]}
 
 
 def _make_nugget(
@@ -74,16 +71,17 @@ def _make_nugget(
 # 1. test_embed_returns_list_of_vectors
 # ---------------------------------------------------------------------------
 
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_embed_returns_list_of_vectors(httpx_mock, fake_sb):
     """embed_nuggets returns list[list[float]]."""
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
-        json=_gemini_response(),
+        url=_JINA_EMBED_URL,
+        json=_jina_response(),
     )
 
     nuggets = [_make_nugget(0)]
     result = asyncio.run(
-        embed_nuggets(nuggets, "fake-gemini-key", fake_sb, "user-123")
+        embed_nuggets(nuggets, "fake-jina-key", fake_sb, "user-123")
     )
 
     assert isinstance(result, list)
@@ -96,16 +94,17 @@ def test_embed_returns_list_of_vectors(httpx_mock, fake_sb):
 # 2. test_embed_768_dimensions
 # ---------------------------------------------------------------------------
 
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_embed_768_dimensions(httpx_mock, fake_sb):
     """Each returned embedding vector has exactly 768 floats."""
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
-        json=_gemini_response(_FAKE_VECTOR),
+        url=_JINA_EMBED_URL,
+        json=_jina_response(_FAKE_VECTOR),
     )
 
     nuggets = [_make_nugget(0)]
     result = asyncio.run(
-        embed_nuggets(nuggets, "fake-gemini-key", fake_sb, "user-123")
+        embed_nuggets(nuggets, "fake-jina-key", fake_sb, "user-123")
     )
 
     assert len(result) == 1
@@ -116,8 +115,9 @@ def test_embed_768_dimensions(httpx_mock, fake_sb):
 # 3. test_embed_uses_answer_field
 # ---------------------------------------------------------------------------
 
+@pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_embed_uses_answer_field(httpx_mock, fake_sb):
-    """Gemini is called with nugget.answer text, not nugget_text."""
+    """Jina AI is called with nugget.answer text, not nugget_text."""
     answer_text = "Reduced p99 latency from 200ms to 40ms through async queue redesign"
     captured_bodies: list[dict] = []
 
@@ -129,17 +129,16 @@ def test_embed_uses_answer_field(httpx_mock, fake_sb):
         except Exception:
             pass
         import httpx as _httpx
-        return _httpx.Response(200, json=_gemini_response())
+        return _httpx.Response(200, json=_jina_response())
 
-    httpx_mock.add_callback(capture_request, url=_GEMINI_EMBED_URL)
+    httpx_mock.add_callback(capture_request, url=_JINA_EMBED_URL)
 
     nugget = _make_nugget(0, answer=answer_text)
-    asyncio.run(embed_nuggets([nugget], "fake-gemini-key", fake_sb, "user-123"))
+    asyncio.run(embed_nuggets([nugget], "fake-jina-key", fake_sb, "user-123"))
 
     assert len(captured_bodies) == 1
-    # The Gemini request body has content.parts[0].text == answer
-    parts = captured_bodies[0]["content"]["parts"]
-    assert parts[0]["text"] == answer_text
+    # Jina request body has input[0] == answer text
+    assert captured_bodies[0]["input"][0] == answer_text
 
 
 # ---------------------------------------------------------------------------
@@ -147,15 +146,15 @@ def test_embed_uses_answer_field(httpx_mock, fake_sb):
 # ---------------------------------------------------------------------------
 
 def test_null_embedding_on_failure(httpx_mock, fake_sb):
-    """Gemini 500 → empty list [] for that nugget's slot."""
+    """Jina 500 → empty list [] for that nugget's slot."""
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
+        url=_JINA_EMBED_URL,
         status_code=500,
     )
 
     nuggets = [_make_nugget(0)]
     result = asyncio.run(
-        embed_nuggets(nuggets, "fake-gemini-key", fake_sb, "user-123")
+        embed_nuggets(nuggets, "fake-jina-key", fake_sb, "user-123")
     )
 
     assert result == [[]]
@@ -166,9 +165,9 @@ def test_null_embedding_on_failure(httpx_mock, fake_sb):
 # ---------------------------------------------------------------------------
 
 def test_needs_embedding_tag_on_failure(httpx_mock, fake_sb):
-    """Gemini 500 → failed nugget gets 'needs_embedding' tag in DB."""
+    """Jina 500 → failed nugget gets 'needs_embedding' tag in DB."""
     httpx_mock.add_response(
-        url=_GEMINI_EMBED_URL,
+        url=_JINA_EMBED_URL,
         status_code=500,
     )
 
@@ -179,7 +178,7 @@ def test_needs_embedding_tag_on_failure(httpx_mock, fake_sb):
     )
 
     nugget = _make_nugget(0, nugget_id=nugget_id)
-    asyncio.run(embed_nuggets([nugget], "fake-gemini-key", fake_sb, "user-123"))
+    asyncio.run(embed_nuggets([nugget], "fake-jina-key", fake_sb, "user-123"))
 
     # Check DB row was updated with needs_embedding tag
     rows = fake_sb.table("career_nuggets").rows
@@ -194,20 +193,20 @@ def test_needs_embedding_tag_on_failure(httpx_mock, fake_sb):
 
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_no_exception_on_total_failure(httpx_mock, fake_sb):
-    """All Gemini calls fail → returns list of [] entries, no exception raised."""
+    """All Jina calls fail → returns list of [] entries, no exception raised."""
     import httpx as _httpx
 
     # Provide enough exceptions for 3 nuggets (each with up to 5 retry attempts)
     for _ in range(15):
         httpx_mock.add_exception(
             _httpx.ConnectError("Connection refused"),
-            url=_GEMINI_EMBED_URL,
+            url=_JINA_EMBED_URL,
         )
 
     nuggets = [_make_nugget(i, nugget_id=f"nid-{i}") for i in range(3)]
 
     result = asyncio.run(
-        embed_nuggets(nuggets, "fake-gemini-key", fake_sb, "user-123")
+        embed_nuggets(nuggets, "fake-jina-key", fake_sb, "user-123")
     )
 
     assert isinstance(result, list)
