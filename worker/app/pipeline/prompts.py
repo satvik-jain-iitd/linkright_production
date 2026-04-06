@@ -48,6 +48,7 @@ Parsing rules:
 - target_role: match JD exactly, not candidate's current title
 - companies: ALL roles in REVERSE chronological order (most recent first)
 - education: ALL entries — institution, degree, year, GPA, highlights
+- highlights: Copy verbatim academic achievements, ranks, scores, and honours directly from the career profile — do NOT paraphrase, infer, or generate new content. If none listed, use empty array []
 - skills: 2-4 categories relevant to JD
 - If a section has no data, use empty array/string — do NOT invent data
 

@@ -2,7 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { WizardShell } from "./WizardShell";
 
-export default async function NewResumePage() {
+export default async function NewResumePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ job?: string }>;
+}) {
+  const { job } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -12,7 +17,7 @@ export default async function NewResumePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <WizardShell userId={user.id} />
+      <WizardShell userId={user.id} jobId={job} />
     </div>
   );
 }
