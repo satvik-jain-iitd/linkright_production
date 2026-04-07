@@ -280,9 +280,15 @@ function StepApiKey({
 function StepCareerBasics({
   onNext,
   onSkip,
+  modelProvider,
+  modelId,
+  apiKey,
 }: {
   onNext: () => void;
   onSkip: () => void;
+  modelProvider: string;
+  modelId: string;
+  apiKey: string;
 }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -296,6 +302,92 @@ function StepCareerBasics({
   const [certifications, setCertifications] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Resume upload / paste state
+  const [uploadMode, setUploadMode] = useState<"none" | "paste" | "file">("none");
+  const [resumePasteText, setResumePasteText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState("");
+  const [parsed, setParsed] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const applyParsed = (data: Record<string, unknown>) => {
+    if (typeof data.full_name === "string" && data.full_name) setFullName(data.full_name);
+    if (typeof data.email === "string" && data.email) setEmail(data.email);
+    if (typeof data.phone === "string" && data.phone) setPhone(data.phone);
+    if (typeof data.linkedin === "string" && data.linkedin) setLinkedin(data.linkedin);
+    if (Array.isArray(data.education) && data.education.length > 0) {
+      const edu = (data.education as Array<{ institution?: string; degree?: string; year?: string }>).map((e) => ({
+        institution: e.institution ?? "",
+        degree: e.degree ?? "",
+        year: e.year ?? "",
+      }));
+      setEducation(edu.length > 0 ? edu : [{ institution: "", degree: "", year: "" }]);
+    }
+    if (Array.isArray(data.skills) && data.skills.length > 0) {
+      setSkills(data.skills.filter((s): s is string => typeof s === "string"));
+    }
+    if (Array.isArray(data.certifications) && data.certifications.length > 0) {
+      setCertifications((data.certifications as string[]).join("\n"));
+    }
+    setParsed(true);
+    setUploadMode("none");
+  };
+
+  const handleParsePaste = async () => {
+    if (!resumePasteText.trim()) return;
+    setParsing(true);
+    setParseError("");
+    try {
+      const res = await fetch("/api/onboarding/parse-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: resumePasteText.trim(),
+          model_provider: modelProvider,
+          model_id: modelId,
+          api_key: apiKey,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.parsed) {
+        applyParsed(data.parsed);
+      } else {
+        setParseError(data.error ?? "Could not parse resume. Please fill in manually.");
+      }
+    } catch {
+      setParseError("Network error. Please try again.");
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleParseFile = async (file: File) => {
+    setParsing(true);
+    setParseError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("model_provider", modelProvider);
+      formData.append("model_id", modelId);
+      formData.append("api_key", apiKey);
+      const res = await fetch("/api/onboarding/parse-resume", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.parsed) {
+        applyParsed(data.parsed);
+      } else {
+        setParseError(data.error ?? "Could not parse file. Please paste your resume text instead.");
+        setUploadMode("paste");
+      }
+    } catch {
+      setParseError("Network error. Please try again.");
+    } finally {
+      setParsing(false);
+    }
+  };
 
   const addEducation = () => {
     setEducation([...education, { institution: "", degree: "", year: "" }]);
@@ -395,6 +487,90 @@ function StepCareerBasics({
           name are optional.
         </p>
       </div>
+
+      {/* Resume upload shortcut */}
+      {!parsed && uploadMode === "none" && (
+        <div className="rounded-xl border border-dashed border-border bg-surface p-5 space-y-3">
+          <p className="text-sm font-medium text-foreground">
+            Have an existing resume? Auto-fill this form.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setUploadMode("paste")}
+              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
+            >
+              Paste resume text
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
+            >
+              Upload .txt file
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.text,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleParseFile(file);
+                e.target.value = "";
+              }}
+            />
+          </div>
+          {parsing && (
+            <p className="text-sm text-primary-600 animate-pulse">
+              Parsing your resume…
+            </p>
+          )}
+          {parseError && (
+            <p className="text-sm text-red-600">{parseError}</p>
+          )}
+        </div>
+      )}
+
+      {uploadMode === "paste" && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-primary-700">
+              Paste your resume text
+            </p>
+            <button
+              onClick={() => { setUploadMode("none"); setParseError(""); }}
+              className="text-xs text-muted hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+          <textarea
+            value={resumePasteText}
+            onChange={(e) => setResumePasteText(e.target.value)}
+            placeholder="Paste your resume here — all sections, plain text…"
+            rows={8}
+            className="w-full rounded-lg border border-primary-200 bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {parseError && (
+            <p className="text-sm text-red-600">{parseError}</p>
+          )}
+          <button
+            onClick={handleParsePaste}
+            disabled={!resumePasteText.trim() || parsing}
+            className="w-full rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {parsing ? "Parsing…" : "Auto-fill from resume"}
+          </button>
+        </div>
+      )}
+
+      {parsed && (
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          Resume parsed — fields pre-filled below. Edit anything that looks wrong.
+        </div>
+      )}
 
       <div className="space-y-4">
         {/* Basic info */}
@@ -1142,6 +1318,9 @@ export function OnboardingFlow() {
         <StepCareerBasics
           onNext={() => setStep(4)}
           onSkip={() => setStep(4)}
+          modelProvider={modelProvider}
+          modelId={modelId}
+          apiKey={apiKey}
         />
       )}
 
