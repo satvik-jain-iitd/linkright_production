@@ -22,9 +22,12 @@ const ROLE_OPTIONS = [
 ];
 
 const PROVIDER_MODEL_MAP: Record<string, string> = {
-  groq: "llama-3.1-8b-instant",
-  openai: "gpt-4o-mini",
-  anthropic: "claude-haiku-4-5-20251001",
+  groq:        "llama-3.1-8b-instant",
+  cerebras:    "llama3.1-8b",
+  sambanova:   "Meta-Llama-3.1-8B-Instruct",
+  siliconflow: "Qwen/Qwen3-8B",
+  openrouter:  "meta-llama/llama-3.2-3b-instruct:free",
+  gemini:      "gemini-1.5-flash-8b",
 };
 
 interface Education {
@@ -130,6 +133,26 @@ function StepApiKey({
     setValidated(false);
 
     try {
+      // First: test the key with a real inference call
+      const testRes = await fetch("/api/user/keys/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, api_key: apiKey.trim(), model_id: modelId }),
+      });
+      const testData = await testRes.json();
+
+      if (!testRes.ok || (!testData.valid && testData.status !== "rate_limited")) {
+        const msg =
+          testData.status === "invalid_key" ? "Invalid API key — check and try again." :
+          testData.status === "network_error" ? "Could not reach provider. Check your connection." :
+          testData.error ?? "Validation failed.";
+        setError(msg);
+        return;
+      }
+
+      const isRateLimited = testData.status === "rate_limited";
+
+      // Now save the key to DB
       const res = await fetch("/api/user/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -139,9 +162,12 @@ function StepApiKey({
       if (res.ok) {
         setValidated(true);
         onKeyValidated(provider, modelId, apiKey.trim());
+        if (isRateLimited) {
+          setError("Key saved — but it's currently rate-limited (quota hit). It will work once the limit resets.");
+        }
       } else {
         const data = await res.json();
-        setError(data.error ?? "Validation failed. Check your key and try again.");
+        setError(data.error ?? "Failed to save key.");
       }
     } catch {
       setError("Network error. Please try again.");
@@ -171,9 +197,12 @@ function StepApiKey({
           onChange={(e) => handleProviderChange(e.target.value)}
           className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
-          <option value="groq">Groq (free)</option>
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic</option>
+          <option value="groq">Groq (free · 30 RPM)</option>
+          <option value="cerebras">Cerebras (free · fastest ~2200 tok/s)</option>
+          <option value="sambanova">SambaNova (free · 30 RPM)</option>
+          <option value="siliconflow">SiliconFlow (free · 1000 RPM)</option>
+          <option value="openrouter">OpenRouter (free tier available)</option>
+          <option value="gemini">Google Gemini (free tier)</option>
         </select>
         <p className="text-xs text-muted">
           Model: <span className="font-mono">{modelId}</span>
@@ -216,6 +245,26 @@ function StepApiKey({
               <span>
                 Create an API key → Copy it
               </span>
+            </li>
+          </ol>
+        </div>
+      )}
+
+      {provider === "cerebras" && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 space-y-3">
+          <p className="text-sm font-semibold text-primary-700">Get a free Cerebras API key</p>
+          <ol className="space-y-2">
+            <li className="flex items-start gap-2 text-sm text-foreground">
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">1</span>
+              <span>Go to <a href="https://cloud.cerebras.ai" target="_blank" rel="noopener noreferrer" className="text-primary-600 underline hover:text-primary-700">cloud.cerebras.ai</a></span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-foreground">
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">2</span>
+              <span>Sign up → API Keys → Create Key</span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-foreground">
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">3</span>
+              <span>Free tier: 1M tokens/day, ~2200 tokens/second</span>
             </li>
           </ol>
         </div>
