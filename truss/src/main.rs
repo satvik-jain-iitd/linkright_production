@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 mod commands;
 mod models;
+mod analysis;
+mod decompose;
 
 #[derive(Parser)]
 #[command(name = "truss", version, about = "Parallel Agent Orchestration Framework")]
@@ -31,6 +33,18 @@ enum Commands {
         /// Domain to use for decomposition
         #[arg(long)]
         domain: String,
+
+        /// Path to existing codebase (omit for greenfield)
+        #[arg(long)]
+        codebase: Option<PathBuf>,
+
+        /// Force greenfield mode (skip GitNexus analysis)
+        #[arg(long, default_value_t = false)]
+        greenfield: bool,
+
+        /// Approve a pending decomposition
+        #[arg(long, default_value_t = false)]
+        approve: bool,
     },
 
     /// Show execution dashboard
@@ -102,7 +116,9 @@ fn main() {
             DomainAction::Build => commands::domain::build(),
             DomainAction::Install { path } => commands::domain::install(&path),
         },
-        Commands::Decompose { goal, domain } => commands::decompose::run(&goal, &domain),
+        Commands::Decompose { goal, domain, codebase, greenfield, approve } => {
+            commands::decompose::run(&goal, &domain, codebase.as_deref(), greenfield, approve)
+        }
         Commands::Status { run } => commands::status::run(run.as_deref()),
         Commands::Inspect { run } => commands::inspect::run(run.as_deref()),
         Commands::Retro { run } => commands::retro::run(run.as_deref()),

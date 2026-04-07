@@ -16,3 +16,5 @@ serde_yaml = "0.9"
 serde_json = "1"
 dirs = "5"
 colored = "2"
+petgraph = "0.6"
+chrono = { version = "0.4", features = ["serde"] }
