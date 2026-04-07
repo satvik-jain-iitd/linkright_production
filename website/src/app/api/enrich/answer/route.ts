@@ -213,6 +213,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to save to profile" }, { status: 500 });
   }
 
+  // Step 4: Fire-and-forget nugget re-embedding so new chunk gets indexed
+  const workerUrl = process.env.WORKER_URL;
+  const workerSecret = process.env.WORKER_SECRET;
+  if (workerUrl && workerSecret) {
+    fetch(`${workerUrl}/nuggets/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${workerSecret}`,
+      },
+      body: JSON.stringify({ user_id: user.id }),
+    }).catch(() => {/* non-blocking — enrich answer already saved */});
+  }
+
   return Response.json({
     status: "added",
     message: "Added to your career profile.",

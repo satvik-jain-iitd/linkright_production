@@ -22,13 +22,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Career text too short" }, { status: 400 });
   }
 
-  // Delete existing chunks for this user (replace on re-upload)
-  await supabase.from("career_chunks").delete().eq("user_id", user.id);
-
-  // Chunk the text
+  // Chunk the text FIRST — before touching the database
   const chunks = chunkText(career_text);
 
-  // Insert chunks
+  // INSERT new chunks before deleting old ones — safe window: both versions exist simultaneously
   const rows = chunks.map((text, i) => ({
     user_id: user.id,
     chunk_index: i,
@@ -36,16 +33,28 @@ export async function POST(request: Request) {
     chunk_tokens: Math.ceil(text.length / 4),
   }));
 
-  const { error: insertError } = await supabase
+  const { data: inserted, error: insertError } = await supabase
     .from("career_chunks")
-    .insert(rows);
+    .insert(rows)
+    .select("id");
 
-  if (insertError) {
+  if (insertError || !inserted?.length) {
+    // Insert failed — old chunks still intact, nothing lost
     return Response.json(
       { error: "Failed to store chunks" },
       { status: 500 }
     );
   }
+
+  // Only delete old chunks AFTER new ones are safely written
+  // Exclude the IDs we just inserted so we never delete what we just wrote
+  const newIds = inserted.map((r: { id: string }) => r.id);
+  await supabase
+    .from("career_chunks")
+    .delete()
+    .eq("user_id", user.id)
+    .not("id", "in", `(${newIds.join(",")})`);
+
 
   // Trigger nugget re-extraction in background (fire-and-forget)
   const workerUrl = process.env.WORKER_URL;

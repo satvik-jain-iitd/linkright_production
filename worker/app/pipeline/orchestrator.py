@@ -327,6 +327,13 @@ def _format_qa_context(ctx: PipelineContext) -> str:
 
 # ── Story 3.3: Post-LLM Validation Guards ────────────────────────────────
 
+_EDUCATION_FILLER_PHRASES = (
+    "passion for", "interest in", "dedicated to", "committed to",
+    "enthusiastic about", "skilled in", "love for", "desire to",
+    "aspiration", "driven by",
+)
+
+
 def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
     """Validate Phase 1+2 LLM output. Returns list of failure reasons."""
     import re
@@ -337,6 +344,18 @@ def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
     for key, val in colors.items():
         if val and not re.match(r'^#[0-9A-Fa-f]{6}$', val):
             failures.append(f"color {key}: invalid hex {val}")
+    # Education highlights must not contain generic filler phrases
+    for i, edu in enumerate(ctx._parsed.get("education", [])):
+        highlights = edu.get("highlights", "")
+        if highlights and isinstance(highlights, str):
+            lower = highlights.lower()
+            for phrase in _EDUCATION_FILLER_PHRASES:
+                if phrase in lower:
+                    failures.append(
+                        f"education[{i}].highlights: contains filler phrase '{phrase}' — "
+                        "must copy verbatim from career profile or use empty string"
+                    )
+                    break
     return failures
 
 
@@ -407,11 +426,12 @@ def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]
 
 # ── Phase 0: Nugget extraction + embedding (USE_NUGGETS=true only) ──────
 
-async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | None = None, byok_api_key: str | None = None, force: bool = False):
+async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | None = None, byok_api_key: str | None = None, force: bool = False, force_delete: bool = False):
     """Phase 0: LLM-powered nugget extraction + embedding (USE_NUGGETS=true only).
 
     Args:
         force: If True, bypass the USE_NUGGETS feature flag (used by /nuggets/refresh endpoint).
+        force_delete: If True, delete existing nuggets before extraction. Default False — preserves existing data.
     """
     from ..config import USE_NUGGETS
     if not USE_NUGGETS and not force:
@@ -419,6 +439,18 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
 
     t0 = time.time()
     logger.info(f"[Phase 0] Starting nugget extraction for user {ctx.user_id}")
+
+    jina_api_key = os.environ.get("JINA_API_KEY", "")
+
+    # Embed each batch immediately after extraction — no credits wasted if interrupted
+    async def _embed_batch_callback(batch_nuggets: list) -> None:
+        if jina_api_key:
+            await embed_nuggets(
+                nuggets=batch_nuggets,
+                jina_api_key=jina_api_key,
+                sb=sb,
+                user_id=ctx.user_id,
+            )
 
     try:
         nuggets = await extract_nuggets(
@@ -428,6 +460,8 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
             groq_api_key=groq_api_key,
             byok_api_key=byok_api_key,
             key_manager=ctx.key_manager,
+            batch_callback=_embed_batch_callback,
+            force_delete=force_delete,
         )
 
         if nuggets:
@@ -440,7 +474,8 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
                 key_manager=ctx.key_manager,
             )
             ctx._nuggets = nuggets
-            logger.info(f"[Phase 0] Extracted {len(nuggets)} nuggets, {sum(1 for e in embeddings if e)} embedded")
+            embedded_count = sum(1 for n in nuggets if getattr(n, "id", None))
+            logger.info(f"[Phase 0] Extracted {len(nuggets)} nuggets, {embedded_count} embedded")
         else:
             logger.warning("[Phase 0] Nugget extraction returned empty — falling back to paragraph chunking")
             ctx._nuggets = []
