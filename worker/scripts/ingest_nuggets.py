@@ -84,13 +84,83 @@ async def main() -> None:
         action="store_true",
         help="Skip the confirmation prompt (for non-interactive / scripted use).",
     )
+    parser.add_argument(
+        "--embed-only",
+        action="store_true",
+        help="Skip extraction — only embed existing career_nuggets rows that lack embeddings.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete existing nuggets before extracting. WARNING: destroys existing data. Use only when re-ingesting from scratch.",
+    )
     args = parser.parse_args()
 
-    _check_env()
+    # Embed-only mode doesn't need GROQ_API_KEY
+    if not args.embed_only:
+        _check_env()
+    else:
+        missing = [v for v in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "JINA_API_KEY") if not os.environ.get(v)]
+        if missing:
+            print(f"[error] Missing env vars: {', '.join(missing)}")
+            sys.exit(1)
 
     sb_url = os.environ["SUPABASE_URL"]
     sb_key = os.environ["SUPABASE_SERVICE_KEY"]
     sb = create_client(sb_url, sb_key)
+
+    # ── embed-only shortcut ───────────────────────────────────────────────
+    if args.embed_only:
+        from app.tools.nugget_embedder import embed_nuggets
+        from app.tools.nugget_extractor import Nugget
+
+        print(f"[embed-only] Fetching nuggets without embeddings for user {args.user_id} …")
+        rows = (
+            sb.table("career_nuggets")
+            .select("id, nugget_index, answer")
+            .eq("user_id", args.user_id)
+            .is_("embedding", "null")
+            .execute()
+            .data or []
+        )
+        if not rows:
+            print("[embed-only] Nothing to embed — all nuggets already have embeddings.")
+            sys.exit(0)
+
+        print(f"[embed-only] {len(rows)} nuggets need embedding …")
+        nuggets = []
+        for r in rows:
+            n = Nugget.__new__(Nugget)
+            object.__setattr__(n, "id", r["id"])
+            object.__setattr__(n, "nugget_index", r["nugget_index"])
+            object.__setattr__(n, "answer", r.get("answer") or "")
+            object.__setattr__(n, "nugget_text", "")
+            object.__setattr__(n, "question", "")
+            object.__setattr__(n, "alt_questions", [])
+            object.__setattr__(n, "primary_layer", "A")
+            object.__setattr__(n, "section_type", None)
+            object.__setattr__(n, "section_subtype", None)
+            object.__setattr__(n, "resume_section_target", None)
+            object.__setattr__(n, "resume_relevance", None)
+            object.__setattr__(n, "life_domain", None)
+            object.__setattr__(n, "life_l2", None)
+            object.__setattr__(n, "importance", None)
+            object.__setattr__(n, "temporality", None)
+            object.__setattr__(n, "duration", None)
+            object.__setattr__(n, "event_date", None)
+            object.__setattr__(n, "role", None)
+            object.__setattr__(n, "company", None)
+            object.__setattr__(n, "people", [])
+            object.__setattr__(n, "leadership_signal", False)
+            object.__setattr__(n, "factuality", None)
+            object.__setattr__(n, "tags", [])
+
+            nuggets.append(n)
+
+        t0 = time.time()
+        asyncio.run(embed_nuggets(nuggets, os.environ["JINA_API_KEY"], sb, args.user_id))
+        print(f"\n[done] Embedded {len(nuggets)} nuggets in {time.time() - t0:.0f}s")
+        sys.exit(0)
 
     # ── 1. Get career text ────────────────────────────────────────────────
     if args.career_file:
@@ -143,7 +213,7 @@ async def main() -> None:
     t0 = time.time()
     print("[phase_0] Starting nugget extraction + embedding …")
     print("          (30s delays between Groq batches — this is normal)")
-    await phase_0_nuggets(ctx, sb, groq_api_key=os.environ.get("GROQ_API_KEY"), force=True)
+    await phase_0_nuggets(ctx, sb, groq_api_key=os.environ.get("GROQ_API_KEY"), force=True, force_delete=args.force)
     elapsed = time.time() - t0
 
     # ── 5. Summary ────────────────────────────────────────────────────────

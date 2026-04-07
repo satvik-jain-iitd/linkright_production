@@ -241,6 +241,8 @@ async def extract_nuggets(
     sb,  # Supabase client
     groq_api_key: Optional[str] = None,
     byok_api_key: Optional[str] = None,
+    batch_callback=None,  # Optional[Callable[[list[Nugget]], Awaitable[None]]]
+    force_delete: bool = False,  # if False, skip DELETE when nuggets already exist
 ) -> list[Nugget]:
     """Extract atomic career nuggets from free-text career data.
 
@@ -271,14 +273,22 @@ async def extract_nuggets(
 
         batches = _split_into_batches(career_text)
         all_nuggets: list[Nugget] = []
-        global_index = 0
+        global_index = 0  # may be overridden below if existing nuggets are preserved
 
-        # --- DB: delete old nuggets for this user before starting ---
-        try:
-            sb.table("career_nuggets").delete().eq("user_id", user_id).execute()
-            logger.info("extract_nuggets: cleared old nuggets for user %s", user_id)
-        except Exception as exc:
-            logger.warning("extract_nuggets: failed to delete old nuggets: %s", exc)
+        # --- DB: delete old nuggets ONLY if explicitly requested ---
+        if force_delete:
+            try:
+                sb.table("career_nuggets").delete().eq("user_id", user_id).execute()
+                logger.info("extract_nuggets: cleared old nuggets for user %s (force_delete=True)", user_id)
+            except Exception as exc:
+                logger.warning("extract_nuggets: failed to delete old nuggets: %s", exc)
+        else:
+            existing = sb.table("career_nuggets").select("nugget_index").eq("user_id", user_id).execute()
+            existing_count = len(existing.data or [])
+            if existing_count > 0:
+                logger.info("extract_nuggets: %d existing nuggets preserved (pass force_delete=True to replace)", existing_count)
+                # Offset new nugget indices past existing ones
+                global_index = existing_count
 
         consecutive_429s = 0  # track rate-limit failures to detect daily quota exhaustion
 
@@ -345,6 +355,13 @@ async def extract_nuggets(
                     logger.info("extract_nuggets: batch %d → %d nuggets saved (total=%d)", batch_num, len(batch_nuggets), len(all_nuggets))
                 except Exception as exc:
                     logger.warning("extract_nuggets: DB insert failed for batch %d: %s", batch_num, exc)
+
+                # --- Batch callback: embed immediately after save ---
+                if batch_callback is not None:
+                    try:
+                        await batch_callback(batch_nuggets)
+                    except Exception as exc:
+                        logger.warning("extract_nuggets: batch_callback failed for batch %d: %s", batch_num, exc)
 
         return all_nuggets
 
