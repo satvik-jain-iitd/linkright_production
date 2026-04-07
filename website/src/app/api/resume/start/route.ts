@@ -64,6 +64,31 @@ export async function POST(request: Request) {
     );
   }
 
+  // Resolve api_key: if it looks like a UUID (key ID from KeyManagerPanel), fetch the actual key
+  let resolved_api_key = api_key;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (UUID_RE.test(api_key)) {
+    const { data: keyRow } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .eq("id", api_key)
+      .eq("user_id", user.id)
+      .single();
+    if (keyRow?.api_key) {
+      resolved_api_key = keyRow.api_key;
+    } else {
+      // Fallback: try user_settings
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("api_key")
+        .eq("user_id", user.id)
+        .single();
+      if (settings?.api_key) {
+        resolved_api_key = settings.api_key;
+      }
+    }
+  }
+
   // Create job row in Supabase
   const { data: job, error: insertError } = await supabase
     .from("resume_jobs")
@@ -98,7 +123,7 @@ export async function POST(request: Request) {
         career_text,
         model_provider,
         model_id,
-        api_key,
+        api_key: resolved_api_key,
         template_id: template_id || "cv-a4-standard",
         qa_answers: qa_answers || [],
         // Sanitize: worker Pydantic model requires str for all 4 color fields — no nulls allowed

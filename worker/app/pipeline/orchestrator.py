@@ -141,6 +141,7 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
     await phase_3_5_stencil_draft(ctx, sb)
+    await phase_3_5a_professional_summary(ctx, sb, llm)
     await phase_4a_verbose_bullets(ctx, sb, llm)
     await phase_4b_ranking(ctx, sb)
     await phase_4c_condense_bullets(ctx, sb, llm)
@@ -762,6 +763,54 @@ async def phase_3_5_stencil_draft(ctx: PipelineContext, sb: Client):
 
     ctx._phase_timings["phase_3_5"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 3, "Stencil ready", 38)
+
+
+# ── Phase 3.5A: Professional Summary (1 LLM call) ─────────────────────
+
+async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm):
+    """Generate a 2-3 sentence professional summary tailored to the target JD."""
+    t0 = time.time()
+    await _progress(ctx, sb, 3, "Generating professional summary", 39)
+
+    parsed = ctx._parsed
+    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+    companies_list = parsed.get("companies", [])
+    company_names = [c.get("name", "") for c in companies_list[:3] if c.get("name")]
+
+    summary_template, _ = get_prompt("professional_summary", prompts.PROFESSIONAL_SUMMARY_SYSTEM)
+
+    system_msg = summary_template
+    user_msg = prompts.PROFESSIONAL_SUMMARY_USER.format(
+        target_role=parsed.get("target_role", ""),
+        target_company=parsed.get("company_name", ""),
+        jd_keywords=", ".join(keyword_strs[:15]),
+        career_level=ctx.career_level or "mid",
+        companies=", ".join(company_names) if company_names else "N/A",
+        career_summary=parsed.get("career_summary", ""),
+    )
+
+    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=3, temperature=0.3)
+    trace_generation(
+        trace_name="pipeline", generation_name="phase_3_5a_summary",
+        model=resp.model, system_prompt=system_msg, user_input=user_msg,
+        output=resp.text, user_id=ctx.user_id,
+    )
+
+    try:
+        data = _parse_json(resp.text)
+        summary_text = data.get("summary_text", "").strip()
+    except (json.JSONDecodeError, ValueError):
+        # Fallback: use raw text if JSON parsing fails
+        summary_text = resp.text.strip()
+
+    if summary_text:
+        ctx._professional_summary = summary_text
+        logger.info("phase_3_5a: summary generated (%d chars)", len(summary_text))
+    else:
+        logger.warning("phase_3_5a: empty summary returned")
+
+    ctx._phase_timings["phase_3_5a"] = int((time.time() - t0) * 1000)
+    _save_checkpoint(ctx, sb, "phase_3_5a")
 
 
 # ── Phase 4A: Verbose Bullets (one LLM call PER COMPANY) ────────────────
@@ -1878,6 +1927,17 @@ def _get_section_order_map(section_order: list) -> dict:
     return mapping
 
 
+def _build_summary_html(summary_text: str) -> str:
+    """Build Professional Summary section HTML."""
+    return (
+        '<div class="section-summary">'
+        '<p style="font-size: 10pt; line-height: 1.4; margin: 0; color: #333;">'
+        f'{summary_text}'
+        '</p>'
+        '</div>'
+    )
+
+
 def _build_experience_html(bullets: list, companies: list) -> str:
     """Build Professional Experience section HTML from optimized bullets + company metadata."""
     from collections import defaultdict
@@ -2049,6 +2109,13 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
 
     # Build section HTML programmatically (no LLM)
     sections = []
+
+    # Professional Summary — inserted before experience (order 0)
+    if ctx._professional_summary:
+        sections.append(SectionContent(
+            section_html=_build_summary_html(ctx._professional_summary),
+            section_order=0,
+        ))
 
     if "experience" in order_map and ctx._optimized_bullets:
         sections.append(SectionContent(

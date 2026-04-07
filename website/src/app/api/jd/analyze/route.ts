@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { scoreRequirementsWithNuggets } from "@/lib/jd-matcher";
 
 export interface JDRequirement {
   id: string;
@@ -13,6 +14,8 @@ export interface JDMatch {
   chunk: string;
   status: "met" | "partial";
   score: number;
+  llm_status: "met" | "partial" | "gap";
+  composite_score: number;
 }
 
 export interface JDGap {
@@ -267,6 +270,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Could not extract requirements" }, { status: 500 });
   }
 
+  // Step 1b: Fetch career_nuggets for composite scoring
+  const { data: nuggetRows } = await supabase
+    .from("career_nuggets")
+    .select("id, company, role, answer, event_date, nugget_type, leadership_signal, organization")
+    .eq("user_id", user.id);
+  const userNuggets = (nuggetRows ?? []) as Record<string, unknown>[];
+
   // Step 2: Text search — gather top candidate chunk per requirement
   const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
 
@@ -283,6 +293,25 @@ export async function POST(request: Request) {
   const scores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, api_key);
   const scoringAvailable = Object.keys(scores).length > 0;
 
+  // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)
+  // Build semantic scores from LLM scores (normalise 0-100 → 0-1)
+  const semanticScores: Record<string, number> = {};
+  for (const req of requirements) {
+    const llmScore = scores[req.id];
+    if (typeof llmScore === "number") {
+      semanticScores[req.text] = llmScore / 100;
+    }
+  }
+
+  const compositeResults = scoreRequirementsWithNuggets(
+    requirements.map((r) => ({ text: r.text, type: r.category })),
+    userNuggets,
+    semanticScores
+  );
+  const compositeByText = Object.fromEntries(
+    compositeResults.map((r) => [r.requirement, r])
+  );
+
   // Step 4: Classify matches vs gaps based on scores
   const matches: JDMatch[] = [];
   const gaps: JDGap[] = [];
@@ -292,6 +321,8 @@ export async function POST(request: Request) {
   for (const req of requirements) {
     const chunk = candidateByReqId[req.id];
     const score = scores[req.id] ?? -1;
+    const compositeResult = compositeByText[req.text];
+    const compositeScore = compositeResult?.composite_score ?? 0;
 
     if (!chunk) {
       // No text search hit at all
@@ -299,19 +330,37 @@ export async function POST(request: Request) {
       continue;
     }
 
+    // Determine LLM classification
+    let llmStatus: "met" | "partial" | "gap";
     if (scoringAvailable) {
-      // Use LLM score with thresholds
-      if (score >= 80) {
-        matches.push({ req_id: req.id, chunk, status: "met", score });
-      } else if (score >= 50) {
-        matches.push({ req_id: req.id, chunk, status: "partial", score });
-      } else {
-        // Text search found something but LLM says not career-relevant
-        gaps.push({ req_id: req.id, text: req.text, category: req.category, importance: req.importance });
-      }
+      if (score >= 80) llmStatus = "met";
+      else if (score >= 50) llmStatus = "partial";
+      else llmStatus = "gap";
     } else {
-      // LLM scoring unavailable — fallback to text-search-only (original behaviour)
-      matches.push({ req_id: req.id, chunk, status: "partial", score: 0 });
+      llmStatus = "partial";
+    }
+
+    // Post-processing: validate/override LLM classification with composite score
+    let finalStatus: "met" | "partial" | "gap" = llmStatus;
+    if (llmStatus === "gap" && compositeScore > 0.6) {
+      // LLM was too strict — composite says there's evidence
+      finalStatus = "partial";
+    } else if (llmStatus === "met" && compositeScore < 0.3) {
+      // LLM was too lenient — composite says evidence is weak
+      finalStatus = "partial";
+    }
+
+    if (finalStatus === "gap") {
+      gaps.push({ req_id: req.id, text: req.text, category: req.category, importance: req.importance });
+    } else {
+      matches.push({
+        req_id: req.id,
+        chunk,
+        status: finalStatus,
+        score,
+        llm_status: llmStatus,
+        composite_score: compositeScore,
+      });
     }
   }
 

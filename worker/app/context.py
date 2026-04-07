@@ -46,6 +46,7 @@ class PipelineContext:
     _optimized_bullets: list[dict] = field(default_factory=list)
     _relevant_chunks: list[str] = field(default_factory=list)  # from pgvector/FTS
     _company_chunks: dict[int, list[str]] = field(default_factory=dict)  # per-company QMD results
+    _professional_summary: str | None = None                      # Phase 3.5A professional summary text
     _verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4a output (200-400 char paragraphs)
     _ranked_verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4b ranked by BRS
     _nuggets: list = field(default_factory=list)              # Phase 0 extracted Nugget objects

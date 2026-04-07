@@ -38,6 +38,13 @@ const OPTIONAL_LABELS = [
   { key: "brand_quaternary" as const, label: "Quaternary" },
 ];
 
+const DEFAULT_COLORS: BrandColors = {
+  brand_primary: "#1B2A4A",
+  brand_secondary: "#2563EB",
+  brand_tertiary: "#6B7280",
+  brand_quaternary: "#FFFFFF",
+};
+
 function isValidHex(v: string | null): v is string {
   if (!v) return false;
   return /^#[0-9A-Fa-f]{6}$/.test(v);
@@ -87,23 +94,15 @@ export function StepBrandColors({ data, update, next, back }: Props) {
           brand_tertiary: existing.brand_tertiary ?? null,
           brand_quaternary: existing.brand_quaternary ?? null,
         }
-      : {
-          brand_primary: "#1B2A4A",
-          brand_secondary: "#93702b",
-          brand_tertiary: "#3D5A80",
-          brand_quaternary: "#D4B87A",
-        }
+      : { ...DEFAULT_COLORS }
   );
   const [hexInputs, setHexInputs] = useState<Record<string, string>>({
-    brand_primary: existing?.brand_primary ?? "#1B2A4A",
-    brand_secondary: existing?.brand_secondary ?? "#93702b",
-    brand_tertiary: existing?.brand_tertiary ?? "#3D5A80",
-    brand_quaternary: existing?.brand_quaternary ?? "#D4B87A",
+    brand_primary: existing?.brand_primary ?? DEFAULT_COLORS.brand_primary,
+    brand_secondary: existing?.brand_secondary ?? DEFAULT_COLORS.brand_secondary,
+    brand_tertiary: existing?.brand_tertiary ?? DEFAULT_COLORS.brand_tertiary!,
+    brand_quaternary: existing?.brand_quaternary ?? DEFAULT_COLORS.brand_quaternary!,
   });
-  const [loading, setLoading] = useState(!existing);
-  const [error, setError] = useState<string | null>(null);
   const [lowContrastWarning, setLowContrastWarning] = useState(false);
-  const fetched = useRef(false);
 
   // Company search state
   const [searchQuery, setSearchQuery] = useState(data.target_company || "");
@@ -112,6 +111,18 @@ export function StepBrandColors({ data, update, next, back }: Props) {
   const [searching, setSearching] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ZIP/CSS upload state
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // BrandFetch lookup state
+  const [domainQuery, setDomainQuery] = useState("");
+  const [brandFetchStatus, setBrandFetchStatus] = useState<string | null>(null);
+  const [brandFetchError, setBrandFetchError] = useState<string | null>(null);
+  const [brandFetching, setBrandFetching] = useState(false);
 
   useEffect(() => {
     if (isValidHex(colors.brand_primary)) {
@@ -155,67 +166,25 @@ export function StepBrandColors({ data, update, next, back }: Props) {
     searchTimer.current = setTimeout(() => searchCachedColors(value), 300);
   };
 
+  const applyColors = (newColors: BrandColors, label?: string) => {
+    setColors(newColors);
+    setHexInputs({
+      brand_primary: newColors.brand_primary,
+      brand_secondary: newColors.brand_secondary,
+      brand_tertiary: newColors.brand_tertiary ?? DEFAULT_COLORS.brand_tertiary!,
+      brand_quaternary: newColors.brand_quaternary ?? DEFAULT_COLORS.brand_quaternary!,
+    });
+  };
+
   const applyFromCache = (company: CachedCompany) => {
-    const newColors: BrandColors = {
+    applyColors({
       brand_primary: company.brand_primary,
       brand_secondary: company.brand_secondary,
       brand_tertiary: company.brand_tertiary,
       brand_quaternary: company.brand_quaternary,
-    };
-    setColors(newColors);
-    setHexInputs({
-      brand_primary: company.brand_primary,
-      brand_secondary: company.brand_secondary,
-      brand_tertiary: company.brand_tertiary ?? "#3D5A80",
-      brand_quaternary: company.brand_quaternary ?? "#D4B87A",
     });
     setShowDropdown(false);
-    setError(null);
-    setLoading(false);
   };
-
-  const fetchColors = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const resp = await fetch("/api/resume/brand-colors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company_name: data.target_company,
-          jd_text: data.jd_text,
-          model_provider: data.model_provider,
-          model_id: data.model_id,
-          api_key: data.api_key,
-        }),
-      });
-      if (!resp.ok) throw new Error("Failed to extract colors");
-      const result = await resp.json();
-      const extracted: BrandColors = {
-        brand_primary: result.brand_primary,
-        brand_secondary: result.brand_secondary,
-        brand_tertiary: result.brand_tertiary ?? null,
-        brand_quaternary: result.brand_quaternary ?? null,
-      };
-      setColors(extracted);
-      setHexInputs({
-        brand_primary: extracted.brand_primary,
-        brand_secondary: extracted.brand_secondary,
-        brand_tertiary: extracted.brand_tertiary ?? "#3D5A80",
-        brand_quaternary: extracted.brand_quaternary ?? "#D4B87A",
-      });
-    } catch {
-      setError("Could not auto-extract colors — using defaults. Edit manually below.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (fetched.current || existing) return;
-    fetched.current = true;
-    fetchColors();
-  }, []);
 
   const handleColorChange = (key: keyof BrandColors, value: string) => {
     setHexInputs((prev) => ({ ...prev, [key]: value }));
@@ -231,6 +200,89 @@ export function StepBrandColors({ data, update, next, back }: Props) {
 
   const handleRemove = (key: "brand_tertiary" | "brand_quaternary") => {
     setColors((prev) => ({ ...prev, [key]: null }));
+  };
+
+  // ZIP/CSS file upload handler
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    setUploadStatus(null);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const resp = await fetch("/api/brand-colors/extract", {
+        method: "POST",
+        body: formData,
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || "Upload failed");
+      }
+      const result = await resp.json();
+      applyColors({
+        brand_primary: result.brand_primary,
+        brand_secondary: result.brand_secondary,
+        brand_tertiary: result.brand_tertiary,
+        brand_quaternary: result.brand_quaternary,
+      });
+      if (result.colors_found > 0) {
+        setUploadStatus(`Found ${result.colors_found} color${result.colors_found === 1 ? "" : "s"} in file`);
+      } else {
+        setUploadStatus("Using defaults — no brand colors found in file");
+      }
+    } catch (e: unknown) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFileUpload(file);
+  };
+
+  // BrandFetch domain lookup
+  const handleBrandFetchLookup = async () => {
+    if (!domainQuery.trim()) return;
+    setBrandFetching(true);
+    setBrandFetchStatus(null);
+    setBrandFetchError(null);
+    try {
+      const resp = await fetch(
+        `/api/brand-colors/brandfetch?domain=${encodeURIComponent(domainQuery.trim())}`
+      );
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || "Lookup failed");
+      }
+      const result = await resp.json();
+      if (!result.colors) {
+        setBrandFetchError(`Could not find brand colors for ${domainQuery.trim()}`);
+        return;
+      }
+      setColors((prev) => ({
+        ...prev,
+        brand_primary: result.brand_primary,
+        brand_secondary: result.brand_secondary,
+      }));
+      setHexInputs((prev) => ({
+        ...prev,
+        brand_primary: result.brand_primary,
+        brand_secondary: result.brand_secondary,
+      }));
+      setBrandFetchStatus(`Colors from ${domainQuery.trim()}`);
+    } catch (e: unknown) {
+      setBrandFetchError(e instanceof Error ? e.message : "Lookup failed");
+    } finally {
+      setBrandFetching(false);
+    }
   };
 
   const handleNext = () => {
@@ -275,7 +327,7 @@ export function StepBrandColors({ data, update, next, back }: Props) {
     <div>
       <h2 className="text-2xl font-bold">Brand Colors</h2>
       <p className="mt-2 text-sm text-muted">
-        Colors extracted for{" "}
+        Set brand colors for{" "}
         <span className="font-medium text-foreground">{data.target_company}</span>.
         Review and edit before generating your resume.
       </p>
@@ -339,154 +391,238 @@ export function StepBrandColors({ data, update, next, back }: Props) {
         </div>
       </div>
 
-      {loading ? (
-        <div className="mt-10 flex flex-col items-center gap-4">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-          <p className="text-sm text-muted">Extracting brand colors...</p>
+      {lowContrastWarning && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          Primary color has low contrast against white ({contrastVsWhite(colors.brand_primary).toFixed(1)}:1). Text may be hard to read — consider a darker shade.
         </div>
-      ) : (
-        <>
-          {error && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              {error}
-            </div>
-          )}
-
-          {lowContrastWarning && (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              Primary color has low contrast against white ({contrastVsWhite(colors.brand_primary).toFixed(1)}:1). Text may be hard to read — consider a darker shade.
-            </div>
-          )}
-
-          {/* Identity horizon preview */}
-          <div className="mt-8">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-              Preview — Identity Stripe
-            </p>
-            <div className="flex h-3 w-full overflow-hidden rounded-full shadow-sm">
-              {colorList.filter(isValidHex).map((c, i) => (
-                <div key={i} className="flex-1" style={{ background: c }} />
-              ))}
-            </div>
-          </div>
-
-          {/* Section title preview */}
-          <div className="mt-4 rounded-xl border border-border bg-surface px-5 py-4">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
-              Section title preview
-            </p>
-            <div
-              className="text-sm font-medium"
-              style={{ color: colors.brand_primary }}
-            >
-              Professional Experience
-            </div>
-            <div
-              className="mt-0.5 h-px w-full opacity-70"
-              style={{ background: buildStepGradient(colorList) }}
-            />
-          </div>
-
-          {/* Required color pickers */}
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            {REQUIRED_LABELS.map(({ key, label }) => (
-              <div
-                key={key}
-                className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4"
-              >
-                <div className="relative flex-shrink-0">
-                  <div
-                    className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm"
-                    style={{ background: colors[key] }}
-                  />
-                  <input
-                    type="color"
-                    value={colors[key]}
-                    onChange={(e) => handlePickerChange(key, e.target.value)}
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center text-xs font-medium text-muted">
-                    {label}
-                    <ContrastBadge hex={colors[key]} />
-                  </p>
-                  <input
-                    type="text"
-                    value={hexInputs[key]}
-                    onChange={(e) => handleColorChange(key, e.target.value)}
-                    maxLength={7}
-                    className={`mt-0.5 w-full rounded-lg border px-2 py-1 font-mono text-sm focus:outline-none ${
-                      isValidHex(hexInputs[key])
-                        ? "border-border bg-background text-foreground focus:border-accent/50"
-                        : "border-red-300 bg-red-50 text-red-600"
-                    }`}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Optional color pickers — removable */}
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            {OPTIONAL_LABELS.map(({ key, label }) =>
-              colors[key] === null ? null : (
-                <div
-                  key={key}
-                  className="relative flex items-center gap-3 rounded-xl border border-border bg-surface p-4"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(key)}
-                    className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-border text-xs text-muted transition-colors hover:bg-red-100 hover:text-red-600"
-                    title={`Remove ${label}`}
-                  >
-                    ×
-                  </button>
-                  <div className="relative flex-shrink-0">
-                    <div
-                      className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm"
-                      style={{ background: colors[key] as string }}
-                    />
-                    <input
-                      type="color"
-                      value={colors[key] as string}
-                      onChange={(e) => handlePickerChange(key, e.target.value)}
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center text-xs font-medium text-muted">
-                      {label}
-                      <ContrastBadge hex={colors[key] as string} />
-                    </p>
-                    <input
-                      type="text"
-                      value={hexInputs[key]}
-                      onChange={(e) => handleColorChange(key, e.target.value)}
-                      maxLength={7}
-                      className={`mt-0.5 w-full rounded-lg border px-2 py-1 font-mono text-sm focus:outline-none ${
-                        isValidHex(hexInputs[key])
-                          ? "border-border bg-background text-foreground focus:border-accent/50"
-                          : "border-red-300 bg-red-50 text-red-600"
-                      }`}
-                    />
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={fetchColors}
-              className="text-sm text-muted underline-offset-2 transition-colors hover:text-foreground hover:underline"
-            >
-              Re-extract colors
-            </button>
-          </div>
-        </>
       )}
+
+      {/* Identity horizon preview */}
+      <div className="mt-8">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+          Preview — Identity Stripe
+        </p>
+        <div className="flex h-3 w-full overflow-hidden rounded-full shadow-sm">
+          {colorList.filter(isValidHex).map((c, i) => (
+            <div key={i} className="flex-1" style={{ background: c }} />
+          ))}
+        </div>
+      </div>
+
+      {/* Section title preview */}
+      <div className="mt-4 rounded-xl border border-border bg-surface px-5 py-4">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted">
+          Section title preview
+        </p>
+        <div
+          className="text-sm font-medium"
+          style={{ color: colors.brand_primary }}
+        >
+          Professional Experience
+        </div>
+        <div
+          className="mt-0.5 h-px w-full opacity-70"
+          style={{ background: buildStepGradient(colorList) }}
+        />
+      </div>
+
+      {/* Default palette label + color preview row */}
+      <div className="mt-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+          Default professional colors — upload brand assets below for an accurate match
+        </p>
+        <div className="flex gap-2">
+          {colorList.map((c, i) => (
+            <div
+              key={i}
+              title={c ?? "none"}
+              className="h-6 w-6 rounded border border-border shadow-sm"
+              style={{ background: isValidHex(c) ? c : "#e5e7eb" }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Required color pickers */}
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        {REQUIRED_LABELS.map(({ key, label }) => (
+          <div
+            key={key}
+            className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4"
+          >
+            <div className="relative flex-shrink-0">
+              <div
+                className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm"
+                style={{ background: colors[key] }}
+              />
+              <input
+                type="color"
+                value={colors[key]}
+                onChange={(e) => handlePickerChange(key, e.target.value)}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center text-xs font-medium text-muted">
+                {label}
+                <ContrastBadge hex={colors[key]} />
+              </p>
+              <input
+                type="text"
+                value={hexInputs[key]}
+                onChange={(e) => handleColorChange(key, e.target.value)}
+                maxLength={7}
+                className={`mt-0.5 w-full rounded-lg border px-2 py-1 font-mono text-sm focus:outline-none ${
+                  isValidHex(hexInputs[key])
+                    ? "border-border bg-background text-foreground focus:border-accent/50"
+                    : "border-red-300 bg-red-50 text-red-600"
+                }`}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Optional color pickers — removable */}
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        {OPTIONAL_LABELS.map(({ key, label }) =>
+          colors[key] === null ? null : (
+            <div
+              key={key}
+              className="relative flex items-center gap-3 rounded-xl border border-border bg-surface p-4"
+            >
+              <button
+                type="button"
+                onClick={() => handleRemove(key)}
+                className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-border text-xs text-muted transition-colors hover:bg-red-100 hover:text-red-600"
+                title={`Remove ${label}`}
+              >
+                ×
+              </button>
+              <div className="relative flex-shrink-0">
+                <div
+                  className="h-10 w-10 cursor-pointer rounded-lg border border-border shadow-sm"
+                  style={{ background: colors[key] as string }}
+                />
+                <input
+                  type="color"
+                  value={colors[key] as string}
+                  onChange={(e) => handlePickerChange(key, e.target.value)}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center text-xs font-medium text-muted">
+                  {label}
+                  <ContrastBadge hex={colors[key] as string} />
+                </p>
+                <input
+                  type="text"
+                  value={hexInputs[key]}
+                  onChange={(e) => handleColorChange(key, e.target.value)}
+                  maxLength={7}
+                  className={`mt-0.5 w-full rounded-lg border px-2 py-1 font-mono text-sm focus:outline-none ${
+                    isValidHex(hexInputs[key])
+                      ? "border-border bg-background text-foreground focus:border-accent/50"
+                      : "border-red-300 bg-red-50 text-red-600"
+                  }`}
+                />
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
+      {/* ZIP / CSS file upload */}
+      <div className="mt-8">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted">
+          Upload brand assets (CSS/HTML file)
+        </label>
+        <div
+          className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface px-6 py-6 text-center transition-colors hover:border-accent/40 hover:bg-background"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleFileDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? (
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+              Extracting colors…
+            </div>
+          ) : (
+            <>
+              <svg
+                className="h-6 w-6 text-muted"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                />
+              </svg>
+              <p className="text-sm text-muted">
+                Drop CSS/HTML file here or <span className="text-accent underline">click to browse</span>
+              </p>
+              <p className="text-xs text-muted/60">.css, .html, .txt, .zip accepted</p>
+            </>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".css,.html,.txt,.zip"
+          className="hidden"
+          onChange={handleFileInputChange}
+        />
+        {uploadStatus && (
+          <p className="mt-2 text-xs font-medium text-green-700">{uploadStatus}</p>
+        )}
+        {uploadError && (
+          <p className="mt-2 text-xs font-medium text-red-600">{uploadError}</p>
+        )}
+      </div>
+
+      {/* BrandFetch domain lookup */}
+      <div className="mt-6">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted">
+          Look up brand colors
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={domainQuery}
+            onChange={(e) => setDomainQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleBrandFetchLookup()}
+            placeholder="e.g. stripe.com"
+            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent/50 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleBrandFetchLookup}
+            disabled={brandFetching || !domainQuery.trim()}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/80 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {brandFetching ? (
+              <span className="flex items-center gap-1.5">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Looking up…
+              </span>
+            ) : (
+              "Look up"
+            )}
+          </button>
+        </div>
+        {brandFetchStatus && (
+          <p className="mt-2 text-xs font-medium text-green-700">{brandFetchStatus}</p>
+        )}
+        {brandFetchError && (
+          <p className="mt-2 text-xs font-medium text-red-600">{brandFetchError}</p>
+        )}
+      </div>
 
       <div className="mt-8 flex items-center justify-between">
         <button
@@ -497,7 +633,7 @@ export function StepBrandColors({ data, update, next, back }: Props) {
         </button>
         <button
           onClick={handleNext}
-          disabled={loading || !allValid}
+          disabled={!allValid}
           className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           Looks good → Next
