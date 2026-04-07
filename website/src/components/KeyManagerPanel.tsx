@@ -128,7 +128,7 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
     }
   };
 
-  const handleMovePriority = async (id: string, direction: "up" | "down") => {
+  const handleMovePriority = (id: string, direction: "up" | "down") => {
     const sorted = [...keys].sort((a, b) => a.priority - b.priority);
     const idx = sorted.findIndex((k) => k.id === id);
     if (idx < 0) return;
@@ -139,24 +139,31 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
     const current = sorted[idx];
     const swap = sorted[swapIdx];
 
-    // Swap priorities
-    try {
-      await Promise.all([
-        fetch(`/api/user/keys/${current.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ priority: swap.priority }),
-        }),
-        fetch(`/api/user/keys/${swap.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ priority: current.priority }),
-        }),
-      ]);
-      await fetchKeys();
-    } catch {
-      // silent
-    }
+    // Optimistic: swap priorities in local state immediately
+    setKeys((prev) =>
+      prev.map((k) => {
+        if (k.id === current.id) return { ...k, priority: swap.priority };
+        if (k.id === swap.id) return { ...k, priority: current.priority };
+        return k;
+      })
+    );
+
+    // Background: persist to DB, revert on failure
+    Promise.all([
+      fetch(`/api/user/keys/${current.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: swap.priority }),
+      }),
+      fetch(`/api/user/keys/${swap.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: current.priority }),
+      }),
+    ]).catch(() => {
+      // Revert on failure by re-fetching from DB
+      fetchKeys();
+    });
   };
 
   if (loading) {
