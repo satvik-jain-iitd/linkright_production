@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+// TODO: Add Langfuse TypeScript SDK tracing here
 
 const SYSTEM_PROMPT = `You are a resume editor. The user has selected a specific element from their resume and wants you to edit it.
 
@@ -19,6 +20,7 @@ Rules:
 - For "make more concise": cut to the essential XYZ without filler
 - For "expand to fill width": add more context/detail while keeping the sentence count
 - For "STAR format": Situation → Task → Action → Result, one sentence each
+- Preserve any existing metric values exactly — do not round, estimate, or change numbers from the original
 - explanation should be 1 sentence describing what changed`;
 
 function buildLlmBody(

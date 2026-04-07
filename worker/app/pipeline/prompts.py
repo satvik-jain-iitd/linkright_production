@@ -59,7 +59,9 @@ Strategy rules:
 - Pick strategy that best matches JD emphasis
 - Use actual brand colors of the target company
 - section_order: follow career level defaults, adjust for JD emphasis
-- bullet_budget: total ~12-15 bullets for one A4 page"""
+- bullet_budget: total ~12-15 bullets for one A4 page
+- Extract approximate dates from career context when available (years, date ranges)
+- If JD mentions specific tools or tech stack, add them to jd_keywords even if not explicit requirements"""
 
 PHASE_1_2_USER = """## Job Description
 {jd_text}
@@ -145,6 +147,8 @@ RULES:
 9. Write EXACTLY {bullet_count} paragraphs for this company
 10. Do NOT worry about line width — these will be condensed later
 11. Verbs already used by prior companies: {used_verbs}. Do NOT reuse any of these.
+12. Every paragraph MUST include at least one metric (number, %, $, time) if one exists in the career context
+13. State the company name and role at least once per company block in the output
 
 Strategy: {strategy}
 Strategy emphasis: {strategy_description}

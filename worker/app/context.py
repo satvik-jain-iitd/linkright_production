@@ -60,6 +60,9 @@ class PipelineContext:
     current_phase: int = 0
     phase_message: str = ""
 
+    # Multi-key management
+    key_manager: Any | None = None  # Optional KeyManager instance
+
     # Output
     output_html: str | None = None
     stats: dict[str, Any] = field(default_factory=dict)
