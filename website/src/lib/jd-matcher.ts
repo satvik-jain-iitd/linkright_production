@@ -21,6 +21,42 @@ export interface RequirementScore {
 }
 
 // ---------------------------------------------------------------------------
+// Cosine similarity
+// ---------------------------------------------------------------------------
+
+/**
+ * Cosine similarity between two equal-length vectors.
+ * Returns 0 if either vector has zero magnitude.
+ */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  let dot = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+/**
+ * Given a requirement embedding and an array of nugget embeddings,
+ * return the maximum cosine similarity (0-1).
+ */
+export function maxSemanticScore(
+  reqEmbedding: number[],
+  nuggetEmbeddings: number[][]
+): number {
+  if (nuggetEmbeddings.length === 0) return 0;
+  let best = 0;
+  for (const ne of nuggetEmbeddings) {
+    const sim = cosineSimilarity(reqEmbedding, ne);
+    if (sim > best) best = sim;
+  }
+  return Math.max(0, Math.min(1, best));
+}
+
+// ---------------------------------------------------------------------------
 // Stop words
 // ---------------------------------------------------------------------------
 

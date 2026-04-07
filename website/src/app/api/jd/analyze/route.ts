@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { scoreRequirementsWithNuggets } from "@/lib/jd-matcher";
+import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
+import { jinaEmbed } from "@/lib/jina-embed";
 
 export interface JDRequirement {
   id: string;
@@ -285,6 +286,47 @@ export async function POST(request: Request) {
     })
   );
 
+  // Step 1c: Semantic scoring via Jina embeddings (optional, degrades gracefully)
+  //
+  // Strategy:
+  //   1. Embed all requirements in one Jina batch call
+  //   2. Fetch stored nugget embeddings from career_nuggets
+  //   3. For each requirement, take max cosine similarity across all nuggets
+  //   This runs in parallel with text search (Step 2) but we await it before
+  //   building semanticScores below.
+  const jinaApiKey = process.env.JINA_API_KEY ?? "";
+  const jinaSemanticScores: Record<string, number> = {};
+
+  if (jinaApiKey && userNuggets.length > 0) {
+    try {
+      // Fetch stored embeddings for this user's nuggets
+      const { data: embeddingRows } = await supabase
+        .from("career_nuggets")
+        .select("id, embedding")
+        .eq("user_id", user.id)
+        .not("embedding", "is", null);
+
+      const nuggetEmbeddings: number[][] = (embeddingRows ?? [])
+        .map((row: { id: string; embedding: unknown }) => row.embedding as unknown)
+        .filter((emb: unknown): emb is number[] => Array.isArray(emb) && emb.length > 0);
+
+      if (nuggetEmbeddings.length > 0) {
+        // Embed all requirements in one batch (up to 20 texts)
+        const reqTexts = requirements.map((r) => r.text.slice(0, 200));
+        const reqEmbeddings = await jinaEmbed(reqTexts, jinaApiKey);
+
+        if (reqEmbeddings && reqEmbeddings.length === requirements.length) {
+          for (let i = 0; i < requirements.length; i++) {
+            const sim = maxSemanticScore(reqEmbeddings[i], nuggetEmbeddings);
+            jinaSemanticScores[requirements[i].text] = sim;
+          }
+        }
+      }
+    } catch {
+      // Semantic scoring failed — composite falls back to exact + metadata only
+    }
+  }
+
   // Step 2: Text search — gather top candidate chunk per requirement
   const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
 
@@ -302,12 +344,17 @@ export async function POST(request: Request) {
   const scoringAvailable = Object.keys(scores).length > 0;
 
   // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)
-  // Build semantic scores from LLM scores (normalise 0-100 → 0-1)
+  // Semantic score = Jina cosine similarity if available, else LLM score (normalised 0→1).
+  // Jina is preferred because it uses actual embedding vectors rather than LLM text judgement.
   const semanticScores: Record<string, number> = {};
   for (const req of requirements) {
-    const llmScore = scores[req.id];
-    if (typeof llmScore === "number") {
-      semanticScores[req.text] = llmScore / 100;
+    if (typeof jinaSemanticScores[req.text] === "number") {
+      semanticScores[req.text] = jinaSemanticScores[req.text];
+    } else {
+      const llmScore = scores[req.id];
+      if (typeof llmScore === "number") {
+        semanticScores[req.text] = llmScore / 100;
+      }
     }
   }
 
