@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 mod commands;
+mod models;
 
 #[derive(Parser)]
 #[command(name = "truss", version, about = "Parallel Agent Orchestration Framework")]
