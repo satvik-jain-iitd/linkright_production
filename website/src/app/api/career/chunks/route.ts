@@ -14,6 +14,7 @@ export async function GET() {
     .from("career_chunks")
     .select("chunk_index, chunk_text, chunk_tokens, created_at")
     .eq("user_id", user.id)
+    .neq("is_active", false)  // exclude soft-deleted chunks
     .order("chunk_index", { ascending: true });
 
   if (error) {

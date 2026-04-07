@@ -27,6 +27,7 @@ export async function GET() {
     .from("career_chunks")
     .select("chunk_text")
     .eq("user_id", user.id)
+    .neq("is_active", false)  // exclude soft-deleted chunks (future-proof for versioning)
     .order("chunk_index", { ascending: true });
 
   const career_text = chunks?.map((c: { chunk_text: string }) => c.chunk_text).join("\n\n") || "";
@@ -64,7 +65,8 @@ export async function PUT(request: Request) {
   };
   if (model_provider !== undefined) updates.model_provider = model_provider;
   if (model_id !== undefined) updates.model_id = model_id;
-  if (api_key !== undefined) updates.api_key = api_key;
+  // Never overwrite api_key with empty/null — only update when a real value is provided
+  if (api_key !== undefined && api_key !== null && api_key !== "") updates.api_key = api_key;
   if (career_graph !== undefined) updates.career_graph = career_graph;
 
   const { data, error } = await supabase

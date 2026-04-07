@@ -278,6 +278,13 @@ async def extract_nuggets(
         # --- DB: delete old nuggets ONLY if explicitly requested ---
         if force_delete:
             try:
+                # Safety log: show exactly what will be destroyed before destroying it
+                count_result = sb.table("career_nuggets").select("id").eq("user_id", user_id).execute()
+                count = len(count_result.data or [])
+                logger.warning(
+                    "extract_nuggets: FORCE DELETE — destroying %d existing nuggets for user %s. This is permanent.",
+                    count, user_id
+                )
                 sb.table("career_nuggets").delete().eq("user_id", user_id).execute()
                 logger.info("extract_nuggets: cleared old nuggets for user %s (force_delete=True)", user_id)
             except Exception as exc:
@@ -344,15 +351,34 @@ async def extract_nuggets(
                 batch_nuggets.append(nugget)
                 global_index += 1
 
-            # --- DB: insert this batch immediately (incremental save) ---
+            # --- DB: insert this batch immediately (incremental save, with dedup) ---
             if batch_nuggets:
                 try:
-                    rows = [_nugget_to_row(n, user_id) for n in batch_nuggets]
-                    result = sb.table("career_nuggets").insert(rows).execute()
-                    inserted = result.data or []
-                    for nugget, row_data in zip(batch_nuggets, inserted):
-                        nugget.id = row_data.get("id")
-                    logger.info("extract_nuggets: batch %d → %d nuggets saved (total=%d)", batch_num, len(batch_nuggets), len(all_nuggets))
+                    # Dedup: skip nuggets whose text already exists for this user
+                    unique_nuggets: list[Nugget] = []
+                    for n in batch_nuggets:
+                        try:
+                            dup = sb.table("career_nuggets").select("id, nugget_index") \
+                                .eq("user_id", user_id).eq("nugget_text", n.nugget_text) \
+                                .limit(1).execute()
+                            if dup.data:
+                                n.id = dup.data[0]["id"]  # reuse existing id for embedding
+                                logger.debug("extract_nuggets: skipping duplicate nugget_text (id=%s)", n.id)
+                                unique_nuggets.append(n)  # still embed if needed
+                                continue
+                        except Exception:
+                            pass  # on dedup check failure, allow insert
+                        unique_nuggets.append(n)
+
+                    new_nuggets = [n for n in unique_nuggets if not n.id]
+                    if new_nuggets:
+                        rows = [_nugget_to_row(n, user_id) for n in new_nuggets]
+                        result = sb.table("career_nuggets").insert(rows).execute()
+                        inserted = result.data or []
+                        for nugget, row_data in zip(new_nuggets, inserted):
+                            nugget.id = row_data.get("id")
+                    batch_nuggets = unique_nuggets  # use deduped list (includes existing dupes with ids) for callback
+                    logger.info("extract_nuggets: batch %d → %d nuggets saved (%d new, total=%d)", batch_num, len(unique_nuggets), len(new_nuggets), len(all_nuggets))
                 except Exception as exc:
                     logger.warning("extract_nuggets: DB insert failed for batch %d: %s", batch_num, exc)
 
