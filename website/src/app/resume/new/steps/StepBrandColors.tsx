@@ -254,9 +254,10 @@ export function StepBrandColors({ data, update, next, back }: Props) {
     setBrandFetching(true);
     setBrandFetchStatus(null);
     setBrandFetchError(null);
+    const q = domainQuery.trim().includes(".") ? domainQuery.trim() : `${domainQuery.trim()}.com`;
     try {
       const resp = await fetch(
-        `/api/brand-colors/brandfetch?domain=${encodeURIComponent(domainQuery.trim())}`
+        `/api/brand-colors/brandfetch?domain=${encodeURIComponent(q)}`
       );
       if (!resp.ok) {
         const err = await resp.json();
@@ -264,7 +265,7 @@ export function StepBrandColors({ data, update, next, back }: Props) {
       }
       const result = await resp.json();
       if (!result.colors) {
-        setBrandFetchError(`Could not find brand colors for ${domainQuery.trim()}`);
+        setBrandFetchError("Couldn't find colors for this domain. Try entering the full domain like 'company.com', or upload a CSS file instead.");
         return;
       }
       setColors((prev) => ({
@@ -277,7 +278,7 @@ export function StepBrandColors({ data, update, next, back }: Props) {
         brand_primary: result.brand_primary,
         brand_secondary: result.brand_secondary,
       }));
-      setBrandFetchStatus(`Colors from ${domainQuery.trim()}`);
+      setBrandFetchStatus(`Colors from ${q}`);
     } catch (e: unknown) {
       setBrandFetchError(e instanceof Error ? e.message : "Lookup failed");
     } finally {
@@ -592,14 +593,17 @@ export function StepBrandColors({ data, update, next, back }: Props) {
           Look up brand colors
         </label>
         <div className="flex gap-2">
-          <input
-            type="text"
-            value={domainQuery}
-            onChange={(e) => setDomainQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleBrandFetchLookup()}
-            placeholder="e.g. stripe.com"
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent/50 focus:outline-none"
-          />
+          <div className="flex-1">
+            <input
+              type="text"
+              value={domainQuery}
+              onChange={(e) => setDomainQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleBrandFetchLookup()}
+              placeholder="e.g. stripe.com"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent/50 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-muted">Enter full domain (e.g. highlevel.com, stripe.com)</p>
+          </div>
           <button
             type="button"
             onClick={handleBrandFetchLookup}

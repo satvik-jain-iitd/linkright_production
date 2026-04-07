@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { ExtractionPromptModal } from "@/components/ExtractionPromptModal";
 
 /* ---------- Types ---------- */
 
@@ -406,6 +407,7 @@ export default function NuggetsDashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Fetch analytics on mount
   useEffect(() => {
@@ -492,12 +494,12 @@ export default function NuggetsDashboard() {
               Analytics and management for your nugget library
             </p>
           </div>
-          <Link
-            href="/resume/new"
+          <button
+            onClick={() => setShowImportModal(true)}
             className="rounded-full bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             + Import Nuggets
-          </Link>
+          </button>
         </div>
 
         {/* Summary Cards */}
@@ -539,6 +541,11 @@ export default function NuggetsDashboard() {
         {/* Pagination */}
         <Pagination page={page} total={total} limit={50} onChange={setPage} />
       </div>
+      <ExtractionPromptModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => { setShowImportModal(false); window.location.reload(); }}
+      />
     </div>
   );
 }

@@ -83,6 +83,20 @@ export async function POST(
         }),
       });
       valid = resp.status === 200;
+    } else if (["cerebras", "sambanova", "siliconflow", "nvidia", "github", "mistral"].includes(provider)) {
+      const urls: Record<string, string> = {
+        cerebras:    "https://api.cerebras.ai/v1/models",
+        sambanova:   "https://api.sambanova.ai/v1/models",
+        siliconflow: "https://api.siliconflow.cn/v1/models",
+        nvidia:      "https://integrate.api.nvidia.com/v1/models",
+        github:      "https://models.inference.ai.azure.com/info",
+        mistral:     "https://api.mistral.ai/v1/models",
+      };
+      const resp = await fetch(urls[provider], {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      valid = resp.status === 200;
     }
 
     // Reset fail count on successful validation

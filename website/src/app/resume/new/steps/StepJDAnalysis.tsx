@@ -153,7 +153,10 @@ export function StepJDAnalysis({ data, update, next, back }: Props) {
       <div className="text-center">
         <div className="mx-auto max-w-md rounded-2xl border border-red-200 bg-red-50 p-10">
           <h2 className="mt-4 text-xl font-semibold text-red-700">Analysis failed</h2>
-          <p className="mt-2 text-sm text-red-600">{error}</p>
+          <p className="mt-2 text-sm text-red-600">
+            Analysis failed — your API key may be rate-limited.{" "}
+            <a href="/dashboard/settings" className="underline">Go to Settings → API Keys</a> to add or validate a key.
+          </p>
           <div className="mt-6 flex justify-center gap-3">
             <button
               onClick={back}

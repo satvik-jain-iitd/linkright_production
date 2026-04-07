@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const validProviders = ["openrouter", "groq", "gemini", "jina", "anthropic"];
+  const validProviders = ["openrouter", "groq", "gemini", "jina", "anthropic", "cerebras", "sambanova", "siliconflow", "nvidia", "github", "mistral"];
   if (!validProviders.includes(provider)) {
     return Response.json(
       {
