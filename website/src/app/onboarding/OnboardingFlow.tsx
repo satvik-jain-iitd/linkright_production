@@ -1,0 +1,1161 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { ChatMessage, type Message } from "./ChatMessage";
+import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
+import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+type Step = 1 | 2 | 3 | 4 | 5;
+
+const ROLE_OPTIONS = [
+  "Product Manager",
+  "Software Engineer",
+  "Data Analyst",
+  "UX Designer",
+  "Marketing",
+  "Finance",
+  "Operations",
+  "Other",
+];
+
+const PROVIDER_MODEL_MAP: Record<string, string> = {
+  groq: "llama-3.1-8b-instant",
+  openai: "gpt-4o-mini",
+  anthropic: "claude-haiku-4-5-20251001",
+};
+
+interface Education {
+  institution: string;
+  degree: string;
+  year: string;
+}
+
+interface ConversationTurn {
+  userAnswer: string;
+  paraphrase: string;
+  confirmed: boolean;
+}
+
+// ── Step 1: Welcome + Target Roles ────────────────────────────────────────
+
+function StepWelcome({
+  selectedRoles,
+  onRolesChange,
+  onNext,
+}: {
+  selectedRoles: string[];
+  onRolesChange: (roles: string[]) => void;
+  onNext: () => void;
+}) {
+  const toggle = (role: string) => {
+    onRolesChange(
+      selectedRoles.includes(role)
+        ? selectedRoles.filter((r) => r !== role)
+        : [...selectedRoles, role]
+    );
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">
+          Welcome to LinkRight
+        </h1>
+        <p className="mt-2 text-muted">
+          What kind of roles are you targeting?
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {ROLE_OPTIONS.map((role) => {
+          const selected = selectedRoles.includes(role);
+          return (
+            <button
+              key={role}
+              onClick={() => toggle(role)}
+              className={`rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
+                selected
+                  ? "bg-primary-500 border-primary-500 text-white"
+                  : "bg-surface border-border text-foreground hover:border-primary-400 hover:text-primary-600"
+              }`}
+            >
+              {role}
+            </button>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={onNext}
+        disabled={selectedRoles.length === 0}
+        className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        Get Started
+      </button>
+    </div>
+  );
+}
+
+// ── Step 2: API Key Setup ─────────────────────────────────────────────────
+
+function StepApiKey({
+  onNext,
+  onKeyValidated,
+}: {
+  onNext: (provider: string, modelId: string, apiKey: string) => void;
+  onKeyValidated: (provider: string, modelId: string, apiKey: string) => void;
+}) {
+  const [provider, setProvider] = useState("groq");
+  const [apiKey, setApiKey] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [validated, setValidated] = useState(false);
+  const [error, setError] = useState("");
+
+  const modelId = PROVIDER_MODEL_MAP[provider] ?? "";
+
+  const handleProviderChange = (p: string) => {
+    setProvider(p);
+    setValidated(false);
+    setError("");
+    setApiKey("");
+  };
+
+  const handleValidate = async () => {
+    if (!apiKey.trim()) return;
+    setValidating(true);
+    setError("");
+    setValidated(false);
+
+    try {
+      const res = await fetch("/api/user/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, api_key: apiKey.trim(), label: "Primary" }),
+      });
+
+      if (res.ok) {
+        setValidated(true);
+        onKeyValidated(provider, modelId, apiKey.trim());
+      } else {
+        const data = await res.json();
+        setError(data.error ?? "Validation failed. Check your key and try again.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">
+          Set up your AI model
+        </h1>
+        <p className="mt-2 text-muted">
+          LinkRight uses your API key to generate resumes. Your key stays private.
+        </p>
+      </div>
+
+      {/* Provider dropdown */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-foreground">
+          Provider
+        </label>
+        <select
+          value={provider}
+          onChange={(e) => handleProviderChange(e.target.value)}
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="groq">Groq (free)</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+        </select>
+        <p className="text-xs text-muted">
+          Model: <span className="font-mono">{modelId}</span>
+        </p>
+      </div>
+
+      {/* Groq visual guide */}
+      {provider === "groq" && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 space-y-3">
+          <p className="text-sm font-semibold text-primary-700">
+            Get a free API key in 60 seconds
+          </p>
+          <ol className="space-y-2">
+            <li className="flex items-start gap-2 text-sm text-foreground">
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
+                1
+              </span>
+              <span>
+                Go to{" "}
+                <a
+                  href="https://console.groq.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary-600 underline hover:text-primary-700"
+                >
+                  console.groq.com
+                </a>
+              </span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-foreground">
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
+                2
+              </span>
+              <span>Sign up / Log in</span>
+            </li>
+            <li className="flex items-start gap-2 text-sm text-foreground">
+              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
+                3
+              </span>
+              <span>
+                Create an API key → Copy it
+              </span>
+            </li>
+          </ol>
+        </div>
+      )}
+
+      {/* API Key input */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-foreground">
+          API Key
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => {
+              setApiKey(e.target.value);
+              setValidated(false);
+              setError("");
+            }}
+            placeholder="Paste your API key here"
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <button
+            onClick={handleValidate}
+            disabled={!apiKey.trim() || validating || validated}
+            className="rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+          >
+            {validating ? "Validating…" : "Validate Key"}
+          </button>
+        </div>
+
+        {validated && (
+          <p className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Key validated!
+          </p>
+        )}
+        {error && (
+          <p className="text-sm text-red-600">{error}</p>
+        )}
+      </div>
+
+      <button
+        onClick={() => onNext(provider, modelId, apiKey.trim())}
+        disabled={!validated}
+        className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+// ── Step 3: Career Basics Form ────────────────────────────────────────────
+
+function StepCareerBasics({
+  onNext,
+  onSkip,
+}: {
+  onNext: () => void;
+  onSkip: () => void;
+}) {
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [education, setEducation] = useState<Education[]>([
+    { institution: "", degree: "", year: "" },
+  ]);
+  const [skillInput, setSkillInput] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [certifications, setCertifications] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const addEducation = () => {
+    setEducation([...education, { institution: "", degree: "", year: "" }]);
+  };
+
+  const updateEducation = (
+    idx: number,
+    field: keyof Education,
+    value: string
+  ) => {
+    setEducation(
+      education.map((e, i) => (i === idx ? { ...e, [field]: value } : e))
+    );
+  };
+
+  const removeEducation = (idx: number) => {
+    setEducation(education.filter((_, i) => i !== idx));
+  };
+
+  const handleSkillKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "," || e.key === "Enter") {
+      e.preventDefault();
+      const trimmed = skillInput.trim().replace(/,$/, "");
+      if (trimmed && !skills.includes(trimmed)) {
+        setSkills([...skills, trimmed]);
+      }
+      setSkillInput("");
+    }
+  };
+
+  const removeSkill = (skill: string) => {
+    setSkills(skills.filter((s) => s !== skill));
+  };
+
+  const handleSave = async () => {
+    if (!fullName.trim()) {
+      setError("Full name is required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+
+    const educationLines = education
+      .filter((e) => e.institution || e.degree)
+      .map((e) => `- ${e.degree} at ${e.institution}${e.year ? ` (${e.year})` : ""}`)
+      .join("\n");
+
+    const certLines = certifications
+      .split("\n")
+      .filter(Boolean)
+      .map((c) => `- ${c.trim()}`)
+      .join("\n");
+
+    const careerText = [
+      fullName && `Name: ${fullName}`,
+      email && `Email: ${email}`,
+      phone && `Phone: ${phone}`,
+      linkedin && `LinkedIn: ${linkedin}`,
+      educationLines && `Education:\n${educationLines}`,
+      skills.length > 0 && `Skills: ${skills.join(", ")}`,
+      certLines && `Certifications:\n${certLines}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    try {
+      const res = await fetch("/api/user/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ career_text: careerText }),
+      });
+
+      if (res.ok) {
+        onNext();
+      } else {
+        const data = await res.json();
+        setError(data.error ?? "Failed to save. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass =
+    "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500";
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">
+          Tell us about yourself
+        </h1>
+        <p className="mt-2 text-muted">
+          These basics help us generate more accurate resumes. All fields except
+          name are optional.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {/* Basic info */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Jane Smith"
+              className={inputClass}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jane@example.com"
+              className={inputClass}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              Phone
+            </label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+1 (555) 000-0000"
+              className={inputClass}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              LinkedIn URL
+            </label>
+            <input
+              type="text"
+              value={linkedin}
+              onChange={(e) => setLinkedin(e.target.value)}
+              placeholder="https://linkedin.com/in/jane"
+              className={inputClass}
+            />
+          </div>
+        </div>
+
+        {/* Education */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            Education
+          </label>
+          {education.map((edu, idx) => (
+            <div key={idx} className="flex gap-2 items-start">
+              <input
+                type="text"
+                value={edu.institution}
+                onChange={(e) =>
+                  updateEducation(idx, "institution", e.target.value)
+                }
+                placeholder="Institution"
+                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <input
+                type="text"
+                value={edu.degree}
+                onChange={(e) =>
+                  updateEducation(idx, "degree", e.target.value)
+                }
+                placeholder="Degree"
+                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <input
+                type="text"
+                value={edu.year}
+                onChange={(e) => updateEducation(idx, "year", e.target.value)}
+                placeholder="Year"
+                className="w-20 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              {education.length > 1 && (
+                <button
+                  onClick={() => removeEducation(idx)}
+                  className="mt-1 text-muted hover:text-red-500 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={addEducation}
+            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+          >
+            + Add Education
+          </button>
+        </div>
+
+        {/* Skills */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            Skills
+          </label>
+          <input
+            type="text"
+            value={skillInput}
+            onChange={(e) => setSkillInput(e.target.value)}
+            onKeyDown={handleSkillKeyDown}
+            placeholder="Type a skill and press Enter or comma"
+            className={inputClass}
+          />
+          {skills.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-1">
+              {skills.map((skill) => (
+                <span
+                  key={skill}
+                  className="flex items-center gap-1 rounded-full bg-primary-100 text-primary-700 px-3 py-1 text-xs font-medium"
+                >
+                  {skill}
+                  <button
+                    onClick={() => removeSkill(skill)}
+                    className="hover:text-primary-900 transition-colors"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Certifications */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-foreground">
+            Certifications
+          </label>
+          <textarea
+            value={certifications}
+            onChange={(e) => setCertifications(e.target.value)}
+            placeholder="One certification per line&#10;e.g. AWS Solutions Architect&#10;PMP Certified"
+            rows={3}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="flex gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving || !fullName.trim()}
+          className="flex-1 rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? "Saving…" : "Save & Continue"}
+        </button>
+        <button
+          onClick={onSkip}
+          className="rounded-xl border border-border px-6 py-3 text-base font-medium text-muted hover:bg-surface-hover transition-colors"
+        >
+          I&apos;ll add this later
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 4: TruthEngine Conversation ─────────────────────────────────────
+
+function StepConversation({
+  selectedRoles,
+  modelProvider,
+  modelId,
+  apiKey,
+  onDone,
+}: {
+  selectedRoles: string[];
+  modelProvider: string;
+  modelId: string;
+  apiKey: string;
+  onDone: () => void;
+}) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [nuggetCount, setNuggetCount] = useState(0);
+  const [conversationHistory, setConversationHistory] = useState<
+    Array<{ role: string; content: string }>
+  >([]);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    paraphrase: string;
+    userAnswer: string;
+  } | null>(null);
+  const [waitingForConfirm, setWaitingForConfirm] = useState(false);
+  const [showDoneConfirm, setShowDoneConfirm] = useState(false);
+  const [finalStats, setFinalStats] = useState<{
+    nugget_count: number;
+    confidence: number;
+  } | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const addMessage = (role: "system" | "user", content: string): Message => {
+    const msg: Message = { id: crypto.randomUUID(), role, content };
+    setMessages((prev) => [...prev, msg]);
+    return msg;
+  };
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, pendingConfirm]);
+
+  // Fetch initial question on mount
+  useEffect(() => {
+    let mounted = true;
+    async function fetchFirstQuestion() {
+      setSending(true);
+      try {
+        const res = await fetch("/api/onboarding/question", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            target_roles: selectedRoles,
+            conversation_history: [],
+            confirmed_nuggets: [],
+            model_provider: modelProvider,
+            model_id: modelId,
+            api_key: apiKey,
+          }),
+        });
+        const data = await res.json();
+        if (mounted && data.question) {
+          addMessage("system", data.question);
+        } else if (mounted) {
+          addMessage("system", "Tell me about your most recent work experience.");
+        }
+      } catch {
+        if (mounted) {
+          addMessage("system", "Tell me about your most recent work experience.");
+        }
+      } finally {
+        if (mounted) setSending(false);
+      }
+    }
+    fetchFirstQuestion();
+    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchNextQuestion = async (
+    updatedHistory: Array<{ role: string; content: string }>,
+    confirmedCount: number
+  ) => {
+    setSending(true);
+    try {
+      const res = await fetch("/api/onboarding/question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_roles: selectedRoles,
+          conversation_history: updatedHistory,
+          confirmed_nuggets: Array(confirmedCount).fill(""),
+          model_provider: modelProvider,
+          model_id: modelId,
+          api_key: apiKey,
+        }),
+      });
+      const data = await res.json();
+      if (data.question) {
+        addMessage("system", data.question);
+      }
+    } catch {
+      addMessage("system", "What other achievements or projects would you like to highlight?");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || sending || waitingForConfirm) return;
+
+    setInputText("");
+    addMessage("user", text);
+
+    const newHistory = [
+      ...conversationHistory,
+      { role: "user", content: text },
+    ];
+    setConversationHistory(newHistory);
+
+    // Fetch paraphrase via confirm route with a preview (just use the question flow for paraphrase)
+    setSending(true);
+    setWaitingForConfirm(true);
+    try {
+      const res = await fetch("/api/onboarding/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_answer: text,
+          action: "confirm",
+          model_provider: modelProvider,
+          model_id: modelId,
+          api_key: apiKey,
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.paraphrase) {
+        addMessage("system", data.paraphrase);
+        // We already confirmed and created the nugget in this flow
+        const newCount = nuggetCount + 1;
+        setNuggetCount(newCount);
+        setWaitingForConfirm(false);
+
+        const updatedHistory = [
+          ...newHistory,
+          { role: "assistant", content: data.paraphrase },
+        ];
+        setConversationHistory(updatedHistory);
+
+        addMessage("system", "Saved! ✓");
+        await fetchNextQuestion(updatedHistory, newCount);
+      } else {
+        // Paraphrase extraction failed — ask to rephrase
+        addMessage("system", "I had trouble processing that. Could you rephrase or add more details?");
+        setWaitingForConfirm(false);
+        setSending(false);
+      }
+    } catch {
+      addMessage("system", "Something went wrong. Please try again.");
+      setWaitingForConfirm(false);
+      setSending(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!pendingConfirm) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/onboarding/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_answer: pendingConfirm.userAnswer,
+          action: "confirm",
+          model_provider: modelProvider,
+          model_id: modelId,
+          api_key: apiKey,
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        const newCount = nuggetCount + 1;
+        setNuggetCount(newCount);
+        setPendingConfirm(null);
+        setWaitingForConfirm(false);
+
+        addMessage("system", "Saved! ✓");
+
+        const updatedHistory = [
+          ...conversationHistory,
+          { role: "assistant", content: "Confirmed and saved." },
+        ];
+        setConversationHistory(updatedHistory);
+
+        await fetchNextQuestion(updatedHistory, newCount);
+      } else {
+        addMessage("system", data.error ?? "Failed to save. Please try again.");
+        setSending(false);
+      }
+    } catch {
+      addMessage("system", "Failed to save. Please try again.");
+      setSending(false);
+    }
+  };
+
+  const handleCorrect = async (correctedText: string) => {
+    if (!pendingConfirm) return;
+    setSending(true);
+    try {
+      const res = await fetch("/api/onboarding/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_answer: pendingConfirm.userAnswer,
+          action: "correct",
+          correction: correctedText,
+          model_provider: modelProvider,
+          model_id: modelId,
+          api_key: apiKey,
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.updated_paraphrase) {
+        addMessage("system", data.updated_paraphrase);
+        setPendingConfirm({
+          paraphrase: data.updated_paraphrase,
+          userAnswer: correctedText,
+        });
+      } else {
+        addMessage("system", "Could not update paraphrase. Please confirm or try again.");
+      }
+    } catch {
+      addMessage("system", "Network error. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDone = async () => {
+    try {
+      const res = await fetch("/api/onboarding/status");
+      const data = await res.json();
+      setFinalStats({
+        nugget_count: data.nugget_count ?? nuggetCount,
+        confidence: data.confidence ?? 0,
+      });
+      setShowDoneConfirm(true);
+    } catch {
+      setShowDoneConfirm(true);
+      setFinalStats({ nugget_count: nuggetCount, confidence: 0 });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  if (showDoneConfirm && finalStats) {
+    return (
+      <div className="space-y-6 text-center">
+        <div>
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
+            <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-foreground">
+            Great job!
+          </h2>
+          <p className="mt-2 text-muted">
+            You&apos;ve captured{" "}
+            <span className="font-semibold text-primary-600">
+              {finalStats.nugget_count} career nuggets
+            </span>
+            .
+          </p>
+        </div>
+        <button
+          onClick={onDone}
+          className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 transition-colors"
+        >
+          Create Your First Resume
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full space-y-4">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">
+          Let&apos;s capture your experience
+        </h1>
+        <p className="mt-2 text-muted">
+          I&apos;ll ask you questions to understand your career. Answer
+          naturally — the more detail, the better.
+        </p>
+      </div>
+
+      {/* Nugget counter */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted">
+          <span className="font-semibold text-primary-600">{nuggetCount}</span>{" "}
+          nuggets captured
+        </span>
+        <button
+          onClick={handleDone}
+          disabled={sending}
+          className="text-sm text-muted hover:text-foreground underline transition-colors"
+        >
+          I&apos;m done
+        </button>
+      </div>
+
+      {/* Chat window */}
+      <div className="flex-1 min-h-[320px] max-h-[420px] overflow-y-auto rounded-xl border border-border bg-background p-4 space-y-1">
+        {messages.map((msg) => (
+          <ChatMessage key={msg.id} message={msg} />
+        ))}
+        {pendingConfirm && (
+          <div className="px-1">
+            <ConfirmDenyButtons
+              originalAnswer={pendingConfirm.userAnswer}
+              onConfirm={handleConfirm}
+              onCorrect={handleCorrect}
+              disabled={sending}
+            />
+          </div>
+        )}
+        {sending && !waitingForConfirm && (
+          <div className="flex justify-start mb-3">
+            <div className="rounded-2xl rounded-tl-sm bg-surface border border-border px-4 py-3">
+              <span className="flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "300ms" }} />
+              </span>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className="flex gap-2 items-end">
+        <textarea
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={
+            waitingForConfirm
+              ? "Please confirm or correct the paraphrase above…"
+              : "Type your answer… (Enter to send, Shift+Enter for newline)"
+          }
+          disabled={sending || waitingForConfirm}
+          rows={2}
+          className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
+        />
+        <button
+          onClick={handleSend}
+          disabled={!inputText.trim() || sending || waitingForConfirm}
+          className="rounded-xl bg-primary-500 px-4 py-3 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 5: Summary / Completion screen ──────────────────────────────────
+
+interface SummaryStats {
+  nugget_count: number;
+  confidence: number;
+  companies?: string[];
+  label?: "excellent" | "good" | "fair" | "insufficient";
+}
+
+function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
+  const router = useRouter();
+  const [stats, setStats] = useState<SummaryStats | null>(initialStats ?? null);
+  const [loading, setLoading] = useState(!initialStats);
+
+  useEffect(() => {
+    if (initialStats) return;
+    fetch("/api/onboarding/status")
+      .then((r) => r.json())
+      .then((data) => {
+        const score = Math.round((data.confidence ?? 0) * 100);
+        const label: SummaryStats["label"] =
+          score >= 90 ? "excellent" : score >= 75 ? "good" : score >= 60 ? "fair" : "insufficient";
+        setStats({
+          nugget_count: data.nugget_count ?? 0,
+          confidence: score,
+          label,
+        });
+      })
+      .catch(() => {
+        setStats({ nugget_count: 0, confidence: 0, label: "insufficient" });
+      })
+      .finally(() => setLoading(false));
+  }, [initialStats]);
+
+  const score = stats?.confidence ?? 0;
+
+  return (
+    <div className="space-y-8 text-center">
+      <div>
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
+          <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h2 className="text-2xl font-bold text-foreground">
+          You&apos;re ready!
+        </h2>
+        <p className="mt-2 text-muted">
+          Your career profile is set up. Here&apos;s a summary.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="h-12 flex items-center justify-center">
+          <span className="flex gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "300ms" }} />
+          </span>
+        </div>
+      ) : stats ? (
+        <div className="space-y-6 text-left">
+          {/* Confidence bar */}
+          <ConfidenceProgressBar
+            score={score}
+            label={stats.label}
+            nuggetCount={stats.nugget_count}
+          />
+
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-border bg-surface p-4 text-center">
+              <p className="text-2xl font-bold text-primary-600">
+                {stats.nugget_count}
+              </p>
+              <p className="text-xs text-muted mt-1">nuggets captured</p>
+            </div>
+            <div className="rounded-xl border border-border bg-surface p-4 text-center">
+              <p className="text-2xl font-bold text-primary-600 capitalize">
+                {stats.label ?? "—"}
+              </p>
+              <p className="text-xs text-muted mt-1">profile quality</p>
+            </div>
+          </div>
+
+          {/* Warning if low score */}
+          {score < 60 && (
+            <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+              <p className="text-sm text-yellow-800">
+                Consider adding more details for better resume quality. You can always come back and add more experience.
+              </p>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        <button
+          onClick={() => router.push("/resume/new")}
+          className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 transition-colors"
+        >
+          Create Your First Resume
+        </button>
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="w-full rounded-xl border border-border px-6 py-3 text-base font-medium text-muted hover:bg-surface-hover transition-colors"
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────
+
+const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
+
+function ProgressBar({ step }: { step: Step }) {
+  const totalSteps = 5;
+  const currentIndex = Math.min(step - 1, totalSteps - 1);
+
+  return (
+    <div className="mb-10">
+      <div className="flex justify-between mb-2">
+        {STEP_LABELS.map((label, idx) => (
+          <span
+            key={label}
+            className={`text-xs font-medium ${
+              idx <= currentIndex ? "text-primary-600" : "text-muted"
+            }`}
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-border">
+        <div
+          className="h-1.5 rounded-full bg-primary-500 transition-all duration-300"
+          style={{ width: `${(currentIndex / (totalSteps - 1)) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Main OnboardingFlow ───────────────────────────────────────────────────
+
+export function OnboardingFlow() {
+  const [step, setStep] = useState<Step>(1);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [modelProvider, setModelProvider] = useState("groq");
+  const [modelId, setModelId] = useState(PROVIDER_MODEL_MAP.groq);
+  const [apiKey, setApiKey] = useState("");
+
+  return (
+    <div>
+      {step <= 5 && <ProgressBar step={step} />}
+
+      {step === 1 && (
+        <StepWelcome
+          selectedRoles={selectedRoles}
+          onRolesChange={setSelectedRoles}
+          onNext={() => setStep(2)}
+        />
+      )}
+
+      {step === 2 && (
+        <StepApiKey
+          onNext={(p, m, k) => {
+            setModelProvider(p);
+            setModelId(m);
+            setApiKey(k);
+            setStep(3);
+          }}
+          onKeyValidated={(p, m, k) => {
+            setModelProvider(p);
+            setModelId(m);
+            setApiKey(k);
+          }}
+        />
+      )}
+
+      {step === 3 && (
+        <StepCareerBasics
+          onNext={() => setStep(4)}
+          onSkip={() => setStep(4)}
+        />
+      )}
+
+      {step === 4 && (
+        <StepConversation
+          selectedRoles={selectedRoles}
+          modelProvider={modelProvider}
+          modelId={modelId}
+          apiKey={apiKey}
+          onDone={() => setStep(5)}
+        />
+      )}
+
+      {step === 5 && <StepSummary />}
+    </div>
+  );
+}

@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ProfileContent } from "./ProfileContent";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -12,5 +11,5 @@ export default async function ProfilePage() {
     redirect("/auth");
   }
 
-  return <ProfileContent user={user} />;
+  redirect("/dashboard/career");
 }

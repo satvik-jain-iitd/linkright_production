@@ -248,6 +248,41 @@ Budget: {raw_budget} CU | Target range: {range_min_90} – {raw_budget} CU
 {bullets_section}"""
 
 
+# ── Phase 3.5A: Professional Summary (1 LLM call) ─────────────────────
+
+PROFESSIONAL_SUMMARY_SYSTEM = """You are a resume summary writer. Write a concise professional summary for a resume.
+Return ONLY valid JSON:
+
+{{
+  "summary_text": "2-3 sentence professional summary"
+}}
+
+RULES:
+1. Write 2-3 sentences, 150-250 characters total
+2. NO "I" statements — use implied first person (e.g., "Results-driven PM with 5+ years..." not "I am a PM with 5+ years...")
+3. Lead with years of experience + primary domain
+4. Include ONE quantified achievement (%, $, team size, scale metric)
+5. Reference the candidate's most relevant company/role for the target position
+6. Mention 2-3 key skills that match JD keywords naturally
+7. Professional, confident tone — no generic filler like "passionate" or "dedicated"
+8. Target the summary specifically to the role and company mentioned
+9. Do NOT use bullet points — write flowing prose"""
+
+PROFESSIONAL_SUMMARY_USER = """## Target Role: {target_role} at {target_company}
+## JD Keywords: {jd_keywords}
+## Career Level: {career_level}
+## Top Companies: {companies}
+## Career Summary: {career_summary}
+
+Write a 2-3 sentence professional summary (150-250 chars) for this candidate targeting the role above.
+Rules:
+- No "I" statements — write in implied first person
+- Lead with years of experience + domain
+- Include one quantified achievement
+- Reference most relevant company/role
+- Mention 2-3 key skills matching JD keywords"""
+
+
 # ── Phase 6: BRS Scoring (tool-only — no LLM) ──────────────────────────
 # ── Phase 7: Validation (tool-only — no LLM) ───────────────────────────
 # ── Phase 8: Assembly (programmatic HTML — no LLM) ─────────────────────

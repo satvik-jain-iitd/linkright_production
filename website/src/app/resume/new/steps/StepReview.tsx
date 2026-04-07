@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { WizardData } from "../WizardShell";
 import { QualityPanel } from "@/components/QualityPanel";
 import type { QualityStats } from "@/components/QualityPanel";
+import { TemplateLockPanel } from "@/components/TemplateLockPanel";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -18,13 +19,21 @@ interface SelectedElement {
   preview: string;
 }
 
-const PRESETS = [
-  "Make more impactful",
-  "Expand to fill width",
-  "Make more concise",
-  "Quantify with metrics",
-  "Improve action verb",
-  "Enforce STAR format",
+const PRESETS: { label: string; prompt: string }[] = [
+  { label: "Make more impactful", prompt: "Make more impactful" },
+  {
+    label: "Expand to fill width (98%)",
+    prompt:
+      "Expand this bullet point to fill approximately 98% of the line width. Add meaningful detail, context, or metrics. Keep it to a single line.",
+  },
+  { label: "Make more concise", prompt: "Make more concise" },
+  { label: "Quantify with metrics", prompt: "Quantify with metrics" },
+  { label: "Improve action verb", prompt: "Improve action verb" },
+  {
+    label: "Justify",
+    prompt:
+      "Rewrite this bullet point so it reads as justified, professional prose with no informal language or hedging.",
+  },
 ];
 
 // Injected into the iframe to enable element picking
@@ -100,8 +109,14 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const [chatInput, setChatInput] = useState("");
+  const [additionalContext, setAdditionalContext] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [selectorMode, setSelectorMode] = useState(false);
+
+  // Template lock state
+  const [lockedSections, setLockedSections] = useState<string[]>([]);
+  const [savedTemplate, setSavedTemplate] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -246,6 +261,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
           )
         );
         setSelectedElement(null);
+        setAdditionalContext("");
       }
     } catch {
       setChatHistory((prev) => [
@@ -272,6 +288,34 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
     const iframe = iframeRef.current;
     if (iframe?.contentWindow) {
       iframe.contentWindow.print();
+    }
+  };
+
+  const toggleLockedSection = (section: string) => {
+    setLockedSections((prev) =>
+      prev.includes(section) ? prev.filter((s) => s !== section) : [...prev, section]
+    );
+  };
+
+  const saveAsTemplate = async () => {
+    if (!data.job_id) return;
+    setSavingTemplate(true);
+    try {
+      const resp = await fetch("/api/resume/template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: data.job_id,
+          name: "My Template",
+          locked_sections: lockedSections,
+          brand_colors: data.brand_colors,
+        }),
+      });
+      if (resp.ok) {
+        setSavedTemplate(true);
+      }
+    } finally {
+      setSavingTemplate(false);
     }
   };
 
@@ -487,7 +531,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
             </div>
           )}
 
-          {/* Preset chips (shown when element is selected) */}
+          {/* Preset chips + additional context (shown when element is selected) */}
           {selectedElement && (
             <div className="border-t border-border px-4 py-2">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
@@ -496,15 +540,28 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
               <div className="flex flex-wrap gap-1.5">
                 {PRESETS.map((preset) => (
                   <button
-                    key={preset}
-                    onClick={() => sendChat(preset)}
+                    key={preset.label}
+                    onClick={() => {
+                      const fullPrompt = additionalContext.trim()
+                        ? `${preset.prompt}\n\nAdditional context from user: ${additionalContext.trim()}`
+                        : preset.prompt;
+                      sendChat(fullPrompt);
+                    }}
                     disabled={chatLoading}
                     className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-foreground transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {preset}
+                    {preset.label}
                   </button>
                 ))}
               </div>
+              <textarea
+                value={additionalContext}
+                onChange={(e) => setAdditionalContext(e.target.value)}
+                placeholder="Add context for this edit (optional)..."
+                disabled={chatLoading}
+                rows={2}
+                className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent/50 focus:outline-none disabled:opacity-50"
+              />
             </div>
           )}
 
@@ -535,7 +592,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                 placeholder={
                   selectedElement
                     ? "Describe the edit..."
-                    : "Select an element first..."
+                    : "Chat with your resume..."
                 }
                 disabled={chatLoading}
                 className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent/50 focus:outline-none disabled:opacity-50"
@@ -545,10 +602,39 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                 disabled={chatLoading || !chatInput.trim()}
                 className="flex-shrink-0 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Send
+                {selectedElement ? "Send" : "Apply"}
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Save as Template */}
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold">Save as Template</h3>
+          <p className="mt-1 text-sm text-muted">
+            Lock sections you want frozen — they won&apos;t be regenerated on your next resume.
+          </p>
+        </div>
+        <TemplateLockPanel lockedSections={lockedSections} onToggle={toggleLockedSection} />
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={saveAsTemplate}
+            disabled={savingTemplate || savedTemplate}
+            className={`rounded-xl px-5 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
+              savedTemplate
+                ? "border border-green-300 bg-green-50 text-green-700"
+                : "bg-cta text-white hover:bg-cta-hover disabled:opacity-60"
+            }`}
+          >
+            {savedTemplate ? "Saved ✓" : savingTemplate ? "Saving..." : "Save as Template"}
+          </button>
+          {savedTemplate && (
+            <p className="text-sm text-green-700">
+              Template saved! Next resume will reuse locked sections.
+            </p>
+          )}
         </div>
       </div>
     </div>

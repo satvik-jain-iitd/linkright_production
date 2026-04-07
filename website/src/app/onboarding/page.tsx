@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { DashboardContent } from "./DashboardContent";
+import { OnboardingFlow } from "./OnboardingFlow";
 
-export default async function DashboardPage() {
+export default async function OnboardingPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -12,7 +12,7 @@ export default async function DashboardPage() {
     redirect("/auth");
   }
 
-  // Onboarding gate: redirect if user hasn't completed setup
+  // Check onboarding status: does user have API key + career data?
   const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
     supabase
       .from("user_api_keys")
@@ -25,9 +25,19 @@ export default async function DashboardPage() {
       .eq("user_id", user.id),
   ]);
 
-  if ((keyCount ?? 0) === 0 || (chunkCount ?? 0) === 0) {
-    redirect("/onboarding");
+  const hasApiKey = (keyCount ?? 0) > 0;
+  const hasCareerData = (chunkCount ?? 0) > 0;
+
+  // Already onboarded → go to dashboard
+  if (hasApiKey && hasCareerData) {
+    redirect("/dashboard");
   }
 
-  return <DashboardContent user={user} />;
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <OnboardingFlow />
+      </div>
+    </div>
+  );
 }

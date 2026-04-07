@@ -44,13 +44,13 @@ const STEP_LABELS = [
   "Review",
 ];
 
-const STORAGE_KEY = "linkright_wizard_v4";
+const STORAGE_KEY = "linkright_wizard_v7";
 
 const EMPTY_DATA: WizardData = {
   jd_text: "",
   career_text: "",
   model_provider: "groq",
-  model_id: "llama-3.3-70b-versatile",
+  model_id: "llama-3.1-8b-instant",
   api_key: "",
   job_id: null,
   qa_answers: [],
@@ -115,19 +115,35 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
     restoreJob();
   }, [jobId]);
 
-  // Load settings from user_settings (career_text, api_key, model)
+  // Load settings from user_settings (career_text, model) + api_key from user_api_keys
   useEffect(() => {
     async function loadSettings() {
       try {
         const resp = await fetch("/api/user/settings");
         if (!resp.ok) return;
         const settings = await resp.json();
+
+        const provider = settings.model_provider || "groq";
+
+        // Fetch primary key from user_api_keys for this provider
+        let primaryKeyId = "";
+        try {
+          const keysResp = await fetch(`/api/user/keys?provider=${encodeURIComponent(provider)}`);
+          if (keysResp.ok) {
+            const { keys } = await keysResp.json();
+            const activeKey = (keys || []).find((k: { is_active: boolean }) => k.is_active);
+            if (activeKey) primaryKeyId = activeKey.id;
+          }
+        } catch {
+          // Keys endpoint not available — fall back to settings
+        }
+
         setData((prev) => ({
           ...prev,
           career_text: prev.career_text || settings.career_text || "",
-          model_provider: prev.model_provider || settings.model_provider || "groq",
-          model_id: prev.model_id || settings.model_id || "llama-3.3-70b-versatile",
-          api_key: prev.api_key || settings.api_key || "",
+          model_provider: prev.model_provider || provider,
+          model_id: prev.model_id || settings.model_id || "llama-3.1-8b-instant",
+          api_key: prev.api_key || primaryKeyId || settings.api_key || "",
         }));
       } catch {
         // Settings not available yet — user will configure inline

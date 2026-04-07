@@ -75,10 +75,16 @@ export function DashboardContent({ user }: { user: User }) {
         </Link>
         <div className="flex items-center gap-4">
           <Link
-            href="/dashboard/profile"
+            href="/dashboard/career"
             className="text-sm text-muted transition-colors hover:text-foreground"
           >
-            Profile
+            My Career
+          </Link>
+          <Link
+            href="/dashboard/nuggets"
+            className="text-sm text-muted transition-colors hover:text-foreground"
+          >
+            Nuggets
           </Link>
           <Link
             href="/dashboard/settings"
