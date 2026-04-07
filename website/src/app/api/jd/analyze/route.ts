@@ -275,7 +275,15 @@ export async function POST(request: Request) {
     .from("career_nuggets")
     .select("id, company, role, answer, event_date, nugget_type, leadership_signal, organization")
     .eq("user_id", user.id);
-  const userNuggets = (nuggetRows ?? []) as Record<string, unknown>[];
+  const userNuggets: import("@/lib/jd-matcher").NuggetMeta[] = (nuggetRows ?? []).map(
+    (n: Record<string, unknown>) => ({
+      section_type: String(n["nugget_type"] ?? ""),
+      company: (n["company"] as string | null) ?? null,
+      role: (n["role"] as string | null) ?? null,
+      event_date: (n["event_date"] as string | null) ?? null,
+      answer: (n["answer"] as string | null) ?? null,
+    })
+  );
 
   // Step 2: Text search — gather top candidate chunk per requirement
   const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
