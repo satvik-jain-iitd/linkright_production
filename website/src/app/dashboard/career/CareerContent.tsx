@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { ExtractionPromptModal } from "@/components/ExtractionPromptModal";
 
 interface CareerContentProps {
   user: User;
@@ -16,6 +17,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     fetch("/api/user/settings")
@@ -36,8 +38,8 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
     setSaving(true);
     setSaveStatus("idle");
     try {
-      const resp = await fetch("/api/user/settings", {
-        method: "PUT",
+      const resp = await fetch("/api/career/upload", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ career_text: careerText }),
       });
@@ -133,7 +135,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
               {saving ? "Saving..." : "Save Profile"}
             </button>
             {saveStatus === "saved" && (
-              <span className="text-sm text-green-600">Profile saved</span>
+              <span className="text-sm text-green-600">Profile saved — nuggets being extracted in the background</span>
             )}
             {saveStatus === "error" && (
               <span className="text-sm text-red-500">
@@ -155,12 +157,12 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Link
-                href="/resume/new"
+              <button
+                onClick={() => setShowImportModal(true)}
                 className="rounded-full bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
               >
                 + Import Nuggets
-              </Link>
+              </button>
               <Link
                 href="/dashboard/nuggets"
                 className="rounded-full border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
@@ -191,6 +193,11 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
           )}
         </div>
       </div>
+      <ExtractionPromptModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={() => { setShowImportModal(false); window.location.reload(); }}
+      />
     </div>
   );
 }
