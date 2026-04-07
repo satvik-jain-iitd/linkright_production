@@ -1,0 +1,5 @@
+# Truss execution state (machine-readable)
+current_workflow: null
+current_step: null
+completed: []
+streams: {}
