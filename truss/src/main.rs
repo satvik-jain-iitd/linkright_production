@@ -5,6 +5,9 @@ mod commands;
 mod models;
 mod analysis;
 mod decompose;
+mod groom;
+mod inspect;
+mod retro;
 
 #[derive(Parser)]
 #[command(name = "truss", version, about = "Parallel Agent Orchestration Framework")]
@@ -45,6 +48,25 @@ enum Commands {
         /// Approve a pending decomposition
         #[arg(long, default_value_t = false)]
         approve: bool,
+    },
+
+    /// Groom streams into features, stories, and tasks
+    Groom {
+        /// Groom a specific stream (omit for all)
+        #[arg(long)]
+        stream: Option<String>,
+
+        /// Run a specific step (1-5, or name like "read-artifacts")
+        #[arg(long)]
+        step: Option<String>,
+
+        /// Path to codebase (default: current dir if .git exists)
+        #[arg(long)]
+        codebase: Option<std::path::PathBuf>,
+
+        /// Print coordinator prompt for Claude skill layer
+        #[arg(long, default_value_t = false)]
+        output_context: bool,
     },
 
     /// Show execution dashboard
@@ -118,6 +140,14 @@ fn main() {
         },
         Commands::Decompose { goal, domain, codebase, greenfield, approve } => {
             commands::decompose::run(&goal, &domain, codebase.as_deref(), greenfield, approve)
+        }
+        Commands::Groom { stream, step, codebase, output_context } => {
+            commands::groom::run(
+                stream.as_deref(),
+                step.as_deref(),
+                codebase.as_deref(),
+                output_context,
+            )
         }
         Commands::Status { run } => commands::status::run(run.as_deref()),
         Commands::Inspect { run } => commands::inspect::run(run.as_deref()),

@@ -1,0 +1,125 @@
+goal_summary: Build a multi-agent social media automation agency that orchestrates end-to-end content creation, scheduling, and publishing across LinkedIn, X, YouTube, Instagram, and Facebook via Postiz. Multi-agent orchestration with AI agents per pipeline stage.
+streams:
+- name: content-ideation
+  objective: Design and implement AI-driven content ideation and research engine
+  scope:
+  - AI agent that monitors trending topics, industry news, and user's career/professional context
+  - Ideation scoring system to prioritize content opportunities (relevance, timeliness, audience fit)
+  - Content brief generation with suggested angles, hooks, and target platform
+  - Integration with LifeOS for authentic content sourcing from career achievements and learnings
+  out_of_scope: []
+  reserved_files: []
+  shared_files: []
+  dependencies: []
+  roles:
+    po: po responsibilities for content-ideation
+    qa: qa responsibilities for content-ideation
+    architect: architect responsibilities for content-ideation
+    designer: designer responsibilities for content-ideation
+- name: content-drafting
+  objective: Design and implement multi-agent content drafting with platform-specific writers
+  scope:
+  - 'Multi-agent drafting: specialist agents per platform (LinkedIn long-form, X threads, YouTube scripts, Instagram captions, Facebook posts)'
+  - Platform-specific formatting rules (LinkedIn staircase format, X 280-char limit, YouTube description SEO)
+  - Tone and voice consistency engine — learns user's writing style from past posts
+  - Draft versioning with A/B variant generation
+  out_of_scope: []
+  reserved_files: []
+  shared_files: []
+  dependencies:
+  - content-ideation
+  roles:
+    architect: architect responsibilities for content-drafting
+    qa: qa responsibilities for content-drafting
+    designer: designer responsibilities for content-drafting
+    po: po responsibilities for content-drafting
+- name: review-editing
+  objective: Design and implement review, editing, and human-in-the-loop approval pipeline
+  scope:
+  - QA agent for grammar, readability (FK Grade 7 target), and brand voice compliance
+  - Pixel-perfect preview rendering per platform before approval
+  - Human-in-the-loop approval checkpoint — nothing publishes without user sign-off
+  - 'Feedback loop: user edits feed back into the style model'
+  out_of_scope: []
+  reserved_files: []
+  shared_files: []
+  dependencies:
+  - content-drafting
+  roles:
+    po: po responsibilities for review-editing
+    qa: qa responsibilities for review-editing
+    designer: designer responsibilities for review-editing
+    architect: architect responsibilities for review-editing
+- name: publishing-orchestration
+  objective: Design and implement Postiz-based publishing, scheduling, and multi-agent orchestration layer
+  scope:
+  - Postiz integration for cross-platform publishing (LinkedIn, X, YouTube, Instagram, Facebook)
+  - 'Intelligent scheduling: optimal posting times per platform based on audience analytics'
+  - Queue management with drag-and-drop reordering
+  - Auto-retry on publish failures with notification
+  - Coordinator agent that routes work through the pipeline stages
+  - Parallel agent execution where stages are independent
+  - Agent-to-agent communication via message passing
+  - 'Checkpoint system: each stage produces artifacts the next stage consumes'
+  - 'Error handling: failed agent tasks get retried or escalated to human'
+  out_of_scope: []
+  reserved_files: []
+  shared_files: []
+  dependencies:
+  - review-editing
+  roles:
+    architect: architect responsibilities for publishing-orchestration
+    qa: qa responsibilities for publishing-orchestration
+    designer: designer responsibilities for publishing-orchestration
+    po: po responsibilities for publishing-orchestration
+- name: analytics
+  objective: Design and implement post-publish analytics, optimization, and recommendation engine
+  scope:
+  - Post-publish performance tracking (impressions, engagement, clicks, shares)
+  - Per-platform analytics dashboard
+  - 'Content performance patterns: which topics, formats, times perform best'
+  - Automated recommendations for future content based on historical performance
+  out_of_scope: []
+  reserved_files: []
+  shared_files: []
+  dependencies:
+  - publishing-orchestration
+  roles:
+    designer: designer responsibilities for analytics
+    po: po responsibilities for analytics
+    qa: qa responsibilities for analytics
+    architect: architect responsibilities for analytics
+task_ids:
+  publishing-orchestration:
+    epic_id: Claude-7ir
+    feature_ids:
+    - Claude-7ir.4
+  content-drafting:
+    epic_id: Claude-7ir
+    feature_ids:
+    - Claude-7ir.2
+  review-editing:
+    epic_id: Claude-7ir
+    feature_ids:
+    - Claude-7ir.3
+  analytics:
+    epic_id: Claude-7ir
+    feature_ids:
+    - Claude-7ir.5
+  content-ideation:
+    epic_id: Claude-7ir
+    feature_ids:
+    - Claude-7ir.1
+dependency_graph:
+- - content-ideation
+  - content-drafting
+- - content-drafting
+  - review-editing
+- - review-editing
+  - publishing-orchestration
+- - publishing-orchestration
+  - analytics
+max_parallelism: 1
+critical_path_length: 4
+approved: true
+timestamp: 2026-04-07T22:41:42.672718+00:00

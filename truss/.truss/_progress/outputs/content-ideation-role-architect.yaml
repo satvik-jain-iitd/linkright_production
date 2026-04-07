@@ -1,0 +1,285 @@
+role: architect
+stream_name: content-ideation
+
+feature_analyses:
+  - feature_name: "Trend Monitor Agent"
+    analysis: >
+      TrendMonitorAgent is a scheduled pull-based agent with 4 source adapters.
+      Each adapter is isolated behind a TrendSource ABC so new sources can be
+      added without modifying core agent logic. The agent checks poll_interval
+      against a last_run_at timestamp persisted in trends_store metadata. Career
+      context filtering uses OpenAI-compatible embedding endpoint (configurable)
+      to compute cosine similarity — this avoids coupling to a specific embedding
+      provider. Embedding calls are batched per poll cycle, not per trend, to
+      minimize latency. trends_store uses append-only SQLite (via tinydb or direct
+      sqlite3) for durability across restarts.
+    tasks:
+      - title: "Create TrendSource ABC and 4 concrete source adapters"
+        task_type: implementation
+        description: >
+          Define TrendSource abstract base class in modules/flex/sources/base.py with
+          abstract method fetch() -> list[RawTrend]. Implement 4 adapters:
+          GoogleTrendsSource (pytrends library), TwitterTrendsSource (X API v2
+          bearer token), LinkedInTrendsSource (LinkedIn hashtag API or scrape
+          workaround with rate-limit guard), RSSNewsSource (feedparser, reads
+          configurable feed URLs list). Each adapter catches its own API errors
+          and returns empty list + logs on failure (never propagates exception to
+          caller). RawTrend model: source, title, url, engagement_score, fetched_at.
+      - title: "Implement TrendMonitorAgent with parallel source fetching"
+        task_type: implementation
+        description: >
+          Create TrendMonitorAgent in modules/flex/agents/trend_monitor_agent.py.
+          __init__ reads AgentConfig from agent_config.py (poll_interval_hours,
+          sources list, relevance_threshold, career_context). poll() method: check
+          last_run_at vs now — skip if within interval. Then use
+          concurrent.futures.ThreadPoolExecutor to call all source adapters in
+          parallel (max_workers=4). Merge results, call relevance_filter(), write
+          to trends_store. Update last_run_at and next_run_at metadata. Return
+          PollResult (trends_fetched, trends_filtered, skipped, errors).
+      - title: "Implement trends_store with SQLite backend"
+        task_type: implementation
+        description: >
+          Create modules/flex/store/trends_store.py. Uses sqlite3 (stdlib, no ORM).
+          Schema: trends table (id TEXT PK, source TEXT, title TEXT, url TEXT,
+          engagement_score REAL, relevance_score REAL, fetched_at TEXT, filtered
+          INTEGER DEFAULT 0). metadata table (key TEXT PK, value TEXT) for
+          last_run_at/next_run_at. Methods: insert_batch(trends), get_unscored(),
+          get_recent(hours=24), mark_scored(ids). DB file path: .flex/db/trends.db.
+      - title: "Implement embedding-based relevance filter"
+        task_type: implementation
+        description: >
+          Add relevance_filter() to TrendMonitorAgent. Accepts list[RawTrend] +
+          CareerContext. Builds context_embedding from career context fields
+          concatenated as a single string. Batches all trend titles into a single
+          embed call via configured embedding_provider (default: openai, also
+          supports ollama for local). Computes cosine_similarity for each trend
+          vs context_embedding. Returns trends where score >= relevance_threshold.
+          Caches context_embedding until CareerContext changes (hash-based
+          invalidation).
+
+    files_affected:
+      - "modules/flex/agents/trend_monitor_agent.py"
+      - "modules/flex/sources/base.py"
+      - "modules/flex/sources/google_trends_source.py"
+      - "modules/flex/sources/twitter_trends_source.py"
+      - "modules/flex/sources/linkedin_trends_source.py"
+      - "modules/flex/sources/rss_news_source.py"
+      - "modules/flex/store/trends_store.py"
+      - "modules/flex/config/agent_config.py"
+      - "modules/flex/models/raw_trend.py"
+
+    api_contract:
+      internal_interface: >
+        TrendMonitorAgent.poll() -> PollResult
+        PollResult: { trends_fetched: int, trends_filtered: int, trends_stored: int,
+                      skipped: bool, skip_reason: str | None, errors: list[str],
+                      next_run_at: datetime }
+
+    data_model:
+      trends_table: |
+        CREATE TABLE trends (
+          id TEXT PRIMARY KEY,
+          source TEXT NOT NULL,
+          title TEXT NOT NULL,
+          url TEXT,
+          engagement_score REAL DEFAULT 0,
+          relevance_score REAL DEFAULT 0,
+          fetched_at TEXT NOT NULL,
+          filtered INTEGER DEFAULT 0
+        );
+      metadata_table: |
+        CREATE TABLE metadata (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+
+    integration_points:
+      - stream: "content-ideation/Ideation Scoring Engine"
+        contract: "trends_store.get_unscored() returns list[RawTrend] for scoring input"
+      - service: "embedding provider (OpenAI embeddings API or Ollama)"
+        contract: "POST /v1/embeddings, input: list[str], returns list[float[]] — provider-agnostic via EmbeddingClient ABC"
+
+    dependencies:
+      - "pytrends: ^4.9.2 — Google Trends unofficial API"
+      - "feedparser: ^6.0.11 — RSS feed parsing"
+      - "numpy: ^1.26 — cosine similarity computation"
+      - "concurrent.futures: stdlib — parallel source fetching"
+
+    risks:
+      - "LinkedIn Trends API unavailable or requires scraping: Mitigate — LinkedInTrendsSource returns empty + warning if no API key configured; agent continues with remaining sources"
+      - "Embedding API adds latency to poll cycle: Mitigate — run embedding async in background thread, store relevance_score separately, don't block trend insertion"
+
+  - feature_name: "Ideation Scoring Engine"
+    analysis: >
+      IdeationScoringEngine is a pure scoring function — no I/O side effects during
+      scoring, only reads from trends_store and writes to scored_opportunities_store.
+      Scoring is implemented as a pipeline of 3 Scorer ABCs (RelevanceScorer,
+      TimelinessScorer, AudienceFitScorer) with configurable weights loaded from
+      ScoringConfig. This enables independent testing and weight tuning without
+      touching core logic. scored_opportunities_store is a separate SQLite table
+      (not the same as trends) to maintain clean separation for the handoff to
+      brief generation.
+    tasks:
+      - title: "Implement IdeationScoringEngine with 3-scorer pipeline"
+        task_type: implementation
+        description: >
+          Create modules/flex/agents/ideation_scoring_engine.py. IdeationScoringEngine
+          reads ScoringConfig, instantiates 3 scorers. score_all() method: fetches
+          unscored trends from trends_store, runs each through scorer pipeline,
+          computes composite_score = sum(weight * sub_score), ranks by composite_score,
+          writes to scored_opportunities_store with all score fields + rank. Returns
+          list[ScoredOpportunity].
+      - title: "Implement TimelinessScorer with decay function"
+        task_type: implementation
+        description: >
+          TimelinessScorer in modules/flex/agents/ideation_scoring_engine.py.
+          Computes score using exponential decay: score = exp(-lambda * hours_old)
+          where lambda = 0.03 (half-life ~23h). Additionally adds velocity bonus
+          if engagement_score increased >20% since last fetch (if delta available).
+          Score clamped to [0, 1]. Configurable decay_lambda in ScoringConfig.
+      - title: "Implement scored_opportunities_store"
+        task_type: implementation
+        description: >
+          Create modules/flex/store/scored_opportunities_store.py. SQLite table:
+          scored_opportunities (id TEXT PK, trend_id TEXT FK, topic TEXT, source TEXT,
+          relevance_score REAL, timeliness_score REAL, audience_fit_score REAL,
+          composite_score REAL, rank INTEGER, scored_at TEXT, brief_generated
+          INTEGER DEFAULT 0). Methods: insert_batch(), get_top_n(n=10),
+          get_by_id(id), mark_brief_generated(id).
+
+    files_affected:
+      - "modules/flex/agents/ideation_scoring_engine.py"
+      - "modules/flex/store/scored_opportunities_store.py"
+      - "modules/flex/cli/ideation_commands.py"
+      - "modules/flex/config/scoring_config.py"
+      - "modules/flex/models/scored_opportunity.py"
+
+    integration_points:
+      - stream: "content-ideation/Trend Monitor Agent"
+        contract: "reads trends_store.get_unscored() -> list[RawTrend]"
+      - stream: "content-ideation/Content Brief Generator"
+        contract: "scored_opportunities_store.get_by_id(id) -> ScoredOpportunity used as brief input"
+
+    risks:
+      - "Score weights not summing to 1.0 producing out-of-range composites: Mitigate — validate at ScoringConfig load time, raise ConfigError with exact sum shown"
+
+  - feature_name: "Content Brief Generator"
+    analysis: >
+      BriefGeneratorAgent makes a single structured Claude API call using
+      response_format with JSON schema enforcement. Platform-specific prompt
+      templates live in a separate prompts module (not inline strings) to enable
+      independent editing without touching agent code. briefs_store is SQLite with
+      a JSON column for the full ContentBrief payload (JSONB-equivalent via TEXT +
+      json.dumps). This avoids schema migrations when ContentBrief evolves — only
+      the Pydantic model changes. The brief is the canonical handoff artifact to
+      content-drafting; its schema must be agreed cross-stream.
+    tasks:
+      - title: "Implement BriefGeneratorAgent with structured Claude API call"
+        task_type: implementation
+        description: >
+          Create modules/flex/agents/brief_generator_agent.py. BriefGeneratorAgent
+          reads ANTHROPIC_API_KEY from env. generate(opportunity: ScoredOpportunity,
+          platform: Platform | None, personal_context: list[LifeOSEntry] | None)
+          method: selects prompt template by platform, calls Claude API with
+          response_format enforcing ContentBrief JSON schema, validates response
+          via Pydantic, retries once on validation failure, raises BriefGenerationError
+          on second failure. Saves to briefs_store. Returns ContentBrief.
+      - title: "Create BriefGenerationError and retry logic"
+        task_type: implementation
+        description: >
+          BriefGenerationError(Exception) with fields: opportunity_id, attempt (1|2),
+          raw_response (str), validation_errors (list[str]). On first failure, modify
+          prompt to include the validation_errors as correction instructions and retry.
+          Log both attempts to .flex/logs/brief_generator.log.
+      - title: "Implement briefs_store with JSON payload column"
+        task_type: implementation
+        description: >
+          Create modules/flex/store/briefs_store.py. SQLite table: briefs (id TEXT PK,
+          opportunity_id TEXT, platform TEXT, tone TEXT, status TEXT DEFAULT 'draft',
+          payload TEXT NOT NULL, created_at TEXT, updated_at TEXT). Payload is
+          json.dumps(ContentBrief.model_dump()). Methods: insert(brief), get_by_id(id),
+          update_status(id, status), update_payload(id, brief), list_recent(limit=20).
+
+    files_affected:
+      - "modules/flex/agents/brief_generator_agent.py"
+      - "modules/flex/store/briefs_store.py"
+      - "modules/flex/prompts/brief_generation_prompts.py"
+      - "modules/flex/cli/brief_commands.py"
+      - "modules/flex/models/content_brief.py"
+      - "modules/flex/models/errors.py"
+
+    api_contract:
+      claude_api_call: >
+        POST /v1/messages
+        model: claude-3-5-sonnet-20241022
+        system: PLATFORM_PROMPTS[platform]
+        user: "Generate a content brief for this opportunity: {opportunity.topic}
+               Career context: {career_context}
+               Personal context entries: {personal_context}"
+        response_format: { type: "json_schema", schema: ContentBrief.model_json_schema() }
+
+    integration_points:
+      - stream: "content-drafting"
+        contract: "briefs_store record with status='approved' is consumed by content-drafting as input; ContentBrief model is the shared schema — cross-stream review required"
+      - service: "Anthropic Claude API (claude-3-5-sonnet-20241022)"
+        contract: "structured JSON output via response_format; API key from ANTHROPIC_API_KEY env var"
+
+    risks:
+      - "ContentBrief schema changes breaking content-drafting consumer: Mitigate — version the schema (brief_schema_version field in ContentBrief), content-drafting validates on read"
+      - "Claude API response_format not supported on older model versions: Mitigate — pin to claude-3-5-sonnet-20241022, document in agent_config.py"
+
+  - feature_name: "LifeOS Integration"
+    analysis: >
+      LifeOSConnector is a read-only integration — it never writes to LifeOS data.
+      It reads YAML files from a configured directory, validates each against
+      LifeOSEntry Pydantic model (skipping malformed entries with a warning), builds
+      an in-memory index, and exposes semantic_search(query, top_k) using the same
+      EmbeddingClient ABC as TrendMonitorAgent (shared dependency, no duplicate
+      embedding client code). Manual enrichment writes only to briefs_store, never
+      to LifeOS. lifeos_store is a thin in-memory cache (rebuilt on each CLI invocation)
+      — not persisted separately since LifeOS is the source of truth.
+    tasks:
+      - title: "Implement LifeOSConnector with YAML reader and embedding search"
+        task_type: implementation
+        description: >
+          Create modules/flex/integrations/lifeos_connector.py. LifeOSConnector reads
+          all .yaml/.json files from configured lifeos_path, parses each as LifeOSEntry
+          (skips invalid with warning). Builds entries list. semantic_search(query, top_k=3)
+          embeds query + all entry descriptions, computes cosine similarity, returns
+          top_k entries with relevance_score >= 0.3. Returns empty list if no LifeOS
+          path configured or directory empty (no exception — callers treat as optional).
+      - title: "Wire LifeOSConnector into BriefGeneratorAgent"
+        task_type: implementation
+        description: >
+          Modify BriefGeneratorAgent.generate() to accept optional LifeOSConnector
+          dependency (injected, not instantiated internally). If connector provided,
+          call connector.semantic_search(opportunity.topic) before building prompt.
+          Inject matched entries into personal_context. If connector returns empty,
+          brief generation continues without personal_context (not a failure).
+      - title: "Add lifeos_path config to AgentConfig"
+        task_type: implementation
+        description: >
+          Add lifeos_path: str | None = None field to AgentConfig in
+          modules/flex/config/agent_config.py. Add 'flex lifeos list' CLI command to
+          modules/flex/cli/brief_commands.py that instantiates LifeOSConnector and
+          prints all entries as a table (id, type, title, date). Used in error message
+          for invalid --lifeos-entry IDs.
+
+    files_affected:
+      - "modules/flex/integrations/lifeos_connector.py"
+      - "modules/flex/agents/brief_generator_agent.py"
+      - "modules/flex/config/agent_config.py"
+      - "modules/flex/cli/brief_commands.py"
+      - "modules/flex/models/lifeos_entry.py"
+
+    integration_points:
+      - system: "LifeOS local data directory"
+        contract: "read-only YAML/JSON files at lifeos_path; each file parsed as LifeOSEntry; malformed files skipped with warning"
+      - agent: "BriefGeneratorAgent"
+        contract: "LifeOSConnector.semantic_search() -> list[LifeOSEntryWithScore] injected into brief prompt as personal_context"
+
+    risks:
+      - "EmbeddingClient used in both TrendMonitorAgent and LifeOSConnector — duplicate instantiation: Mitigate — extract shared EmbeddingClient to modules/flex/llm/embedding_client.py, inject as dependency in both agents"
+      - "LifeOS YAML files with inconsistent schema causing silent data loss: Mitigate — log each skipped file with field-level validation errors at DEBUG level"
+
+completed: true

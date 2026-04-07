@@ -7,15 +7,117 @@ use crate::models::decomposition::*;
 
 /// Standalone verify command: load decomposition result and run validation.
 pub fn run(step_id: &str) {
-    if step_id != "step-01-decomposition-quality" {
-        eprintln!(
-            "{} Unknown validation step: {}",
-            "✗".red(),
-            step_id
-        );
-        eprintln!("Available: step-01-decomposition-quality");
+    match step_id {
+        "step-01-decomposition-quality" => run_decomposition_verify(),
+        "step-01-grooming-quality" => run_grooming_verify(None),
+        s if s.starts_with("step-01-grooming-quality:") => {
+            let stream = s.strip_prefix("step-01-grooming-quality:").unwrap();
+            run_grooming_verify(Some(stream));
+        }
+        _ => {
+            eprintln!(
+                "{} Unknown validation step: {}",
+                "✗".red(),
+                step_id
+            );
+            eprintln!("Available:");
+            eprintln!("  step-01-decomposition-quality");
+            eprintln!("  step-01-grooming-quality");
+            eprintln!("  step-01-grooming-quality:<stream-name>");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_grooming_verify(stream_filter: Option<&str>) {
+    use crate::models::grooming::*;
+
+    println!("{}", "GROOMING VALIDATION".bold());
+    println!("{}", "═".repeat(40));
+
+    // Find consolidated outputs
+    let outputs_dir = Path::new(".truss/_progress/outputs");
+    if !outputs_dir.exists() {
+        eprintln!("{} No outputs directory found", "✗".red());
         std::process::exit(1);
     }
+
+    let entries: Vec<_> = std::fs::read_dir(outputs_dir)
+        .unwrap_or_else(|_| {
+            eprintln!("{} Cannot read outputs dir", "✗".red());
+            std::process::exit(1);
+        })
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.ends_with("-consolidated.yaml")
+        })
+        .filter(|e| {
+            if let Some(filter) = stream_filter {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with(filter)
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    if entries.is_empty() {
+        eprintln!(
+            "{} No consolidated grooming outputs found",
+            "✗".red()
+        );
+        if stream_filter.is_some() {
+            eprintln!("  Filter: {}", stream_filter.unwrap());
+        }
+        std::process::exit(1);
+    }
+
+    let mut all_passed = true;
+    for entry in &entries {
+        let content = match std::fs::read_to_string(entry.path()) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "{} Failed to read {}: {}",
+                    "✗".red(),
+                    entry.path().display(),
+                    e
+                );
+                all_passed = false;
+                continue;
+            }
+        };
+
+        let consolidated: ConsolidatedGrooming = match serde_yaml::from_str(&content) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "{} Failed to parse {}: {}",
+                    "✗".red(),
+                    entry.path().display(),
+                    e
+                );
+                all_passed = false;
+                continue;
+            }
+        };
+
+        let report = crate::groom::validate::validate_grooming(&consolidated);
+        crate::groom::validate::print_validation_report(&report);
+
+        if report.status == GroomingValidationStatus::Fail {
+            all_passed = false;
+        }
+    }
+
+    if !all_passed {
+        std::process::exit(1);
+    }
+}
+
+fn run_decomposition_verify() {
 
     let streams_path = Path::new(".truss/_progress/outputs/streams.yaml");
     if !streams_path.exists() {

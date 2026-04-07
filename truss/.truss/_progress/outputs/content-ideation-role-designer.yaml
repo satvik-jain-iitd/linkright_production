@@ -1,0 +1,203 @@
+role: designer
+stream_name: content-ideation
+
+feature_analyses:
+  - feature_name: "Trend Monitor Agent"
+    analysis: >
+      This is a background agent with no primary interactive UI — the main design
+      surface is the agent status indicator and configuration flow. Users need
+      confidence the agent is running and not silently stale. Key design concerns:
+      (1) agent health visibility (last run, next run, source status), (2) career
+      context configuration form, (3) error/stale states that aren't alarming but
+      prompt action.
+    tasks:
+      - title: "Design agent status card component for Trend Monitor"
+        task_type: design
+        description: >
+          UX Flow: User opens Flex dashboard → sees 'Trend Monitor' status card
+          in a sidebar or top-of-page agents strip. Card shows: agent name, status
+          dot (green=running, amber=stale >8h, red=error), last_run_at relative
+          timestamp, next_run_at, and a 'Refresh Now' action button.
+
+          Component Specs:
+          - Card: 320px wide, 80px tall (mobile: full-width, 64px tall), border-radius 8px
+          - Status dot: 8px circle, color tokens: success-500/warning-400/error-500
+          - Typography: agent name 14px semibold, timestamps 12px text-secondary
+          - 'Refresh Now' button: text-only, 12px, primary color token
+
+          Interaction Details:
+          - Loading: skeleton shimmer on card while first poll is in progress
+          - Error state: red status dot + inline error message below card (e.g., "Last poll failed — rate limited by X API. Retrying in 12 min")
+          - Empty state: amber dot with "No polls run yet. Configure career context to start."
+          - Transition: status dot color change with 200ms fade
+
+          Responsive Behavior:
+          - Desktop: cards displayed in horizontal strip, 4 cards per row
+          - Tablet: 2 cards per row, full width
+          - Mobile: stacked vertically, full width
+
+          Accessibility:
+          - Keyboard: tab to card, Enter opens detail panel
+          - Screen reader: aria-label="Trend Monitor Agent: [status], last run [time]"
+          - Color contrast: all status dot colors paired with text label (don't rely on color alone)
+
+      - title: "Design career context configuration form"
+        task_type: design
+        description: >
+          UX Flow:
+          1. User clicks 'Configure' on Trend Monitor card → inline panel slides in
+          2. Form shows 5 fields: Role (text input), Industry (text input with suggestions),
+             Target Audience (text input), Seniority (dropdown: junior/mid/senior/executive),
+             Niche Keywords (tag input — type to add, click X to remove)
+          3. 'Save Context' button — disabled until at least Role and Industry filled
+          4. Success state: panel closes, card status updates to 'configured', first poll queued
+          5. Error state: inline validation messages below each field
+
+          Component Specs:
+          - Panel: 400px wide, slides in from right (desktop); full-screen sheet (mobile)
+          - Tag input: pill-shaped chips, 12px font, background bg-surface-2, X button 16px
+          - Save button: full-width on mobile, 160px on desktop, primary action style
+
+          Interaction Details:
+          - Loading: save button shows spinner while persisting
+          - Error: inline validation "Role is required" beneath field, red border on input
+          - Empty state for tag input: placeholder text "Add keywords like 'product strategy', 'AI'"
+
+          Accessibility:
+          - Tab order: role → industry → audience → seniority → keywords → save
+          - Screen reader: aria-required on mandatory fields, live region announces save success
+
+  - feature_name: "Ideation Scoring Engine"
+    analysis: >
+      This feature's primary UI surface is the opportunities list — the user's
+      daily decision-making view. Design must make score breakdown scannable at a
+      glance (not buried in numbers) and make the 'act on this' action obvious.
+      The score breakdown should use visual encoding (bars/dots) not just numbers
+      to enable fast scanning. Empty state is critical here — if the user lands on
+      an empty list, they must know exactly what to do next.
+    tasks:
+      - title: "Design scored opportunities list view"
+        task_type: design
+        description: >
+          UX Flow:
+          1. User runs 'flex ideation list' or navigates to Ideation tab in dashboard
+          2. Sees a ranked list of up to 10 opportunity cards sorted by composite_score
+          3. Each card shows: rank badge, topic title (truncated to 2 lines), composite
+             score as a horizontal progress bar (0-100), 3 sub-score pills
+             (relevance/timeliness/audience_fit), source label, age badge, 'Generate Brief' CTA
+          4. Selecting a card expands inline to show full topic description + source URL
+          5. Clicking 'Generate Brief' → confirmation toast → navigates to brief view
+
+          Component Specs:
+          - Opportunity card: full-width, 96px collapsed / 180px expanded, border-radius 8px
+          - Rank badge: 28px circle, bg-surface-3, 13px bold, left-aligned
+          - Composite score bar: full-width of card content area, 6px height, bg-primary-500 fill
+          - Sub-score pills: 3 pills in a row, 10px font, color-coded:
+            - relevance: bg-blue-100 text-blue-700
+            - timeliness: bg-green-100 text-green-700
+            - audience_fit: bg-purple-100 text-purple-700
+          - 'Generate Brief' button: text-sm, right-aligned, appears on hover (desktop) or always (mobile)
+
+          Interaction Details:
+          - Loading: skeleton cards (3 ghost cards) while scoring runs
+          - Error: toast "Scoring failed — run 'flex ideation refresh' to retry"
+          - Empty state: centered illustration + text "No opportunities yet" + "Run: flex ideation refresh" code chip
+          - Transitions: card expand with 150ms ease-in-out height animation
+
+          Responsive Behavior:
+          - Desktop: cards in single-column center-aligned 640px max-width
+          - Tablet: full-width, same layout
+          - Mobile: full-width, sub-score pills wrap to 2 rows if needed
+
+          Accessibility:
+          - Keyboard: arrow keys to navigate cards, Enter to expand, Space to trigger Generate Brief
+          - Screen reader: "Opportunity [rank]: [title]. Composite score [score]%. Relevance [score], Timeliness [score], Audience fit [score]."
+          - No color-only indicators — all pills include text labels
+
+  - feature_name: "Content Brief Generator"
+    analysis: >
+      The brief view is a structured artifact, not a form — design it as a document
+      with clear visual hierarchy: brief header (topic + platform badge) → angles
+      as expandable sections → hooks as readable list within each angle → personal
+      context callout if LifeOS entries present. The platform override flow needs
+      to be a single-step action (dropdown, not a separate screen). Generation
+      loading state matters — this involves an LLM call (5-15s) so skeleton loading
+      is essential to prevent perceived hangs.
+    tasks:
+      - title: "Design content brief document view"
+        task_type: design
+        description: >
+          UX Flow:
+          1. User triggers brief generation → loading skeleton for 5-15s
+          2. Brief view renders with: header (topic title, platform badge, tone chip, effort badge),
+             angles section (3 angle cards in a vertical stack), hooks within each angle
+             (bullet list, 2 per angle), personal context callout (amber card, appears only if
+             LifeOS entries matched), footer actions (Edit Platform, Enrich with LifeOS, Approve → handoff)
+          3. User can collapse/expand individual angle sections
+          4. 'Approve' button changes status to approved and signals content-drafting stream
+
+          Component Specs:
+          - Brief header: 100% width, 120px, title 20px semibold, badges right-aligned
+          - Platform badge: color-coded pill (LinkedIn=blue, X=black, YouTube=red, Instagram=pink, Facebook=indigo)
+          - Angle card: 100% width, 80px min, border-left 3px accent-color, expandable
+          - Hooks list: inside expanded angle card, 14px, line-height 1.5, bullet-point style
+          - Personal context callout: amber-50 background, 12px italic, "From your LifeOS:" label
+          - Approve button: full-width on mobile, 180px desktop, primary action style
+
+          Interaction Details:
+          - Loading: skeleton layout matching final structure (header, 3 angle cards)
+          - Error: "Brief generation failed — Claude API error" with 'Retry' button
+          - Empty state: not applicable (brief always has content or shows error)
+          - Transitions: angle card expand 200ms ease
+
+          Responsive Behavior:
+          - Desktop: brief centered at 640px max-width
+          - Mobile: full-width, angle cards stacked, footer actions sticky at bottom
+
+          Accessibility:
+          - Keyboard: tab through angle headings, Enter to expand, tab through hooks
+          - Screen reader: h2 for brief title, h3 for angle titles, hooks as <ul><li>
+          - ARIA expanded attribute on angle cards
+
+  - feature_name: "LifeOS Integration"
+    analysis: >
+      LifeOS integration has two design surfaces: (1) the personal context callout
+      in the brief view (designed in Brief Generator above), and (2) the manual
+      enrichment flow triggered by 'flex brief enrich'. The manual enrichment flow
+      is a selection UI — show a searchable list of LifeOS entries so the user can
+      pick the right one. The overwrite confirmation must be unambiguous but not
+      alarming (not a destructive modal — it's reversible).
+    tasks:
+      - title: "Design LifeOS entry picker for manual enrichment"
+        task_type: design
+        description: >
+          UX Flow:
+          1. User runs 'flex brief enrich <brief_id>' → LifeOS picker panel slides in
+          2. Panel shows: search input at top, scrollable list of LifeOS entries below
+          3. Each entry shows: type icon (trophy=achievement, book=learning, flag=milestone),
+             title, date, 2-line description preview, relevance_score badge (if auto-scored)
+          4. User clicks entry → it's highlighted, 'Attach Entry' button activates
+          5. If brief already manually_enriched: confirmation banner appears inline before 'Attach Entry'
+             text: "This brief already has a manually selected entry. Attaching will replace it."
+          6. Success: panel closes, brief view shows updated personal context callout
+
+          Component Specs:
+          - Picker panel: 400px wide (desktop), full-screen sheet (mobile)
+          - Search input: full-width, 40px height, magnifier icon
+          - Entry row: full-width, 72px, type icon 20px, title 14px semibold, date 12px secondary
+          - Relevance badge: small pill, right-aligned, bg-green-100 text-green-700
+          - Confirmation banner: amber-100 background, 12px text, displayed above CTA button
+          - 'Attach Entry' button: full-width, primary style, disabled until entry selected
+
+          Interaction Details:
+          - Loading: skeleton rows while LifeOS store loads
+          - Error: "LifeOS store not found — configure path in settings" with settings link
+          - Empty state: "No LifeOS entries found. Add achievements to your LifeOS directory."
+          - Search: filters list in real-time (client-side, no API call needed)
+
+          Accessibility:
+          - Keyboard: search then arrow keys through list, Enter to select, Space to confirm
+          - Screen reader: list items as interactive radio-style with aria-selected
+          - Confirmation banner: role="alert" so screen reader announces before user acts
+
+completed: true

@@ -1,8 +1,8 @@
 current_workflow: decomposition
-current_step: step-03-decompose
+current_step: approved
 streams:
-  e2e-2: pending
-  tests-3: pending
-  api: pending
-  lifeos: pending
-  modules-scout-tests: pending
+  content-ideation: ready
+  publishing-orchestration: ready
+  analytics: ready
+  review-editing: ready
+  content-drafting: ready

@@ -1,0 +1,38 @@
+current_workflow: grooming
+streams:
+  review-editing:
+    status: blocked
+    current_step: not_started
+    features_identified: 0
+    roles_completed: []
+    consolidated: false
+    verified: false
+  content-ideation:
+    status: in_progress
+    current_step: step-03-spawn-roles
+    features_identified: 0
+    roles_completed: []
+    consolidated: false
+    verified: false
+  content-drafting:
+    status: blocked
+    current_step: not_started
+    features_identified: 0
+    roles_completed: []
+    consolidated: false
+    verified: false
+  publishing-orchestration:
+    status: blocked
+    current_step: not_started
+    features_identified: 0
+    roles_completed: []
+    consolidated: false
+    verified: false
+  analytics:
+    status: blocked
+    current_step: not_started
+    features_identified: 0
+    roles_completed: []
+    consolidated: false
+    verified: false
+timestamp: 2026-04-07T22:41:48.124169+00:00
