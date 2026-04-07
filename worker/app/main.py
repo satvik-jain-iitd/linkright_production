@@ -41,6 +41,8 @@ class JobRequest(BaseModel):
     template_id: str = "cv-a4-standard"
     qa_answers: list[dict] = []  # [{question, answer}]
     override_theme_colors: dict | None = None  # user-confirmed brand colors from wizard
+    locked_sections: list[str] = []  # section names to skip LLM re-generation (use frozen HTML)
+    section_html_frozen: dict[str, str] = {}  # section_name → frozen HTML from template
 
 
 class JobResponse(BaseModel):
@@ -89,6 +91,8 @@ async def process_job(req: JobRequest):
             template_id=req.template_id,
             qa_answers=req.qa_answers or [],
             override_theme_colors=req.override_theme_colors,
+            locked_sections=req.locked_sections or [],
+            section_html_frozen=req.section_html_frozen or {},
         )
 
         logger.info(f"Job {req.job_id}: starting pipeline ({req.model_provider}/{req.model_id})")

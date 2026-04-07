@@ -698,31 +698,51 @@ async def phase_3_5_stencil_draft(ctx: PipelineContext, sb: Client):
         ))
 
     # Static sections — built once, final from this point
-    if "education" in order_map and parsed.get("education"):
-        sections.append(SectionContent(
-            section_html=_build_education_html(parsed["education"]),
-            section_order=order_map["education"],
-        ))
-    if "skills" in order_map and parsed.get("skills"):
-        sections.append(SectionContent(
-            section_html=_build_skills_html(parsed["skills"]),
-            section_order=order_map["skills"],
-        ))
-    if "awards" in order_map and parsed.get("awards"):
-        sections.append(SectionContent(
-            section_html=_build_awards_html(parsed["awards"]),
-            section_order=order_map["awards"],
-        ))
-    if "voluntary" in order_map and parsed.get("voluntary"):
-        sections.append(SectionContent(
-            section_html=_build_voluntary_html(parsed["voluntary"]),
-            section_order=order_map["voluntary"],
-        ))
-    if "interests" in order_map and parsed.get("interests"):
-        sections.append(SectionContent(
-            section_html=_build_interests_html(parsed["interests"]),
-            section_order=order_map["interests"],
-        ))
+    if "education" in order_map:
+        frozen_edu = _apply_frozen_section("education", ctx)
+        if frozen_edu is not None:
+            sections.append(SectionContent(section_html=frozen_edu, section_order=order_map["education"]))
+        elif parsed.get("education"):
+            sections.append(SectionContent(
+                section_html=_build_education_html(parsed["education"]),
+                section_order=order_map["education"],
+            ))
+    if "skills" in order_map:
+        frozen_skills = _apply_frozen_section("skills", ctx)
+        if frozen_skills is not None:
+            sections.append(SectionContent(section_html=frozen_skills, section_order=order_map["skills"]))
+        elif parsed.get("skills"):
+            sections.append(SectionContent(
+                section_html=_build_skills_html(parsed["skills"]),
+                section_order=order_map["skills"],
+            ))
+    if "awards" in order_map:
+        frozen_awards = _apply_frozen_section("awards", ctx)
+        if frozen_awards is not None:
+            sections.append(SectionContent(section_html=frozen_awards, section_order=order_map["awards"]))
+        elif parsed.get("awards"):
+            sections.append(SectionContent(
+                section_html=_build_awards_html(parsed["awards"]),
+                section_order=order_map["awards"],
+            ))
+    if "voluntary" in order_map:
+        frozen_voluntary = _apply_frozen_section("voluntary", ctx)
+        if frozen_voluntary is not None:
+            sections.append(SectionContent(section_html=frozen_voluntary, section_order=order_map["voluntary"]))
+        elif parsed.get("voluntary"):
+            sections.append(SectionContent(
+                section_html=_build_voluntary_html(parsed["voluntary"]),
+                section_order=order_map["voluntary"],
+            ))
+    if "interests" in order_map:
+        frozen_interests = _apply_frozen_section("interests", ctx)
+        if frozen_interests is not None:
+            sections.append(SectionContent(section_html=frozen_interests, section_order=order_map["interests"]))
+        elif parsed.get("interests"):
+            sections.append(SectionContent(
+                section_html=_build_interests_html(parsed["interests"]),
+                section_order=order_map["interests"],
+            ))
 
     # Assemble stencil HTML
     contact = parsed.get("contact_info", {})
@@ -765,49 +785,156 @@ async def phase_3_5_stencil_draft(ctx: PipelineContext, sb: Client):
     await _progress(ctx, sb, 3, "Stencil ready", 38)
 
 
-# ── Phase 3.5A: Professional Summary (1 LLM call) ─────────────────────
+# ── Phase 3.5a: Professional Summary Width Optimization ──────────────────
 
-async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm):
-    """Generate a 2-3 sentence professional summary tailored to the target JD."""
+async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm) -> None:
+    """Optimize the professional summary to fill 95-98% of line width.
+
+    The career_summary from Phase 1 is a 2-sentence narrative extracted by the LLM.
+    This phase:
+      1. Measures each summary sentence against the summary_line budget.
+      2. Sentences that are already in range [90%, 100%] are kept as-is.
+      3. Sentences that are TOO_SHORT or OVERFLOW are sent to a targeted LLM
+         rewrite call (same pattern as phase_5 per-bullet synonym retry).
+      4. Stores final HTML in ctx._summary_html for phase_8_assembly to inject.
+
+    Width target: 95-98% of summary_line budget (matches experience bullet targets).
+    """
     t0 = time.time()
-    await _progress(ctx, sb, 3, "Generating professional summary", 39)
+    await _progress(ctx, sb, 3, "Optimizing professional summary", 39)
 
-    parsed = ctx._parsed
-    keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
-    companies_list = parsed.get("companies", [])
-    company_names = [c.get("name", "") for c in companies_list[:3] if c.get("name")]
+    summary_raw: str = ctx._parsed.get("career_summary", "")
+    if not summary_raw or not summary_raw.strip():
+        logger.info(f"Job {ctx.job_id} [Phase 3.5a]: no career_summary — skipping")
+        ctx._phase_timings["phase_3_5a"] = int((time.time() - t0) * 1000)
+        return
 
-    summary_template, _ = get_prompt("professional_summary", prompts.PROFESSIONAL_SUMMARY_SYSTEM)
+    # Split into individual sentences for per-sentence measurement
+    import re as _re
+    # Split on sentence-ending punctuation followed by space + capital or end
+    raw_sentences = [s.strip() for s in _re.split(r'(?<=[.!?])\s+', summary_raw.strip()) if s.strip()]
+    if not raw_sentences:
+        raw_sentences = [summary_raw.strip()]
 
-    system_msg = summary_template
-    user_msg = prompts.PROFESSIONAL_SUMMARY_USER.format(
-        target_role=parsed.get("target_role", ""),
-        target_company=parsed.get("company_name", ""),
-        jd_keywords=", ".join(keyword_strs[:15]),
-        career_level=ctx.career_level or "mid",
-        companies=", ".join(company_names) if company_names else "N/A",
-        career_summary=parsed.get("career_summary", ""),
-    )
+    # Get budget parameters from template_config
+    bullet_budget = ctx.template_config.get("budgets", {}).get("bullet", {})
+    if hasattr(bullet_budget, "model_dump"):
+        bullet_budget = bullet_budget.model_dump()
+    # Use summary_line budget if available, else fall back to bullet budget values
+    summary_budget_cfg = ctx.template_config.get("budgets", {}).get("summary_line", {})
+    if hasattr(summary_budget_cfg, "model_dump"):
+        summary_budget_cfg = summary_budget_cfg.model_dump()
+    raw_budget = summary_budget_cfg.get("raw_budget", bullet_budget.get("raw_budget", 101.4))
+    range_min_90 = summary_budget_cfg.get("range_min_90", bullet_budget.get("range_min_90", 91.3))
 
-    resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=3, temperature=0.3)
-    trace_generation(
-        trace_name="pipeline", generation_name="phase_3_5a_summary",
-        model=resp.model, system_prompt=system_msg, user_input=user_msg,
-        output=resp.text, user_id=ctx.user_id,
-    )
+    optimized_sentences: list[str] = []
+    needs_fix: list[dict] = []
 
-    try:
-        data = _parse_json(resp.text)
-        summary_text = data.get("summary_text", "").strip()
-    except (json.JSONDecodeError, ValueError):
-        # Fallback: use raw text if JSON parsing fails
-        summary_text = resp.text.strip()
+    # Step 1: Measure all sentences
+    for i, sentence in enumerate(raw_sentences):
+        try:
+            result = json.loads(
+                await resume_measure_width(
+                    MeasureWidthInput(text_html=sentence, line_type="summary_line"),
+                    template_config=ctx.template_config,
+                )
+            )
+            status = result.get("status", "PASS")
+            fill = result.get("fill_percentage", 0.0)
+            weighted_total = result.get("weighted_total", 0.0)
 
-    if summary_text:
-        ctx._professional_summary = summary_text
-        logger.info("phase_3_5a: summary generated (%d chars)", len(summary_text))
+            if status == "PASS":
+                optimized_sentences.append(sentence)
+                logger.info(f"[Phase 3.5a] sentence {i}: PASS ({fill:.1f}%)")
+            else:
+                needs_fix.append({
+                    "index": i,
+                    "text_html": sentence,
+                    "fill_percentage": fill,
+                    "weighted_total": weighted_total,
+                    "status": status,
+                })
+                optimized_sentences.append(sentence)  # placeholder, will be replaced
+                logger.info(f"[Phase 3.5a] sentence {i}: {status} ({fill:.1f}%) — needs fix")
+        except Exception as e:
+            logger.warning(f"[Phase 3.5a] measure_width failed for sentence {i}: {e} — keeping as-is")
+            optimized_sentences.append(sentence)
+
+    # Step 2: LLM-rewrite sentences that don't pass (same approach as phase_5 per-bullet)
+    if needs_fix:
+        logger.info(f"[Phase 3.5a] {len(needs_fix)} sentence(s) need width fixing")
+
+        for m in needs_fix:
+            idx = m["index"]
+            fill = m["fill_percentage"]
+            status = m["status"]
+            direction = "trim" if status == "OVERFLOW" else "expand"
+            current_text = m["text_html"]
+
+            # Calculate gap for the prompt
+            if status == "TOO_SHORT":
+                gap_desc = f"need to expand by ~{round(range_min_90 - m['weighted_total'], 1)} CU to fill 95-98% of line width"
+            else:
+                gap_desc = f"need to shorten by ~{round(m['weighted_total'] - raw_budget, 1)} CU to fit within line width"
+
+            action = "lengthen/expand" if direction == "expand" else "shorten/trim"
+            system_prompt = (
+                "You are a professional resume writer. Rewrite the given career summary sentence "
+                "to adjust its length while preserving the exact meaning and professional tone. "
+                "Return ONLY the rewritten sentence — no markdown, no commentary, no quotes."
+            )
+            user_prompt = (
+                f"Rewrite this career summary sentence to {action} it slightly.\n\n"
+                f"Current: {current_text}\n\n"
+                f"Width issue: {gap_desc} (current fill: {fill:.1f}%, target: 90-100%).\n\n"
+                f"Rules:\n"
+                f"- Preserve factual content and professional tone\n"
+                f"- Use <b>word</b> tags for key terms/metrics if helpful\n"
+                f"- Keep it a single complete sentence\n"
+                f"- Return ONLY the rewritten sentence text (with optional HTML bold tags)"
+            )
+
+            try:
+                resp = await _llm_call(ctx, llm, system_prompt, user_prompt, phase=3, temperature=0.2)
+                rewritten = resp.text.strip() if resp else None
+                # Strip accidental markdown fences
+                if rewritten and rewritten.startswith("```"):
+                    lines = rewritten.split("\n")
+                    rewritten = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+                if rewritten:
+                    # Verify width of rewritten sentence
+                    verify = json.loads(
+                        await resume_measure_width(
+                            MeasureWidthInput(text_html=rewritten, line_type="summary_line"),
+                            template_config=ctx.template_config,
+                        )
+                    )
+                    new_fill = verify.get("fill_percentage", 0.0)
+                    new_status = verify.get("status", "ERROR")
+
+                    if new_status == "PASS" or (88 <= new_fill <= 103):
+                        optimized_sentences[idx] = rewritten
+                        logger.info(f"[Phase 3.5a] sentence {idx} fixed: {fill:.1f}% → {new_fill:.1f}%")
+                    else:
+                        # Keep original — rewrite didn't improve enough
+                        logger.info(f"[Phase 3.5a] sentence {idx} rewrite still {new_status} ({new_fill:.1f}%) — keeping original")
+            except Exception as e:
+                logger.warning(f"[Phase 3.5a] LLM rewrite failed for sentence {idx}: {e} — keeping original")
+
+    # Step 3: Build final summary HTML — each sentence on its own summary-line span
+    summary_parts: list[str] = []
+    for sentence in optimized_sentences:
+        if sentence.strip():
+            summary_parts.append(f'<span class="summary-line">{sentence}</span>')
+
+    ctx._summary_html = "\n".join(summary_parts) if summary_parts else None
+
+    if ctx._summary_html:
+        ctx.stats["summary_sentences"] = len(optimized_sentences)
+        logger.info(f"[Phase 3.5a] summary ready: {len(optimized_sentences)} sentence(s)")
     else:
-        logger.warning("phase_3_5a: empty summary returned")
+        logger.warning(f"[Phase 3.5a] no summary HTML produced")
 
     ctx._phase_timings["phase_3_5a"] = int((time.time() - t0) * 1000)
     _save_checkpoint(ctx, sb, "phase_3_5a")
@@ -1896,6 +2023,83 @@ async def phase_7_validation(ctx: PipelineContext, sb: Client):
     _save_checkpoint(ctx, sb, "phase_7")
 
 
+# ── Template Locking Helpers ──────────────────────────────────────────────
+
+def apply_brand_colors_to_html(html: str, brand_colors: dict) -> str:
+    """Replace color placeholders and specific hex values with actual brand colors.
+
+    Handles two replacement modes:
+    1. Placeholder tokens: {brand_primary}, {brand_secondary}, etc. (template placeholders)
+    2. Common hardcoded hex patterns in inline styles / CSS — replace known defaults
+       with the actual brand color so frozen HTML picks up the user's brand palette.
+
+    Args:
+        html: Frozen section HTML from a template.
+        brand_colors: dict with keys brand_primary, brand_secondary, brand_tertiary, brand_quaternary.
+
+    Returns:
+        HTML with brand colors applied.
+    """
+    import re as _re
+
+    # Map placeholder names → actual color values (skip empty values)
+    replacements = {
+        name: value
+        for name, value in brand_colors.items()
+        if value and isinstance(value, str) and value.startswith("#")
+    }
+
+    if not replacements:
+        return html
+
+    result = html
+
+    # Pass 1: replace {brand_primary} style placeholder tokens
+    for name, color in replacements.items():
+        result = result.replace("{" + name + "}", color)
+        result = result.replace("{{" + name + "}}", color)  # double-brace variants
+
+    # Pass 2: replace hardcoded default hex values in style attributes.
+    # These defaults match what assemble_html injects when no override is given.
+    DEFAULT_COLOR_MAP = {
+        "#1B2A4A": "brand_primary",   # default dark navy primary
+        "#4285F4": "brand_primary",   # default blue primary
+        "#EA4335": "brand_secondary", # default red secondary
+        "#2563EB": "brand_primary",   # alternate blue
+        "#1E3A5F": "brand_primary",   # alternate dark
+    }
+
+    for default_hex, brand_key in DEFAULT_COLOR_MAP.items():
+        if brand_key in replacements:
+            # Replace only inside style="" attributes or <style> blocks to avoid
+            # clobbering visible text that happens to contain a hex code.
+            pattern = r'(style\s*=\s*["\'][^"\']*?)' + _re.escape(default_hex) + r'([^"\']*?["\'])'
+            result = _re.sub(
+                pattern,
+                lambda m, _hex=replacements[brand_key]: m.group(1) + _hex + m.group(2),
+                result,
+            )
+
+    return result
+
+
+def _apply_frozen_section(section_name: str, ctx: PipelineContext) -> str | None:
+    """Return frozen HTML for a locked section, with brand colors applied.
+
+    Returns None if the section is not locked or has no frozen HTML.
+    """
+    if section_name not in ctx.locked_sections:
+        return None
+    frozen = ctx.section_html_frozen.get(section_name)
+    if not frozen:
+        logger.warning(f"[locked] section '{section_name}' is locked but has no frozen HTML — will regenerate")
+        return None
+    colors = ctx.theme_colors or {}
+    updated = apply_brand_colors_to_html(frozen, colors)
+    logger.info(f"[locked] Using frozen HTML for section '{section_name}' ({len(updated)} chars)")
+    return updated
+
+
 # ── Section Builders (programmatic HTML — no LLM) ────────────────────────
 
 def _get_section_order_map(section_order: list) -> dict:
@@ -1925,17 +2129,6 @@ def _get_section_order_map(section_order: list) -> dict:
         elif "interest" in lower:
             mapping["interests"] = 6
     return mapping
-
-
-def _build_summary_html(summary_text: str) -> str:
-    """Build Professional Summary section HTML."""
-    return (
-        '<div class="section-summary">'
-        '<p style="font-size: 10pt; line-height: 1.4; margin: 0; color: #333;">'
-        f'{summary_text}'
-        '</p>'
-        '</div>'
-    )
 
 
 def _build_experience_html(bullets: list, companies: list) -> str:
@@ -2110,48 +2303,62 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
     # Build section HTML programmatically (no LLM)
     sections = []
 
-    # Professional Summary — inserted before experience (order 0)
-    if ctx._professional_summary:
-        sections.append(SectionContent(
-            section_html=_build_summary_html(ctx._professional_summary),
-            section_order=0,
-        ))
-
+    # Experience: never frozen (always freshly generated per JD)
     if "experience" in order_map and ctx._optimized_bullets:
         sections.append(SectionContent(
             section_html=_build_experience_html(ctx._optimized_bullets, companies),
             section_order=order_map["experience"],
         ))
 
-    if "education" in order_map and parsed.get("education"):
-        sections.append(SectionContent(
-            section_html=_build_education_html(parsed["education"]),
-            section_order=order_map["education"],
-        ))
+    if "education" in order_map:
+        frozen_edu = _apply_frozen_section("education", ctx)
+        if frozen_edu is not None:
+            sections.append(SectionContent(section_html=frozen_edu, section_order=order_map["education"]))
+        elif parsed.get("education"):
+            sections.append(SectionContent(
+                section_html=_build_education_html(parsed["education"]),
+                section_order=order_map["education"],
+            ))
 
-    if "skills" in order_map and parsed.get("skills"):
-        sections.append(SectionContent(
-            section_html=_build_skills_html(parsed["skills"]),
-            section_order=order_map["skills"],
-        ))
+    if "skills" in order_map:
+        frozen_skills = _apply_frozen_section("skills", ctx)
+        if frozen_skills is not None:
+            sections.append(SectionContent(section_html=frozen_skills, section_order=order_map["skills"]))
+        elif parsed.get("skills"):
+            sections.append(SectionContent(
+                section_html=_build_skills_html(parsed["skills"]),
+                section_order=order_map["skills"],
+            ))
 
-    if "awards" in order_map and parsed.get("awards"):
-        sections.append(SectionContent(
-            section_html=_build_awards_html(parsed["awards"]),
-            section_order=order_map["awards"],
-        ))
+    if "awards" in order_map:
+        frozen_awards = _apply_frozen_section("awards", ctx)
+        if frozen_awards is not None:
+            sections.append(SectionContent(section_html=frozen_awards, section_order=order_map["awards"]))
+        elif parsed.get("awards"):
+            sections.append(SectionContent(
+                section_html=_build_awards_html(parsed["awards"]),
+                section_order=order_map["awards"],
+            ))
 
-    if "voluntary" in order_map and parsed.get("voluntary"):
-        sections.append(SectionContent(
-            section_html=_build_voluntary_html(parsed["voluntary"]),
-            section_order=order_map["voluntary"],
-        ))
+    if "voluntary" in order_map:
+        frozen_voluntary = _apply_frozen_section("voluntary", ctx)
+        if frozen_voluntary is not None:
+            sections.append(SectionContent(section_html=frozen_voluntary, section_order=order_map["voluntary"]))
+        elif parsed.get("voluntary"):
+            sections.append(SectionContent(
+                section_html=_build_voluntary_html(parsed["voluntary"]),
+                section_order=order_map["voluntary"],
+            ))
 
-    if "interests" in order_map and parsed.get("interests"):
-        sections.append(SectionContent(
-            section_html=_build_interests_html(parsed["interests"]),
-            section_order=order_map["interests"],
-        ))
+    if "interests" in order_map:
+        frozen_interests = _apply_frozen_section("interests", ctx)
+        if frozen_interests is not None:
+            sections.append(SectionContent(section_html=frozen_interests, section_order=order_map["interests"]))
+        elif parsed.get("interests"):
+            sections.append(SectionContent(
+                section_html=_build_interests_html(parsed["interests"]),
+                section_order=order_map["interests"],
+            ))
 
     # Build tool inputs
     contact = parsed.get("contact_info", {})
@@ -2191,9 +2398,32 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
         ))
     )
 
-    ctx.output_html = assemble_result.get("final_html", "")
+    final_html: str = assemble_result.get("final_html", "")
+
+    # Inject professional summary below the header div (if phase_3_5a produced one)
+    if ctx._summary_html:
+        import re as _inject_re
+        # Find the closing </div> of the header block and inject summary after it
+        header_close_pattern = r'(</div>\s*)(<!--)'
+        # More reliable: find the header div and its closing tag
+        header_div_match = _inject_re.search(
+            r'(<div[^>]*class="[^"]*header[^"]*"[^>]*>.*?</div>)',
+            final_html,
+            flags=_inject_re.DOTALL | _inject_re.IGNORECASE,
+        )
+        if header_div_match:
+            insert_pos = header_div_match.end()
+            summary_block = f'\n<div class="professional-summary">\n{ctx._summary_html}\n</div>'
+            final_html = final_html[:insert_pos] + summary_block + final_html[insert_pos:]
+            logger.info(f"[Phase 8] Professional summary injected ({len(ctx._summary_html)} chars)")
+        else:
+            logger.warning("[Phase 8] Could not find header div to inject summary — summary skipped")
+
+    ctx.output_html = final_html
     ctx.stats["assembly_warnings"] = assemble_result.get("warnings", [])
     ctx.stats["sections_injected"] = len(sections)
+    if ctx._summary_html:
+        ctx.stats["summary_injected"] = True
 
     ctx._phase_timings["phase_8"] = int((time.time() - t0) * 1000)
     await _progress(ctx, sb, 8, "Resume complete", 98)

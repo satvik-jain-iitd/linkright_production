@@ -46,7 +46,6 @@ class PipelineContext:
     _optimized_bullets: list[dict] = field(default_factory=list)
     _relevant_chunks: list[str] = field(default_factory=list)  # from pgvector/FTS
     _company_chunks: dict[int, list[str]] = field(default_factory=dict)  # per-company QMD results
-    _professional_summary: str | None = None                      # Phase 3.5A professional summary text
     _verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4a output (200-400 char paragraphs)
     _ranked_verbose_bullets: list[dict] = field(default_factory=list)  # Phase 4b ranked by BRS
     _nuggets: list = field(default_factory=list)              # Phase 0 extracted Nugget objects
@@ -63,6 +62,13 @@ class PipelineContext:
 
     # Multi-key management
     key_manager: Any | None = None  # Optional KeyManager instance
+
+    # Template locking: sections that should use frozen HTML (skip LLM re-generation)
+    locked_sections: list[str] = field(default_factory=list)      # e.g. ["education", "skills"]
+    section_html_frozen: dict[str, str] = field(default_factory=dict)  # section_name → frozen HTML
+
+    # Professional summary (phase_3_5a output — width-optimized summary HTML)
+    _summary_html: str | None = None  # width-optimized summary line(s) HTML
 
     # Output
     output_html: str | None = None
