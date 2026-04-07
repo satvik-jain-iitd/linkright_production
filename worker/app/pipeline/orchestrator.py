@@ -36,10 +36,12 @@ from ..tools.assemble_html import (
 from ..tools.score_bullets import resume_score_bullets, ScoreBulletsInput, CandidateBullet
 from ..qmd_search import hybrid_search as qmd_hybrid_search, fallback_fts_search
 from . import prompts
+from ..langfuse_client import trace_generation, get_prompt
 from ..tools.nugget_extractor import extract_nuggets
 from ..tools.nugget_embedder import embed_nuggets
 from ..tools.quality_judge import judge_quality
 from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
+from ..key_manager import KeyManager
 import os
 
 USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
@@ -123,6 +125,13 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     """
     llm = get_provider(ctx.model_provider, ctx.api_key, ctx.model_id)
 
+    # Initialize KeyManager if user has keys in DB
+    km = KeyManager(sb, ctx.user_id)
+    if km.get_keys("groq") or km.get_keys("jina"):
+        ctx.key_manager = km
+        logger.info("run_pipeline: KeyManager active (groq=%d, jina=%d keys)",
+                     len(km.get_keys("groq")), len(km.get_keys("jina")))
+
     await phase_0_nuggets(
         ctx, sb,
         groq_api_key=os.environ.get("GROQ_API_KEY"),
@@ -185,10 +194,37 @@ def _save_checkpoint(ctx: PipelineContext, sb: Client, phase_name: str, status: 
 MAX_LLM_RETRIES = 5
 
 async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
-    """Call LLM with retry on rate limit (429) and track tokens + timing."""
+    """Call LLM with retry on rate limit (429) and track tokens + timing.
+
+    If ctx.key_manager is set and has keys for ctx.model_provider, uses
+    multi-key fallback (tries each DB key, then falls back to ctx.api_key).
+    """
     import httpx
     import random
 
+    # --- KeyManager path: rotate through user's DB keys ---
+    if ctx.key_manager and ctx.key_manager.get_keys(ctx.model_provider):
+        async def _km_call(api_key: str) -> LLMResponse:
+            km_llm = get_provider(ctx.model_provider, api_key, ctx.model_id)
+            return await km_llm.complete(system, user, temperature=temperature)
+
+        start = time.time()
+        resp = await ctx.key_manager.call_with_fallback(
+            ctx.model_provider,
+            _km_call,
+            fallback_key=ctx.api_key,
+        )
+        duration = int((time.time() - start) * 1000)
+        ctx._llm_log.append({
+            "phase": phase,
+            "input_tokens": resp.input_tokens,
+            "output_tokens": resp.output_tokens,
+            "duration_ms": duration,
+            "model": resp.model,
+        })
+        return resp
+
+    # --- Default path: single key with retry ---
     for attempt in range(MAX_LLM_RETRIES + 1):
         try:
             start = time.time()
@@ -391,6 +427,7 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
             sb=sb,
             groq_api_key=groq_api_key,
             byok_api_key=byok_api_key,
+            key_manager=ctx.key_manager,
         )
 
         if nuggets:
@@ -400,6 +437,7 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
                 jina_api_key=jina_api_key,
                 sb=sb,
                 user_id=ctx.user_id,
+                key_manager=ctx.key_manager,
             )
             ctx._nuggets = nuggets
             logger.info(f"[Phase 0] Extracted {len(nuggets)} nuggets, {sum(1 for e in embeddings if e)} embedded")
@@ -432,7 +470,8 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
         raise RuntimeError("Template parsing failed: template_config not set")
 
     qa_context = _format_qa_context(ctx)
-    system_msg = prompts.PHASE_1_2_SYSTEM.format(
+    phase_1_2_template, _ = get_prompt("phase_1_2", prompts.PHASE_1_2_SYSTEM)
+    system_msg = phase_1_2_template.format(
         strategies_json=json.dumps(
             {k: {"description": v["description"], "trigger": v["trigger"]} for k, v in STRATEGIES.items()},
             indent=2,
@@ -446,6 +485,11 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     )
 
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=1)
+    trace_generation(
+        trace_name="pipeline", generation_name="phase_1_2",
+        model=resp.model, system_prompt=system_msg, user_input=user_msg,
+        output=resp.text, user_id=ctx.user_id,
+    )
     try:
         data = _parse_json(resp.text)
         ctx.career_level = data["career_level"]
@@ -700,6 +744,8 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
     keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
     jd_keywords_compact = ", ".join(keyword_strs)
 
+    phase_4a_template, _ = get_prompt("phase_4a_verbose", prompts.PHASE_4A_VERBOSE_SYSTEM)
+
     all_verbose = []
     used_verbs_so_far = []
 
@@ -716,7 +762,7 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
         else:
             company_context = _get_company_context(ctx, idx)
 
-        system_msg = prompts.PHASE_4A_VERBOSE_SYSTEM.format(
+        system_msg = phase_4a_template.format(
             bullet_count=num_bullets,
             used_verbs=", ".join(used_verbs_so_far) if used_verbs_so_far else "none",
             strategy=ctx.strategy,
@@ -734,6 +780,11 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
         )
 
         resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.4)
+        trace_generation(
+            trace_name="pipeline", generation_name="phase_4a_verbose",
+            model=resp.model, system_prompt=system_msg, user_input=user_msg,
+            output=resp.text, user_id=ctx.user_id,
+        )
         try:
             data = _parse_json(resp.text)
         except json.JSONDecodeError as e:
@@ -772,7 +823,7 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
                     company_context = "\n\n---\n\n".join(ctx._company_chunks[idx])[:5000]
                 else:
                     company_context = _get_company_context(ctx, idx)
-                sys_r = prompts.PHASE_4A_VERBOSE_SYSTEM.format(
+                sys_r = phase_4a_template.format(
                     bullet_count=num_bullets,
                     used_verbs=", ".join(used_verbs_retry) if used_verbs_retry else "none",
                     strategy=ctx.strategy,
@@ -907,6 +958,8 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
     if not verbose:
         raise ValueError("Phase 4C: No verbose bullets to condense")
 
+    phase_4c_template, _ = get_prompt("phase_4c_condense", prompts.PHASE_4C_CONDENSE_SYSTEM)
+
     # Build paragraphs section for prompt
     para_lines = []
     for i, b in enumerate(verbose):
@@ -914,7 +967,7 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
         para_lines.append(f'"{b.get("text_html", "")}"')
         para_lines.append("")
 
-    system_msg = prompts.PHASE_4C_CONDENSE_SYSTEM.format(
+    system_msg = phase_4c_template.format(
         paragraph_count=len(verbose),
     )
     user_msg = prompts.PHASE_4C_CONDENSE_USER.format(
@@ -922,6 +975,11 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
     )
 
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.2)
+    trace_generation(
+        trace_name="pipeline", generation_name="phase_4c_condense",
+        model=resp.model, system_prompt=system_msg, user_input=user_msg,
+        output=resp.text, user_id=ctx.user_id,
+    )
     try:
         data = _parse_json(resp.text)
     except json.JSONDecodeError as e:
@@ -1313,7 +1371,8 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
     logger.info(f"Job {ctx.job_id} phase 5: {len(needs_fix)} bullets in {len(chunks)} {batch_word}")
     await _progress(ctx, sb, 5, f"Optimizing {len(needs_fix)} bullets in {len(chunks)} {batch_word}", 58)
 
-    system_msg = prompts.PHASE_5_BATCHED_SYSTEM.format(
+    phase_5_template, _ = get_prompt("phase_5_width", prompts.PHASE_5_BATCHED_SYSTEM)
+    system_msg = phase_5_template.format(
         raw_budget=raw_budget,
         range_min_90=range_min_90,
     )
@@ -1333,6 +1392,11 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
         )
 
         resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=5, temperature=0.2)
+        trace_generation(
+            trace_name="pipeline", generation_name="phase_5_width",
+            model=resp.model, system_prompt=system_msg, user_input=user_msg,
+            output=resp.text, user_id=ctx.user_id,
+        )
         try:
             revisions = _parse_json(resp.text).get("revised_bullets", [])
         except (json.JSONDecodeError, KeyError):

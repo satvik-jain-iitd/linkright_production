@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { WizardData } from "../WizardShell";
+import { KeyManagerPanel } from "@/components/KeyManagerPanel";
 
 const PROVIDERS = [
   {
@@ -44,8 +45,7 @@ interface Props {
 }
 
 export function StepConfigure({ data, update, next, back }: Props) {
-  const [validating, setValidating] = useState(false);
-  const [keyStatus, setKeyStatus] = useState<"idle" | "valid" | "invalid">("idle");
+  const [hasKey, setHasKey] = useState(!!data.api_key);
 
   const provider = PROVIDERS.find((p) => p.id === data.model_provider) || PROVIDERS[0];
 
@@ -56,34 +56,30 @@ export function StepConfigure({ data, update, next, back }: Props) {
       model_id: p.models[0].id,
       api_key: "",
     });
-    setKeyStatus("idle");
+    setHasKey(false);
   };
 
-  const validateKey = async () => {
-    if (!data.api_key.trim()) return;
-    setValidating(true);
-    try {
-      const resp = await fetch("/api/keys/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: data.model_provider, api_key: data.api_key }),
-      });
-      const result = await resp.json();
-      setKeyStatus(result.valid ? "valid" : "invalid");
-    } catch {
-      setKeyStatus("invalid");
-    }
-    setValidating(false);
-  };
-
-  const canProceed = data.api_key.trim().length > 0 && keyStatus === "valid";
+  // When KeyManagerPanel reports the primary key ID, update wizard
+  const handleKeySelected = useCallback(
+    (keyId: string) => {
+      if (keyId) {
+        // Store the key ID — the pipeline reads the actual key from DB
+        update({ api_key: keyId });
+        setHasKey(true);
+      } else {
+        update({ api_key: "" });
+        setHasKey(false);
+      }
+    },
+    [update]
+  );
 
   return (
     <div>
       <h2 className="text-2xl font-bold">Configure Your LLM</h2>
       <p className="mt-2 text-sm text-muted">
-        Bring your own API key. We never store it — it&apos;s sent directly to
-        the provider for this session only.
+        Add your API keys below. Keys are stored securely and used for resume
+        generation.
       </p>
 
       {/* Provider selection */}
@@ -127,36 +123,29 @@ export function StepConfigure({ data, update, next, back }: Props) {
         </select>
       </div>
 
-      {/* API key */}
+      {/* API Keys — KeyManagerPanel */}
       <div className="mt-6">
         <label className="text-sm font-semibold uppercase tracking-wide text-muted">
-          API Key
+          API Keys
         </label>
-        <div className="mt-3 flex gap-3">
-          <input
-            type="password"
-            value={data.api_key}
-            onChange={(e) => {
-              update({ api_key: e.target.value });
-              setKeyStatus("idle");
-            }}
-            placeholder={`Paste your ${provider.name} API key`}
-            className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder-muted transition-colors focus:border-accent/50 focus:outline-none"
+        <div className="mt-3">
+          <KeyManagerPanel
+            provider={data.model_provider}
+            providerLabel={provider.name}
+            onKeySelected={handleKeySelected}
           />
-          <button
-            onClick={validateKey}
-            disabled={!data.api_key.trim() || validating}
-            className="rounded-xl border border-accent bg-accent/10 px-5 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {validating ? "Checking..." : "Validate"}
-          </button>
         </div>
-        {keyStatus === "valid" && (
-          <p className="mt-2 text-sm text-green-600">Key is valid</p>
-        )}
-        {keyStatus === "invalid" && (
-          <p className="mt-2 text-sm text-red-500">Invalid key — check and try again</p>
-        )}
+      </div>
+
+      {/* Jina AI embedding keys */}
+      <div className="mt-6 border-t border-border pt-4">
+        <h3 className="text-sm font-medium text-gray-700 mb-2">
+          Embedding Keys (Jina AI)
+        </h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Multiple Jina keys run embedding in parallel — 2 keys = 2x faster.
+        </p>
+        <KeyManagerPanel provider="jina" providerLabel="Jina AI" />
       </div>
 
       <div className="mt-8 flex items-center justify-between">
@@ -168,7 +157,7 @@ export function StepConfigure({ data, update, next, back }: Props) {
         </button>
         <button
           onClick={next}
-          disabled={!canProceed}
+          disabled={!hasKey}
           className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next

@@ -1,0 +1,106 @@
+openapi: 3.1.0
+info:
+  title: LinkRight Nugget Ingestion API
+  description: Send career nuggets extracted from conversations to LinkRight for embedding and resume generation.
+  version: 1.0.0
+servers:
+  - url: https://sync.linkright.in
+    description: Production
+
+paths:
+  /api/webhooks/nuggets:
+    post:
+      operationId: sendNuggets
+      summary: Send extracted career nuggets to LinkRight
+      description: |
+        Accepts an array of career nuggets in JSON format. Each nugget should follow
+        the Two-Layer Classification Model (Layer A: Resume, Layer B: Life).
+        Authenticates via Bearer token from LinkRight settings.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - format
+                - data
+              properties:
+                format:
+                  type: string
+                  enum: [json]
+                  description: Always "json" for ChatGPT Actions
+                data:
+                  type: string
+                  description: JSON-encoded array of nugget objects
+                source:
+                  type: string
+                  default: chatgpt_export
+                  description: Source identifier
+                prompt_version:
+                  type: string
+                  default: chatgpt_custom
+                  description: Prompt version used for extraction
+      responses:
+        '200':
+          description: Nuggets ingested successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inserted:
+                    type: integer
+                    description: Number of nuggets successfully ingested
+                  rejected:
+                    type: integer
+                    description: Number of nuggets that failed validation
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: integer
+                        error:
+                          type: string
+        '401':
+          description: Invalid or missing Bearer token
+        '400':
+          description: Invalid request body
+
+  /api/nuggets/analytics:
+    get:
+      operationId: getNuggetStatus
+      summary: Check nugget and embedding status
+      description: Returns summary statistics about the user's career nuggets
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      embedded:
+                        type: integer
+                      pct_embedded:
+                        type: number
+                      retrieval_ready:
+                        type: integer
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Use your LinkRight webhook token from Settings > Webhook Integration

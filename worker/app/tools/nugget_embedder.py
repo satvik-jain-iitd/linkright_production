@@ -113,6 +113,7 @@ async def embed_nuggets(
     jina_api_key: str,
     sb,             # Supabase client
     user_id: str,
+    key_manager=None,  # Optional KeyManager for parallel multi-key embedding
 ) -> list[list[float]]:
     """Generate and store embeddings for a list of Nuggets.
 
@@ -130,6 +131,7 @@ async def embed_nuggets(
         jina_api_key: Jina AI API key for embeddings.
         sb: Supabase client (service-role key expected).
         user_id: Owner identifier — used only for logging context.
+        key_manager: Optional KeyManager for parallel multi-key embedding.
 
     Returns:
         List of embedding vectors (list[list[float]]). Entries that failed
@@ -138,9 +140,70 @@ async def embed_nuggets(
     if not nuggets:
         return []
 
-    if not jina_api_key:
+    if not jina_api_key and not key_manager:
         logger.warning("embed_nuggets: no Jina API key provided")
         return []
+
+    # --- Parallel path: multiple Jina keys via KeyManager ---
+    if key_manager and len(key_manager.get_keys("jina")) > 1:
+        logger.info("embed_nuggets: using parallel embedding across %d Jina keys", len(key_manager.get_keys("jina")))
+
+        # Filter nuggets that have embeddable answers
+        nuggets_to_embed = []
+        nugget_indices = []  # track original positions
+        for i, nugget in enumerate(nuggets):
+            answer_text = getattr(nugget, "answer", "") or ""
+            if answer_text.strip():
+                nuggets_to_embed.append(nugget)
+                nugget_indices.append(i)
+            else:
+                nugget_id = getattr(nugget, "id", None)
+                if nugget_id:
+                    _mark_needs_embedding(sb, nugget_id, user_id)
+
+        if not nuggets_to_embed:
+            return [[] for _ in nuggets]
+
+        async def _embed_chunk(api_key: str, chunk: list) -> list:
+            """Embed a chunk of nuggets with a single key."""
+            chunk_results = []
+            for nugget in chunk:
+                answer_text = getattr(nugget, "answer", "") or ""
+                embedding = await _embed_with_retry(api_key, answer_text)
+                chunk_results.append((nugget, embedding))
+            return chunk_results
+
+        try:
+            parallel_results = await key_manager.call_parallel(
+                "jina",
+                nuggets_to_embed,
+                _embed_chunk,
+            )
+
+            # Build results list preserving original order
+            results: list[list[float]] = [[] for _ in nuggets]
+            for nugget, embedding in parallel_results:
+                idx = next((i for i, n in enumerate(nuggets) if n is nugget), None)
+                if idx is not None:
+                    if embedding is not None:
+                        results[idx] = embedding
+                        nugget_id = getattr(nugget, "id", None)
+                        if nugget_id:
+                            try:
+                                sb.table("career_nuggets").update(
+                                    {"embedding": embedding}
+                                ).eq("id", nugget_id).execute()
+                            except Exception as exc:
+                                logger.warning("embed_nuggets: DB update failed for id=%s: %s", nugget_id, exc)
+                    else:
+                        nugget_id = getattr(nugget, "id", None)
+                        if nugget_id:
+                            _mark_needs_embedding(sb, nugget_id, user_id)
+
+            return results
+        except Exception as exc:
+            logger.warning("embed_nuggets: parallel embedding failed (%s), falling back to sequential", exc)
+            # Fall through to sequential path
 
     results: list[list[float]] = []
 

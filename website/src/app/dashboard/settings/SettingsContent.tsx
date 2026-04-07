@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { KeyManagerPanel } from "@/components/KeyManagerPanel";
 
 const PROVIDERS = [
   {
@@ -47,6 +48,13 @@ export function SettingsContent({ user }: { user: User }) {
   const [savingCareer, setSavingCareer] = useState(false);
   const [careerStatus, setCareerStatus] = useState<"idle" | "saved" | "error">("idle");
 
+  // Webhook token
+  const [webhookTokenMasked, setWebhookTokenMasked] = useState("");
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookFullToken, setWebhookFullToken] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [webhookCopied, setWebhookCopied] = useState<"" | "token" | "url">("");
+
   useEffect(() => {
     fetch("/api/user/settings")
       .then((r) => r.json())
@@ -58,6 +66,15 @@ export function SettingsContent({ user }: { user: User }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch webhook token
+    fetch("/api/user/webhook-token")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.token_masked) setWebhookTokenMasked(d.token_masked);
+        if (d.url) setWebhookUrl(d.url);
+      })
+      .catch(() => {});
   }, []);
 
   const provider = PROVIDERS.find((p) => p.id === modelProvider) || PROVIDERS[0];
@@ -225,6 +242,21 @@ export function SettingsContent({ user }: { user: User }) {
           </div>
         </div>
 
+        {/* API Key Management */}
+        <div className="rounded-2xl border border-border bg-surface p-6">
+          <h2 className="text-base font-semibold">API Key Management</h2>
+          <p className="mt-1 text-sm text-muted">
+            Manage API keys for all providers. Keys are stored securely and rotated automatically on failure.
+          </p>
+          <div className="mt-5 space-y-4">
+            <KeyManagerPanel provider="groq" providerLabel="Groq" />
+            <KeyManagerPanel provider="openrouter" providerLabel="OpenRouter" />
+            <KeyManagerPanel provider="gemini" providerLabel="Google Gemini" />
+            <KeyManagerPanel provider="jina" providerLabel="Jina AI" />
+            <KeyManagerPanel provider="anthropic" providerLabel="Anthropic" />
+          </div>
+        </div>
+
         {/* Career Profile */}
         <div className="rounded-2xl border border-border bg-surface p-6">
           <h2 className="text-base font-semibold">Career Profile</h2>
@@ -264,6 +296,160 @@ export function SettingsContent({ user }: { user: User }) {
                 {careerText.trim().length < 200 ? "Too short — need 200+ characters" : "Failed to save"}
               </span>
             )}
+          </div>
+        </div>
+
+        {/* Webhook Token */}
+        <div className="rounded-2xl border border-border bg-surface p-6">
+          <h2 className="text-base font-semibold">Webhook Integration</h2>
+          <p className="mt-1 text-sm text-muted">
+            Use this token to push nuggets from external tools (e.g., Claude, ChatGPT, automation scripts) via the webhook API.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Webhook URL
+              </label>
+              <div className="mt-2 flex gap-2">
+                <code className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground font-mono">
+                  {webhookUrl || "https://sync.linkright.in/api/webhooks/nuggets"}
+                </code>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(webhookUrl || "https://sync.linkright.in/api/webhooks/nuggets");
+                    setWebhookCopied("url");
+                    setTimeout(() => setWebhookCopied(""), 2000);
+                  }}
+                  className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted hover:text-foreground"
+                >
+                  {webhookCopied === "url" ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted">
+                Bearer Token
+              </label>
+              <div className="mt-2 flex gap-2">
+                <code className="flex-1 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground font-mono">
+                  {webhookFullToken || webhookTokenMasked || "No token generated yet"}
+                </code>
+                {webhookFullToken && (
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(webhookFullToken);
+                      setWebhookCopied("token");
+                      setTimeout(() => setWebhookCopied(""), 2000);
+                    }}
+                    className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-muted hover:text-foreground"
+                  >
+                    {webhookCopied === "token" ? "Copied" : "Copy"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button
+                onClick={async () => {
+                  setRegenerating(true);
+                  try {
+                    const resp = await fetch("/api/user/webhook-token", { method: "POST" });
+                    const d = await resp.json();
+                    if (d.token) {
+                      setWebhookFullToken(d.token);
+                      setWebhookTokenMasked("");
+                    }
+                  } catch {}
+                  setRegenerating(false);
+                }}
+                disabled={regenerating}
+                className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
+              >
+                {regenerating ? "Regenerating..." : webhookTokenMasked ? "Regenerate Token" : "Generate Token"}
+              </button>
+              {webhookFullToken && (
+                <span className="text-xs text-amber-600">
+                  Save this token now — it won&apos;t be shown again after you leave this page.
+                </span>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Usage</p>
+              <pre className="text-xs text-foreground/70 font-mono whitespace-pre-wrap">{`curl -X POST ${webhookUrl || "https://sync.linkright.in/api/webhooks/nuggets"} \\
+  -H "Authorization: Bearer YOUR_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"data": "[{\\"nugget_text\\": \\"...\\", \\"answer\\": \\"...\\", \\"primary_layer\\": \\"A\\", ...}]"}'`}</pre>
+            </div>
+          </div>
+        </div>
+
+        {/* Custom ChatGPT Action Setup Guide */}
+        <div className="rounded-2xl border border-border bg-surface p-6">
+          <h2 className="text-base font-semibold">Custom ChatGPT Diary Bot</h2>
+          <p className="mt-1 text-sm text-muted">
+            Create a Custom GPT that acts as your career diary. Speak naturally about your day,
+            achievements, and projects. When you say &quot;send to LinkRight&quot;, it extracts
+            structured nuggets and sends them to your account automatically.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h3 className="font-medium text-sm">Step 1: Create Custom GPT</h3>
+              <p className="text-xs text-muted mt-1">
+                Go to <a href="https://chat.openai.com/gpts/editor" target="_blank" rel="noopener noreferrer" className="text-accent underline">chat.openai.com/gpts/editor</a> and create a new GPT.
+              </p>
+            </div>
+
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h3 className="font-medium text-sm">Step 2: Set Instructions</h3>
+              <p className="text-xs text-muted mt-1">
+                Paste this as the GPT&apos;s instructions:
+              </p>
+              <pre className="mt-2 p-3 bg-background rounded-xl border border-border text-xs overflow-x-auto max-h-40 overflow-y-auto font-mono">
+{`You are a career diary assistant. Listen to the user talk about their work day, achievements, projects, and career events. Be conversational and supportive.
+
+When the user says "send to LinkRight" or "save this" or "extract nuggets", do the following:
+1. Extract all career nuggets from the conversation using the Two-Layer model
+2. Format each as a JSON object with: nugget_text, answer, primary_layer, section_type, company, role, event_date, importance, resume_relevance, tags, leadership_signal
+3. Call the sendNuggets action with the extracted nuggets
+
+Rules for extraction:
+- Every work_experience nugget MUST have company and role
+- Answers must be self-contained with company, role, and timeframe
+- Include metrics (%, $, numbers) when mentioned
+- Set importance: P0=career-defining, P1=strong, P2=contextual, P3=peripheral`}
+              </pre>
+            </div>
+
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h3 className="font-medium text-sm">Step 3: Add Action</h3>
+              <p className="text-xs text-muted mt-1">
+                In the GPT editor, go to &quot;Actions&quot; → &quot;Create new action&quot; → &quot;Import from URL&quot; and enter:
+              </p>
+              <code className="block mt-2 p-2 bg-background rounded-xl border border-border text-xs font-mono">
+                https://sync.linkright.in/openapi-nuggets.yaml
+              </code>
+            </div>
+
+            <div className="border-l-4 border-blue-500 pl-4">
+              <h3 className="font-medium text-sm">Step 4: Set Authentication</h3>
+              <p className="text-xs text-muted mt-1">
+                In the action settings, set Authentication to &quot;API Key&quot;, Auth Type: &quot;Bearer&quot;,
+                and paste your webhook token from above.
+              </p>
+            </div>
+
+            <div className="border-l-4 border-green-500 pl-4">
+              <h3 className="font-medium text-sm">Done!</h3>
+              <p className="text-xs text-muted mt-1">
+                Now chat with your GPT about your day. When ready, say &quot;send to LinkRight&quot;
+                and your nuggets will appear in the dashboard automatically.
+              </p>
+            </div>
           </div>
         </div>
       </div>

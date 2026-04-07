@@ -15,6 +15,8 @@ from typing import Optional
 
 import httpx
 
+from ..langfuse_client import trace_generation, get_prompt
+
 logger = logging.getLogger(__name__)
 
 # Groq model used for extraction
@@ -42,14 +44,24 @@ Return JSON array. Each nugget:
   "life_domain": "Relationships" (if Layer B, one of 6 domains),
   "resume_relevance": 0.0-1.0 float,
   "resume_section_target": "experience" or "skills" etc,
-  "importance": "P0"/"P1"/"P2"/"P3",
+  "importance": "P0=career-defining achievement (top 3 ever), P1=strong supporting achievement, P2=contextual/supporting fact, P3=peripheral/background",
   "factuality": "fact"/"opinion"/"aspiration",
   "temporality": "past"/"present"/"future",
   "company": "company name or null",
   "role": "role title or null",
+  "event_date": "YYYY-MM or YYYY (approximate ok, extract from any date hint in context, null only if truly unknown)",
+  "people": ["collaborator or stakeholder name if mentioned, else empty array"],
   "tags": ["tag1", "tag2"],
   "leadership_signal": "none"/"team_lead"/"individual"
 }
+
+RULES:
+- Every work_experience nugget MUST have both company AND role fields set — never null for work items
+- The answer field MUST be self-contained: include company name, role, and timeframe in every answer
+- If a metric (%, $, count, time) exists in source text, it MUST appear in the answer
+- event_date: extract approximate date even if only year mentioned (e.g. "2022" or "2022-06")
+- Each nugget should be atomic — one achievement per nugget, not combined
+- role: use exact title held at the time, not current title
 
 Return ONLY valid JSON array, no other text.\
 """
@@ -118,11 +130,12 @@ def _split_into_batches(text: str, max_chars: int = 3000) -> list[str]:
     return batches
 
 
-async def _groq_complete(api_key: str, user_text: str) -> str:
+async def _groq_complete(api_key: str, user_text: str, system_prompt: str = "") -> str:
     """Single Groq chat-completion call. Returns raw response text.
 
     Raises httpx.HTTPStatusError on non-2xx (caller handles 429 retry).
     """
+    sys_prompt = system_prompt or _SYSTEM_PROMPT
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(
             f"{_GROQ_BASE_URL}/chat/completions",
@@ -130,7 +143,7 @@ async def _groq_complete(api_key: str, user_text: str) -> str:
             json={
                 "model": _GROQ_MODEL,
                 "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": sys_prompt},
                     {"role": "user", "content": user_text},
                 ],
                 "temperature": 0.1,
@@ -141,14 +154,14 @@ async def _groq_complete(api_key: str, user_text: str) -> str:
         return data["choices"][0]["message"]["content"]
 
 
-async def _call_with_retry(api_key: str, user_text: str) -> Optional[str]:
+async def _call_with_retry(api_key: str, user_text: str, system_prompt: str = "") -> Optional[str]:
     """Call Groq with exponential backoff on 429. Returns None on exhaustion."""
     for attempt, backoff in enumerate([0] + _RETRY_BACKOFFS):
         if backoff:
             logger.warning("Groq 429 — backing off %ds (attempt %d)", backoff, attempt)
             await asyncio.sleep(backoff)
         try:
-            return await _groq_complete(api_key, user_text)
+            return await _groq_complete(api_key, user_text, system_prompt=system_prompt)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 429:
                 continue
@@ -197,6 +210,8 @@ def _raw_to_nugget(raw: dict, index: int) -> Nugget:
         leadership_signal=raw.get("leadership_signal", "none"),
         company=raw.get("company"),
         role=raw.get("role"),
+        event_date=raw.get("event_date"),
+        people=raw.get("people", []),
         tags=raw.get("tags", []),
     )
 
@@ -240,6 +255,7 @@ async def extract_nuggets(
     sb,  # Supabase client
     groq_api_key: Optional[str] = None,
     byok_api_key: Optional[str] = None,
+    key_manager=None,  # Optional KeyManager for multi-key fallback
 ) -> list[Nugget]:
     """Extract atomic career nuggets from free-text career data.
 
@@ -253,6 +269,7 @@ async def extract_nuggets(
         sb: Supabase client (service-role key expected).
         groq_api_key: Primary Groq API key.
         byok_api_key: Optional BYOK fallback key (tried once if Groq fails).
+        key_manager: Optional KeyManager for multi-key fallback with priority rotation.
 
     Returns:
         List of Nugget objects. Returns partial results on timeout.
@@ -264,9 +281,12 @@ async def extract_nuggets(
             logger.info("extract_nuggets: career_text too short, skipping")
             return []
 
-        if not groq_api_key and not byok_api_key:
+        if not groq_api_key and not byok_api_key and not key_manager:
             logger.warning("extract_nuggets: no API key provided")
             return []
+
+        # Fetch versioned prompt from Langfuse (falls back to local _SYSTEM_PROMPT)
+        system_prompt, prompt_version = get_prompt("nugget_extractor", _SYSTEM_PROMPT)
 
         batches = _split_into_batches(career_text)
         all_nuggets: list[Nugget] = []
@@ -289,22 +309,47 @@ async def extract_nuggets(
 
             raw_text: Optional[str] = None
 
-            # --- Primary: Groq ---
-            if groq_api_key:
+            # --- KeyManager path: multi-key fallback ---
+            if key_manager:
                 try:
-                    raw_text = await _call_with_retry(groq_api_key, batch_text)
+                    raw_text = await key_manager.call_with_fallback(
+                        "groq",
+                        lambda key: _groq_complete(key, batch_text, system_prompt=system_prompt),
+                        fallback_key=byok_api_key,
+                    )
                 except Exception as exc:
-                    logger.warning("extract_nuggets: Groq exception on batch %d: %s", batch_num, exc)
+                    logger.warning("extract_nuggets: key_manager fallback exhausted on batch %d: %s", batch_num, exc)
                     raw_text = None
+            else:
+                # --- Primary: Groq ---
+                if groq_api_key:
+                    try:
+                        raw_text = await _call_with_retry(groq_api_key, batch_text, system_prompt=system_prompt)
+                    except Exception as exc:
+                        logger.warning("extract_nuggets: Groq exception on batch %d: %s", batch_num, exc)
+                        raw_text = None
 
-            # --- Fallback: BYOK ---
-            if raw_text is None and byok_api_key:
-                logger.info("extract_nuggets: falling back to BYOK key for batch %d", batch_num)
-                try:
-                    raw_text = await _call_with_retry(byok_api_key, batch_text)
-                except Exception as exc:
-                    logger.warning("extract_nuggets: BYOK exception on batch %d: %s", batch_num, exc)
-                    raw_text = None
+                # --- Fallback: BYOK ---
+                if raw_text is None and byok_api_key:
+                    logger.info("extract_nuggets: falling back to BYOK key for batch %d", batch_num)
+                    try:
+                        raw_text = await _call_with_retry(byok_api_key, batch_text, system_prompt=system_prompt)
+                    except Exception as exc:
+                        logger.warning("extract_nuggets: BYOK exception on batch %d: %s", batch_num, exc)
+                        raw_text = None
+
+            # Langfuse: trace the extraction call
+            if raw_text is not None:
+                trace_generation(
+                    trace_name="nugget_extraction",
+                    generation_name="extract_nuggets_batch",
+                    model=_GROQ_MODEL,
+                    system_prompt=system_prompt,
+                    user_input=batch_text,
+                    output=raw_text,
+                    user_id=user_id,
+                    prompt_version=prompt_version,
+                )
 
             if raw_text is None:
                 consecutive_429s += 1
@@ -329,6 +374,7 @@ async def extract_nuggets(
                 if not isinstance(raw, dict):
                     continue
                 nugget = _raw_to_nugget(raw, global_index)
+                nugget.tags.append(f"prompt_v{prompt_version}")
                 all_nuggets.append(nugget)
                 batch_nuggets.append(nugget)
                 global_index += 1

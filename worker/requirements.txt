@@ -4,3 +4,4 @@ httpx==0.28.1
 pydantic>=2.11.7,<3.0
 supabase>=2.22.0
 beautifulsoup4==4.12.3
+langfuse>=2.0.0

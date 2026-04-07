@@ -46,7 +46,8 @@ Rules:
 - Extract 8-20 distinct requirements
 - category: "skill" for technical/soft skills, "experience" for years/domain experience, "education" for degrees, "certification" for certs/licenses, "other" for everything else
 - importance: "required" if mandatory, "preferred" if nice-to-have
-- Keep "text" concise (under 80 chars) but specific`;
+- Keep "text" concise (under 80 chars) but specific
+- Note experience duration requirements (e.g. '5+ years of experience in X') as a separate requirement with type 'experience_duration'`;
 
 const SCORING_PROMPT = `You are a career screener evaluating resume candidates.
 

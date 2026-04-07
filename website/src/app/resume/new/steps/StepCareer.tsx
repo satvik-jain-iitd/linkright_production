@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { WizardData } from "../WizardShell";
+import { ExtractionPromptModal } from "@/components/ExtractionPromptModal";
 
 interface Props {
   data: WizardData;
@@ -13,6 +14,7 @@ interface Props {
 export function StepCareer({ data, update, next, back }: Props) {
   const valid = data.career_text.trim().length >= 200;
   const [uploading, setUploading] = useState(false);
+  const [showPromptModal, setShowPromptModal] = useState(false);
 
   const handleNext = async () => {
     // Upload career text as chunks (fire-and-forget, don't block wizard)
@@ -69,6 +71,19 @@ export function StepCareer({ data, update, next, back }: Props) {
         placeholder="Paste your resume text, career profile, or detailed experience notes..."
         className="mt-4 w-full resize-none rounded-xl border border-border bg-surface p-4 text-sm text-foreground placeholder-muted transition-colors focus:border-accent/50 focus:outline-none"
         rows={14}
+      />
+
+      <button
+        type="button"
+        onClick={() => setShowPromptModal(true)}
+        className="text-sm text-blue-600 hover:text-blue-800 underline mt-2"
+      >
+        Or extract on Claude/ChatGPT instead &rarr;
+      </button>
+
+      <ExtractionPromptModal
+        isOpen={showPromptModal}
+        onClose={() => setShowPromptModal(false)}
       />
 
       <div className="mt-2 flex items-center justify-between">
