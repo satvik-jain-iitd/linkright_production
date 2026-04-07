@@ -1,0 +1,175 @@
+role: qa
+stream_name: content-ideation
+
+feature_analyses:
+  - feature_name: "Trend Monitor Agent"
+    analysis: >
+      TrendMonitorAgent has three hard-to-test failure modes: (1) external API failures
+      (rate limits, network errors, bad responses), (2) the poll-skip logic based on
+      timestamps, and (3) the embedding-based relevance filter with floating-point
+      threshold behaviour. All three require dedicated test coverage. The agent runs
+      on a schedule so integration tests must mock time. SQLite store operations need
+      round-trip tests to catch schema drift. The parallel source fetching via
+      ThreadPoolExecutor needs a failure-isolation test: one adapter crashing must not
+      block others.
+    tasks:
+      - title: "Write unit tests for TrendMonitorAgent poll logic and skip behaviour"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/test_trend_monitor_agent.py
+          Cases:
+          - test_poll_skips_within_interval: mock last_run_at = now - 1h, interval = 4h → assert PollResult.skipped=True, next_run_at set correctly
+          - test_poll_runs_after_interval: last_run_at = now - 5h, interval = 4h → assert poll proceeds (sources called)
+          - test_poll_merges_source_results: mock 4 sources returning 3 trends each → assert 12 unique trends in store
+          - test_poll_continues_when_one_source_fails: one source raises exception → assert remaining 3 sources still called, errors list populated
+          - test_poll_updates_last_run_metadata: after successful poll → assert trends_store metadata last_run_at updated
+
+      - title: "Write unit tests for relevance_filter with embedding mocks"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/test_relevance_filter.py
+          Cases:
+          - test_filter_passes_high_relevance_trends: mock cosine_sim > 0.4 → assert all pass filter
+          - test_filter_blocks_low_relevance_trends: mock cosine_sim = 0.1 → assert none pass
+          - test_filter_threshold_boundary: cosine_sim = 0.4 exactly → assert passes (>= not >)
+          - test_filter_fallback_no_career_context: CareerContext None → assert all trends stored with warning logged
+          - test_filter_cache_invalidates_on_context_change: context hash changes → embedding re-computed (embed called twice)
+          - test_embedding_batched_not_per_trend: 10 trends → assert embed API called once (not 10 times)
+
+      - title: "Write integration tests for trends_store SQLite operations"
+        task_type: test
+        description: >
+          Test file: tests/flex/store/test_trends_store.py
+          Use tmp_path fixture for isolated SQLite DB per test.
+          Cases:
+          - test_insert_batch_stores_all_fields: insert 3 RawTrend objects → assert all fields present in DB
+          - test_get_unscored_returns_only_unscored: insert 5, mark 2 scored → assert get_unscored returns 3
+          - test_get_recent_filters_by_hours: insert trends at -1h, -12h, -30h → get_recent(24) returns 2
+          - test_mark_scored_updates_flag: insert trend, mark_scored(id) → assert filtered=1 in DB
+          - test_schema_created_on_init: fresh DB → both tables (trends, metadata) created automatically
+
+      - title: "Write edge case tests for external source adapters"
+        task_type: test
+        description: >
+          Test file: tests/flex/sources/test_source_adapters.py
+          Cases:
+          - test_google_trends_handles_429: mock pytrends raising TooManyRequestsError → adapter returns empty list, no exception
+          - test_twitter_adapter_handles_missing_key: TWITTER_BEARER_TOKEN not set → adapter returns empty list + logs warning
+          - test_rss_adapter_handles_malformed_feed: feedparser returns malformed XML → adapter returns empty list
+          - test_all_adapters_return_rawtrent_schema: mock successful API calls → each adapter returns list[RawTrend] with required fields
+
+  - feature_name: "Ideation Scoring Engine"
+    analysis: >
+      Scoring engine is deterministic and pure — ideal for property-based testing.
+      Key risks: (1) weight validation (must sum to 1.0), (2) timeliness decay
+      function producing out-of-range values, (3) rank ordering correctness,
+      (4) reconfigured weights must recompute all scores. The CLI integration test
+      (ideation list) must verify empty state rendering and --select triggering.
+    tasks:
+      - title: "Write unit tests for composite scoring and weight validation"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/test_ideation_scoring_engine.py
+          Cases:
+          - test_composite_score_within_range: any valid sub-scores → composite_score in [0, 1]
+          - test_weight_sum_validation_raises: weights summing to 0.9 → ConfigError raised with exact sum in message
+          - test_weight_reconfiguration_recomputes: change weights → rescore same trends → different composite scores
+          - test_ranking_correct_order: 3 trends with known composites → assert rank 1 has highest composite
+          - test_timeliness_decay_24h: trend 24h old → timeliness_score <= 0.5 (half-life ~23h)
+          - test_timeliness_clamp: artificially high score input → clamped to 1.0
+          - test_audience_fit_returns_float: given any trend + platform → audience_fit_score in [0, 1]
+
+      - title: "Write regression tests for scored_opportunities_store"
+        task_type: test
+        description: >
+          Test file: tests/flex/store/test_scored_opportunities_store.py
+          Cases:
+          - test_insert_and_get_by_id: insert ScoredOpportunity → get_by_id returns identical object
+          - test_get_top_n_sorted: insert 15 scored opps → get_top_n(5) returns top 5 by composite_score
+          - test_mark_brief_generated: insert opp, mark_brief_generated(id) → brief_generated=1 in DB
+          - test_get_top_n_excludes_brief_generated: 10 opps, 3 marked brief_generated → get_top_n(10) returns 7
+
+  - feature_name: "Content Brief Generator"
+    analysis: >
+      BriefGeneratorAgent makes a live Claude API call — tests must mock the API
+      client. Critical test cases: (1) validation failure → retry with corrected
+      prompt, (2) second failure → BriefGenerationError raised, (3) platform
+      routing — correct template selected per platform. Also test that
+      ContentBrief Pydantic validation catches malformed Claude outputs. The
+      briefs_store JSON payload round-trip is critical for cross-stream handoff
+      integrity.
+    tasks:
+      - title: "Write unit tests for BriefGeneratorAgent with mocked Claude API"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/test_brief_generator_agent.py
+          Cases:
+          - test_successful_brief_generation: mock valid Claude response → ContentBrief returned with all required fields
+          - test_platform_linkedin_selects_correct_template: platform=linkedin → PLATFORM_PROMPTS['linkedin'] used in API call
+          - test_platform_x_enforces_hook_length: platform=x → all hooks <= 240 chars in brief
+          - test_retry_on_validation_failure: first response missing 'angles' field → second API call made with corrected prompt
+          - test_raises_after_second_failure: both API responses invalid → BriefGenerationError raised with opportunity_id, attempt=2
+          - test_brief_saved_to_store: successful generation → briefs_store.insert called with ContentBrief
+          - test_invalid_platform_raises_validation_error: platform='tiktok' → ValidationError with supported platforms listed
+
+      - title: "Write integration tests for briefs_store round-trip and schema versioning"
+        task_type: test
+        description: >
+          Test file: tests/flex/store/test_briefs_store.py
+          Cases:
+          - test_json_payload_round_trip: insert ContentBrief → retrieve and deserialize → identical ContentBrief
+          - test_update_status_changes_field: insert draft brief → update_status(id, 'approved') → brief_generated flag unchanged, status updated
+          - test_list_recent_ordered_by_created_at: insert 5 briefs at different times → list_recent(3) returns 3 most recent
+          - test_payload_survives_model_field_additions: add optional field to ContentBrief → old payload still deserializes (graceful evolution)
+
+  - feature_name: "LifeOS Integration"
+    analysis: >
+      LifeOSConnector is read-only with graceful degradation — tests must confirm
+      the degradation paths: empty directory, malformed YAML, path not configured.
+      The semantic search (embedding-based) must be tested with controlled cosine
+      similarity mocks to verify the 0.3 threshold and top_k logic. The manual
+      enrichment overwrite guard is a critical UX protection — test both the
+      prompt flow and the forced-overwrite path.
+    tasks:
+      - title: "Write unit tests for LifeOSConnector with mocked filesystem and embeddings"
+        task_type: test
+        description: >
+          Test file: tests/flex/integrations/test_lifeos_connector.py
+          Cases:
+          - test_loads_valid_yaml_entries: tmp_path with 3 valid YAML files → 3 LifeOSEntry objects loaded
+          - test_skips_malformed_yaml_with_warning: 1 valid + 1 malformed YAML → 1 entry loaded, warning logged for malformed
+          - test_returns_empty_on_no_path_configured: lifeos_path=None → semantic_search returns []
+          - test_returns_empty_on_empty_directory: valid path but empty dir → semantic_search returns []
+          - test_semantic_search_threshold_0_3: mock sim scores [0.5, 0.2, 0.4] → only 2 entries returned (score >= 0.3)
+          - test_semantic_search_top_k: 10 entries all above threshold → returns only top_k=3 sorted by score
+          - test_embedding_client_shared_not_duplicated: TrendMonitorAgent + LifeOSConnector share same EmbeddingClient instance (DI verified)
+
+      - title: "Write tests for manual enrichment overwrite guard"
+        task_type: test
+        description: >
+          Test file: tests/flex/cli/test_brief_enrich_command.py
+          Cases:
+          - test_enrich_new_brief: brief with status='draft' → enrichment proceeds without prompt
+          - test_enrich_manually_enriched_brief_prompts_user: brief status='manually_enriched', user input='y' → enrichment proceeds
+          - test_enrich_manually_enriched_brief_aborts_on_no: brief status='manually_enriched', user input='N' → no update, message shown
+          - test_invalid_lifeos_entry_id_shows_error: unknown entry_id → error message with 'Run: flex lifeos list' shown
+          - test_invalid_brief_id_shows_error: unknown brief_id → error message shown, no DB writes
+
+edge_cases:
+  - "Concurrent TrendMonitorAgent polls (two processes): second poll must detect last_run_at from first and skip — use SQLite write lock test"
+  - "Scoring engine called on empty trends_store: must return empty list without error, not divide-by-zero in ranking"
+  - "Claude API returns valid JSON but ContentBrief Pydantic validation finds extra fields: must not error (extra='ignore' on model)"
+  - "LifeOS YAML entry with future date: must be loaded without error (date validation should warn, not reject)"
+  - "Trend with engagement_score=0: timeliness score must still be > 0 (time-based only), not short-circuit to 0"
+
+integration_notes: >
+  Cross-stream: ContentBrief schema is the handoff contract to content-drafting stream.
+  QA requires a shared test fixture (conftest.py) with a sample ContentBrief that
+  both streams import — prevents divergence on schema changes. Recommend adding
+  brief_schema_version='1.0' field to ContentBrief model and asserting in content-drafting
+  integration tests that the consumed brief version matches expected.
+  EmbeddingClient shared between TrendMonitorAgent and LifeOSConnector must have its
+  own test suite (tests/flex/llm/test_embedding_client.py) testing the provider-agnostic
+  ABC — not duplicated across feature tests.
+
+completed: true

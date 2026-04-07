@@ -8,12 +8,12 @@ streams:
     consolidated: false
     verified: false
   content-ideation:
-    status: in_progress
-    current_step: step-03-spawn-roles
-    features_identified: 0
-    roles_completed: []
-    consolidated: false
-    verified: false
+    status: completed
+    current_step: step-05-verify
+    features_identified: 4
+    roles_completed: ["po", "designer", "architect", "qa"]
+    consolidated: true
+    verified: true
   content-drafting:
     status: blocked
     current_step: not_started
