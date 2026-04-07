@@ -25,15 +25,20 @@ export interface RequirementScore {
 // ---------------------------------------------------------------------------
 
 const STOPWORDS = new Set([
-  "and", "or", "the", "a", "with", "in", "for", "of", "to",
+  "and", "or", "the", "a", "an", "with", "in", "for", "of", "to",
+  "at", "by", "from", "on", "as", "is", "are", "was", "were",
+  "be", "been", "have", "has", "had", "will", "would", "could",
+  "should", "may", "might", "must", "shall",
 ]);
 
-const FINTECH_TERMS = [
-  "bank", "finance", "capital", "amex", "visa", "mastercard",
-  "stripe", "paypal", "fintech", "fintec",
+const FINTECH_COMPANIES = [
+  "amex", "american express", "visa", "mastercard", "stripe", "paypal",
+  "bank", "capital", "financial", "goldman", "morgan", "citi", "jpmorgan",
 ];
 
-const LEADERSHIP_SIGNALS = new Set(["team_lead", "manager", "director"]);
+const FINTECH_KEYWORDS = ["fintech", "banking", "finance", "crypto", "payments"];
+
+const LEADERSHIP_KEYWORDS = ["lead", "manage", "director", "head of", "vp"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,10 +46,19 @@ const LEADERSHIP_SIGNALS = new Set(["team_lead", "manager", "director"]);
 
 function tokenize(text: string): string[] {
   return text
-    .replace(/[^a-zA-Z0-9\s+]/g, " ")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
     .toLowerCase()
     .split(/\s+/)
     .filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+}
+
+/**
+ * Fuzzy token match: token matches if it appears as a substring in the answer
+ * token, or the answer token appears as a substring in the requirement token.
+ * This handles: "SQL" → "MySQL"/"PostgreSQL", "Python" → "Python3"/"python-based".
+ */
+function tokenMatchesFuzzy(reqToken: string, answerToken: string): boolean {
+  return answerToken.includes(reqToken) || reqToken.includes(answerToken);
 }
 
 // ---------------------------------------------------------------------------
@@ -52,24 +66,43 @@ function tokenize(text: string): string[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Score how well a requirement's keywords appear verbatim (substring) in nugget answers.
- * Returns best ratio across all nuggets: 0.0 – 1.0.
+ * Score how well a requirement's keywords appear in nugget answers.
+ *
+ * Improvements over simple substring check:
+ * - Full stop word removal (30+ words) so noise tokens don't dilute score
+ * - Per-token fuzzy matching: "SQL" matches "MySQL"/"PostgreSQL"/"NoSQL",
+ *   "Python" matches "Python3"/"python-based"
+ * - Score = matched_tokens / total_tokens, capped at 1.0
+ * - Returns best score across all nugget answers
  */
 export function exactMatchScore(
   requirement: string,
   nuggetAnswers: string[]
 ): number {
-  const keywords = tokenize(requirement);
-  if (keywords.length === 0) return 0;
+  const reqTokens = tokenize(requirement);
+  if (reqTokens.length === 0) return 0;
 
   let bestRatio = 0;
+
   for (const answer of nuggetAnswers) {
     if (!answer) continue;
-    const answerLower = answer.toLowerCase();
-    const hits = keywords.filter((kw) => answerLower.includes(kw)).length;
-    const ratio = hits / keywords.length;
+    // Tokenize answer without stop word filter so all answer words are candidates
+    const answerTokens = answer
+      .replace(/[^a-zA-Z0-9\s]/g, " ")
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+
+    let hits = 0;
+    for (const reqToken of reqTokens) {
+      const matched = answerTokens.some((at) => tokenMatchesFuzzy(reqToken, at));
+      if (matched) hits++;
+    }
+
+    const ratio = Math.min(hits / reqTokens.length, 1.0);
     if (ratio > bestRatio) bestRatio = ratio;
   }
+
   return bestRatio;
 }
 
@@ -77,61 +110,93 @@ export function exactMatchScore(
 // Metadata match score
 // ---------------------------------------------------------------------------
 
+export interface NuggetMeta {
+  section_type: string;
+  company?: string | null;
+  role?: string | null;
+  event_date?: string | null;
+  answer?: string | null;
+}
+
 /**
- * Score a requirement using structured metadata.
- * nuggets here are the raw nugget objects (not just answer strings).
+ * Score a requirement using structured nugget metadata (not answer text).
+ * Returns max across three signals: leadership, experience years, industry.
+ *
+ * @param requirement     raw requirement text
+ * @param requirementType requirement category (unused currently, reserved for future)
+ * @param nuggets         raw nugget objects with typed metadata fields
  */
 export function metadataMatchScore(
   requirement: string,
   requirementType: string,
-  nuggets: Record<string, unknown>[]
+  nuggets: NuggetMeta[]
 ): number {
   const reqLower = requirement.toLowerCase();
+  const signals: number[] = [];
 
-  // ── Leadership ─────────────────────────────────────────────────────────────
-  if (/lead|leadership|manager|director/.test(reqLower)) {
-    const found = nuggets.some((n) =>
-      LEADERSHIP_SIGNALS.has(String(n["leadership_signal"] ?? ""))
-    );
-    return found ? 1.0 : 0.0;
+  // ── Signal 1: Leadership ───────────────────────────────────────────────────
+  // If requirement mentions leadership keywords, check nugget role fields
+  const isLeadershipReq = LEADERSHIP_KEYWORDS.some((kw) => reqLower.includes(kw));
+  if (isLeadershipReq) {
+    const hasLeadershipRole = nuggets.some((n) => {
+      const role = (n.role ?? "").toLowerCase();
+      return LEADERSHIP_KEYWORDS.some((kw) => role.includes(kw));
+    });
+    signals.push(hasLeadershipRole ? 1.0 : 0.0);
   }
 
-  // ── Experience years ────────────────────────────────────────────────────────
-  const yearsMatch = requirement.match(/(\d+)\+?\s*(?:years?|yrs?)/i);
+  // ── Signal 2: Experience years ─────────────────────────────────────────────
+  // Extract "N+ years" from requirement, sum work_experience date spans
+  const yearsMatch = requirement.match(/(\d+)\+?\s*years?/i);
   if (yearsMatch) {
     const requiredYears = parseInt(yearsMatch[1], 10);
     const currentYear = new Date().getFullYear();
     let totalYears = 0;
 
     for (const nugget of nuggets) {
-      if (nugget["nugget_type"] !== "work_experience") continue;
-      const eventDate = nugget["event_date"] as Record<string, unknown> | undefined;
-      if (!eventDate || typeof eventDate !== "object") continue;
+      if (nugget.section_type !== "work_experience") continue;
+      const eventDate = nugget.event_date;
+      if (!eventDate) continue;
+
       try {
-        const start = parseInt(String(eventDate["start"] ?? "0"), 10);
-        const endRaw = String(eventDate["end"] ?? "present").toLowerCase();
-        const end = endRaw === "present" ? currentYear : parseInt(endRaw, 10);
-        if (start > 0 && end >= start) totalYears += end - start;
+        // event_date format: "YYYY-MM-DD" for start; some nuggets may use
+        // "YYYY-MM-DD/YYYY-MM-DD" range or just the start date
+        const parts = eventDate.split("/");
+        const startYear = parseInt(parts[0].substring(0, 4), 10);
+        let endYear: number;
+        if (parts.length > 1) {
+          const endPart = parts[1].toLowerCase().trim();
+          endYear = endPart === "present" ? currentYear : parseInt(endPart.substring(0, 4), 10);
+        } else {
+          // single date — treat as ongoing if in the past, else skip
+          endYear = currentYear;
+        }
+        if (startYear > 0 && endYear >= startYear) {
+          totalYears += endYear - startYear;
+        }
       } catch {
-        /* skip malformed */
+        /* skip malformed dates */
       }
     }
 
-    if (totalYears >= requiredYears) return 1.0;
-    if (totalYears >= requiredYears - 1) return 0.7;
-    return 0.0;
+    if (totalYears >= requiredYears) signals.push(1.0);
+    else if (totalYears >= requiredYears - 1) signals.push(0.7);
+    else signals.push(0.0);
   }
 
-  // ── Fintech / Finance ───────────────────────────────────────────────────────
-  if (/fintech|banking|finance|financial/.test(reqLower)) {
-    const found = nuggets.some((n) => {
-      const company = String(n["company"] ?? n["organization"] ?? "").toLowerCase();
-      return FINTECH_TERMS.some((term) => company.includes(term));
+  // ── Signal 3: Industry (fintech/finance) ───────────────────────────────────
+  // If requirement mentions fintech/finance terms, check company names in nuggets
+  const isFinanceReq = FINTECH_KEYWORDS.some((kw) => reqLower.includes(kw));
+  if (isFinanceReq) {
+    const hasFinanceCompany = nuggets.some((n) => {
+      const company = (n.company ?? "").toLowerCase();
+      return FINTECH_COMPANIES.some((term) => company.includes(term));
     });
-    return found ? 1.0 : 0.0;
+    signals.push(hasFinanceCompany ? 1.0 : 0.0);
   }
 
-  return 0.0;
+  // Return max signal score; 0.0 if no signal matched
+  return signals.length > 0 ? Math.max(...signals) : 0.0;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,15 +255,15 @@ export function scoreRequirements(
  * Full scorer that includes metadata signals.
  *
  * @param requirements  array of {text, type}
- * @param nuggets       raw nugget objects (must have at least "answer" field)
+ * @param nuggets       typed nugget objects with section_type, company, role, event_date, answer
  * @param semanticScores optional map of requirement text → semantic score (0-1)
  */
 export function scoreRequirementsWithNuggets(
   requirements: { text: string; type: string }[],
-  nuggets: Record<string, unknown>[],
+  nuggets: NuggetMeta[],
   semanticScores?: Record<string, number>
 ): RequirementScore[] {
-  const nuggetAnswers = nuggets.map((n) => String(n["answer"] ?? ""));
+  const nuggetAnswers = nuggets.map((n) => n.answer ?? "").filter(Boolean);
 
   return requirements.map((req) => {
     const exact = exactMatchScore(req.text, nuggetAnswers);
