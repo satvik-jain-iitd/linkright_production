@@ -39,10 +39,10 @@ _JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings"
 _FAKE_VECTOR: list[float] = [0.1] * 768
 
 
-def _jina_response(vector: list[float] | None = None) -> dict:
-    """Build a minimal Jina AI embeddings response."""
+def _jina_response(vector: list[float] | None = None, count: int = 1) -> dict:
+    """Build a minimal Jina AI embeddings response (batch format with index field)."""
     vec = vector if vector is not None else _FAKE_VECTOR
-    return {"data": [{"embedding": vec}]}
+    return {"data": [{"embedding": vec, "index": i} for i in range(count)]}
 
 
 def _make_nugget(

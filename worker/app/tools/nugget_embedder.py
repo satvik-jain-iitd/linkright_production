@@ -21,9 +21,9 @@ _JINA_EMBED_MODEL = "jina-embeddings-v3"
 _JINA_BASE_URL = "https://api.jina.ai/v1"
 _JINA_DIMENSIONS = 768
 
-# Rate-limit / retry config
-_BATCH_SLEEP = 10           # seconds between Gemini batch calls
-_BATCH_SIZE = 5             # max texts per Gemini call
+# Rate-limit / retry config — Jina free tier: 60 RPM
+_BATCH_SLEEP = 2            # seconds between batch calls (~30 RPM effective)
+_BATCH_SIZE = 5             # texts per Jina call (single API call for all 5)
 _RETRY_BACKOFFS = [60, 120, 240, 300]  # seconds on 429
 
 
@@ -31,10 +31,10 @@ _RETRY_BACKOFFS = [60, 120, 240, 300]  # seconds on 429
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-async def _embed_single(api_key: str, text: str) -> Optional[list[float]]:
-    """Call Jina AI embeddings for a single text.
+async def _embed_batch(api_key: str, texts: list[str]) -> Optional[list[list[float]]]:
+    """Call Jina AI embeddings for a batch of texts in a single API call.
 
-    Returns the embedding vector (768 dims) or None on failure.
+    Returns list of embedding vectors (768 dims each) or None on failure.
     Raises httpx.HTTPStatusError on non-2xx so callers can handle 429.
     """
     async with httpx.AsyncClient(timeout=60) as client:
@@ -43,20 +43,21 @@ async def _embed_single(api_key: str, text: str) -> Optional[list[float]]:
             headers={"Authorization": f"Bearer {api_key}"},
             json={
                 "model": _JINA_EMBED_MODEL,
-                "input": [text],
+                "input": texts,
                 "dimensions": _JINA_DIMENSIONS,
                 "task": "text-matching",
             },
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["data"][0]["embedding"]
+        # Jina returns results ordered by index
+        return [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]
 
 
-async def _embed_with_retry(api_key: str, text: str) -> Optional[list[float]]:
-    """Embed a single text with exponential back-off on 429.
+async def _embed_batch_with_retry(api_key: str, texts: list[str]) -> Optional[list[list[float]]]:
+    """Embed a batch of texts with exponential back-off on 429.
 
-    Returns None if all retries are exhausted or a non-429 error occurs.
+    Returns list of embeddings or None if all retries exhausted.
     """
     for attempt, backoff in enumerate([0] + _RETRY_BACKOFFS):
         if backoff:
@@ -67,24 +68,23 @@ async def _embed_with_retry(api_key: str, text: str) -> Optional[list[float]]:
             )
             await asyncio.sleep(backoff)
         try:
-            return await _embed_single(api_key, text)
+            return await _embed_batch(api_key, texts)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 429:
                 continue
-            logger.warning("nugget_embedder: HTTP error embedding text: %s", exc)
+            logger.warning("nugget_embedder: HTTP error embedding batch: %s", exc)
             return None
         except Exception as exc:
-            logger.warning("nugget_embedder: unexpected error embedding text: %s", exc)
+            logger.warning("nugget_embedder: unexpected error embedding batch: %s", exc)
             return None
 
-    logger.warning("nugget_embedder: exhausted all retries for a text")
+    logger.warning("nugget_embedder: exhausted all retries for batch")
     return None
 
 
 def _mark_needs_embedding(sb, nugget_id: str, user_id: str = "") -> None:
     """Add 'needs_embedding' tag to a career_nuggets row and clear any stale embedding."""
     try:
-        # Fetch current tags — always scope by id AND user_id for defense-in-depth
         q = sb.table("career_nuggets").select("tags").eq("id", nugget_id)
         if user_id:
             q = q.eq("user_id", user_id)
@@ -117,8 +117,9 @@ async def embed_nuggets(
     """Generate and store embeddings for a list of Nuggets.
 
     Embeds the `answer` field of each nugget using Jina AI jina-embeddings-v3
-    (768 dimensions), with a 10-second inter-batch delay and exponential
-    back-off on rate-limit errors.
+    (768 dimensions). Sends up to _BATCH_SIZE texts per Jina API call with a
+    _BATCH_SLEEP delay between calls (~30 RPM, well under Jina's 60 RPM limit).
+    Exponential back-off on 429s.
 
     On embedding failure for an individual nugget:
     - The embedding is set to None for that nugget.
@@ -129,7 +130,7 @@ async def embed_nuggets(
         nuggets: List of Nugget objects (expected to have .id after DB insert).
         jina_api_key: Jina AI API key for embeddings.
         sb: Supabase client (service-role key expected).
-        user_id: Owner identifier — used only for logging context.
+        user_id: Owner identifier — used for logging and DB scoping.
 
     Returns:
         List of embedding vectors (list[list[float]]). Entries that failed
@@ -144,7 +145,6 @@ async def embed_nuggets(
 
     results: list[list[float]] = []
 
-    # Process in batches of _BATCH_SIZE
     for batch_start in range(0, len(nuggets), _BATCH_SIZE):
         batch = nuggets[batch_start: batch_start + _BATCH_SIZE]
 
@@ -157,39 +157,60 @@ async def embed_nuggets(
             )
             await asyncio.sleep(_BATCH_SLEEP)
 
-        for nugget in batch:
-            answer_text: str = getattr(nugget, "answer", "") or ""
+        # Collect texts — track which nuggets have valid answers
+        texts: list[str] = []
+        valid_indices: list[int] = []  # positions within this batch that have text
 
-            if not answer_text.strip():
+        for i, nugget in enumerate(batch):
+            answer_text: str = getattr(nugget, "answer", "") or ""
+            if answer_text.strip():
+                texts.append(answer_text)
+                valid_indices.append(i)
+            else:
                 logger.warning(
                     "embed_nuggets: nugget index=%d has empty answer, skipping",
                     getattr(nugget, "nugget_index", -1),
                 )
-                results.append([])
-                # Mark in DB if we have an id
                 nugget_id = getattr(nugget, "id", None)
                 if nugget_id:
                     _mark_needs_embedding(sb, nugget_id, user_id)
-                continue
 
-            embedding = await _embed_with_retry(jina_api_key, answer_text)
+        if not texts:
+            results.extend([[]] * len(batch))
+            continue
 
+        # Single Jina API call for all texts in this batch
+        embeddings = await _embed_batch_with_retry(jina_api_key, texts)
+
+        # Build per-nugget results and write to DB
+        embed_iter = iter(embeddings) if embeddings else iter([])
+        batch_results: list[list[float]] = [[]] * len(batch)
+
+        for local_i, nugget in enumerate(batch):
             nugget_id = getattr(nugget, "id", None)
 
-            if embedding is None:
+            if local_i not in valid_indices:
+                continue  # already marked needs_embedding above
+
+            if embeddings is None:
+                # Entire batch failed
                 logger.warning(
-                    "embed_nuggets: failed to embed nugget index=%d (user=%s)",
+                    "embed_nuggets: batch failed for nugget index=%d (user=%s)",
                     getattr(nugget, "nugget_index", -1),
                     user_id,
                 )
-                results.append([])
                 if nugget_id:
                     _mark_needs_embedding(sb, nugget_id, user_id)
                 continue
 
-            results.append(embedding)
+            embedding = next(embed_iter, None)
+            if embedding is None:
+                if nugget_id:
+                    _mark_needs_embedding(sb, nugget_id, user_id)
+                continue
 
-            # Write embedding back to DB
+            batch_results[local_i] = embedding
+
             if nugget_id:
                 try:
                     sb.table("career_nuggets").update(
@@ -206,5 +227,7 @@ async def embed_nuggets(
                     "embed_nuggets: nugget index=%d has no DB id — skipping DB update",
                     getattr(nugget, "nugget_index", -1),
                 )
+
+        results.extend(batch_results)
 
     return results

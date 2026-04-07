@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -17,9 +18,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Groq model used for extraction
-_GROQ_MODEL = "llama-3.3-70b-versatile"
-_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+# Groq model used for extraction — override via env for alternate providers
+_GROQ_MODEL = os.environ.get("NUGGET_LLM_MODEL", "llama-3.3-70b-versatile")
+_GROQ_BASE_URL = os.environ.get("NUGGET_LLM_BASE_URL", "https://api.groq.com/openai/v1")
 
 # Rate-limit / retry config
 _BATCH_SLEEP = 30          # seconds between Groq batch calls
