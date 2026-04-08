@@ -155,12 +155,12 @@ export function StepConfigure({ data, update, next, back }: Props) {
         <label className="text-sm font-semibold uppercase tracking-wide text-muted">
           Provider
         </label>
-        <div className="mt-3 flex gap-3">
+        <div className="mt-3 grid grid-cols-3 gap-3">
           {PROVIDERS.map((p) => (
             <button
               key={p.id}
               onClick={() => handleProviderChange(p.id)}
-              className={`flex-1 rounded-xl border py-4 text-center transition-all ${
+              className={`rounded-xl border py-4 text-center transition-all ${
                 data.model_provider === p.id
                   ? "border-accent bg-accent/10 text-accent"
                   : "border-border bg-surface text-muted hover:border-accent/30"

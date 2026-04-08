@@ -89,12 +89,36 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Fuzzy token match: token matches if it appears as a substring in the answer
- * token, or the answer token appears as a substring in the requirement token.
- * This handles: "SQL" → "MySQL"/"PostgreSQL", "Python" → "Python3"/"python-based".
+ * Fuzzy token match with word boundary awareness.
+ *
+ * Exact equality always matches. For substring matches, the shorter token
+ * must appear at a word boundary (start/end) in the longer token — so "sql"
+ * matches "nosql" or "sql3" (boundary: start/end of string) but "sql" does
+ * NOT match "sqlalchemy" because it's a prefix of a longer compound word
+ * where the remainder isn't a recognized boundary.
+ *
+ * Heuristic: a substring match counts only if the shorter token === longer
+ * token (exact), or the shorter token length is >= 80% of the longer token
+ * length (near-complete overlap like "python" / "python3"), or they are
+ * equal after stripping trailing digits (version suffixes).
  */
 function tokenMatchesFuzzy(reqToken: string, answerToken: string): boolean {
-  return answerToken.includes(reqToken) || reqToken.includes(answerToken);
+  if (reqToken === answerToken) return true;
+
+  // Strip trailing digits for version-suffix comparison: "python" vs "python3"
+  const stripDigits = (s: string) => s.replace(/\d+$/, "");
+  if (stripDigits(reqToken) === stripDigits(answerToken)) return true;
+
+  // For substring containment, require high overlap ratio to avoid
+  // "sql" matching "sqlalchemy" (3/10 = 0.3, rejected)
+  // but allow "sql" matching "nosql" (3/5 = 0.6... still borderline)
+  // Use a stricter rule: shorter must be >= 80% of longer
+  const shorter = reqToken.length <= answerToken.length ? reqToken : answerToken;
+  const longer = reqToken.length > answerToken.length ? reqToken : answerToken;
+
+  if (!longer.includes(shorter)) return false;
+
+  return shorter.length / longer.length >= 0.8;
 }
 
 // ---------------------------------------------------------------------------

@@ -207,12 +207,12 @@ export function SettingsContent({ user }: { user: User }) {
               <label className="text-xs font-semibold uppercase tracking-wide text-muted">
                 Provider
               </label>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 grid grid-cols-3 gap-2">
                 {PROVIDERS.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => handleProviderChange(p.id)}
-                    className={`flex-1 rounded-xl border py-3 text-center text-sm font-medium transition-all ${
+                    className={`rounded-xl border py-3 text-center text-sm font-medium transition-all ${
                       modelProvider === p.id
                         ? "border-accent bg-accent/10 text-accent"
                         : "border-border bg-background text-muted hover:border-accent/30"
