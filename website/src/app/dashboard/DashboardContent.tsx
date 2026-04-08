@@ -27,6 +27,23 @@ interface ResumeJob {
   stats?: { quality_grade?: string } | null;
 }
 
+// [PSA5R-1A] Human-readable error message mapping
+const ERROR_PATTERNS: Array<[RegExp, string]> = [
+  [/timed?\s*out/i, "Resume generation timed out. Please try again."],
+  [/worker\s*(un)?reachable/i, "Our servers are busy. Please try again in a moment."],
+  [/pydantic|validation|parse|schema/i, "The job description couldn't be processed. Try simplifying it."],
+  [/rate\s*limit/i, "Too many requests. Please wait a few minutes."],
+  [/api[_\s]?key|auth|unauthorized/i, "Service configuration error. Please contact support."],
+  [/token|context.*length|too\s*long/i, "The input was too long. Try shortening your job description."],
+];
+
+const friendlyError = (raw: string): string => {
+  for (const [pattern, message] of ERROR_PATTERNS) {
+    if (pattern.test(raw)) return message;
+  }
+  return "Something went wrong. Please try again.";
+};
+
 export function DashboardContent({ user }: { user: User }) {
   // [NAV-REDESIGN] const router = useRouter();
   const [jobs, setJobs] = useState<ResumeJob[]>([]);
@@ -225,7 +242,7 @@ export function DashboardContent({ user }: { user: User }) {
                           }
                         </p>
                         {job.status === "failed" && job.error_message && (
-                          <p className="text-xs text-red-500 mt-1 line-clamp-2">{job.error_message}</p>
+                          <p className="text-xs text-red-500 mt-1 line-clamp-2">{friendlyError(job.error_message)}</p>
                         )}
                       </div>
                     </div>

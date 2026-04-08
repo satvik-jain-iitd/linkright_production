@@ -134,6 +134,7 @@ function extractRoleAndCompany(jdText: string): {
 export function StepJobDetails({ data, update, next }: Props) {
   const [targetCompany, setTargetCompany] = useState(data.target_company || "");
   const [targetRole, setTargetRole] = useState(data.target_role || "");
+  const [companyError, setCompanyError] = useState(""); // [PSA5R-2A]
   // Track whether the user has manually typed into each field
   const userEditedCompany = useRef(!!data.target_company);
   const userEditedRole = useRef(!!data.target_role);
@@ -243,11 +244,21 @@ export function StepJobDetails({ data, update, next }: Props) {
 
   // [WIZARD-STREAMLINE] "Analyze JD" click — triggers analysis
   const handleAnalyze = () => {
+    if (!targetCompany.trim()) {
+      setCompanyError("Please enter the company name"); // [PSA5R-2A]
+      return;
+    }
+    setCompanyError(""); // [PSA5R-2A]
     analyze();
   };
 
   // [WIZARD-STREAMLINE] "Continue" click — saves overrides and advances
   const handleContinue = () => {
+    if (!targetCompany.trim()) {
+      setCompanyError("Please enter the company name"); // [PSA5R-2A]
+      return;
+    }
+    setCompanyError(""); // [PSA5R-2A]
     if (!analysis) {
       // Skip scenario — just save company/role and advance
       update({ target_company: targetCompany, target_role: targetRole });
@@ -323,6 +334,8 @@ export function StepJobDetails({ data, update, next }: Props) {
             </button>
             <button
               onClick={() => {
+                if (!targetCompany.trim()) { setCompanyError("Please enter the company name"); return; } // [PSA5R-2A]
+                setCompanyError(""); // [PSA5R-2A]
                 update({ target_company: targetCompany, target_role: targetRole });
                 next();
               }}
@@ -586,15 +599,17 @@ export function StepJobDetails({ data, update, next }: Props) {
           <input
             id="target-company"
             type="text"
-            className="w-full rounded-lg border border-border bg-background p-2.5 text-sm focus:border-accent/50 focus:outline-none"
+            className={`w-full rounded-lg border bg-background p-2.5 text-sm focus:outline-none ${companyError ? "border-red-500 focus:border-red-500" : "border-border focus:border-accent/50"}`}
             placeholder="e.g., Google"
             value={targetCompany}
             aria-required="true"
             onChange={(e) => {
               userEditedCompany.current = e.target.value.length > 0;
               setTargetCompany(e.target.value);
+              setCompanyError(""); // [PSA5R-2A]
             }}
           />
+          {companyError && <p className="text-sm text-red-500 mt-1">{companyError}</p>}
         </div>
         <div>
           <label htmlFor="target-role" className="mb-1 block text-sm font-medium">Target Role</label>
@@ -625,6 +640,8 @@ export function StepJobDetails({ data, update, next }: Props) {
         {/* [WIZARD-STREAMLINE] Skip analysis — advance without analyzing */}
         <button
           onClick={() => {
+            if (!targetCompany.trim()) { setCompanyError("Please enter the company name"); return; } // [PSA5R-2A]
+            setCompanyError(""); // [PSA5R-2A]
             update({ target_company: targetCompany, target_role: targetRole });
             next();
           }}

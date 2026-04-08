@@ -609,8 +609,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
 
       <h2 className="text-2xl font-bold">Customize</h2>
       <p className="mt-2 text-sm text-muted">
-        Set brand colors and answer profile questions for{" "}
-        <span className="font-medium text-foreground">{data.target_company}</span>.
+        Set brand colors and answer profile questions{data.target_company ? <> for{" "}<span className="font-medium text-foreground">{data.target_company}</span></> : ""}.
       </p>
 
       <div className="mt-8 rounded-2xl border border-border bg-surface/50 p-6">

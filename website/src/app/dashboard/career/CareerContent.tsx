@@ -157,7 +157,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
               <p className="mt-1 text-sm text-muted">
                 {nuggetCount > 0
                   ? `${nuggetCount} career highlights in your library`
-                  : "No career highlights yet — import from resume or add via ChatGPT bot"}
+                  : "No career highlights yet — import from your resume to get started."}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -180,7 +180,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
             <div className="mt-6 rounded-2xl border border-dashed border-border bg-background p-10 text-center">
               <p className="text-sm font-medium text-muted">No career highlights yet</p>
               <p className="mt-1 text-xs text-muted">
-                Import career highlights from a resume or use the ChatGPT diary bot in Settings.
+                Import career highlights from a resume to get started.
               </p>
             </div>
           )}

@@ -367,10 +367,6 @@ function Footer() {
           <Link href="/pricing" className="transition-colors hover:text-foreground">
             Pricing
           </Link>
-          // [PSA5-382.2.1.1] Docs link removed — no documentation site yet
-          // <Link href="#" className="transition-colors hover:text-foreground">
-          //   Docs
-          // </Link>
         </div>
         <p className="text-sm text-muted">
           Made in India 🇮🇳

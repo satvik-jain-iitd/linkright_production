@@ -18,7 +18,7 @@ export default async function CareerPage() {
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id),
     supabase
-      .from("nuggets")
+      .from("career_nuggets")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id),
   ]);
