@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { computeOverallConfidence } from "@/lib/confidence";
 import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
+import { resolveApiKey } from "@/lib/resolve-api-key";
 
 // ── L1 section types ────────────────────────────────────────────────────────
 
@@ -220,6 +221,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing LLM config (model_provider, model_id, api_key)" }, { status: 400 });
   }
 
+  // Resolve UUID key → actual API key
+  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+
   // Step 1: Fetch existing nuggets for user
   const { data: nuggets, error: dbError } = await supabase
     .from("career_nuggets")
@@ -323,7 +327,7 @@ export async function POST(request: Request) {
     const { url, headers, body: llmBody } = buildLlmCall(
       model_provider,
       model_id,
-      api_key,
+      resolvedKey,
       QUESTION_SYSTEM_PROMPT,
       userMsg,
       300
