@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
+import { resolveApiKey } from "@/lib/resolve-api-key";
 
 // ── System prompts ──────────────────────────────────────────────────────────
 
@@ -126,6 +127,9 @@ export async function POST(request: Request) {
     );
   }
 
+  // Resolve UUID key → actual API key
+  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+
   // ── Handle "correct" action ─────────────────────────────────────────────
 
   if (action === "correct") {
@@ -135,7 +139,7 @@ export async function POST(request: Request) {
       const { url, headers, body: llmBody } = buildLlmCall(
         model_provider,
         model_id,
-        api_key,
+        resolvedKey,
         CORRECTION_PROMPT,
         userMsg,
         400
@@ -186,7 +190,7 @@ export async function POST(request: Request) {
     const { url, headers, body: llmBody } = buildLlmCall(
       model_provider,
       model_id,
-      api_key,
+      resolvedKey,
       NUGGET_EXTRACTION_PROMPT,
       `Confirmed career statement:\n"${user_answer}"`,
       800

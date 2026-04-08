@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { buildLlmCall, extractLlmText } from "@/lib/llm-call";
+import { resolveApiKey } from "@/lib/resolve-api-key";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -23,6 +25,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  // Resolve UUID key → actual API key
+  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+
   const systemPrompt = `You are a career coach preparing to write a targeted resume. Read the candidate's career profile and the job description carefully.
 
 Generate EXACTLY 5 to 8 specific, actionable questions that would help create a more compelling resume. You MUST NOT return more than 8 questions. Focus on:
@@ -44,69 +49,32 @@ ${jd_text.slice(0, 3000)}
 ${career_text.slice(0, 8000)}`;
 
   try {
-    let questions: string[] = [];
+    const { url, headers, body } = buildLlmCall(
+      model_provider,
+      model_id || "llama-3.1-8b-instant",
+      resolvedKey,
+      systemPrompt,
+      userPrompt,
+      1000
+    );
 
-    if (model_provider === "openrouter" || model_provider === "groq") {
-      const baseUrl =
-        model_provider === "openrouter"
-          ? "https://openrouter.ai/api/v1"
-          : "https://api.groq.com/openai/v1";
+    const resp = await fetch(url, {
+      method: "POST",
+      headers,
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
 
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${api_key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: model_id,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
-        }),
-      });
-
-      if (!resp.ok) {
-        const err = await resp.text();
-        return Response.json(
-          { error: `LLM API error: ${resp.status}` },
-          { status: 502 }
-        );
-      }
-
-      const data = await resp.json();
-      const text = data.choices?.[0]?.message?.content || "";
-      questions = parseJsonArray(text).slice(0, 8);
-    } else if (model_provider === "gemini") {
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model_id}:generateContent?key=${api_key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              { parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] },
-            ],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 1000 },
-          }),
-        }
+    if (!resp.ok) {
+      return Response.json(
+        { error: `LLM API error: ${resp.status}` },
+        { status: 502 }
       );
-
-      if (!resp.ok) {
-        return Response.json(
-          { error: `Gemini API error: ${resp.status}` },
-          { status: 502 }
-        );
-      }
-
-      const data = await resp.json();
-      const text =
-        data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      questions = parseJsonArray(text).slice(0, 8);
     }
+
+    const data = await resp.json();
+    const text = extractLlmText(model_provider, data);
+    const questions = parseJsonArray(text).slice(0, 8);
 
     if (questions.length === 0) {
       return Response.json(

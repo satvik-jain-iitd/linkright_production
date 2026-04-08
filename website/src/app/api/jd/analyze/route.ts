@@ -3,6 +3,7 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
 import { jinaEmbed } from "@/lib/jina-embed";
 import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
+import { resolveApiKey } from "@/lib/resolve-api-key";
 
 export interface JDRequirement {
   id: string;
@@ -182,13 +183,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  // Resolve UUID key → actual API key
+  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+
   // Step 1: Extract requirements via LLM
   let requirements: JDRequirement[] = [];
   try {
     const { url, headers, body } = buildLlmCall(
       model_provider,
       model_id,
-      api_key,
+      resolvedKey,
       EXTRACTION_PROMPT,
       `Job Description:\n${jd_text.slice(0, 4000)}`,
       1500
@@ -288,7 +292,7 @@ export async function POST(request: Request) {
 
   // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
   const candidatePairs = allPairs.map(({ req_id, req_text, chunk }) => ({ req_id, req_text, chunk }));
-  const rawScores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, api_key);
+  const rawScores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, resolvedKey);
 
   // Pick best scoring chunk per original requirement
   const scores: Record<string, number> = {};

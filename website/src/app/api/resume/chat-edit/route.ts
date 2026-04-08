@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-// TODO: Add Langfuse TypeScript SDK tracing here
+import { buildLlmCall, extractLlmText } from "@/lib/llm-call";
+import { resolveApiKey } from "@/lib/resolve-api-key";
 
 const SYSTEM_PROMPT = `You are a resume editor. The user has selected a specific element from their resume and wants you to edit it.
 
@@ -22,78 +23,6 @@ Rules:
 - For "STAR format": Situation → Task → Action → Result, one sentence each
 - Preserve any existing metric values exactly — do not round, estimate, or change numbers from the original
 - explanation should be 1 sentence describing what changed`;
-
-function buildLlmBody(
-  provider: string,
-  modelId: string,
-  apiKey: string,
-  selectedHtml: string,
-  instruction: string,
-  resumeContext: string,
-  jobContext: string
-) {
-  const userMsg = `Selected element:
-\`\`\`html
-${selectedHtml}
-\`\`\`
-
-Instruction: ${instruction}
-
-Job context:
-${jobContext}
-
-Full resume (for context only — edit only the selected element):
-${resumeContext.slice(0, 3000)}`;
-
-  if (provider === "groq" || provider === "openrouter") {
-    const baseUrl =
-      provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : "https://api.groq.com/openai/v1";
-    return {
-      url: `${baseUrl}/chat/completions`,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...(provider === "openrouter" ? { "HTTP-Referer": "https://linkright.in" } : {}),
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMsg },
-        ],
-        temperature: 0.3,
-        max_tokens: 600,
-      }),
-    };
-  } else {
-    return {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${SYSTEM_PROMPT}\n\n${userMsg}` }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
-      }),
-    };
-  }
-}
-
-function extractText(provider: string, result: Record<string, unknown>): string {
-  if (provider === "gemini") {
-    return (
-      (
-        result?.candidates as Array<{
-          content: { parts: Array<{ text: string }> };
-        }>
-      )?.[0]?.content?.parts?.[0]?.text ?? ""
-    );
-  }
-  return (
-    (result?.choices as Array<{ message: { content: string } }>)?.[0]?.message
-      ?.content ?? ""
-  );
-}
 
 function parseEditResponse(text: string): { updated_html: string; explanation: string } | null {
   let clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
@@ -140,19 +69,34 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  // Resolve UUID key → actual API key
+  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+
   const jobContextStr = job_context
     ? `Company: ${job_context.company || "Unknown"}\nRole: ${job_context.role || "Unknown"}\nKey requirements: ${(job_context.requirements || []).slice(0, 5).join(", ")}`
     : "";
 
   try {
-    const { url, headers, body } = buildLlmBody(
+    const userMsg = `Selected element:
+\`\`\`html
+${selected_html}
+\`\`\`
+
+Instruction: ${instruction}
+
+Job context:
+${jobContextStr}
+
+Full resume (for context only — edit only the selected element):
+${(full_resume_html || "").slice(0, 3000)}`;
+
+    const { url, headers, body } = buildLlmCall(
       model_provider,
       model_id,
-      api_key,
-      selected_html,
-      instruction,
-      full_resume_html || "",
-      jobContextStr
+      resolvedKey,
+      SYSTEM_PROMPT,
+      userMsg,
+      600
     );
 
     const resp = await fetch(url, {
@@ -167,7 +111,7 @@ export async function POST(request: Request) {
     }
 
     const result = await resp.json();
-    const text = extractText(model_provider, result);
+    const text = extractLlmText(model_provider, result);
     const parsed = parseEditResponse(text);
 
     if (!parsed) {
