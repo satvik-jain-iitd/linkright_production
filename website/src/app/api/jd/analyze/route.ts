@@ -248,13 +248,29 @@ export async function POST(request: Request) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  // Resolve api_key: if it looks like a UUID (key ID from KeyManagerPanel), fetch the actual key
+  let resolvedApiKey = api_key;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (UUID_RE.test(api_key)) {
+    const { data: keyRow } = await supabase
+      .from("user_api_keys")
+      .select("api_key_encrypted")
+      .eq("id", api_key)
+      .eq("user_id", user.id)
+      .single();
+    if (keyRow?.api_key_encrypted) {
+      resolvedApiKey = keyRow.api_key_encrypted;
+    }
+  }
+  const apiKey = resolvedApiKey;
+
   // Step 1: Extract requirements via LLM
   let requirements: JDRequirement[] = [];
   try {
     const { url, headers, body } = buildLlmCall(
       model_provider,
       model_id,
-      api_key,
+      apiKey,
       EXTRACTION_PROMPT,
       `Job Description:\n${jd_text.slice(0, 4000)}`,
       1500
@@ -340,7 +356,7 @@ export async function POST(request: Request) {
   );
 
   // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
-  const scores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, api_key);
+  const scores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, apiKey);
   const scoringAvailable = Object.keys(scores).length > 0;
 
   // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)

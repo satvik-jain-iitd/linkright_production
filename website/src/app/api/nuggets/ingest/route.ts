@@ -29,6 +29,45 @@ const NuggetSchema = z.object({
 
 type ValidNugget = z.infer<typeof NuggetSchema>;
 
+// Normalize freeform date strings to PostgreSQL-safe YYYY-MM-DD format
+function normalizeDate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  // Already valid YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // YYYY-MM → append -01
+  if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`;
+  // YYYY only → append -01-01
+  if (/^\d{4}$/.test(s)) return `${s}-01-01`;
+  // "Month YYYY" or "YYYY Month" patterns
+  const months: Record<string, string> = {
+    jan: "01", january: "01", feb: "02", february: "02", mar: "03", march: "03",
+    apr: "04", april: "04", may: "05", jun: "06", june: "06", jul: "07", july: "07",
+    aug: "08", august: "08", sep: "09", september: "09", oct: "10", october: "10",
+    nov: "11", november: "11", dec: "12", december: "12",
+  };
+  const monthYear = s.match(/^(\w+)\s+(\d{4})$/i) || s.match(/^(\d{4})\s+(\w+)$/i);
+  if (monthYear) {
+    const [, a, b] = monthYear;
+    const year = /^\d{4}$/.test(a) ? a : b;
+    const monthStr = /^\d{4}$/.test(a) ? b : a;
+    const mm = months[monthStr.toLowerCase()];
+    if (mm && year) return `${year}-${mm}-01`;
+  }
+  // Q1-Q4 YYYY
+  const quarter = s.match(/Q([1-4])\s*(\d{4})/i);
+  if (quarter) {
+    const qMonth = { "1": "01", "2": "04", "3": "07", "4": "10" }[quarter[1]] || "01";
+    return `${quarter[2]}-${qMonth}-01`;
+  }
+  // Last resort: try native Date parse
+  const d = new Date(s);
+  if (!isNaN(d.getTime()) && d.getFullYear() > 1900) {
+    return d.toISOString().slice(0, 10);
+  }
+  return null; // Can't parse → store as null rather than crash
+}
+
 // ---------------------------------------------------------------------------
 // CSV parser (simple inline — no external dep)
 // ---------------------------------------------------------------------------
@@ -207,7 +246,7 @@ export async function POST(request: Request) {
       leadership_signal: nugget.leadership_signal,
       company: nugget.company ?? null,
       role: nugget.role ?? null,
-      event_date: nugget.event_date ?? null,
+      event_date: normalizeDate(nugget.event_date) ?? null,
       people: nugget.people,
       tags,
     };
