@@ -1,0 +1,103 @@
+role: qa
+stream_name: publishing-orchestration
+
+feature_analyses:
+  - feature_name: "Postiz Publishing Integration"
+    analysis: >
+      PostizPublisher has one hard-to-test behaviour: the tenacity retry decorator.
+      Tests must use requests_mock or responses library to simulate 5xx sequences
+      followed by success, and 401 failures. The no-retry-on-401 invariant is
+      business-critical — a test must confirm it. PostizChannelAdapter mapping tests
+      must confirm each platform's content field format (X thread joining, Instagram
+      hashtag appending). publish_records_store round-trip must be tested including
+      the analytics stream contract: get_published_without_analytics() must return
+      records that have no corresponding metrics_store entry.
+    tasks:
+      - title: "Write unit tests for PostizPublisher retry logic and PostizChannelAdapters"
+        task_type: test
+        description: >
+          tests/flex/agents/publishing/test_postiz_publisher.py:
+          - test_successful_publish: mock Postiz 200 → PublishRecord created, draft status='published'
+          - test_retry_on_5xx_then_success: mock 500, 500, 200 → 3 API calls, success on third
+          - test_no_retry_on_401: mock 401 → PostizAuthError raised, API called exactly once
+          - test_exhausted_retries_sets_failed: 3x 500 → draft status='publish_failed', PostizServerError raised
+          - test_backoff_delays: assert retry delays are [2,4,8] seconds (mock time.sleep)
+
+          tests/flex/agents/publishing/test_postiz_channel_adapters.py:
+          - test_linkedin_adapter: draft with body → payload content=body, channel_id from config
+          - test_x_adapter_thread_format: draft with thread=['t1','t2'] → content joined correctly
+          - test_instagram_adapter_appends_hashtags: caption + hashtags → content='caption\n\n#tag1 #tag2'
+          - test_facebook_adapter_no_hashtags: body without hashtags → content=body as-is
+          - test_youtube_adapter: title in metadata, description as content
+
+      - title: "Write integration tests for publish_records_store and failure notifier"
+        task_type: test
+        description: >
+          tests/flex/store/test_publish_records_store.py:
+          - test_insert_and_get_by_draft_id: full round-trip with all fields
+          - test_get_published_without_analytics: insert published records with/without metrics → returns only those without
+          - test_update_status: insert, update_status('post_deleted') → status updated
+          tests/flex/agents/publishing/test_publish_failure_notifier.py:
+          - test_cli_notification_contains_required_fields: notify() output contains platform, error_type, retry_command
+          - test_agentmail_sent_when_configured: AGENTMAIL_INBOX set → AgentMail API called with correct fields
+          - test_separate_notification_per_failure: 3 failures → notify() called 3 times
+
+  - feature_name: "Intelligent Scheduling Engine"
+    analysis: >
+      SchedulingEngine is a pure function — extensive unit tests with no mocking needed.
+      Critical: timezone boundary tests (post scheduled near midnight should not cross
+      to wrong day). Historical override threshold (>= 5 posts) must be tested at
+      boundary (4 posts → use default, 5 posts → use historical). The queue cancel
+      must test the Postiz DELETE API call contract.
+    tasks:
+      - title: "Write unit tests for SchedulingEngine optimal time computation and timezone handling"
+        task_type: test
+        description: >
+          tests/flex/agents/publishing/test_scheduling_engine.py:
+          - test_linkedin_default_window: no historical data → returns Tue/Wed/Thu 08:00-10:00 window
+          - test_x_default_window: no historical data → returns weekday 09:00-10:00 or 19:00-21:00
+          - test_historical_override_at_5_posts: 5 posts with clear peak at 07:30 → returns 07:30
+          - test_historical_override_requires_5_posts: 4 posts → falls back to default window
+          - test_timezone_conversion: compute_optimal_time('linkedin', 'Asia/Kolkata') → returns IST datetime
+          - test_timezone_midnight_boundary: optimal window near midnight UTC → correct local day
+          - test_schedule_override_stored: --at override → scheduled_at set to exact datetime, SchedulingEngine not called
+
+  - feature_name: "Pipeline Coordinator Agent"
+    analysis: >
+      PipelineCoordinator's most important test: the quarantine test. When any stage
+      raises an unhandled exception, the item must be quarantined (no further processing)
+      and a checkpoint written. The parallel publishing test must verify exactly 3
+      concurrent PostizPublisher calls (not 4+, which would exceed max_workers). The
+      EventBus must be tested for thread safety under concurrent subscribe/publish.
+    tasks:
+      - title: "Write unit and integration tests for PipelineCoordinator quarantine, parallel publishing, and EventBus"
+        task_type: test
+        description: >
+          tests/flex/agents/test_pipeline_coordinator.py:
+          - test_brief_approved_triggers_drafting: mock brief.status='approved' → DraftingOrchestrator.run_for called
+          - test_draft_qa_passed_triggers_scheduling: status='qa_passed' → SchedulingEngine + Publisher triggered
+          - test_unhandled_exception_quarantines_item: agent raises RuntimeError → item in quarantine_set, checkpoint written with status='error'
+          - test_quarantined_item_not_reprocessed: quarantined item present in next tick → no agent called
+          - test_parallel_publishing_max_3: 5 approved drafts → max 3 concurrent publisher calls (ThreadPoolExecutor max_workers=3)
+          - test_failure_notifier_called_after_quarantine: quarantine → PublishFailureNotifier.notify called
+
+          tests/flex/agents/test_message_bus.py:
+          - test_subscriber_called_on_publish: subscribe(event, callback) then publish(event) → callback called
+          - test_multiple_subscribers: 3 subscribers for same event → all 3 called
+          - test_thread_safe_concurrent_publish: 10 threads publish simultaneously → no lost events, no race condition
+          - test_unsubscribed_event_ignored: publish event with no subscribers → no error
+
+edge_cases:
+  - "Postiz API adds new required field to payload: PostizChannelAdapter returns unexpected 422 — retry would fail all 3 times. Mitigate: log 422 as PostizPayloadError (non-retryable), add to quarantine"
+  - "Scheduled post time passes while still in approval queue (user delays approval): SchedulingEngine must detect past scheduled_at and recompute a new time"
+  - "PipelineCoordinator tick runs while previous tick is still processing: must skip/lock to prevent duplicate agent invocations"
+  - "All 3 concurrent publish slots occupied when new approved draft arrives: must queue and wait, not drop or error"
+
+integration_notes: >
+  Cross-stream contract with analytics: publish_records_store.get_published_without_analytics()
+  returns records where no metrics_store entry exists for the platform_post_id.
+  QA must write a joint contract test (spanning both streams): publish a draft →
+  verify PublishRecord in store → simulate analytics poll → verify MetricsSnapshot links
+  to correct platform_post_id. This prevents the analytics stream from polling wrong IDs.
+
+completed: true

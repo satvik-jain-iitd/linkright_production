@@ -1,0 +1,132 @@
+stream_name: publishing-orchestration
+
+features:
+  - name: "Postiz Publishing Integration"
+    priority: p1
+    description: >
+      PostizPublisher wraps the Postiz API to schedule and publish approved drafts
+      across LinkedIn, X, YouTube, Instagram, and Facebook. Each platform has a
+      PostizChannelAdapter that maps Draft.platform_fields to Postiz's media object
+      format. Published posts return a platform_post_id stored in publish_records_store
+      for analytics tracking. On publish failure: auto-retry up to 3 times with
+      exponential backoff, then escalate to human with notification.
+    scope_items_covered: [0, 3]
+    stories:
+      - title: "As a content creator, I want approved drafts published to the correct platform via Postiz so I don't have to manually post on each network"
+        description: >
+          PostizPublisher.publish(draft) maps the draft to Postiz's API format,
+          calls POST /api/v1/posts, stores the result in publish_records_store,
+          and updates draft.status to 'published' on success or 'publish_failed' on error.
+        acceptance_criteria:
+          - "Given an approved LinkedIn draft, When PostizPublisher.publish() is called, Then a POST to Postiz /api/v1/posts is made with correct channel_id, content (draft body), and scheduled_at (optimal time), returning a platform_post_id stored in publish_records_store"
+          - "Given Postiz API returns a 5xx error, When PostizPublisher.publish() is called, Then it retries up to 3 times with exponential backoff (2s, 4s, 8s), then sets draft.status='publish_failed' and triggers human notification"
+          - "Given a draft is published successfully, When the response is received, Then PublishRecord is created with draft_id, platform, platform_post_id, published_at, and scheduled_at"
+          - "Given Postiz returns a 401 Unauthorized, When PostizPublisher.publish() is called, Then it raises PostizAuthError immediately (no retry), logs the error with channel_id"
+
+      - title: "As a content creator, I want to be notified when a publish fails so I can take action before the post window closes"
+        description: >
+          PublishFailureNotifier sends a notification (CLI alert, and optionally AgentMail)
+          when a draft exhausts all retries. Notification includes: platform, draft topic,
+          error summary, and a direct link to retry manually.
+        acceptance_criteria:
+          - "Given a draft fails all 3 retry attempts, When publish_failed status is set, Then PublishFailureNotifier sends a notification with platform name, brief topic, error type, and retry command"
+          - "Given AgentMail is configured, When publish fails, Then a message is sent to the configured AgentMail inbox with structured failure data"
+          - "Given multiple drafts fail in the same run, When notifications are sent, Then each failure produces a separate notification (no batching that could be missed)"
+    files_affected:
+      - "modules/flex/agents/publishing/postiz_publisher.py"
+      - "modules/flex/agents/publishing/postiz_channel_adapter.py"
+      - "modules/flex/agents/publishing/publish_failure_notifier.py"
+      - "modules/flex/store/publish_records_store.py"
+      - "modules/flex/models/publish_record.py"
+      - "modules/flex/config/postiz_config.py"
+    dependencies: []
+
+  - name: "Intelligent Scheduling Engine"
+    priority: p1
+    description: >
+      SchedulingEngine computes the optimal publish time for each draft based on
+      platform-specific best-practice windows and (when analytics data is available)
+      historical engagement patterns from publish_records. Outputs a scheduled_at
+      datetime passed to Postiz. Users can override via 'flex publish schedule
+      <draft_id> --at <datetime>'. Scheduling is per-platform: LinkedIn peak times
+      differ from X or Instagram.
+    scope_items_covered: [1]
+    stories:
+      - title: "As a content creator, I want my posts scheduled at the optimal time for each platform so I maximize reach without having to research posting times"
+        description: >
+          SchedulingEngine.compute_optimal_time(platform, timezone) returns a datetime
+          using platform-specific heuristics (hardcoded best-practice windows) as baseline,
+          adjusted by historical engagement data if available from analytics stream.
+        acceptance_criteria:
+          - "Given platform='linkedin' and no historical data, When SchedulingEngine.compute_optimal_time() is called, Then returns next occurrence of Tue/Wed/Thu between 08:00-10:00 in user's configured timezone"
+          - "Given platform='x' and no historical data, When compute_optimal_time() is called, Then returns next occurrence of any weekday between 09:00-10:00 or 19:00-21:00"
+          - "Given historical analytics showing user's LinkedIn posts peak at 07:30, When compute_optimal_time('linkedin') is called, Then returns 07:30 (historical data overrides default window)"
+          - "Given user runs 'flex publish schedule <draft_id> --at 2026-04-10T09:00', When override is saved, Then scheduled_at is set to the specified datetime, ignoring SchedulingEngine output"
+
+      - title: "As a content creator, I want to see and reorder my publishing queue so I can control what goes out and when"
+        description: >
+          Publishing queue shows all scheduled drafts with their scheduled_at times.
+          User can reorder via 'flex publish queue reorder' and cancel via 'flex publish cancel'.
+        acceptance_criteria:
+          - "Given 4 drafts scheduled for different times, When 'flex publish queue' is run, Then all 4 shown sorted by scheduled_at with columns: platform, topic, scheduled_at, status"
+          - "Given user runs 'flex publish queue reorder <draft_id> --before <other_id>', When executed, Then the draft's scheduled_at is set to 5 minutes before other_id's scheduled_at"
+          - "Given user runs 'flex publish cancel <draft_id>', When confirmed, Then draft status='cancelled', removed from Postiz queue if already scheduled there"
+    files_affected:
+      - "modules/flex/agents/publishing/scheduling_engine.py"
+      - "modules/flex/cli/publish_commands.py"
+      - "modules/flex/store/publish_records_store.py"
+    dependencies:
+      - "Postiz Publishing Integration"
+
+  - name: "Pipeline Coordinator Agent"
+    priority: p1
+    description: >
+      PipelineCoordinator is the top-level orchestration agent for the entire Flex
+      content pipeline. It routes work through stages (ideation → drafting → review
+      → publishing), monitors agent health, handles escalations, and maintains a
+      checkpoint log of all stage transitions. Supports parallel execution of
+      independent stages (e.g., multiple streams in drafting simultaneously).
+      Agent-to-agent communication via a lightweight in-process message bus (pub/sub
+      over a shared queue). Each stage emits a completion event consumed by the
+      coordinator to trigger the next stage.
+    scope_items_covered: [4, 5, 6, 7, 8]
+    stories:
+      - title: "As a content creator, I want the pipeline to automatically move content through each stage so I only need to act at approval checkpoints"
+        description: >
+          PipelineCoordinator monitors all stores for state transitions and triggers
+          the appropriate agent. Runs as a background process (or invoked via 'flex pipeline run').
+          Produces a PipelineCheckpoint log at each stage boundary.
+        acceptance_criteria:
+          - "Given a ContentBrief transitions to status='approved', When PipelineCoordinator detects it, Then DraftingOrchestrator is triggered within the configured poll interval"
+          - "Given a Draft transitions to status='ready_for_review', When PipelineCoordinator detects it, Then QAReviewAgent is triggered automatically and draft moves to qa_passed/qa_flagged"
+          - "Given a Draft transitions to status='approved' (post-human-approval), When PipelineCoordinator detects it, Then SchedulingEngine + PostizPublisher are triggered in sequence"
+          - "Given 3 approved drafts exist simultaneously, When PipelineCoordinator runs, Then all 3 are dispatched to SchedulingEngine+Publisher in parallel (ThreadPoolExecutor, max 3 concurrent publishes)"
+          - "Given any stage raises an unhandled exception, When PipelineCoordinator catches it, Then a PipelineCheckpoint with status='error' is written, the item is quarantined, and human notification is sent"
+
+      - title: "As a content creator, I want to see a full audit trail of what happened to each piece of content so I can diagnose failures"
+        description: >
+          'flex pipeline log <brief_id>' shows the full stage-by-stage history for
+          a content item, including timestamps, agent decisions, and any errors.
+        acceptance_criteria:
+          - "Given a brief has passed through ideation → drafting → review → publishing, When 'flex pipeline log <brief_id>' is run, Then all 4 stage transitions are shown with timestamps, agent used, input status, output status, and duration"
+          - "Given a brief has a failed publish in its history, When pipeline log is shown, Then the failure entry shows error type, retry count, and final resolution"
+    files_affected:
+      - "modules/flex/agents/pipeline_coordinator.py"
+      - "modules/flex/agents/message_bus.py"
+      - "modules/flex/models/pipeline_checkpoint.py"
+      - "modules/flex/store/checkpoints_store.py"
+      - "modules/flex/cli/pipeline_commands.py"
+    dependencies:
+      - "Postiz Publishing Integration"
+      - "Intelligent Scheduling Engine"
+
+coverage_map:
+  "Postiz integration for cross-platform publishing": "Postiz Publishing Integration"
+  "Auto-retry on publish failures with notification": "Postiz Publishing Integration"
+  "Intelligent scheduling: optimal posting times": "Intelligent Scheduling Engine"
+  "Queue management": "Intelligent Scheduling Engine"
+  "Coordinator agent that routes work": "Pipeline Coordinator Agent"
+  "Parallel agent execution": "Pipeline Coordinator Agent"
+  "Agent-to-agent communication via message passing": "Pipeline Coordinator Agent"
+  "Checkpoint system": "Pipeline Coordinator Agent"
+  "Error handling: failed agent tasks": "Pipeline Coordinator Agent"

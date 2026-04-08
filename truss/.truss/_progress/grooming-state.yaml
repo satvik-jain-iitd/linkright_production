@@ -22,17 +22,17 @@ streams:
     consolidated: true
     verified: true
   publishing-orchestration:
-    status: blocked
-    current_step: not_started
-    features_identified: 0
-    roles_completed: []
-    consolidated: false
-    verified: false
+    status: completed
+    current_step: step-05-verify
+    features_identified: 3
+    roles_completed: ["po", "designer", "architect", "qa"]
+    consolidated: true
+    verified: true
   analytics:
-    status: blocked
-    current_step: not_started
-    features_identified: 0
-    roles_completed: []
-    consolidated: false
-    verified: false
-timestamp: 2026-04-07T22:41:48.124169+00:00
+    status: completed
+    current_step: step-05-verify
+    features_identified: 3
+    roles_completed: ["po", "designer", "architect", "qa"]
+    consolidated: true
+    verified: true
+timestamp: 2026-04-08T00:00:00.000000+00:00

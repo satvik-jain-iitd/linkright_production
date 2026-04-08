@@ -1,0 +1,95 @@
+role: designer
+stream_name: publishing-orchestration
+
+feature_analyses:
+  - feature_name: "Postiz Publishing Integration"
+    analysis: >
+      Publishing is a background event — the design surface is the confirmation
+      and the failure state, not the act of publishing itself. Users need: (1) a
+      clear confirmation that publishing was scheduled ("✓ Queued for LinkedIn at
+      Tue 09:00"), (2) an unambiguous failure alert with a recovery action, (3) a
+      publish history view to see what went out. The publish record card reuses
+      the same platform color language from content-drafting previews — visual
+      consistency across the pipeline.
+    tasks:
+      - title: "Design publish confirmation toast, failure alert, and publish history view"
+        task_type: design
+        description: >
+          Publish Confirmation Toast (appears after Postiz queues successfully):
+          Bottom-right, 320px wide, 4s duration. Content: platform icon + "Queued for
+          [Platform]" + scheduled_at in user's local time (e.g., "Tue Apr 9 at 09:00").
+          [View Queue] text button. Auto-dismisses.
+
+          Publish Failure Alert (persistent — doesn't auto-dismiss):
+          Top-center banner, red-50 bg, red-600 border. Content: platform icon, draft
+          topic (20 char truncated), "Failed to publish — [error type]", [Retry] primary
+          button (triggers retry CLI action), [Dismiss] text button. Stays until user acts.
+
+          Publish History View ('flex publish history' or Settings > Publish History):
+          Table: Date | Platform icon | Topic | Status badge | platform_post_id (truncated, link)
+          Status badges: Published (green), Failed (red), Cancelled (gray), Scheduled (amber)
+          Clicking Published row: opens post in platform (external link via platform URL pattern).
+
+          Accessibility:
+          - Toast: aria-live="polite"
+          - Failure alert: aria-live="assertive" (screen reader announces immediately)
+          - Table: standard sortable, aria-sort on Date column
+
+  - feature_name: "Intelligent Scheduling Engine"
+    analysis: >
+      The scheduling UX must communicate confidence without being opaque. "We're
+      scheduling your LinkedIn post for Tuesday 09:00 because that's when your
+      audience is most active" is 10x better than showing a bare datetime. The
+      queue management view is a planning tool — drag-and-drop would be ideal on
+      mobile-like interfaces but CLI-first means relative positioning commands
+      (--before) instead. The main design challenge: making the publish queue
+      feel like a calendar, not a database table.
+    tasks:
+      - title: "Design schedule confirmation and publishing queue view"
+        task_type: design
+        description: >
+          Schedule Confirmation (shown when SchedulingEngine selects a time):
+          Inline card in the approval footer: "📅 Recommended: Tuesday Apr 9 at 09:00
+          (LinkedIn peak time)" with [Change Time] text button that opens a datetime picker.
+          Datetime picker: calendar popup (or inline), time input, timezone display.
+
+          Publishing Queue View:
+          Timeline layout (not a flat table): vertical timeline showing scheduled posts
+          grouped by day. Each item: platform icon (colored per platform), time badge,
+          topic (2 lines max), status chip.
+          Today's section highlighted with a "Today" label.
+          [Cancel] appears on hover of each item. [Reschedule] opens datetime picker.
+          Empty state: "No posts scheduled. Approve a draft to schedule publishing."
+
+          Mobile-responsive:
+          - Desktop: 2-column (timeline left, next-up detail right)
+          - Mobile: single column, stacked timeline
+
+  - feature_name: "Pipeline Coordinator Agent"
+    analysis: >
+      The pipeline view is the single source of truth for "where is my content
+      right now?" It should answer that question at a glance without the user
+      having to run CLI commands. Inspired by CI/CD pipeline views (GitHub Actions,
+      GitLab CI): horizontal stage flow with status per stage. The pipeline log
+      view (per-brief audit trail) is a table — engineers love tables, but creators
+      want a timeline. Design the timeline version.
+    tasks:
+      - title: "Design pipeline status board and per-brief audit timeline"
+        task_type: design
+        description: >
+          Pipeline Status Board (main dashboard):
+          Horizontal stage flow: [Ideation] → [Drafting] → [QA] → [Approval] → [Publishing]
+          Each stage: count badge (in progress / completed / blocked), status color
+          (green=running, amber=waiting_human, red=error, gray=empty).
+          Below: list of active items, each showing: platform icon, topic, current stage,
+          current status, time in current stage ("In Drafting for 2h").
+
+          Per-Brief Audit Timeline ('flex pipeline log <brief_id>'):
+          Vertical timeline with event nodes per stage transition.
+          Each node: stage name, timestamp, duration, agent used, input→output status arrow.
+          Error nodes: red, expanded by default to show error_type and error_detail.
+          Final node: either "✓ Published" (green) or quarantine icon (red).
+
+          Accessibility:
+          - Stage flow: aria-label per stage with count and status
+          - Timeline: role=list, each node role=listitem with aria-label

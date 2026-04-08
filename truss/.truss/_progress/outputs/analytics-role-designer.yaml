@@ -1,0 +1,85 @@
+role: designer
+stream_name: analytics
+
+feature_analyses:
+  - feature_name: "Performance Tracking and Data Ingestion"
+    analysis: >
+      Raw metrics are not motivating — context makes them actionable. "1,240 impressions"
+      means nothing. "1,240 impressions — your best LinkedIn post this month" means
+      everything. The 3-snapshot timeline (1h/24h/7d) is a growth chart, not just a table.
+      Show it as a mini sparkline. The post_deleted state needs a design treatment:
+      a struck-through entry with an explanation, not a broken state.
+    tasks:
+      - title: "Design post metrics card with sparkline and snapshot timeline"
+        task_type: design
+        description: >
+          Post Metrics Card (shown in analytics view or brief detail):
+          Header: platform icon, topic (2 lines), published date.
+          Metrics strip: 4-5 metric badges (Impressions / Likes / Comments / Shares / Saves)
+          each as a pill with icon + number. Largest metric visually prominent (larger font).
+          Sparkline: tiny line chart (80px × 24px) showing metric trend across 3 snapshots
+          (1h → 24h → 7d). Green if trending up, red if declining.
+          Delta badge: "+240 impressions since 1h ago" (green if positive, neutral if flat).
+          Snapshot timeline (collapsible): 3 rows — "1h", "24h", "7d" with timestamp and
+          metric values per row.
+          post_deleted state: card with strikethrough topic, gray platform icon, message
+          "Post was deleted from [Platform] on [date]. Final metrics shown below." with last snapshot.
+
+          Accessibility:
+          - Sparkline: aria-label "Impressions trend: 800 at 1 hour, 1200 at 24 hours, 1240 at 7 days"
+          - Metric pills: aria-label "[metric]: [value]"
+
+  - feature_name: "Analytics Dashboard and Pattern Detection"
+    analysis: >
+      The analytics dashboard is the motivational core of the product — it shows
+      the creator their impact. Design it to celebrate wins, not bury them in numbers.
+      Use a hero stat (most impressive metric this week) at the top. The pattern
+      insights must look like insights, not chart labels — use a newspaper-headline
+      format ("Your Tuesday posts outperform by 40%").
+    tasks:
+      - title: "Design analytics dashboard with platform tabs, hero stat, and pattern insights"
+        task_type: design
+        description: >
+          Analytics Dashboard Layout:
+          Hero Bar: "This week's best: [platform icon] [topic] — [impressions] impressions"
+          Platform tabs: [All] [LinkedIn] [X] [YouTube] [Instagram] [Facebook]
+          Per platform tab content:
+          - Summary row: Total posts | Avg impressions | Avg engagement rate | Top performer
+          - Post list: sorted by engagement_rate desc. Each post: topic (2 lines), publish date,
+            engagement_rate as a progress bar (0-100%), top metric (Impressions: 1.2K), mini sparkline
+          Patterns section (below post list):
+          - Up to 3 insight cards, each: large quote-mark icon, insight text in 16px medium
+            ("Your LinkedIn posts on Tue at 08:30 get 2.3× more engagement"), small supporting
+            stat chip ("Based on 8 posts")
+          - "Need 5+ posts" empty state: progress indicator showing n/5 posts with encouragement text
+
+          Mobile: platform tabs collapse to a dropdown, post list to single-column cards.
+
+  - feature_name: "Content Recommendation Engine"
+    analysis: >
+      Recommendations must feel earned, not generic. The confidence score should be
+      shown visually (signal bars like wifi icon, 0-4 bars) not as a raw decimal.
+      The source posts that drove the recommendation should be linkable (click to see
+      that post's metrics card). The cross-stream appearance in 'flex ideation list'
+      (top 2 recs) should be a distinct card design — clearly labeled "Based on your
+      performance" so users know it's personalized, not generic AI output.
+    tasks:
+      - title: "Design recommendation cards with confidence signal bars and source post links"
+        task_type: design
+        description: >
+          Recommendation Card (full view — 'flex analytics recommend'):
+          Platform badge, confidence bars (0-4 signal bar icons, filled to confidence level),
+          "Low confidence" chip if < 0.4.
+          3 recommendation lines:
+          - 📅 "Post on [day] at [time]" (timing)
+          - 📝 "Write about [topic]" (topic)
+          - 📐 "[Format] format works best for your audience" (format)
+          Rationale (expandable): 1-2 sentences with specific numbers.
+          Source posts (expandable): 2-3 post titles as chips, clickable to metrics card.
+
+          Ideation Integration Card (shown in 'flex ideation list', above scored opportunities):
+          Amber-50 background, left border 4px amber-400. Label: "Based on your performance" (12px caps).
+          1-2 recommendation lines as bullet points. [See full analysis] link to analytics dashboard.
+
+          Empty state: illustrated card "No recommendations yet — need 5+ posts per platform."
+          with how-it-works explainer.
