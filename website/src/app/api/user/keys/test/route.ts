@@ -1,6 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
-import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+// [BYOK-REMOVED] Supabase + rate-limit imports no longer needed
+// import { createClient } from "@/lib/supabase/server";
+// import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
+/* [BYOK-REMOVED]
 // Base URLs for all supported providers (OpenAI-compatible)
 const PROVIDER_URLS: Record<string, string> = {
   groq:        "https://api.groq.com/openai/v1/chat/completions",
@@ -24,8 +26,11 @@ const PROVIDER_TEST_MODELS: Record<string, string> = {
   github:      "Phi-3.5-mini-instruct",
   mistral:     "ministral-3b-2512",
 };
+*/
 
-export async function POST(request: Request) {
+export async function POST() {
+  // [BYOK-REMOVED] API key testing disabled — server manages keys
+  /* [BYOK-REMOVED]
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -127,4 +132,6 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ valid: false, status: "network_error", latency_ms: Date.now() - start });
   }
+  */
+  return Response.json({ valid: false, message: "API key management is handled server-side" }, { status: 410 });
 }

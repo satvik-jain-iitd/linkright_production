@@ -1,12 +1,12 @@
 // POST: Validate a specific key against its provider
 
-import { createClient } from "@/lib/supabase/server";
-import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+// [BYOK-REMOVED] Supabase + rate-limit imports no longer needed
+// import { createClient } from "@/lib/supabase/server";
+// import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST() {
+  // [BYOK-REMOVED] API key validation disabled — server manages keys
+  /* [BYOK-REMOVED]
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -114,4 +114,6 @@ export async function POST(
       { status: 200 }
     );
   }
+  */
+  return Response.json({ valid: false, message: "API key management is handled server-side" });
 }

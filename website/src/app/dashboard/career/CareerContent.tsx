@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { AppNav } from "@/components/AppNav";
 import { ExtractionPromptModal } from "@/components/ExtractionPromptModal";
 
 interface CareerContentProps {
@@ -62,32 +63,35 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
 
   return (
     <div className="min-h-screen">
-      {/* Navbar */}
-      <nav className="flex items-center justify-between border-b border-border px-6 py-4">
-        <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-          Link<span className="text-accent">Right</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-foreground">
-            ← Dashboard
-          </Link>
-          <Link href="/dashboard/nuggets" className="text-sm text-muted transition-colors hover:text-foreground">
-            Nuggets
-          </Link>
-          <Link href="/dashboard/settings" className="text-sm text-muted transition-colors hover:text-foreground">
-            Settings
-          </Link>
-          <span className="text-sm text-muted">
-            {user.user_metadata?.full_name || user.email}
-          </span>
-        </div>
-      </nav>
+      {
+        // [NAV-REDESIGN] <nav className="flex items-center justify-between border-b border-border px-6 py-4">
+        // [NAV-REDESIGN]   <Link href="/dashboard" className="text-lg font-bold tracking-tight">
+        // [NAV-REDESIGN]     Link<span className="text-accent">Right</span>
+        // [NAV-REDESIGN]   </Link>
+        // [NAV-REDESIGN]   <div className="flex items-center gap-4">
+        // [NAV-REDESIGN]     <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-foreground">
+        // [NAV-REDESIGN]       ← Dashboard
+        // [NAV-REDESIGN]     </Link>
+        // [NAV-REDESIGN]     <Link href="/dashboard/nuggets" className="text-sm text-muted transition-colors hover:text-foreground">
+        // [NAV-REDESIGN]       Career Highlights
+        // [NAV-REDESIGN]     </Link>
+        // [NAV-REDESIGN]     [BYOK-REMOVED] Settings link removed
+        // [NAV-REDESIGN]     <Link href="/dashboard/settings" className="text-sm text-muted transition-colors hover:text-foreground">
+        // [NAV-REDESIGN]       Settings
+        // [NAV-REDESIGN]     </Link>
+        // [NAV-REDESIGN]     <span className="text-sm text-muted">
+        // [NAV-REDESIGN]       {user.user_metadata?.full_name || user.email}
+        // [NAV-REDESIGN]     </span>
+        // [NAV-REDESIGN]   </div>
+        // [NAV-REDESIGN] </nav>
+      }
+      <AppNav user={user} />
 
       <div className="mx-auto max-w-3xl px-6 py-12 space-y-10">
         <div>
           <h1 className="text-2xl font-bold">My Career</h1>
           <p className="mt-1 text-sm text-muted">
-            Your career profile and nuggets — the foundation for all resume generation.
+            Your career profile and highlights — the foundation for all resume generation.
           </p>
         </div>
 
@@ -99,7 +103,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
           </div>
           <div className="rounded-xl border border-border bg-surface p-4 text-center">
             <div className="text-2xl font-bold text-accent">{nuggetCount}</div>
-            <div className="mt-0.5 text-xs text-muted">Career Nuggets</div>
+            <div className="mt-0.5 text-xs text-muted">Career Highlights</div>
           </div>
         </div>
 
@@ -135,7 +139,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
               {saving ? "Saving..." : "Save Profile"}
             </button>
             {saveStatus === "saved" && (
-              <span className="text-sm text-green-600">Profile saved — nuggets being extracted in the background</span>
+              <span className="text-sm text-green-600">Profile saved — career highlights being extracted in the background</span>
             )}
             {saveStatus === "error" && (
               <span className="text-sm text-red-500">
@@ -145,15 +149,15 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
           </div>
         </div>
 
-        {/* Bottom section: Nuggets */}
+        {/* Bottom section: Career Highlights */}
         <div className="rounded-2xl border border-border bg-surface p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold">Career Nuggets</h2>
+              <h2 className="text-base font-semibold">Career Highlights</h2>
               <p className="mt-1 text-sm text-muted">
                 {nuggetCount > 0
-                  ? `${nuggetCount} nuggets in your library`
-                  : "No nuggets yet — import from resume or add via ChatGPT bot"}
+                  ? `${nuggetCount} career highlights in your library`
+                  : "No career highlights yet — import from resume or add via ChatGPT bot"}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -161,7 +165,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
                 onClick={() => setShowImportModal(true)}
                 className="rounded-full bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
               >
-                + Import Nuggets
+                + Import Career Highlights
               </button>
               <Link
                 href="/dashboard/nuggets"
@@ -174,9 +178,9 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
 
           {nuggetCount === 0 && (
             <div className="mt-6 rounded-2xl border border-dashed border-border bg-background p-10 text-center">
-              <p className="text-sm font-medium text-muted">No nuggets yet</p>
+              <p className="text-sm font-medium text-muted">No career highlights yet</p>
               <p className="mt-1 text-xs text-muted">
-                Import nuggets from a resume or use the ChatGPT diary bot in Settings.
+                Import career highlights from a resume or use the ChatGPT diary bot in Settings.
               </p>
             </div>
           )}
@@ -187,7 +191,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
                 href="/dashboard/nuggets"
                 className="text-sm text-accent hover:underline"
               >
-                View all {nuggetCount} nuggets →
+                View all {nuggetCount} career highlights →
               </Link>
             </div>
           )}

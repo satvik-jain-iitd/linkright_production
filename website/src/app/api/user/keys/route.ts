@@ -1,15 +1,20 @@
 // GET: List all keys for user (masked)
 // POST: Add new key
 
-import { createClient } from "@/lib/supabase/server";
-import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+// [BYOK-REMOVED] Supabase + rate-limit imports no longer needed
+// import { createClient } from "@/lib/supabase/server";
+// import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
+/* [BYOK-REMOVED]
 function maskKey(key: string): string {
   if (key.length <= 8) return "****";
   return key.slice(0, 4) + "..." + key.slice(-4);
 }
+*/
 
-export async function GET(request: Request) {
+export async function GET() {
+  // [BYOK-REMOVED] API key management disabled — server manages keys
+  /* [BYOK-REMOVED]
   const supabase = await createClient();
   const {
     data: { user },
@@ -52,9 +57,13 @@ export async function GET(request: Request) {
   }));
 
   return Response.json({ keys: masked });
+  */
+  return Response.json({ keys: [], message: "API key management is handled server-side" });
 }
 
-export async function POST(request: Request) {
+export async function POST() {
+  // [BYOK-REMOVED] API key management disabled — server manages keys
+  /* [BYOK-REMOVED]
   const supabase = await createClient();
   const {
     data: { user },
@@ -139,4 +148,6 @@ export async function POST(request: Request) {
   }
 
   return Response.json({ key: data }, { status: 201 });
+  */
+  return Response.json({ error: "API key management is handled server-side" }, { status: 410 });
 }

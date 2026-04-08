@@ -17,7 +17,7 @@ logger = logging.getLogger("worker")
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
-from .config import SUPABASE_SERVICE_KEY, SUPABASE_URL, WORKER_SECRET
+from .config import SUPABASE_SERVICE_KEY, SUPABASE_URL, WORKER_SECRET, DEFAULT_API_KEY, DEFAULT_MODEL_PROVIDER, DEFAULT_MODEL_ID
 from .context import PipelineContext
 from .db import create_supabase, update_job
 from .pipeline.orchestrator import phase_0_nuggets, run_pipeline
@@ -35,9 +35,9 @@ class JobRequest(BaseModel):
     user_id: str
     jd_text: str
     career_text: str
-    model_provider: str  # openrouter | groq | gemini
-    model_id: str
-    api_key: str         # user's BYOK key
+    model_provider: str = "groq"  # openrouter | groq | gemini
+    model_id: str = "llama-3.1-8b-instant"
+    api_key: str = ""    # [BYOK-REMOVED] now optional — server falls back to DEFAULT_API_KEY
     template_id: str = "cv-a4-standard"
     qa_answers: list[dict] = []  # [{question, answer}]
     override_theme_colors: dict | None = None  # user-confirmed brand colors from wizard
@@ -80,14 +80,22 @@ async def process_job(req: JobRequest):
         return
 
     try:
+        # [BYOK-REMOVED] Fallback to server-side defaults if client doesn't provide LLM config
+        # api_key = req.api_key  # original: use client-provided key only
+        # model_provider = req.model_provider
+        # model_id = req.model_id
+        api_key = req.api_key or DEFAULT_API_KEY
+        model_provider = req.model_provider or DEFAULT_MODEL_PROVIDER
+        model_id = req.model_id or DEFAULT_MODEL_ID
+
         ctx = PipelineContext(
             job_id=req.job_id,
             user_id=req.user_id,
             jd_text=req.jd_text,
             career_text=req.career_text,
-            model_provider=req.model_provider,
-            model_id=req.model_id,
-            api_key=req.api_key,
+            model_provider=model_provider,
+            model_id=model_id,
+            api_key=api_key,
             template_id=req.template_id,
             qa_answers=req.qa_answers or [],
             override_theme_colors=req.override_theme_colors,
@@ -95,7 +103,7 @@ async def process_job(req: JobRequest):
             section_html_frozen=req.section_html_frozen or {},
         )
 
-        logger.info(f"Job {req.job_id}: starting pipeline ({req.model_provider}/{req.model_id})")
+        logger.info(f"Job {req.job_id}: starting pipeline ({model_provider}/{model_id})")
         update_job(sb, req.job_id, status="processing", current_phase="starting", phase_number=0)
         await run_pipeline(ctx, sb)
         duration = int((time.time() - started) * 1000)

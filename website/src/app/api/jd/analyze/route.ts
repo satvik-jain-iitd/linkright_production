@@ -3,7 +3,7 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
 import { jinaEmbed } from "@/lib/jina-embed";
 import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
+// [BYOK-REMOVED] import { resolveApiKey } from "@/lib/resolve-api-key";
 
 export interface JDRequirement {
   id: string;
@@ -177,22 +177,27 @@ export async function POST(request: Request) {
     return rateLimitResponse("JD analysis");
   }
 
-  const { jd_text, model_provider, model_id, api_key } = await request.json();
+  // [BYOK-REMOVED] api_key no longer required from client — server provides the key
+  const { jd_text, model_provider: _model_provider, model_id: _model_id /* , api_key */ } = await request.json();
 
-  if (!jd_text || !model_provider || !model_id || !api_key) {
+  // [BYOK-REMOVED] api_key removed from required fields check
+  // if (!jd_text || !model_provider || !model_id || !api_key) {
+  if (!jd_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+  // Server-side defaults for LLM config
+  const apiKey = process.env.GROQ_API_KEY || "";
+  const model_provider = _model_provider || "groq";
+  const model_id = _model_id || "llama-3.1-8b-instant";
 
-  // Step 1: Extract requirements via LLM
+  // Step 1: Extract requirements via LLM (with 1 retry)
   let requirements: JDRequirement[] = [];
   try {
     const { url, headers, body } = buildLlmCall(
       model_provider,
       model_id,
-      resolvedKey,
+      apiKey,
       EXTRACTION_PROMPT,
       `Job Description:\n${jd_text.slice(0, 4000)}`,
       1500
@@ -202,7 +207,7 @@ export async function POST(request: Request) {
     // Retry once on failure with backoff
     if (!resp || !resp.ok) {
       await new Promise((r) => setTimeout(r, 2000));
-      const retry = buildLlmCall(model_provider, model_id, api_key, EXTRACTION_PROMPT, `Job Description:\n${jd_text.slice(0, 4000)}`, 1500);
+      const retry = buildLlmCall(model_provider, model_id, apiKey, EXTRACTION_PROMPT, `Job Description:\n${jd_text.slice(0, 4000)}`, 1500);
       resp = await fetch(retry.url, { method: "POST", headers: retry.headers, body: retry.body, signal: AbortSignal.timeout(20000) }).catch(() => null);
     }
 
@@ -308,7 +313,7 @@ export async function POST(request: Request) {
 
   // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
   const candidatePairs = allPairs.map(({ req_id, req_text, chunk }) => ({ req_id, req_text, chunk }));
-  const rawScores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, resolvedKey);
+  const rawScores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, apiKey);
 
   // Pick best scoring chunk per original requirement
   const scores: Record<string, number> = {};

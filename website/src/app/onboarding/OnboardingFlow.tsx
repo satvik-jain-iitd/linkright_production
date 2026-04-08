@@ -8,7 +8,8 @@ import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type Step = 1 | 2 | 3 | 4 | 5;
+// [BYOK-REMOVED] type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4;
 
 const ROLE_OPTIONS = [
   "Product Manager",
@@ -21,14 +22,14 @@ const ROLE_OPTIONS = [
   "Other",
 ];
 
-const PROVIDER_MODEL_MAP: Record<string, string> = {
-  groq:        "llama-3.1-8b-instant",
-  cerebras:    "llama3.1-8b",
-  sambanova:   "Meta-Llama-3.1-8B-Instruct",
-  siliconflow: "Qwen/Qwen3-8B",
-  openrouter:  "meta-llama/llama-3.2-3b-instruct:free",
-  gemini:      "gemini-1.5-flash-8b",
-};
+// [BYOK-REMOVED] const PROVIDER_MODEL_MAP: Record<string, string> = {
+// [BYOK-REMOVED]   groq:        "llama-3.1-8b-instant",
+// [BYOK-REMOVED]   cerebras:    "llama3.1-8b",
+// [BYOK-REMOVED]   sambanova:   "Meta-Llama-3.1-8B-Instruct",
+// [BYOK-REMOVED]   siliconflow: "Qwen/Qwen3-8B",
+// [BYOK-REMOVED]   openrouter:  "meta-llama/llama-3.2-3b-instruct:free",
+// [BYOK-REMOVED]   gemini:      "gemini-1.5-flash-8b",
+// [BYOK-REMOVED] };
 
 interface Education {
   institution: string;
@@ -102,318 +103,24 @@ function StepWelcome({
   );
 }
 
-// ── Step 2: API Key Setup ─────────────────────────────────────────────────
-
-const PROVIDER_INSTRUCTIONS: Record<string, { label: string; url: string; steps: string[] }> = {
-  groq: {
-    label: "Get a free API key in 60 seconds",
-    url: "https://console.groq.com",
-    steps: ["Go to console.groq.com", "Sign up / Log in", "Create an API key → Copy it"],
-  },
-  cerebras: {
-    label: "Get a free Cerebras API key",
-    url: "https://cloud.cerebras.ai",
-    steps: ["Go to cloud.cerebras.ai", "Sign up → API Keys → Create Key", "Free tier: 1M tokens/day, ~2200 tokens/second"],
-  },
-  sambanova: {
-    label: "Get a free SambaNova API key",
-    url: "https://cloud.sambanova.ai",
-    steps: ["Go to cloud.sambanova.ai", "Sign up / Log in", "Go to API Keys → Create key"],
-  },
-  siliconflow: {
-    label: "Get a free SiliconFlow API key",
-    url: "https://cloud.siliconflow.cn",
-    steps: ["Go to cloud.siliconflow.cn", "Sign up / Log in", "Go to API Keys → Create key"],
-  },
-  openrouter: {
-    label: "Get an OpenRouter API key",
-    url: "https://openrouter.ai",
-    steps: ["Go to openrouter.ai", "Sign up / Log in", "Go to Keys → Create Key"],
-  },
-  gemini: {
-    label: "Get a free Gemini API key",
-    url: "https://aistudio.google.com/apikey",
-    steps: ["Go to aistudio.google.com/apikey", "Sign in with Google", "Click Create API Key"],
-  },
-  nvidia: {
-    label: "Get an NVIDIA API key",
-    url: "https://build.nvidia.com",
-    steps: ["Go to build.nvidia.com", "Sign up / Log in", "Go to API Keys → Generate key"],
-  },
-  github: {
-    label: "Get a GitHub token",
-    url: "https://github.com/settings/tokens",
-    steps: ["Go to github.com/settings/tokens", "Click Generate new token", "Copy the token"],
-  },
-  mistral: {
-    label: "Get a Mistral API key",
-    url: "https://console.mistral.ai",
-    steps: ["Go to console.mistral.ai", "Sign up / Log in", "Go to API Keys → Create key"],
-  },
-};
-
-function StepApiKey({
-  onNext,
-  onKeyValidated,
-}: {
-  onNext: (provider: string, modelId: string, apiKey: string) => void;
-  onKeyValidated: (provider: string, modelId: string, apiKey: string) => void;
-}) {
-  const [provider, setProvider] = useState("groq");
-  const [apiKey, setApiKey] = useState("");
-  const [validating, setValidating] = useState(false);
-  const [validated, setValidated] = useState(false);
-  const [error, setError] = useState("");
-  const [existingKeyId, setExistingKeyId] = useState<string | null>(null);
-
-  const modelId = PROVIDER_MODEL_MAP[provider] ?? "";
-
-  // Fetch existing keys on mount and when provider changes
-  useEffect(() => {
-    setExistingKeyId(null);
-    fetch("/api/user/keys")
-      .then((r) => r.json())
-      .then((data) => {
-        const keys = data.keys || [];
-        const providerKey = keys.find((k: Record<string, unknown>) => k.provider === provider && k.is_active);
-        if (providerKey) {
-          setExistingKeyId(providerKey.id as string);
-          setValidated(true);
-          onKeyValidated(provider, PROVIDER_MODEL_MAP[provider] ?? "", providerKey.id as string);
-        }
-      })
-      .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider]);
-
-  const handleProviderChange = (p: string) => {
-    setProvider(p);
-    setValidated(false);
-    setError("");
-    setApiKey("");
-    setExistingKeyId(null);
-  };
-
-  const handleValidate = async () => {
-    if (!apiKey.trim()) return;
-    setValidating(true);
-    setError("");
-    setValidated(false);
-
-    try {
-      // First: test the key with a real inference call
-      const testRes = await fetch("/api/user/keys/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, api_key: apiKey.trim(), model_id: modelId }),
-      });
-      const testData = await testRes.json();
-
-      if (!testRes.ok || (!testData.valid && testData.status !== "rate_limited")) {
-        const msg =
-          testData.status === "invalid_key" ? "Invalid API key — check and try again." :
-          testData.status === "network_error" ? "Could not reach provider. Check your connection." :
-          testData.error ?? "Validation failed.";
-        setError(msg);
-        return;
-      }
-
-      const isRateLimited = testData.status === "rate_limited";
-
-      // Now save the key to DB
-      const res = await fetch("/api/user/keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, api_key: apiKey.trim(), label: `${provider}-${Date.now()}` }),
-      });
-
-      if (res.ok) {
-        setValidated(true);
-        onKeyValidated(provider, modelId, apiKey.trim());
-        if (isRateLimited) {
-          setError("Key saved — but it's currently rate-limited (quota hit). It will work once the limit resets.");
-        }
-      } else {
-        const data = await res.json();
-        setError(data.error ?? "Failed to save key.");
-      }
-    } catch {
-      setError("Network error. Please try again.");
-    } finally {
-      setValidating(false);
-    }
-  };
-
-  const instructions = PROVIDER_INSTRUCTIONS[provider];
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">
-          Set up your AI model
-        </h1>
-        <p className="mt-2 text-muted">
-          LinkRight uses your API key to generate resumes. Your key stays private.
-        </p>
-      </div>
-
-      {/* Provider dropdown */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-foreground">
-          Provider
-        </label>
-        <select
-          value={provider}
-          onChange={(e) => handleProviderChange(e.target.value)}
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          <option value="groq">Groq (free · 30 RPM)</option>
-          <option value="cerebras">Cerebras (free · fastest ~2200 tok/s)</option>
-          <option value="sambanova">SambaNova (free · 30 RPM)</option>
-          <option value="siliconflow">SiliconFlow (free · 1000 RPM)</option>
-          <option value="openrouter">OpenRouter (free tier available)</option>
-          <option value="gemini">Google Gemini (free tier)</option>
-        </select>
-      </div>
-
-      {/* Model display */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-foreground">
-          Model
-        </label>
-        <input
-          type="text"
-          value={modelId}
-          readOnly
-          className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground font-mono focus:outline-none"
-        />
-      </div>
-
-      {/* Provider instructions */}
-      {instructions && (
-        <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 space-y-3">
-          <p className="text-sm font-semibold text-primary-700">
-            {instructions.label}
-          </p>
-          <ol className="space-y-2">
-            {instructions.steps.map((stepText, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-sm text-foreground">
-                <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
-                  {idx + 1}
-                </span>
-                <span>
-                  {instructions.url && idx === 0 ? (
-                    <>
-                      Go to{" "}
-                      <a
-                        href={instructions.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary-600 underline hover:text-primary-700"
-                      >
-                        {instructions.url.replace("https://", "")}
-                      </a>
-                    </>
-                  ) : (
-                    stepText
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {/* Existing key message */}
-      {existingKeyId && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
-          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Key already configured for {provider}. You can proceed or enter a new key below.
-        </div>
-      )}
-
-      {/* API Key input */}
-      {!existingKeyId && (
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-foreground">
-            API Key
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                setValidated(false);
-                setError("");
-              }}
-              placeholder="Paste your API key here"
-              className="flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <button
-              onClick={handleValidate}
-              disabled={!apiKey.trim() || validating || validated}
-              className="rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-            >
-              {validating ? "Validating..." : "Validate Key"}
-            </button>
-          </div>
-
-          {validated && !existingKeyId && (
-            <p className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Key validated!
-            </p>
-          )}
-          {error && (
-            <p className="text-sm text-red-600">{error}</p>
-          )}
-        </div>
-      )}
-
-      <button
-        onClick={() => {
-          if (existingKeyId) {
-            onNext(provider, modelId, existingKeyId);
-          } else {
-            onNext(provider, modelId, apiKey.trim());
-          }
-        }}
-        disabled={!validated}
-        className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        Next
-      </button>
-    </div>
-  );
-}
+// [BYOK-REMOVED] ── Step 2: API Key Setup (entire component removed) ─────────
+// [BYOK-REMOVED] StepApiKey component was here — users no longer manage API keys.
+// [BYOK-REMOVED] See git history for the full component if needed.
 
 // ── Step 3: Career Basics Form ────────────────────────────────────────────
 
 function StepCareerBasics({
   onNext,
   onSkip,
-  modelProvider,
-  modelId,
-  apiKey,
+  // [BYOK-REMOVED] modelProvider,
+  // [BYOK-REMOVED] modelId,
+  // [BYOK-REMOVED] apiKey,
 }: {
   onNext: () => void;
   onSkip: () => void;
-  modelProvider: string;
-  modelId: string;
-  apiKey: string;
+  // [BYOK-REMOVED] modelProvider: string;
+  // [BYOK-REMOVED] modelId: string;
+  // [BYOK-REMOVED] apiKey: string;
 }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -469,9 +176,9 @@ function StepCareerBasics({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: resumePasteText.trim(),
-          model_provider: modelProvider,
-          model_id: modelId,
-          api_key: apiKey,
+          // [BYOK-REMOVED] model_provider: modelProvider,
+          // [BYOK-REMOVED] model_id: modelId,
+          // [BYOK-REMOVED] api_key: apiKey,
         }),
       });
       const data = await res.json();
@@ -493,9 +200,9 @@ function StepCareerBasics({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("model_provider", modelProvider);
-      formData.append("model_id", modelId);
-      formData.append("api_key", apiKey);
+      // [BYOK-REMOVED] formData.append("model_provider", modelProvider);
+      // [BYOK-REMOVED] formData.append("model_id", modelId);
+      // [BYOK-REMOVED] formData.append("api_key", apiKey);
       const res = await fetch("/api/onboarding/parse-resume", {
         method: "POST",
         body: formData,
@@ -586,36 +293,6 @@ function StepCareerBasics({
       });
 
       if (res.ok) {
-        // Also create career_chunks so the onboarding gate passes
-        let uploadText = careerText;
-        if (uploadText.trim().length < 200) {
-          // Assemble a longer version from all fields
-          uploadText = [
-            fullName && `Full Name: ${fullName}`,
-            email && `Email: ${email}`,
-            phone && `Phone: ${phone}`,
-            linkedin && `LinkedIn: ${linkedin}`,
-            education.filter((e) => e.institution || e.degree).length > 0 &&
-              `Education: ${education
-                .filter((e) => e.institution || e.degree)
-                .map((e) => `${e.degree} at ${e.institution} (${e.year})`)
-                .join("; ")}`,
-            skills.length > 0 && `Skills: ${skills.join(", ")}`,
-            certifications && `Certifications: ${certifications}`,
-            resumePasteText && `Resume: ${resumePasteText}`,
-            // Pad with context to reach minimum length
-            "This is my career profile for generating tailored resumes.",
-          ]
-            .filter(Boolean)
-            .join("\n");
-        }
-        if (uploadText.trim().length >= 200) {
-          await fetch("/api/career/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ career_text: uploadText }),
-          }).catch(() => {}); // Non-blocking
-        }
         onNext();
       } else {
         const data = await res.json();
@@ -905,15 +582,15 @@ function StepCareerBasics({
 
 function StepConversation({
   selectedRoles,
-  modelProvider,
-  modelId,
-  apiKey,
+  // [BYOK-REMOVED] modelProvider,
+  // [BYOK-REMOVED] modelId,
+  // [BYOK-REMOVED] apiKey,
   onDone,
 }: {
   selectedRoles: string[];
-  modelProvider: string;
-  modelId: string;
-  apiKey: string;
+  // [BYOK-REMOVED] modelProvider: string;
+  // [BYOK-REMOVED] modelId: string;
+  // [BYOK-REMOVED] apiKey: string;
   onDone: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -962,9 +639,9 @@ function StepConversation({
             target_roles: selectedRoles,
             conversation_history: [],
             confirmed_nuggets: [],
-            model_provider: modelProvider,
-            model_id: modelId,
-            api_key: apiKey,
+            // [BYOK-REMOVED] model_provider: modelProvider,
+            // [BYOK-REMOVED] model_id: modelId,
+            // [BYOK-REMOVED] api_key: apiKey,
           }),
         });
         const data = await res.json();
@@ -999,9 +676,9 @@ function StepConversation({
           target_roles: selectedRoles,
           conversation_history: updatedHistory,
           confirmed_nuggets: Array(confirmedCount).fill(""),
-          model_provider: modelProvider,
-          model_id: modelId,
-          api_key: apiKey,
+          // [BYOK-REMOVED] model_provider: modelProvider,
+          // [BYOK-REMOVED] model_id: modelId,
+          // [BYOK-REMOVED] api_key: apiKey,
         }),
       });
       const data = await res.json();
@@ -1038,9 +715,9 @@ function StepConversation({
         body: JSON.stringify({
           user_answer: text,
           action: "confirm",
-          model_provider: modelProvider,
-          model_id: modelId,
-          api_key: apiKey,
+          // [BYOK-REMOVED] model_provider: modelProvider,
+          // [BYOK-REMOVED] model_id: modelId,
+          // [BYOK-REMOVED] api_key: apiKey,
         }),
       });
       const data = await res.json();
@@ -1061,11 +738,8 @@ function StepConversation({
         addMessage("system", "Saved! ✓");
         await fetchNextQuestion(updatedHistory, newCount);
       } else {
-        // Paraphrase extraction failed — show actual error from API
-        const errMsg = data.error
-          ? `Error: ${data.error}`
-          : "I had trouble processing that. Could you rephrase or add more details?";
-        addMessage("system", errMsg);
+        // Paraphrase extraction failed — ask to rephrase
+        addMessage("system", "I had trouble processing that. Could you rephrase or add more details?");
         setWaitingForConfirm(false);
         setSending(false);
       }
@@ -1086,9 +760,9 @@ function StepConversation({
         body: JSON.stringify({
           user_answer: pendingConfirm.userAnswer,
           action: "confirm",
-          model_provider: modelProvider,
-          model_id: modelId,
-          api_key: apiKey,
+          // [BYOK-REMOVED] model_provider: modelProvider,
+          // [BYOK-REMOVED] model_id: modelId,
+          // [BYOK-REMOVED] api_key: apiKey,
         }),
       });
       const data = await res.json();
@@ -1129,9 +803,9 @@ function StepConversation({
           user_answer: pendingConfirm.userAnswer,
           action: "correct",
           correction: correctedText,
-          model_provider: modelProvider,
-          model_id: modelId,
-          api_key: apiKey,
+          // [BYOK-REMOVED] model_provider: modelProvider,
+          // [BYOK-REMOVED] model_id: modelId,
+          // [BYOK-REMOVED] api_key: apiKey,
         }),
       });
       const data = await res.json();
@@ -1405,10 +1079,11 @@ function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
 
 // ── Progress bar ──────────────────────────────────────────────────────────
 
-const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
+// [BYOK-REMOVED] const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
+const STEP_LABELS = ["Roles", "Profile", "TruthEngine", "Summary"];
 
 function ProgressBar({ step }: { step: Step }) {
-  const totalSteps = 5;
+  const totalSteps = 4;
   const currentIndex = Math.min(step - 1, totalSteps - 1);
 
   return (
@@ -1440,13 +1115,13 @@ function ProgressBar({ step }: { step: Step }) {
 export function OnboardingFlow() {
   const [step, setStep] = useState<Step>(1);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [modelProvider, setModelProvider] = useState("groq");
-  const [modelId, setModelId] = useState(PROVIDER_MODEL_MAP.groq);
-  const [apiKey, setApiKey] = useState("");
+  // [BYOK-REMOVED] const [modelProvider, setModelProvider] = useState("groq");
+  // [BYOK-REMOVED] const [modelId, setModelId] = useState(PROVIDER_MODEL_MAP.groq);
+  // [BYOK-REMOVED] const [apiKey, setApiKey] = useState("");
 
   return (
     <div>
-      {step <= 5 && <ProgressBar step={step} />}
+      {step <= 4 && <ProgressBar step={step} />}
 
       {step === 1 && (
         <StepWelcome
@@ -1456,43 +1131,29 @@ export function OnboardingFlow() {
         />
       )}
 
+      {/* [BYOK-REMOVED] Step 2 was StepApiKey — removed */}
+
       {step === 2 && (
-        <StepApiKey
-          onNext={(p, m, k) => {
-            setModelProvider(p);
-            setModelId(m);
-            setApiKey(k);
-            setStep(3);
-          }}
-          onKeyValidated={(p, m, k) => {
-            setModelProvider(p);
-            setModelId(m);
-            setApiKey(k);
-          }}
+        <StepCareerBasics
+          onNext={() => setStep(3)}
+          onSkip={() => setStep(3)}
+          // [BYOK-REMOVED] modelProvider={modelProvider}
+          // [BYOK-REMOVED] modelId={modelId}
+          // [BYOK-REMOVED] apiKey={apiKey}
         />
       )}
 
       {step === 3 && (
-        <StepCareerBasics
-          onNext={() => setStep(4)}
-          onSkip={() => setStep(4)}
-          modelProvider={modelProvider}
-          modelId={modelId}
-          apiKey={apiKey}
-        />
-      )}
-
-      {step === 4 && (
         <StepConversation
           selectedRoles={selectedRoles}
-          modelProvider={modelProvider}
-          modelId={modelId}
-          apiKey={apiKey}
-          onDone={() => setStep(5)}
+          // [BYOK-REMOVED] modelProvider={modelProvider}
+          // [BYOK-REMOVED] modelId={modelId}
+          // [BYOK-REMOVED] apiKey={apiKey}
+          onDone={() => setStep(4)}
         />
       )}
 
-      {step === 5 && <StepSummary />}
+      {step === 4 && <StepSummary />}
     </div>
   );
 }

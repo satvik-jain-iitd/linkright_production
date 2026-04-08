@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+// [BYOK-REMOVED] useState, useEffect, useCallback no longer needed
+// import { useState, useEffect, useCallback } from "react";
 
 interface ApiKey {
   id: string;
@@ -21,6 +22,8 @@ export interface KeyManagerPanelProps {
 }
 
 export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyManagerPanelProps) {
+  // [BYOK-REMOVED] Entire BYOK key management UI removed — server manages keys now
+  /* [BYOK-REMOVED]
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [newKey, setNewKey] = useState("");
@@ -194,7 +197,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
         API Keys for {providerLabel}
       </h3>
 
-      {/* Key list */}
       {sorted.length === 0 && (
         <p className="text-xs text-muted">No keys added yet.</p>
       )}
@@ -204,18 +206,15 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
           key={key.id}
           className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
         >
-          {/* Priority badge */}
           <span className="shrink-0 rounded bg-accent/10 px-1.5 py-0.5 text-xs font-semibold text-accent">
             #{idx + 1}
           </span>
 
-          {/* Label + masked key */}
           <div className="min-w-0 flex-1">
             <span className="font-medium text-foreground">{key.label}</span>
             <span className="ml-2 text-xs text-muted">{key.api_key_masked}</span>
           </div>
 
-          {/* Active indicator */}
           <button
             onClick={() => handleToggleActive(key.id, key.is_active)}
             className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
@@ -228,7 +227,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
             {key.is_active ? "Active" : "Off"}
           </button>
 
-          {/* Validation status / button */}
           <button
             onClick={() => handleValidate(key.id)}
             disabled={validating === key.id}
@@ -246,7 +244,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
             )}
           </button>
 
-          {/* Move up */}
           <button
             onClick={() => handleMovePriority(key.id, "up")}
             disabled={idx === 0}
@@ -256,7 +253,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
             &#8593;
           </button>
 
-          {/* Move down */}
           <button
             onClick={() => handleMovePriority(key.id, "down")}
             disabled={idx === sorted.length - 1}
@@ -266,7 +262,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
             &#8595;
           </button>
 
-          {/* Delete */}
           <button
             onClick={() => handleDelete(key.id)}
             disabled={deleting === key.id}
@@ -278,7 +273,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
         </div>
       ))}
 
-      {/* Add key form */}
       <div className="flex gap-2">
         <input
           type="password"
@@ -310,4 +304,6 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
       )}
     </div>
   );
+  */
+  return null;
 }

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+// [NAV-REDESIGN] createClient + useRouter only used by handleSignOut (now in AppNav)
+// import { createClient } from "@/lib/supabase/client";
+// import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { GRADE_COLORS } from "@/components/QualityPanel";
+import { AppNav } from "@/components/AppNav";
 
 interface ResumeJob {
   id: string;
@@ -23,7 +25,7 @@ interface ResumeJob {
 }
 
 export function DashboardContent({ user }: { user: User }) {
-  const router = useRouter();
+  // [NAV-REDESIGN] const router = useRouter();
   const [jobs, setJobs] = useState<ResumeJob[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,11 +37,12 @@ export function DashboardContent({ user }: { user: User }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut({ scope: "global" });
-    router.push("/auth");
-  };
+  // [NAV-REDESIGN] handleSignOut — AppNav handles sign out internally
+  // const handleSignOut = async () => {
+  //   const supabase = createClient();
+  //   await supabase.auth.signOut({ scope: "global" });
+  //   router.push("/auth");
+  // };
 
   const handleDownload = (job: ResumeJob, e: React.MouseEvent) => {
     e.preventDefault();
@@ -66,88 +69,98 @@ export function DashboardContent({ user }: { user: User }) {
   const jobLabel = (job: ResumeJob) =>
     job.target_company || job.model_id.split("/").pop()?.replace(/:.*/, "") || "Resume";
 
+  // [NAV-REDESIGN] Inline nav replaced by shared AppNav component
+  // <nav className="flex items-center justify-between border-b border-border px-6 py-4">
+  //   <Link href="/dashboard" className="text-lg font-bold tracking-tight">
+  //     Link<span className="text-accent">Right</span>
+  //   </Link>
+  //   <div className="flex items-center gap-4">
+  //     <Link
+  //       href="/dashboard/career"
+  //       className="text-sm text-muted transition-colors hover:text-foreground"
+  //     >
+  //       My Career
+  //     </Link>
+  //     <Link
+  //       href="/dashboard/nuggets"
+  //       className="text-sm text-muted transition-colors hover:text-foreground"
+  //     >
+  //       Career Highlights
+  //     </Link>
+  //     {/* [BYOK-REMOVED] Settings link removed
+  //     <Link
+  //       href="/dashboard/settings"
+  //       className="text-sm text-muted transition-colors hover:text-foreground"
+  //     >
+  //       Settings
+  //     </Link>
+  //     */}
+  //     <div className="flex items-center gap-3">
+  //       {user.user_metadata?.avatar_url && (
+  //         <img
+  //           src={user.user_metadata.avatar_url}
+  //           alt=""
+  //           className="h-8 w-8 rounded-full"
+  //         />
+  //       )}
+  //       <span className="text-sm text-muted">
+  //         {user.user_metadata?.full_name || user.email}
+  //       </span>
+  //     </div>
+  //     <button
+  //       onClick={handleSignOut}
+  //       className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:text-foreground"
+  //     >
+  //       Sign out
+  //     </button>
+  //   </div>
+  // </nav>
+
   return (
     <div className="min-h-screen">
-      {/* Navbar */}
-      <nav className="flex items-center justify-between border-b border-border px-6 py-4">
-        <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-          Link<span className="text-accent">Right</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard/career"
-            className="text-sm text-muted transition-colors hover:text-foreground"
-          >
-            My Career
-          </Link>
-          <Link
-            href="/dashboard/nuggets"
-            className="text-sm text-muted transition-colors hover:text-foreground"
-          >
-            Nuggets
-          </Link>
-          <Link
-            href="/dashboard/settings"
-            className="text-sm text-muted transition-colors hover:text-foreground"
-          >
-            Settings
-          </Link>
-          <div className="flex items-center gap-3">
-            {user.user_metadata?.avatar_url && (
-              <img
-                src={user.user_metadata.avatar_url}
-                alt=""
-                className="h-8 w-8 rounded-full"
-              />
-            )}
-            <span className="text-sm text-muted">
-              {user.user_metadata?.full_name || user.email}
-            </span>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:text-foreground"
-          >
-            Sign out
-          </button>
-        </div>
-      </nav>
+      <AppNav user={user} />
 
       {/* Main content */}
       <div className="mx-auto max-w-4xl px-6 py-12">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">
-              Welcome, {user.user_metadata?.full_name?.split(" ")[0] || "there"}!
+              {/* [DASHBOARD-CLEANUP] Old greeting: user.user_metadata?.full_name?.split(" ")[0] || "there" */}
+              Welcome, {(() => {
+                const firstName = user.user_metadata?.full_name?.split(" ")[0];
+                const greeting = firstName && firstName.length < 20 && !firstName.includes("@") ? firstName : "there";
+                return greeting;
+              })()}!
             </h1>
-            <p className="mt-2 text-muted">Your AI-powered resume dashboard.</p>
+            <p className="mt-2 text-muted">Manage your tailored resumes.</p>
           </div>
-          <Link
-            href="/resume/new"
-            onClick={() => sessionStorage.removeItem("linkright_wizard_v4")}
-            className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-          >
-            + Create Resume
-          </Link>
+          {/* [DASHBOARD-CLEANUP] Duplicate "Create Resume" CTA — AppNav already has one */}
+          {/* <Link */}
+          {/*   href="/resume/new" */}
+          {/*   onClick={() => sessionStorage.removeItem("linkright_wizard_v4")} */}
+          {/*   className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover" */}
+          {/* > */}
+          {/*   + Create Resume */}
+          {/* </Link> */}
         </div>
 
-        {/* Feedback CTA */}
-        <div className="mt-8 rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted">Help us build the right pricing</p>
-              <p className="mt-1 text-sm text-foreground">
-                Your first resume is free. Share feedback to shape what&apos;s next.
-              </p>
-            </div>
-            <Link
-              href="/pricing"
-              className="rounded-full border border-accent bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
-            >
-              Share feedback
-            </Link>
-          </div>
-        </div>
+        {/* [DASHBOARD-CLEANUP] Feedback/pricing survey banner removed — revisit when pricing is finalized */}
+        {/* <div className="mt-8 rounded-2xl border border-border bg-surface p-6 shadow-sm"> */}
+        {/*   <div className="flex items-center justify-between"> */}
+        {/*     <div> */}
+        {/*       <p className="text-sm text-muted">Help us build the right pricing</p> */}
+        {/*       <p className="mt-1 text-sm text-foreground"> */}
+        {/*         Your first resume is free. Share feedback to shape what&apos;s next. */}
+        {/*       </p> */}
+        {/*     </div> */}
+        {/*     <Link */}
+        {/*       href="/pricing" */}
+        {/*       className="rounded-full border border-accent bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-accent/20" */}
+        {/*     > */}
+        {/*       Share feedback */}
+        {/*     </Link> */}
+        {/*   </div> */}
+        {/* </div> */}
 
         {/* Resume list */}
         <div className="mt-8">
