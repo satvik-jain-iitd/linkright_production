@@ -70,12 +70,12 @@ export async function POST(request: Request) {
   if (UUID_RE.test(api_key)) {
     const { data: keyRow } = await supabase
       .from("user_api_keys")
-      .select("api_key")
+      .select("api_key_encrypted")
       .eq("id", api_key)
       .eq("user_id", user.id)
       .single();
-    if (keyRow?.api_key) {
-      resolved_api_key = keyRow.api_key;
+    if (keyRow?.api_key_encrypted) {
+      resolved_api_key = keyRow.api_key_encrypted;
     } else {
       // Fallback: try user_settings
       const { data: settings } = await supabase
