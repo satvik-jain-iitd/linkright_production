@@ -22,8 +22,16 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { jd_text, career_text, model_provider, model_id, api_key, template_id, qa_answers, override_theme_colors } = body;
 
-  if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
-    return Response.json({ error: "Missing required fields" }, { status: 400 });
+  {
+    const missing: string[] = [];
+    if (!jd_text) missing.push("job description");
+    if (!career_text) missing.push("career profile (add content on the My Career page first)");
+    if (!model_provider) missing.push("model provider");
+    if (!model_id) missing.push("model");
+    if (!api_key) missing.push("API key (configure in Settings → API Key Management)");
+    if (missing.length > 0) {
+      return Response.json({ error: `Missing required fields: ${missing.join(", ")}` }, { status: 400 });
+    }
   }
 
   // Auto-cleanup stale jobs: mark any queued/processing jobs older than 10 min as failed
@@ -70,12 +78,12 @@ export async function POST(request: Request) {
   if (UUID_RE.test(api_key)) {
     const { data: keyRow } = await supabase
       .from("user_api_keys")
-      .select("api_key")
+      .select("api_key_encrypted")
       .eq("id", api_key)
       .eq("user_id", user.id)
       .single();
-    if (keyRow?.api_key) {
-      resolved_api_key = keyRow.api_key;
+    if (keyRow?.api_key_encrypted) {
+      resolved_api_key = keyRow.api_key_encrypted;
     } else {
       // Fallback: try user_settings
       const { data: settings } = await supabase

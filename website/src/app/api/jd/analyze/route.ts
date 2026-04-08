@@ -327,20 +327,52 @@ export async function POST(request: Request) {
     }
   }
 
-  // Step 2: Text search — gather top candidate chunk per requirement
-  const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
+  // Step 2: Text search — gather top 3 candidate chunks per requirement
+  const candidateGroups: { req_id: string; req_text: string; chunks: string[] }[] = [];
 
   await Promise.allSettled(
     requirements.map(async (req) => {
       const chunks = await searchChunks(supabase, user.id, req.text);
       if (chunks.length > 0) {
-        candidatePairs.push({ req_id: req.id, req_text: req.text, chunk: chunks[0] });
+        candidateGroups.push({ req_id: req.id, req_text: req.text, chunks: chunks.slice(0, 3) });
       }
     })
   );
 
+  // Flatten: score each (requirement, chunk) variant, then pick best per requirement
+  const allPairs: { req_id: string; req_text: string; chunk: string; variant: number }[] = [];
+  for (const group of candidateGroups) {
+    for (let vi = 0; vi < group.chunks.length; vi++) {
+      allPairs.push({
+        req_id: vi === 0 ? group.req_id : `${group.req_id}__v${vi}`,
+        req_text: group.req_text,
+        chunk: group.chunks[vi],
+        variant: vi,
+      });
+    }
+  }
+
   // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
-  const scores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, api_key);
+  const candidatePairs = allPairs.map(({ req_id, req_text, chunk }) => ({ req_id, req_text, chunk }));
+  const rawScores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, api_key);
+
+  // Pick best scoring chunk per original requirement
+  const scores: Record<string, number> = {};
+  const bestChunkByReq: Record<string, string> = {};
+  for (const group of candidateGroups) {
+    let bestScore = -1;
+    let bestChunk = group.chunks[0];
+    for (let vi = 0; vi < group.chunks.length; vi++) {
+      const variantId = vi === 0 ? group.req_id : `${group.req_id}__v${vi}`;
+      const s = rawScores[variantId] ?? -1;
+      if (s > bestScore) {
+        bestScore = s;
+        bestChunk = group.chunks[vi];
+      }
+    }
+    if (bestScore >= 0) scores[group.req_id] = bestScore;
+    bestChunkByReq[group.req_id] = bestChunk;
+  }
   const scoringAvailable = Object.keys(scores).length > 0;
 
   // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)
@@ -371,10 +403,8 @@ export async function POST(request: Request) {
   const matches: JDMatch[] = [];
   const gaps: JDGap[] = [];
 
-  const candidateByReqId = Object.fromEntries(candidatePairs.map((p) => [p.req_id, p.chunk]));
-
   for (const req of requirements) {
-    const chunk = candidateByReqId[req.id];
+    const chunk = bestChunkByReq[req.id];
     const score = scores[req.id] ?? -1;
     const compositeResult = compositeByText[req.text];
     const compositeScore = compositeResult?.composite_score ?? 0;
