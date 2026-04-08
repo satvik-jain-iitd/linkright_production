@@ -139,6 +139,8 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
             api_key: data.api_key,
             qa_answers: data.qa_answers || [],
             override_theme_colors: data.brand_colors || null,
+            target_role: data.target_role || "", // [PSA5-ayd.1.1.2]
+            target_company: data.target_company || "", // [PSA5-ayd.1.1.2]
           }),
         });
         const result = await resp.json();

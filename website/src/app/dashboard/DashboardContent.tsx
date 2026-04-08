@@ -19,7 +19,10 @@ interface ResumeJob {
   duration_ms: number | null;
   model_provider: string;
   model_id: string;
+  target_role: string | null; // [PSA5-ayd.1.1.4]
   target_company: string | null;
+  error_message: string | null; // [PSA5-ayd.2.1.1]
+  jd_text: string | null; // [PSA5-ayd.2.1.2]
   output_html: string | null;
   stats?: { quality_grade?: string } | null;
 }
@@ -66,8 +69,9 @@ export function DashboardContent({ user }: { user: User }) {
     return map[status] || "bg-border text-muted";
   };
 
+  // [PSA5-ayd.1.1.4] Primary label: role > company > fallback
   const jobLabel = (job: ResumeJob) =>
-    job.target_company || job.model_id.split("/").pop()?.replace(/:.*/, "") || "Resume";
+    job.target_role || job.target_company || "Resume";
 
   // [NAV-REDESIGN] Inline nav replaced by shared AppNav component
   // <nav className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -186,65 +190,92 @@ export function DashboardContent({ user }: { user: User }) {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {jobs.map((job) => (
-                <Link
-                  key={job.id}
-                  href={job.status === "completed" ? `/resume/new?job=${job.id}` : "#"}
-                  className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 transition-colors hover:bg-surface-hover"
-                >
-                  <div className="flex items-center gap-4">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusBadge(job.status)}`}
-                    >
-                      {job.status}
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{jobLabel(job)}</p>
-                        {job.stats?.quality_grade && (
-                          <span
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${GRADE_COLORS[job.stats.quality_grade] ?? "bg-gray-100 text-gray-600"}`}
-                            aria-label={`Quality grade: ${job.stats.quality_grade}`}
-                          >
-                            {job.stats.quality_grade}
-                          </span>
+              {jobs.map((job) => {
+                const cardInner = (
+                  <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-4 transition-colors hover:bg-surface-hover">
+                    <div className="flex items-center gap-4">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusBadge(job.status)}`}
+                      >
+                        {job.status}
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium">{jobLabel(job)}</p>
+                          {job.stats?.quality_grade && (
+                            <span
+                              className={`text-xs font-medium px-2 py-0.5 rounded-full ${GRADE_COLORS[job.stats.quality_grade] ?? "bg-gray-100 text-gray-600"}`}
+                              aria-label={`Quality grade: ${job.stats.quality_grade}`}
+                            >
+                              {job.stats.quality_grade}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted">
+                          {job.target_company && (
+                            <span>{job.target_company} · </span>
+                          )}
+                          {new Date(job.created_at).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {// [PSA5-ayd.3.1.1] model name removed from card subtitle — old: job.model_id.split("/").pop()?.replace(/:.*/,"")
+                          }
+                        </p>
+                        {job.status === "failed" && job.error_message && (
+                          <p className="text-xs text-red-500 mt-1 line-clamp-2">{job.error_message}</p>
                         )}
                       </div>
-                      <p className="text-xs text-muted">
-                        {new Date(job.created_at).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                        {" · "}
-                        {job.model_id.split("/").pop()?.replace(/:.*/, "")}
-                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {job.status === "processing" && (
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+                          <span className="text-xs text-muted">{job.progress_pct}%</span>
+                        </div>
+                      )}
+                      {/* [PSA5-ayd.3.1.2] duration_ms display removed from completed cards */}
+                      {/* {job.duration_ms && ( */}
+                      {/*   <span className="text-xs text-muted"> */}
+                      {/*     {Math.round(job.duration_ms / 1000)}s */}
+                      {/*   </span> */}
+                      {/* )} */}
+                      {job.status === "failed" && (
+                        <Link
+                          href={"/resume/new" + (job.jd_text ? "?retry_jd=" + encodeURIComponent(job.jd_text) : "")}
+                          className="rounded-full bg-cta px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-cta-hover"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Retry
+                        </Link>
+                      )}
+                      {job.status === "completed" && job.output_html && (
+                        <button
+                          onClick={(e) => handleDownload(job, e)}
+                          className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent/50 hover:text-accent"
+                        >
+                          Download
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    {job.status === "processing" && (
-                      <div className="flex items-center gap-2">
-                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-                        <span className="text-xs text-muted">{job.progress_pct}%</span>
-                      </div>
-                    )}
-                    {job.duration_ms && (
-                      <span className="text-xs text-muted">
-                        {Math.round(job.duration_ms / 1000)}s
-                      </span>
-                    )}
-                    {job.status === "completed" && job.output_html && (
-                      <button
-                        onClick={(e) => handleDownload(job, e)}
-                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent/50 hover:text-accent"
-                      >
-                        Download
-                      </button>
-                    )}
+                );
+
+                if (job.status === "completed") {
+                  return (
+                    <Link key={job.id} href={`/resume/new?job=${job.id}`}>
+                      {cardInner}
+                    </Link>
+                  );
+                }
+                return (
+                  <div key={job.id}>
+                    {cardInner}
                   </div>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

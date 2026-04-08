@@ -367,9 +367,10 @@ function Footer() {
           <Link href="/pricing" className="transition-colors hover:text-foreground">
             Pricing
           </Link>
-          <Link href="#" className="transition-colors hover:text-foreground">
-            Docs
-          </Link>
+          // [PSA5-382.2.1.1] Docs link removed — no documentation site yet
+          // <Link href="#" className="transition-colors hover:text-foreground">
+          //   Docs
+          // </Link>
         </div>
         <p className="text-sm text-muted">
           Made in India 🇮🇳
@@ -387,6 +388,22 @@ export default async function Home() {
   return (
     <>
       <AppNav user={user ?? null} variant="landing" />
+      {/* [PSA5-382.3.1.1] Returning user dashboard banner */}
+      {user && (
+        <div className="fixed top-16 left-0 right-0 z-40 border-b border-accent/20 bg-accent/5 backdrop-blur-sm">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
+            <p className="text-sm text-foreground/80">
+              Welcome back! You have an active account.
+            </p>
+            <Link
+              href="/dashboard"
+              className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+            >
+              Go to Dashboard →
+            </Link>
+          </div>
+        </div>
+      )}
       <Hero />
       <Features />
       <HowItWorks />

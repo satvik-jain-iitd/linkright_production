@@ -25,6 +25,7 @@ export async function GET(request: Request) {
   const importance = url.searchParams.get("importance");
   const search = url.searchParams.get("search");
   const embeddedFilter = url.searchParams.get("embedded");
+  const primaryLayer = url.searchParams.get("primary_layer"); // [PSA5-z0c.1.1.3]
 
   let query = supabase
     .from("career_nuggets")
@@ -42,6 +43,7 @@ export async function GET(request: Request) {
   if (search) query = query.ilike("answer", `%${search}%`);
   if (embeddedFilter === "true") query = query.not("embedding", "is", null);
   if (embeddedFilter === "false") query = query.is("embedding", null);
+  if (primaryLayer) query = query.eq("primary_layer", primaryLayer); // [PSA5-z0c.1.1.3]
 
   const { data, count, error } = await query;
 

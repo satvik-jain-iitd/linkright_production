@@ -77,7 +77,7 @@ function loadSaved(): { step: number; data: WizardData } | null {
   }
 }
 
-export function WizardShell({ userId, jobId }: { userId: string; jobId?: string }) {
+export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jobId?: string; retryJdText?: string }) { // [PSA5-ayd.2.1.3]
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
   // [WIZARD-STREAMLINE] 4 steps: JobDetails=0, Customize=1, Build=2, Review=3
@@ -92,7 +92,12 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
       : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
-  const [data, setData] = useState<WizardData>(saved?.data ?? { ...EMPTY_DATA });
+  // [PSA5-ayd.2.1.3] Pre-fill jd_text from retry_jd query param if provided
+  const initialData: WizardData = saved?.data ?? { ...EMPTY_DATA };
+  if (retryJdText && !jobId) {
+    initialData.jd_text = retryJdText;
+  }
+  const [data, setData] = useState<WizardData>(initialData);
   const [retryKey, setRetryKey] = useState(0);
   const [buildSubSteps, setBuildSubSteps] = useState<SubStep[]>([]);
 
@@ -229,7 +234,11 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
 
       {/* Sidebar + Content layout */}
       <div className="flex flex-col lg:flex-row min-h-[calc(100vh-3.5rem)]">
-        <VerticalStepper steps={stepDefs} currentStep={step} />
+        <VerticalStepper
+          steps={stepDefs}
+          currentStep={step}
+          onStepClick={(i) => { if (i < step) setStep(i); }}
+        />
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">

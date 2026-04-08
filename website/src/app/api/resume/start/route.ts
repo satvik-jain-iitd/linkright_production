@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   // [BYOK-REMOVED] api_key destructured but no longer required from client
-  const { jd_text, career_text, model_provider, model_id, /* api_key, */ template_id, qa_answers, override_theme_colors } = body;
+  const { jd_text, career_text, model_provider, model_id, /* api_key, */ template_id, qa_answers, override_theme_colors, target_role, target_company } = body; // [PSA5-ayd.1.1.3]
 
   // [BYOK-REMOVED] api_key removed from required fields — server provides the key
   // if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
@@ -104,6 +104,8 @@ export async function POST(request: Request) {
       model_provider: body.model_provider || "groq",
       model_id: body.model_id || "llama-3.1-8b-instant",
       template_id: template_id || "cv-a4-standard",
+      target_role: target_role || null, // [PSA5-ayd.1.1.3]
+      target_company: target_company || null, // [PSA5-ayd.1.1.3]
     })
     .select("id")
     .single();

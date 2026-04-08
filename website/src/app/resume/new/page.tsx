@@ -5,9 +5,11 @@ import { WizardShell } from "./WizardShell";
 export default async function NewResumePage({
   searchParams,
 }: {
-  searchParams: Promise<{ job?: string }>;
+  searchParams: Promise<{ job?: string; retry_jd?: string }>;
 }) {
-  const { job } = await searchParams;
+  const { job, retry_jd } = await searchParams;
+  // [PSA5-ayd.2.1.3] Decode retry_jd param to pre-fill JD textarea on retry
+  const retryJdText = retry_jd ? decodeURIComponent(retry_jd as string) : undefined;
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,7 +41,7 @@ export default async function NewResumePage({
 
   return (
     <div className="min-h-screen bg-background">
-      <WizardShell userId={user.id} jobId={job} />
+      <WizardShell userId={user.id} jobId={job} retryJdText={retryJdText} />
     </div>
   );
 }

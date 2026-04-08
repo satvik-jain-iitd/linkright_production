@@ -40,6 +40,15 @@ export function TemplateLockPanel({ lockedSections, onToggle }: TemplateLockPane
             </button>
           );
         })}
+        {/* [PSA5-8y3.4.1.1] Experience not lockable — tooltip explaining why */}
+        <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/5 px-3 py-2.5 opacity-60">
+          <span className="text-base">💼</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-muted">Experience</p>
+            <p className="text-xs text-muted/70 mt-0.5">Re-tailored for each job description to maximize relevance</p>
+          </div>
+          <span className="text-xs text-muted whitespace-nowrap">Not lockable</span>
+        </div>
       </div>
     </div>
   );

@@ -13,9 +13,10 @@ interface StepDef {
 interface VerticalStepperProps {
   steps: StepDef[];
   currentStep: number;
+  onStepClick?: (index: number) => void; // [PSA5-8y3.3.1.1]
 }
 
-export function VerticalStepper({ steps, currentStep }: VerticalStepperProps) {
+export function VerticalStepper({ steps, currentStep, onStepClick }: VerticalStepperProps) {
   return (
     <>
       {/* Desktop vertical sidebar */}
@@ -43,31 +44,45 @@ export function VerticalStepper({ steps, currentStep }: VerticalStepperProps) {
                   />
                 )}
 
-                {/* Step row */}
-                <div className="relative flex items-center gap-3 py-2.5">
-                  <div
-                    className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                      isDone
-                        ? "bg-accent text-white"
-                        : isActive
-                          ? "bg-accent text-white ring-2 ring-accent/30 ring-offset-2"
-                          : "bg-border text-muted"
-                    }`}
+                {/* Step row — done steps are clickable if onStepClick provided [PSA5-8y3.3.1.1] */}
+                {isDone && onStepClick ? (
+                  <button
+                    onClick={() => onStepClick(i)}
+                    className="relative flex w-full items-center gap-3 py-2.5 cursor-pointer hover:opacity-80 transition-opacity"
                   >
-                    {isDone ? "\u2713" : i + 1}
+                    <div
+                      className="relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold transition-colors bg-accent text-white"
+                    >
+                      {"\u2713"}
+                    </div>
+                    <span className="text-sm text-foreground">{s.label}</span>
+                  </button>
+                ) : (
+                  <div className="relative flex items-center gap-3 py-2.5">
+                    <div
+                      className={`relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                        isDone
+                          ? "bg-accent text-white"
+                          : isActive
+                            ? "bg-accent text-white ring-2 ring-accent/30 ring-offset-2"
+                            : "bg-border text-muted"
+                      }`}
+                    >
+                      {isDone ? "\u2713" : i + 1}
+                    </div>
+                    <span
+                      className={`text-sm ${
+                        isActive
+                          ? "font-medium text-foreground"
+                          : isDone
+                            ? "text-foreground"
+                            : "text-muted"
+                      }`}
+                    >
+                      {s.label}
+                    </span>
                   </div>
-                  <span
-                    className={`text-sm ${
-                      isActive
-                        ? "font-medium text-foreground"
-                        : isDone
-                          ? "text-foreground"
-                          : "text-muted"
-                    }`}
-                  >
-                    {s.label}
-                  </span>
-                </div>
+                )}
 
                 {/* Sub-steps (expanded when active) */}
                 {isActive && s.subSteps && s.subSteps.length > 0 && (

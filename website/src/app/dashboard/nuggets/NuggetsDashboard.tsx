@@ -257,12 +257,21 @@ function FiltersBar({
   );
 }
 
-const IMPORTANCE_COLORS: Record<string, string> = {
-  critical: "bg-red-100 text-red-700",
-  high: "bg-orange-100 text-orange-700",
-  medium: "bg-amber-100 text-amber-700",
-  low: "bg-gray-100 text-gray-600",
-  unset: "bg-gray-100 text-gray-500",
+// [PSA5-8y3.4.2.1] IMPORTANCE_COLORS with word-key map commented out — replaced by P0-P3 IMPORTANCE_MAP
+// const IMPORTANCE_COLORS: Record<string, string> = {
+//   critical: "bg-red-100 text-red-700",
+//   high: "bg-orange-100 text-orange-700",
+//   medium: "bg-amber-100 text-amber-700",
+//   low: "bg-gray-100 text-gray-600",
+//   unset: "bg-gray-100 text-gray-500",
+// };
+
+// [PSA5-8y3.4.2.1] Map P0-P3 DB values to human-readable labels + colors
+const IMPORTANCE_MAP: Record<string, { label: string; color: string }> = {
+  P0: { label: "Essential", color: "bg-red-100 text-red-700" },
+  P1: { label: "Important", color: "bg-orange-100 text-orange-700" },
+  P2: { label: "Useful", color: "bg-amber-100 text-amber-700" },
+  P3: { label: "Minor", color: "bg-gray-100 text-gray-600" },
 };
 
 const SECTION_LABEL_MAP: Record<string, string> = {
@@ -279,7 +288,7 @@ function sectionLabel(raw: string | null): string {
   return SECTION_LABEL_MAP[raw] || raw;
 }
 
-function NuggetsCards({ nuggets }: { nuggets: NuggetRow[] }) {
+function NuggetsCards({ nuggets, onDelete }: { nuggets: NuggetRow[]; onDelete: (id: string) => void }) {
   if (nuggets.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted">
@@ -309,7 +318,18 @@ function NuggetsCards({ nuggets }: { nuggets: NuggetRow[] }) {
             <button
               title="Delete"
               className="rounded-md p-1.5 text-muted hover:bg-red-100 hover:text-red-600 transition-colors"
-              onClick={() => {/* placeholder – delete handler */}}
+              onClick={async () => {
+                // [PSA5-z0c.2.1.2] delete handler with confirm dialog
+                if (!window.confirm("Delete this highlight? This cannot be undone.")) return;
+                try {
+                  const res = await fetch(`/api/nuggets/${n.id}`, { method: "DELETE" });
+                  if (res.ok) {
+                    onDelete(n.id);
+                  }
+                } catch {
+                  // silently fail for now
+                }
+              }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -347,11 +367,11 @@ function NuggetsCards({ nuggets }: { nuggets: NuggetRow[] }) {
             </span>
 
             <span
-              className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium capitalize ${
-                IMPORTANCE_COLORS[n.importance || "unset"] || IMPORTANCE_COLORS.unset
+              className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${
+                IMPORTANCE_MAP[n.importance || ""]?.color || "bg-gray-100 text-gray-500"
               }`}
             >
-              {n.importance || "unset"}
+              {IMPORTANCE_MAP[n.importance || ""]?.label || n.importance || "—"}
             </span>
           </div>
         </div>
@@ -475,6 +495,7 @@ export default function NuggetsDashboard({ user }: { user?: import("@supabase/su
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPersonal, setShowPersonal] = useState(false); // [PSA5-z0c.1.1.1] personal highlights toggle
 
   // Fetch analytics on mount
   useEffect(() => {
@@ -490,13 +511,15 @@ export default function NuggetsDashboard({ user }: { user?: import("@supabase/su
       .catch(() => setError("Failed to load analytics"));
   }, []);
 
-  // Fetch nuggets on page/filter change
+  // Fetch nuggets on page/filter/showPersonal change
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: "50" });
     Object.entries(filters).forEach(([k, v]) => {
       if (v) params.set(k, v);
     });
+    // [PSA5-z0c.1.1.3] server-side filter: exclude primary_layer B unless showPersonal is on
+    if (!showPersonal) params.set("primary_layer", "A");
     fetch(`/api/nuggets/list?${params}`)
       .then((r) => r.json())
       .then((data) => {
@@ -505,7 +528,7 @@ export default function NuggetsDashboard({ user }: { user?: import("@supabase/su
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [page, filters]);
+  }, [page, filters, showPersonal]);
 
   // Reset page when filters change
   const handleFiltersChange = (f: Filters) => {
@@ -600,13 +623,31 @@ export default function NuggetsDashboard({ user }: { user?: import("@supabase/su
         {/* Filters */}
         <FiltersBar filters={filters} onChange={handleFiltersChange} analytics={analytics} />
 
+        {/* [PSA5-z0c.1.1.2] Toggle for personal highlights */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={showPersonal}
+              onChange={(e) => setShowPersonal(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 rounded-full bg-border peer-checked:bg-accent transition-colors" />
+            <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </div>
+          <span className="text-xs text-muted">Show personal highlights</span>
+        </label>
+
         {/* Career Highlights Cards */}
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
           </div>
         ) : (
-          <NuggetsCards nuggets={nuggets} />
+          <NuggetsCards
+            nuggets={nuggets}
+            onDelete={(id) => setNuggets((prev: NuggetRow[]) => prev.filter((item) => item.id !== id))}
+          />
         )}
         {/* [CARD-REDESIGN] was: <NuggetsTable nuggets={nuggets} /> */}
 
