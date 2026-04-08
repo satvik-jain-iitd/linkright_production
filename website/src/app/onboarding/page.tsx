@@ -13,7 +13,7 @@ export default async function OnboardingPage() {
   }
 
   // Check onboarding status: does user have API key + career data?
-  const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
+  const [{ count: keyCount }, { count: chunkCount }, { count: nuggetCount }] = await Promise.all([
     supabase
       .from("user_api_keys")
       .select("*", { count: "exact", head: true })
@@ -23,10 +23,14 @@ export default async function OnboardingPage() {
       .from("career_chunks")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id),
+    supabase
+      .from("career_nuggets")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
   ]);
 
   const hasApiKey = (keyCount ?? 0) > 0;
-  const hasCareerData = (chunkCount ?? 0) > 0;
+  const hasCareerData = (chunkCount ?? 0) > 0 || (nuggetCount ?? 0) > 0;
 
   // Already onboarded → go to dashboard
   if (hasApiKey && hasCareerData) {

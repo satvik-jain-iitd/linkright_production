@@ -104,6 +104,54 @@ function StepWelcome({
 
 // ── Step 2: API Key Setup ─────────────────────────────────────────────────
 
+const PROVIDER_INSTRUCTIONS: Record<string, { label: string; url: string; steps: string[] }> = {
+  groq: {
+    label: "Get a free API key in 60 seconds",
+    url: "https://console.groq.com",
+    steps: ["Go to console.groq.com", "Sign up / Log in", "Create an API key → Copy it"],
+  },
+  cerebras: {
+    label: "Get a free Cerebras API key",
+    url: "https://cloud.cerebras.ai",
+    steps: ["Go to cloud.cerebras.ai", "Sign up → API Keys → Create Key", "Free tier: 1M tokens/day, ~2200 tokens/second"],
+  },
+  sambanova: {
+    label: "Get a free SambaNova API key",
+    url: "https://cloud.sambanova.ai",
+    steps: ["Go to cloud.sambanova.ai", "Sign up / Log in", "Go to API Keys → Create key"],
+  },
+  siliconflow: {
+    label: "Get a free SiliconFlow API key",
+    url: "https://cloud.siliconflow.cn",
+    steps: ["Go to cloud.siliconflow.cn", "Sign up / Log in", "Go to API Keys → Create key"],
+  },
+  openrouter: {
+    label: "Get an OpenRouter API key",
+    url: "https://openrouter.ai",
+    steps: ["Go to openrouter.ai", "Sign up / Log in", "Go to Keys → Create Key"],
+  },
+  gemini: {
+    label: "Get a free Gemini API key",
+    url: "https://aistudio.google.com/apikey",
+    steps: ["Go to aistudio.google.com/apikey", "Sign in with Google", "Click Create API Key"],
+  },
+  nvidia: {
+    label: "Get an NVIDIA API key",
+    url: "https://build.nvidia.com",
+    steps: ["Go to build.nvidia.com", "Sign up / Log in", "Go to API Keys → Generate key"],
+  },
+  github: {
+    label: "Get a GitHub token",
+    url: "https://github.com/settings/tokens",
+    steps: ["Go to github.com/settings/tokens", "Click Generate new token", "Copy the token"],
+  },
+  mistral: {
+    label: "Get a Mistral API key",
+    url: "https://console.mistral.ai",
+    steps: ["Go to console.mistral.ai", "Sign up / Log in", "Go to API Keys → Create key"],
+  },
+};
+
 function StepApiKey({
   onNext,
   onKeyValidated,
@@ -116,14 +164,34 @@ function StepApiKey({
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(false);
   const [error, setError] = useState("");
+  const [existingKeyId, setExistingKeyId] = useState<string | null>(null);
 
   const modelId = PROVIDER_MODEL_MAP[provider] ?? "";
+
+  // Fetch existing keys on mount and when provider changes
+  useEffect(() => {
+    setExistingKeyId(null);
+    fetch("/api/user/keys")
+      .then((r) => r.json())
+      .then((data) => {
+        const keys = data.keys || [];
+        const providerKey = keys.find((k: Record<string, unknown>) => k.provider === provider && k.is_active);
+        if (providerKey) {
+          setExistingKeyId(providerKey.id as string);
+          setValidated(true);
+          onKeyValidated(provider, PROVIDER_MODEL_MAP[provider] ?? "", providerKey.id as string);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider]);
 
   const handleProviderChange = (p: string) => {
     setProvider(p);
     setValidated(false);
     setError("");
     setApiKey("");
+    setExistingKeyId(null);
   };
 
   const handleValidate = async () => {
@@ -156,7 +224,7 @@ function StepApiKey({
       const res = await fetch("/api/user/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, api_key: apiKey.trim(), label: "Primary" }),
+        body: JSON.stringify({ provider, api_key: apiKey.trim(), label: `${provider}-${Date.now()}` }),
       });
 
       if (res.ok) {
@@ -175,6 +243,8 @@ function StepApiKey({
       setValidating(false);
     }
   };
+
+  const instructions = PROVIDER_INSTRUCTIONS[provider];
 
   return (
     <div className="space-y-8">
@@ -204,117 +274,123 @@ function StepApiKey({
           <option value="openrouter">OpenRouter (free tier available)</option>
           <option value="gemini">Google Gemini (free tier)</option>
         </select>
-        <p className="text-xs text-muted">
-          Model: <span className="font-mono">{modelId}</span>
-        </p>
       </div>
 
-      {/* Groq visual guide */}
-      {provider === "groq" && (
+      {/* Model display */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-foreground">
+          Model
+        </label>
+        <input
+          type="text"
+          value={modelId}
+          readOnly
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground font-mono focus:outline-none"
+        />
+      </div>
+
+      {/* Provider instructions */}
+      {instructions && (
         <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 space-y-3">
           <p className="text-sm font-semibold text-primary-700">
-            Get a free API key in 60 seconds
+            {instructions.label}
           </p>
           <ol className="space-y-2">
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
-                1
-              </span>
-              <span>
-                Go to{" "}
-                <a
-                  href="https://console.groq.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary-600 underline hover:text-primary-700"
-                >
-                  console.groq.com
-                </a>
-              </span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
-                2
-              </span>
-              <span>Sign up / Log in</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
-                3
-              </span>
-              <span>
-                Create an API key → Copy it
-              </span>
-            </li>
+            {instructions.steps.map((stepText, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-sm text-foreground">
+                <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">
+                  {idx + 1}
+                </span>
+                <span>
+                  {instructions.url && idx === 0 ? (
+                    <>
+                      Go to{" "}
+                      <a
+                        href={instructions.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary-600 underline hover:text-primary-700"
+                      >
+                        {instructions.url.replace("https://", "")}
+                      </a>
+                    </>
+                  ) : (
+                    stepText
+                  )}
+                </span>
+              </li>
+            ))}
           </ol>
         </div>
       )}
 
-      {provider === "cerebras" && (
-        <div className="rounded-xl border border-primary-200 bg-primary-50 p-4 space-y-3">
-          <p className="text-sm font-semibold text-primary-700">Get a free Cerebras API key</p>
-          <ol className="space-y-2">
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">1</span>
-              <span>Go to <a href="https://cloud.cerebras.ai" target="_blank" rel="noopener noreferrer" className="text-primary-600 underline hover:text-primary-700">cloud.cerebras.ai</a></span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">2</span>
-              <span>Sign up → API Keys → Create Key</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-primary-500 text-white text-xs font-bold">3</span>
-              <span>Free tier: 1M tokens/day, ~2200 tokens/second</span>
-            </li>
-          </ol>
+      {/* Existing key message */}
+      {existingKeyId && (
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path
+              fillRule="evenodd"
+              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Key already configured for {provider}. You can proceed or enter a new key below.
         </div>
       )}
 
       {/* API Key input */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-foreground">
-          API Key
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
-              setValidated(false);
-              setError("");
-            }}
-            placeholder="Paste your API key here"
-            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-          <button
-            onClick={handleValidate}
-            disabled={!apiKey.trim() || validating || validated}
-            className="rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-          >
-            {validating ? "Validating…" : "Validate Key"}
-          </button>
-        </div>
+      {!existingKeyId && (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            API Key
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setValidated(false);
+                setError("");
+              }}
+              placeholder="Paste your API key here"
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <button
+              onClick={handleValidate}
+              disabled={!apiKey.trim() || validating || validated}
+              className="rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+            >
+              {validating ? "Validating..." : "Validate Key"}
+            </button>
+          </div>
 
-        {validated && (
-          <p className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Key validated!
-          </p>
-        )}
-        {error && (
-          <p className="text-sm text-red-600">{error}</p>
-        )}
-      </div>
+          {validated && !existingKeyId && (
+            <p className="flex items-center gap-1.5 text-sm text-green-600 font-medium">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Key validated!
+            </p>
+          )}
+          {error && (
+            <p className="text-sm text-red-600">{error}</p>
+          )}
+        </div>
+      )}
 
       <button
-        onClick={() => onNext(provider, modelId, apiKey.trim())}
+        onClick={() => {
+          if (existingKeyId) {
+            onNext(provider, modelId, existingKeyId);
+          } else {
+            onNext(provider, modelId, apiKey.trim());
+          }
+        }}
         disabled={!validated}
         className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
@@ -510,6 +586,36 @@ function StepCareerBasics({
       });
 
       if (res.ok) {
+        // Also create career_chunks so the onboarding gate passes
+        let uploadText = careerText;
+        if (uploadText.trim().length < 200) {
+          // Assemble a longer version from all fields
+          uploadText = [
+            fullName && `Full Name: ${fullName}`,
+            email && `Email: ${email}`,
+            phone && `Phone: ${phone}`,
+            linkedin && `LinkedIn: ${linkedin}`,
+            education.filter((e) => e.institution || e.degree).length > 0 &&
+              `Education: ${education
+                .filter((e) => e.institution || e.degree)
+                .map((e) => `${e.degree} at ${e.institution} (${e.year})`)
+                .join("; ")}`,
+            skills.length > 0 && `Skills: ${skills.join(", ")}`,
+            certifications && `Certifications: ${certifications}`,
+            resumePasteText && `Resume: ${resumePasteText}`,
+            // Pad with context to reach minimum length
+            "This is my career profile for generating tailored resumes.",
+          ]
+            .filter(Boolean)
+            .join("\n");
+        }
+        if (uploadText.trim().length >= 200) {
+          await fetch("/api/career/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ career_text: uploadText }),
+          }).catch(() => {}); // Non-blocking
+        }
         onNext();
       } else {
         const data = await res.json();
@@ -955,8 +1061,11 @@ function StepConversation({
         addMessage("system", "Saved! ✓");
         await fetchNextQuestion(updatedHistory, newCount);
       } else {
-        // Paraphrase extraction failed — ask to rephrase
-        addMessage("system", "I had trouble processing that. Could you rephrase or add more details?");
+        // Paraphrase extraction failed — show actual error from API
+        const errMsg = data.error
+          ? `Error: ${data.error}`
+          : "I had trouble processing that. Could you rephrase or add more details?";
+        addMessage("system", errMsg);
         setWaitingForConfirm(false);
         setSending(false);
       }

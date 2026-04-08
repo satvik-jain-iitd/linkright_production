@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   }
 
   // Onboarding gate: redirect if user hasn't completed setup
-  const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
+  const [{ count: keyCount }, { count: chunkCount }, { count: nuggetCount }] = await Promise.all([
     supabase
       .from("user_api_keys")
       .select("*", { count: "exact", head: true })
@@ -23,9 +23,13 @@ export default async function DashboardPage() {
       .from("career_chunks")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id),
+    supabase
+      .from("career_nuggets")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
   ]);
 
-  if ((keyCount ?? 0) === 0 || (chunkCount ?? 0) === 0) {
+  if ((keyCount ?? 0) === 0 || ((chunkCount ?? 0) === 0 && (nuggetCount ?? 0) === 0)) {
     redirect("/onboarding");
   }
 
