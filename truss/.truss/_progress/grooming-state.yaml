@@ -15,12 +15,12 @@ streams:
     consolidated: true
     verified: true
   content-drafting:
-    status: blocked
-    current_step: not_started
-    features_identified: 0
-    roles_completed: []
-    consolidated: false
-    verified: false
+    status: completed
+    current_step: step-05-verify
+    features_identified: 3
+    roles_completed: ["po", "designer", "architect", "qa"]
+    consolidated: true
+    verified: true
   publishing-orchestration:
     status: blocked
     current_step: not_started

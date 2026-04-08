@@ -1,0 +1,187 @@
+stream_name: content-drafting
+
+summary:
+  feature_count: 3
+  story_count: 6
+  task_count: 21
+  conflicts_found: 1
+  conflicts_resolved: 1
+  gaps: 0
+
+conflicts:
+  - feature: "Platform-Specialist Drafting Agents"
+    conflict_type: "cross_stream_schema_version"
+    positions:
+      architect: "DraftingAgent must check ContentBrief.brief_schema_version at init and raise SchemaVersionError on mismatch"
+      qa: "SchemaVersionError must be caught by DraftingOrchestrator and logged with brief_id — not crash the orchestrator"
+    decision: "DraftingAgent raises SchemaVersionError on version mismatch. DraftingOrchestrator catches it, logs with brief_id, continues to next brief. SchemaVersionError is a named exception in modules/flex/models/errors.py."
+    rationale: "Explicit version check prevents silent data corruption when content-ideation evolves ContentBrief schema. Orchestrator-level catch ensures queue doesn't stall on a single schema mismatch."
+    impact: "modules/flex/models/errors.py must define SchemaVersionError. DraftingOrchestrator exception handler must distinguish SchemaVersionError from API errors (different logging + alerting)."
+
+task_ids:
+  "Platform-Specialist Drafting Agents":
+    feature_id: "Claude-7ir.2"
+    story_ids: ["Claude-7ir.2.S1", "Claude-7ir.2.S2"]
+    task_ids: ["Claude-7ir.2.S1.T1", "Claude-7ir.2.S1.T2", "Claude-7ir.2.S1.T3", "Claude-7ir.2.S1.T4", "Claude-7ir.2.S1.T5", "Claude-7ir.2.S1.T6", "Claude-7ir.2.S1.T7", "Claude-7ir.2.S1.T8", "Claude-7ir.2.S2.T1"]
+  "Tone and Voice Consistency Engine":
+    feature_id: "Claude-7ir.3"
+    story_ids: ["Claude-7ir.3.S1", "Claude-7ir.3.S2"]
+    task_ids: ["Claude-7ir.3.S1.T1", "Claude-7ir.3.S1.T2", "Claude-7ir.3.S1.T3", "Claude-7ir.3.S2.T1"]
+  "Draft Versioning and A/B Variants":
+    feature_id: "Claude-7ir.4"
+    story_ids: ["Claude-7ir.4.S1", "Claude-7ir.4.S2"]
+    task_ids: ["Claude-7ir.4.S1.T1", "Claude-7ir.4.S1.T2", "Claude-7ir.4.S2.T1", "Claude-7ir.4.S2.T2", "Claude-7ir.4.S2.T3"]
+
+features:
+  - name: "Platform-Specialist Drafting Agents"
+    priority: p1
+    integration_notes: "Roles: po (Draft Pydantic model, drafting prompts, DraftingOrchestrator config, CLI commands), architect (BaseDraftingAgent ABC + 5 platform subclasses, DraftingOrchestrator with registry, drafts_store, Claude API JSON schema enforcement), designer (draft card pipeline view, 5 platform-native preview components), qa (per-platform format validation tests, orchestrator failure isolation, drafts_store round-trip). Input: briefs_store.get_approved_undrafted() from content-ideation. Output: drafts_store → review-editing stream. Claude API: claude-3-5-sonnet-20241022 with response_format JSON schema per platform."
+    stories:
+      - title: "As a content creator, I want a specialist agent to draft platform-native content from my brief so the output matches each platform's format without manual reformatting"
+        acceptance_criteria:
+          - "Given ContentBrief target_platform='linkedin', When LinkedInDraftingAgent.draft() called, Then Draft returned with body 1300-1600 chars, staircase format (paragraphs <= 2 sentences, blank-line separated), at least 1 CTA"
+          - "Given ContentBrief target_platform='x', When XDraftingAgent.draft() called, Then Draft returned with thread of 3-7 strings each <= 280 chars, thread[0] is the hook, thread[-1] contains CTA"
+          - "Given ContentBrief target_platform='youtube', When YouTubeDraftingAgent.draft() called, Then Draft returned with title < 60 chars, description 200-300 words with 3-5 SEO keywords, script_outline list of sections with timestamps"
+          - "Given ContentBrief target_platform='instagram', When InstagramDraftingAgent.draft() called, Then Draft returned with caption 125-200 chars, 15-20 hashtags, at least 1 emoji in caption"
+          - "Given ContentBrief target_platform='facebook', When FacebookDraftingAgent.draft() called, Then Draft returned with body 400-600 chars, ends with a question, contains no hashtags"
+          - "Given Claude API returns malformed response, When DraftingAgent processes it, Then Pydantic validation fails, agent retries once with corrected prompt"
+          - "Given ContentBrief.brief_schema_version is unexpected version, When DraftingAgent initializes, Then SchemaVersionError raised with brief_id logged"
+        tasks:
+          - title: "Create BaseDraftingAgent ABC with abstract _build_prompt and _parse_response methods"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/drafting/base_drafting_agent.py: ABC with abstract _build_prompt(brief, voice_instruction) -> str and _parse_response(raw) -> dict. Concrete draft(): check brief_schema_version, call Claude API (injected client), parse via _parse_response, validate with Draft model, retry once on fail, save to drafts_store."
+
+          - title: "Implement 5 platform-specialist DraftingAgent subclasses with format validation"
+            task_type: implementation
+            source_role: architect
+            description: "5 subclasses in modules/flex/agents/drafting/: LinkedIn (validates body 1300-1600 chars, staircase structure), X (validates thread 3-7 tweets, each <=280 chars, hook in thread[0]), YouTube (extracts title/description/script_outline from JSON, validates title <60 chars, description 200-300 words), Instagram (validates caption 125-200 chars, hashtag count 15-20, emoji present), Facebook (validates body 400-600 chars, no hashtags)."
+
+          - title: "Implement DraftingOrchestrator with platform→agent registry and failure isolation"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/drafting/drafting_orchestrator.py: AGENT_REGISTRY = {Platform: DraftingAgentClass}. run(): polls briefs_store.get_approved_undrafted(), dispatches to registry, catches all exceptions per brief (SchemaVersionError and API errors both logged separately, queue continues). DraftingOrchestrator takes injected claude_client, drafts_store, briefs_store, voice_engine (optional)."
+
+          - title: "Implement drafts_store with SQLite backend"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/store/drafts_store.py: SQLite table drafts(id, brief_id, platform, version INTEGER DEFAULT 1, status TEXT DEFAULT 'ready_for_review', payload TEXT, created_at, updated_at). payload=json.dumps(Draft.model_dump()). Methods: insert(), get_by_id(), get_pending_review(), get_approved_undrafted() (cross-store query), update_status(), list_by_brief(brief_id)."
+
+          - title: "Define Draft Pydantic model and SchemaVersionError exception"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/models/draft.py: Draft with draft_id (UUID), brief_id, brief_schema_version, platform (Platform enum), version (int default=1), status (enum: ready_for_review/selected/archived/published), body (str), platform_fields (dict), created_at, updated_at. modules/flex/models/errors.py: add SchemaVersionError(Exception) with brief_id, expected_version, actual_version fields."
+
+          - title: "Write platform-specific system prompts and Claude API JSON schema per platform"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/prompts/drafting_prompts.py: DRAFTING_PROMPTS dict per platform with formatting constraints in system prompt. Each platform's response_format JSON schema: LinkedIn {body, call_to_action}, X {thread: list[str]}, YouTube {title, description, script_outline: list[{section, timestamp}]}, Instagram {caption, hashtags: list[str]}, Facebook {body}."
+
+          - title: "Design drafting pipeline status view and 5 platform-native draft preview components"
+            task_type: design
+            source_role: designer
+            description: "Draft card (88px, platform-colored border, status badge Queued/Drafting.../Ready, word count chip). 5 platform preview components: LinkedIn (staircase format, 544px, mocked reaction bar), X (thread with connector, 598px, per-tweet char arc), YouTube (title/description/script sections, 400px), Instagram (square placeholder, hashtag pills, 468px), Facebook (avatar header, 500px, no hashtag styling)."
+
+          - title: "Write unit tests for all 5 platform agents and DraftingOrchestrator failure isolation"
+            task_type: test
+            source_role: qa
+            description: "Per-platform tests: body length validation, structure validation (staircase/thread/outline), retry on Pydantic fail, SchemaVersionError on version mismatch. Orchestrator tests: drafts all approved briefs, continues after API error, brief stays 'approved' after failure, skips already-drafted briefs, dispatches to correct platform agent, injects voice profile."
+
+          - title: "Write integration tests for drafts_store SQLite operations"
+            task_type: test
+            source_role: qa
+            description: "Tests: insert+get_by_id round-trip, get_pending_review status filter, update_status changes field, list_by_brief returns all versions, JSON payload round-trip with nested platform_fields."
+
+      - title: "As a content creator, I want drafts automatically triggered when a brief is approved so I don't need to manually kick off the drafting process"
+        acceptance_criteria:
+          - "Given ContentBrief transitions to status='approved', When DraftingOrchestrator next polls (within 15 minutes), Then a Draft is created in drafts_store with status='ready_for_review'"
+          - "Given DraftingOrchestrator finds 3 approved briefs, When it runs, Then all 3 are drafted in sequence"
+          - "Given Claude API returns error during drafting, When DraftingOrchestrator handles failure, Then brief stays status='approved', error logged, orchestrator continues to next brief"
+        tasks:
+          - title: "Implement 'flex draft list' and 'flex draft show' CLI commands"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/cli/draft_commands.py: list subcommand shows table (brief_id, platform, version, status, word_count, created_at), --status filter. show subcommand prints full draft body for given draft_id. variants subcommand (for versioning feature). compare subcommand with --select flag."
+
+  - name: "Tone and Voice Consistency Engine"
+    priority: p1
+    integration_notes: "Roles: po (VoiceProfile model, voice_corpus_path config, flex voice show CLI), architect (VoiceConsistencyEngine with LLM analysis, SHA256 cache invalidation, voice_instruction injection, 20-post sampling), designer (tone dial visualization, readability meter, emoji density indicator, corpus upload panel), qa (cache invalidation on file change, empty corpus graceful degradation, natural language instruction validation, 20-post sampling). Optional dependency injected into DraftingOrchestrator — if None, drafts proceed without voice."
+    stories:
+      - title: "As a content creator, I want drafts to sound like me so my audience recognizes my voice across all platforms"
+        acceptance_criteria:
+          - "Given voice_corpus_path contains >= 5 past posts, When VoiceConsistencyEngine.build_profile() called, Then VoiceProfile returned with avg_sentence_words, fk_grade, emoji_density, tone_signature (enum: analytical/storytelling/provocative/educational), dominant_vocabulary_level"
+          - "Given VoiceProfile exists, When DraftingAgent.draft() called, Then agent system prompt includes 'Voice Instructions' block derived from profile (natural language, not raw JSON)"
+          - "Given new posts added to voice_corpus_path, When VoiceConsistencyEngine.refresh() called, Then cached VoiceProfile invalidated and rebuilt on next draft request"
+          - "Given voice_corpus_path not configured or empty, When DraftingAgent.draft() called, Then drafting proceeds without voice injection, voice_corpus_missing warning logged"
+        tasks:
+          - title: "Implement VoiceConsistencyEngine with LLM corpus analysis, SHA256 cache, and 20-post sampling"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/voice_consistency_engine.py: reads .txt/.yaml corpus files, samples max 20 most recent. build_profile(): single Claude API call with all post texts (max 5000 chars), parses VoiceProfile JSON. Cache: .flex/cache/voice_profile.json + SHA256(all file mtimes+sizes). get_voice_instruction(platform) -> natural language str. refresh(): invalidate cache."
+
+          - title: "Define VoiceProfile Pydantic model and voice_corpus_path AgentConfig field"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/models/voice_profile.py: VoiceProfile(avg_sentence_words, fk_grade, emoji_density, tone_signature enum, dominant_vocabulary_level enum, corpus_post_count, built_at). Add voice_corpus_path: str | None = None to AgentConfig."
+
+          - title: "Design voice profile dashboard with tone dial, readability meter, and corpus upload panel"
+            task_type: design
+            source_role: designer
+            description: "Tone dial: circular SVG with 4 labeled positions. Readability meter: horizontal bar FK grade 6-16, green zone FK 7-9. Emoji density: 5 emoji icons filled to frequency level. Corpus upload panel: drag-and-drop zone, post preview chips, platform tag selector, 'Build Profile' button (disabled until 5+ posts). Empty state: illustrated with 3-step onboarding."
+
+          - title: "Write unit tests for VoiceConsistencyEngine cache invalidation and graceful degradation"
+            task_type: test
+            source_role: qa
+            description: "Tests: profile built from 5 corpus files, cache hit on unchanged corpus (LLM called once), cache invalidated on file mtime change, cache invalidated on new file added, empty corpus returns None (no exception), voice_corpus_path=None returns None, get_voice_instruction returns natural language string (not JSON), max 20 posts sampled (30 files → 20 sent to LLM)."
+
+      - title: "As a content creator, I want to see my detected voice profile so I can verify the engine understood my style correctly"
+        acceptance_criteria:
+          - "Given VoiceProfile exists, When 'flex voice show' run, Then CLI prints tone_signature, fk_grade, avg_sentence_words, emoji_density, dominant_vocabulary_level with human-readable labels"
+          - "Given 0 posts in corpus, When 'flex voice show' run, Then message: 'No voice profile yet. Add past posts to voice_corpus_path to enable voice consistency'"
+          - "Given corpus posts tagged with platform, When 'flex voice show --platform linkedin' run, Then only LinkedIn-specific tone analysis shown"
+        tasks:
+          - title: "Implement 'flex voice show' CLI command with platform filter"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/cli/voice_commands.py: show subcommand reads cached VoiceProfile, prints human-readable format (tone label, FK grade with readability description, emoji density as percentage, vocab level). Empty corpus: onboarding message. --platform flag: filters to platform-tagged posts if available."
+
+  - name: "Draft Versioning and A/B Variants"
+    priority: p2
+    integration_notes: "Roles: po (variant generation and compare CLI flow, --select promotion workflow), architect (DraftVersioningEngine as thin wrapper over BaseDraftingAgent, deterministic tone rotation, Tone enum cycle), designer (split-view A/B comparison, version badges, selection confirmation modal, single-draft generate prompt), qa (two-variant creation, different angles/tones, single-angle fallback, --select atomicity, compare CLI tests). Both variants status='ready_for_review' and linked by brief_id."
+    stories:
+      - title: "As a content creator, I want A/B variants of my drafts so I can choose the best version before reviewing"
+        acceptance_criteria:
+          - "Given ContentBrief with 3+ angles, When 'flex draft variants <brief_id>' run, Then 2 Draft records created: version=1 (primary angle, brief tone) and version=2 (alternate angle, alternate tone)"
+          - "Given only 1 angle in ContentBrief, When variants generated, Then both use same angle, different tones, warning logged: 'Only 1 angle available — variant uses alternate tone only'"
+          - "Given variants generated, When both created, Then both have status='ready_for_review' and linked by same brief_id"
+        tasks:
+          - title: "Implement DraftVersioningEngine as thin wrapper with deterministic tone rotation"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/draft_versioning_engine.py: generate_variants(brief): clone brief with angle_index=0 + original tone → v1. Clone with angle_index=1 (or 0 if only 1) + Tone.next() rotation → v2. Call platform agent.draft() twice. Store both in drafts_store. Return VariantPair(v1, v2). Tone rotation: professional→conversational→provocative→educational→professional."
+
+          - title: "Write unit tests for DraftVersioningEngine variant generation and tone rotation"
+            task_type: test
+            source_role: qa
+            description: "Tests: 2 variants created for brief with 2 angles, variants use different angles (text differs in prompts), variants use different tones, tone rotation is deterministic, single-angle fallback with warning logged, both variants status='ready_for_review'."
+
+      - title: "As a content creator, I want to see a side-by-side comparison of my draft variants so I can pick the best one quickly"
+        acceptance_criteria:
+          - "Given 2 draft variants exist for brief_id, When 'flex draft compare <brief_id>' run, Then CLI renders both drafts with version/hook/tone/word_count/fk_grade headers"
+          - "Given 'flex draft compare <brief_id> --select 2' run, When confirmed, Then v2 status='selected', v1 status='archived'"
+          - "Given only 1 draft for brief_id, When 'flex draft compare' run, Then message shown: 'Only 1 draft version. Run: flex draft variants <brief_id>'"
+        tasks:
+          - title: "Implement 'flex draft compare' CLI with --select flag and atomicity"
+            task_type: implementation
+            source_role: po
+            description: "compare subcommand in draft_commands.py: renders both variant headers (version, hook quoted, tone, word_count, FK grade) then bodies. --select <1|2>: confirm prompt, then atomic update both statuses (selected + archived) in single transaction. If transaction fails, both statuses rolled back."
+
+          - title: "Design A/B draft comparison view with split layout and selection confirmation modal"
+            task_type: design
+            source_role: designer
+            description: "Split view 50/50 desktop >= 1280px, tab view mobile. Each panel: version badge (A=amber, B=blue), hook highlighted (quoted italic, border-left accent), tone chip, word count, FK grade, platform preview (collapsed/expandable). 'Select This Version' full-width per panel. Confirmation modal 400px (not dismissible on backdrop): 'Version [B] will be archived.' [Cancel] [Confirm Select]. After selection: selected badge turns green ✓, other grayed out."
+
+          - title: "Write CLI integration tests for compare view and --select atomicity"
+            task_type: test
+            source_role: qa
+            description: "Tests: compare shows both version headers, --select 1 sets v1='selected' + v2='archived', --select is atomic (drafts_store write failure → both statuses rolled back), --select requires confirmation (no change without confirm), single draft shows generate-variant prompt."
