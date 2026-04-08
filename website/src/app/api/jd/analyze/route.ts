@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
 import { jinaEmbed } from "@/lib/jina-embed";
+import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
 
 export interface JDRequirement {
   id: string;
@@ -32,7 +33,7 @@ export interface JDAnalysisResult {
   gaps: JDGap[];
 }
 
-// ── LLM helpers ─────────────────────────────────────────────────────────────
+// ── LLM prompts ─────────────────────────────────────────────────────────────
 
 const EXTRACTION_PROMPT = `You are a job description analyst. Extract a structured list of requirements from this job description.
 
@@ -66,73 +67,6 @@ Rules:
 
 Return ONLY valid JSON array, no markdown:
 [{"req_id":"r1","score":85}, ...]`;
-
-function buildLlmCall(
-  provider: string,
-  modelId: string,
-  apiKey: string,
-  systemPrompt: string,
-  userMsg: string,
-  maxTokens: number
-) {
-  if (provider === "groq" || provider === "openrouter") {
-    const baseUrl =
-      provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : "https://api.groq.com/openai/v1";
-    return {
-      url: `${baseUrl}/chat/completions`,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...(provider === "openrouter" ? { "HTTP-Referer": "https://linkright.in" } : {}),
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMsg },
-        ],
-        temperature: 0.1,
-        max_tokens: maxTokens,
-      }),
-    };
-  } else {
-    return {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userMsg}` }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens },
-      }),
-    };
-  }
-}
-
-function extractLlmText(provider: string, result: Record<string, unknown>): string {
-  if (provider === "gemini") {
-    return (
-      (
-        result?.candidates as Array<{
-          content: { parts: Array<{ text: string }> };
-        }>
-      )?.[0]?.content?.parts?.[0]?.text ?? ""
-    );
-  }
-  return (
-    (result?.choices as Array<{ message: { content: string } }>)?.[0]?.message
-      ?.content ?? ""
-  );
-}
-
-function parseJsonResponse<T>(text: string): T | null {
-  const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-  try {
-    return JSON.parse(clean) as T;
-  } catch {
-    return null;
-  }
-}
 
 function parseRequirements(text: string): JDRequirement[] {
   const parsed = parseJsonResponse<unknown[]>(text);
