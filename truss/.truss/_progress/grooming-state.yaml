@@ -1,12 +1,12 @@
 current_workflow: grooming
 streams:
   review-editing:
-    status: blocked
-    current_step: not_started
-    features_identified: 0
-    roles_completed: []
-    consolidated: false
-    verified: false
+    status: completed
+    current_step: step-05-verify
+    features_identified: 3
+    roles_completed: ["po", "designer", "architect", "qa"]
+    consolidated: true
+    verified: true
   content-ideation:
     status: completed
     current_step: step-05-verify
