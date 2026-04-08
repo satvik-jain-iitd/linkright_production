@@ -264,7 +264,7 @@ export async function POST(request: Request) {
       temporality: validTemporality.includes(nugget.temporality)
         ? nugget.temporality
         : "past",
-      event_date: nugget.event_date ?? null,
+      event_date: (nugget.event_date && nugget.event_date !== "null" && nugget.event_date.trim() !== "") ? nugget.event_date.trim() : null,
       company: nugget.company ?? null,
       role: nugget.role ?? null,
       people: [] as string[],

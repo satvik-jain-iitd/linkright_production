@@ -197,12 +197,28 @@ export async function POST(request: Request) {
       `Job Description:\n${jd_text.slice(0, 4000)}`,
       1500
     );
-    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) return Response.json({ error: "LLM request failed" }, { status: 502 });
+
+    let resp = await fetch(url, { method: "POST", headers, body: body, signal: AbortSignal.timeout(15000) }).catch(() => null);
+    // Retry once on failure with backoff
+    if (!resp || !resp.ok) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const retry = buildLlmCall(model_provider, model_id, api_key, EXTRACTION_PROMPT, `Job Description:\n${jd_text.slice(0, 4000)}`, 1500);
+      resp = await fetch(retry.url, { method: "POST", headers: retry.headers, body: retry.body, signal: AbortSignal.timeout(20000) }).catch(() => null);
+    }
+
+    if (!resp || !resp.ok) {
+      const status = resp?.status;
+      const hint = status === 429
+        ? `Your ${model_provider} API key is rate-limited. Wait a minute and try again.`
+        : status === 401
+          ? `Your ${model_provider} API key appears invalid. Check it in Settings.`
+          : `${model_provider} API returned ${status || "no response"}. The provider may be temporarily down — try again shortly.`;
+      return Response.json({ error: hint }, { status: 502 });
+    }
     const result = await resp.json();
     requirements = parseRequirements(extractLlmText(model_provider, result));
   } catch {
-    return Response.json({ error: "Failed to analyze JD" }, { status: 500 });
+    return Response.json({ error: "Failed to analyze JD — network error. Check your internet connection and try again." }, { status: 500 });
   }
 
   if (requirements.length === 0) {

@@ -121,6 +121,12 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
         }
       }
 
+      // Pre-check: career_text is required for resume generation
+      if (!data.career_text || data.career_text.trim().length < 100) {
+        setError("Career profile is missing or too short. Go to My Career page to add your experience first.");
+        return;
+      }
+
       try {
         const resp = await fetch("/api/resume/start", {
           method: "POST",

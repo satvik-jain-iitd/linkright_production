@@ -88,6 +88,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // Check for duplicate key (same user + provider + key value)
+  const { data: dupes } = await supabase
+    .from("user_api_keys")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("provider", provider)
+    .eq("api_key_encrypted", api_key)
+    .limit(1);
+
+  if (dupes && dupes.length > 0) {
+    return Response.json(
+      { error: "This API key already exists for this provider" },
+      { status: 409 }
+    );
+  }
+
   // Get current max priority for this provider
   const { data: existing } = await supabase
     .from("user_api_keys")

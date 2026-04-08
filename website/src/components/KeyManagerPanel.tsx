@@ -89,14 +89,23 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
     }
   };
 
+  const [deleteError, setDeleteError] = useState("");
+
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this API key?")) return;
     setDeleting(id);
+    setDeleteError("");
     try {
-      await fetch(`/api/user/keys/${id}`, { method: "DELETE" });
-      await fetchKeys();
+      const resp = await fetch(`/api/user/keys/${id}`, { method: "DELETE" });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Delete failed" }));
+        setDeleteError(err.error || "Failed to delete key");
+        return;
+      }
+      // Optimistic: remove from local state immediately
+      setKeys((prev) => prev.filter((k) => k.id !== id));
     } catch {
-      // silent
+      setDeleteError("Network error — could not delete key");
     } finally {
       setDeleting(null);
     }
@@ -295,6 +304,9 @@ export function KeyManagerPanel({ provider, providerLabel, onKeySelected }: KeyM
       </div>
       {addError && (
         <p className="text-xs text-red-500">{addError}</p>
+      )}
+      {deleteError && (
+        <p className="text-xs text-red-500">{deleteError}</p>
       )}
     </div>
   );

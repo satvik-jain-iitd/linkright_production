@@ -50,10 +50,17 @@ export async function POST(request: Request) {
   }
 
   // Use service role for global cache writes (any auth'd user can contribute)
-  const adminClient = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceKey) {
+    return Response.json(
+      { ok: false, error: "Brand color caching not configured" },
+      { status: 500 }
+    );
+  }
+
+  const adminClient = createSupabaseClient(supabaseUrl, serviceKey);
 
   try {
     const { data, error } = await adminClient
@@ -76,12 +83,14 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      // Silently fail — caching is best-effort
-      return Response.json({ ok: false, error: error.message });
+      return Response.json({ ok: false, error: error.message }, { status: 500 });
     }
 
     return Response.json({ ok: true, id: data?.id });
-  } catch {
-    return Response.json({ ok: false });
+  } catch (err) {
+    return Response.json(
+      { ok: false, error: err instanceof Error ? err.message : "Brand color cache failed" },
+      { status: 500 }
+    );
   }
 }
