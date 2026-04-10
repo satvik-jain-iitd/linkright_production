@@ -72,3 +72,14 @@ website/.env.local
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Local-only directories (not part of the repo)
+bmad_latest/
+docs/
+assets/
+Interview-Prep/
+LinkRight-KB/
+Portfolio/
+Projects/
+playwright_automation/
+.coverage
