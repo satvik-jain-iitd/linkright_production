@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from lifeos.embeddings import embed
 from lifeos.ingest import ingest_atom
+from lifeos.local_llm import rewrite as llm_rewrite, generate as llm_generate
 from lifeos.neo4j_client import (
     setup_schema,
     list_existing_atoms,
@@ -78,6 +79,18 @@ class EmbedRequest(BaseModel):
 class SessionCloseRequest(BaseModel):
     token: str
     user_id: str
+
+
+class RewriteRequest(BaseModel):
+    prompt: str
+    system: str = ""
+    temperature: float = 0.2
+
+
+class GenerateRequest(BaseModel):
+    prompt: str
+    system: str = ""
+    temperature: float = 0.3
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -147,6 +160,43 @@ def embed_text(req: EmbedRequest):
     """Utility: embed arbitrary text. Called by Next.js to embed JD before career-nodes."""
     embedding = embed(req.text)
     return {"embedding": embedding, "model": "nomic-embed-text", "dimensions": len(embedding)}
+
+
+@app.post(
+    "/lifeos/rewrite",
+    dependencies=[Depends(verify_token)],
+)
+def rewrite_text(req: RewriteRequest):
+    """
+    Resume bullet rewriting via llama3.2:1b (local Ollama).
+    Called by the worker in Phase 5 (width optimization) and Phase 3.5a (summary tweaking).
+    Replaces Groq for these phases — fast, free, no rate limits.
+
+    To swap model: edit oracle-backend/lifeos/local_llm.py REWRITE_MODEL constant.
+    """
+    try:
+        result = llm_rewrite(req.prompt, system=req.system, temperature=req.temperature)
+        return {"text": result, "model": "llama3.2:1b"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Rewrite model unavailable: {e}")
+
+
+@app.post(
+    "/lifeos/generate",
+    dependencies=[Depends(verify_token)],
+)
+def generate_text(req: GenerateRequest):
+    """
+    Quick short generation via smollm2:135m (local Ollama).
+    Called by the worker for lightweight tasks (nugget extraction helpers, quick answers).
+
+    To swap model: edit oracle-backend/lifeos/local_llm.py GENERATE_MODEL constant.
+    """
+    try:
+        result = llm_generate(req.prompt, system=req.system, temperature=req.temperature)
+        return {"text": result, "model": "smollm2:135m"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Generate model unavailable: {e}")
 
 
 @app.post(

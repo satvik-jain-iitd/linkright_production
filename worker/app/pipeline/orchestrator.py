@@ -42,9 +42,22 @@ from ..tools.nugget_embedder import embed_nuggets
 from ..tools.quality_judge import judge_quality
 from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
 from ..key_manager import KeyManager
+from ..llm.oracle import OracleProvider
+from .. import config as worker_config
 import os
 
 USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
+
+# Oracle ARM local LLM — used for Phase 5 width rewriting + Phase 3.5a summary tweaking
+# Falls back to Groq automatically if Oracle is not configured or unavailable
+def _get_oracle_llm() -> OracleProvider | None:
+    if worker_config.ORACLE_BACKEND_URL and worker_config.ORACLE_BACKEND_SECRET:
+        return OracleProvider(
+            base_url=worker_config.ORACLE_BACKEND_URL,
+            secret=worker_config.ORACLE_BACKEND_SECRET,
+            endpoint="rewrite",
+        )
+    return None
 
 REVIEW_PAUSE_SECONDS = int(os.environ.get("REVIEW_PAUSE_SECONDS", "6"))
 
@@ -895,7 +908,9 @@ async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm)
             )
 
             try:
-                resp = await _llm_call(ctx, llm, system_prompt, user_prompt, phase=3, temperature=0.2)
+                _oracle_3_5a = _get_oracle_llm()
+                _phase3_5a_llm = _oracle_3_5a if _oracle_3_5a is not None else llm
+                resp = await _llm_call(ctx, _phase3_5a_llm, system_prompt, user_prompt, phase=3, temperature=0.2)
                 rewritten = resp.text.strip() if resp else None
                 # Strip accidental markdown fences
                 if rewritten and rewritten.startswith("```"):
@@ -1535,6 +1550,12 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
     t0 = time.time()
     await _progress(ctx, sb, 5, "Optimizing bullet widths", 55)
 
+    # Use Oracle local LLM (llama3.2:1b) for width rewriting — free, fast, no rate limits
+    # Falls back to Groq if Oracle is unavailable
+    _oracle = _get_oracle_llm()
+    _phase5_llm = _oracle if _oracle is not None else llm
+    logger.info(f"Job {ctx.job_id} phase 5: using {'Oracle llama3.2:1b' if _oracle else 'Groq (fallback)'} for rewriting")
+
     # Get bullet budget numbers for prompts
     bullet_budget = ctx.template_config.get("budgets", {}).get("bullet", {})
     if hasattr(bullet_budget, "model_dump"):
@@ -1602,7 +1623,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             bullets_section=bullets_section,
         )
 
-        resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=5, temperature=0.2)
+        resp = await _llm_call(ctx, _phase5_llm, system_msg, user_msg, phase=5, temperature=0.2)
         trace_generation(
             trace_name="pipeline", generation_name="phase_5_width",
             model=resp.model, system_prompt=system_msg, user_input=user_msg,
@@ -1662,7 +1683,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             range_min_90=range_min_90,
             bullets_section=retry_section,
         )
-        resp2 = await _llm_call(ctx, llm, system_msg, retry_user, phase=5, temperature=0.2)
+        resp2 = await _llm_call(ctx, _phase5_llm, system_msg, retry_user, phase=5, temperature=0.2)
         try:
             revisions2 = _parse_json(resp2.text).get("revised_bullets", [])
         except (json.JSONDecodeError, KeyError):
@@ -1746,7 +1767,7 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
 
             # Targeted LLM rewrite for this single bullet
             try:
-                rewritten = await _rewrite_bullet_with_synonyms(ctx, llm, bullet, syn_context, direction)
+                rewritten = await _rewrite_bullet_with_synonyms(ctx, _phase5_llm, bullet, syn_context, direction)
             except Exception as e:
                 logger.warning(f"[Phase 5 3rd pass] rewrite failed for bullet {fail_idx}: {e}")
                 continue
