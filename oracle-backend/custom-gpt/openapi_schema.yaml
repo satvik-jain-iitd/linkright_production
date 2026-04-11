@@ -1,0 +1,251 @@
+openapi: 3.1.0
+info:
+  title: LifeOS Career Coach API
+  description: >
+    Proxy endpoints on LinkRight's Next.js backend. All requests require Bearer
+    authentication using the CUSTOM_GPT_SECRET configured in GPT Actions.
+    To update: edit this file, then re-paste into GPT Actions schema editor.
+  version: 1.0.0
+
+servers:
+  - url: https://linkright.in
+    description: Production (Vercel)
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Use the CUSTOM_GPT_SECRET value. Stored in GPT Action auth config.
+        Never shown to users.
+
+  schemas:
+    CareerAtom:
+      type: object
+      description: >
+        A structured career achievement. Required: action_verb, action_detail,
+        company, role, result_text. See knowledge file 01_atom_schema.json for
+        full field reference and examples.
+      required:
+        - action_verb
+        - action_detail
+        - company
+        - role
+        - result_text
+      properties:
+        action_verb:
+          type: string
+          example: "Reduced"
+          description: Strong past-tense verb. E.g., Built, Led, Reduced, Launched.
+        action_detail:
+          type: string
+          example: "CI/CD pipeline build time by 40% by switching to parallel jobs"
+        company:
+          type: string
+          example: "Acme Corp"
+        role:
+          type: string
+          example: "Senior Software Engineer"
+        context:
+          type: string
+          example: "During a critical product launch with 3x normal traffic expected"
+        stakes:
+          type: string
+          example: "Any delay would have cost $200K in SLA penalties"
+        you_specifically:
+          type: string
+          example: "I independently identified the bottleneck and proposed the solution"
+        result_text:
+          type: string
+          example: "Deploy time dropped from 18 min to 11 min; team shipped 2x faster"
+        tools_used:
+          type: array
+          items:
+            type: string
+          example: ["GitHub Actions", "Docker", "AWS ECR"]
+        timeframe:
+          type: string
+          example: "Q3 2023"
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+          default: medium
+        challenge:
+          type: string
+          example: "Legacy Makefile system had no documentation"
+        your_decision:
+          type: string
+          example: "Chose parallel jobs over caching to avoid stale artifact risks"
+        team_role:
+          type: string
+          enum: [solo, lead, contributor]
+          default: contributor
+        what_you_learned:
+          type: string
+        behavioral_tags:
+          type: array
+          items:
+            type: string
+          example: ["ownership", "technical-depth", "delivery"]
+        skills_demonstrated:
+          type: array
+          items:
+            type: string
+          example: ["CI/CD", "DevOps", "Python", "AWS"]
+        metrics:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: number
+              unit:
+                type: string
+              direction:
+                type: string
+                enum: [increased, decreased, maintained]
+              timeframe:
+                type: string
+              confidence:
+                type: string
+                enum: [exact, approximate, estimated]
+          example:
+            - value: 40
+              unit: "%"
+              direction: decreased
+              timeframe: "Q3 2023"
+              confidence: exact
+
+paths:
+  /api/oracle/verify-token:
+    post:
+      operationId: verifyToken
+      summary: Verify a session token and get user context
+      description: >
+        Called at the start of every session (Phase 1).
+        Returns user_id and existing atom count for orientation.
+        Never skip this call.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: 8-character session code in format LR-XXXXXXXX
+                  example: "LR-A1B2C3D4"
+      responses:
+        "200":
+          description: Token valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  user_id:
+                    type: string
+                  session_active:
+                    type: boolean
+                  existing_atom_count:
+                    type: integer
+                  atoms_saved_this_session:
+                    type: integer
+        "401":
+          description: Token expired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+        "404":
+          description: Token not found
+
+  /api/oracle/ingest-atom:
+    post:
+      operationId: ingestAtom
+      summary: Save a confirmed career achievement to the knowledge graph
+      description: >
+        Called in Phase 4 after user explicitly confirms each achievement.
+        Only call once per confirmed story — never auto-ingest.
+        Returns ok=true on success, or conflict=true if a similar atom exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, user_id, atom]
+              properties:
+                token:
+                  type: string
+                  description: Session token (same value from verifyToken)
+                user_id:
+                  type: string
+                  description: User ID returned by verifyToken
+                atom:
+                  $ref: "#/components/schemas/CareerAtom"
+      responses:
+        "200":
+          description: Ingestion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  conflict:
+                    type: boolean
+                  atom_id:
+                    type: string
+                  existing_atom_id:
+                    type: string
+                    description: Present when conflict=true
+                  similarity:
+                    type: number
+                    description: Cosine similarity score when conflict=true
+
+  /api/oracle/session-close:
+    post:
+      operationId: sessionClose
+      summary: Mark the coaching session as complete
+      description: >
+        Called once at the end of Phase 5.
+        Marks the session token as used in Supabase.
+        Call exactly once — after summarizing all highlights.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, user_id]
+              properties:
+                token:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        "200":
+          description: Session closed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean

@@ -1,0 +1,85 @@
+[
+  {
+    "_note": "Example 1: Engineering achievement with strong metrics",
+    "action_verb": "Reduced",
+    "action_detail": "CI/CD pipeline build time by switching to parallelized GitHub Actions jobs",
+    "company": "Acme Corp",
+    "role": "Senior Software Engineer",
+    "context": "Our monorepo had 200+ services and builds were taking 18+ minutes, blocking 15 engineers daily",
+    "stakes": "Slow deploys were causing teams to batch changes, increasing blast radius of releases",
+    "you_specifically": "I independently identified the bottleneck, proposed the parallel job architecture, and implemented it in a 2-week sprint",
+    "result_text": "Build time dropped from 18 minutes to 11 minutes; team increased deploy frequency from 3x/week to daily",
+    "tools_used": ["GitHub Actions", "Docker", "AWS ECR", "Python"],
+    "timeframe": "Q3 2023",
+    "difficulty": "medium",
+    "challenge": "Legacy Makefile system had no documentation and parallelizing it required rewriting job dependencies",
+    "your_decision": "Chose parallel job architecture over layer caching to avoid stale artifact risks",
+    "team_role": "solo",
+    "what_you_learned": "Profiling the build DAG before optimizing saved 3x the effort vs. guessing",
+    "behavioral_tags": ["ownership", "delivery", "technical-depth"],
+    "skills_demonstrated": ["CI/CD", "DevOps", "Python", "AWS", "systems design"],
+    "metrics": [
+      { "value": 39, "unit": "%", "direction": "decreased", "timeframe": "Q3 2023", "confidence": "exact" },
+      { "value": 3, "unit": "x/week→daily", "direction": "increased", "confidence": "approximate" }
+    ]
+  },
+  {
+    "_note": "Example 2: Product management with business impact",
+    "action_verb": "Launched",
+    "action_detail": "a self-serve onboarding flow replacing sales-assisted setup for SMB customers",
+    "company": "SaaSCo",
+    "role": "Product Manager",
+    "context": "SMB customers were waiting 5–7 days for sales to help them set up, causing 30% trial-to-paid drop",
+    "stakes": "Fixing conversion would add ~$2M ARR based on existing trial volume",
+    "you_specifically": "I wrote the spec, ran 8 user interviews, worked with a 3-person eng team, and drove the launch end-to-end",
+    "result_text": "Trial-to-paid conversion improved from 12% to 19% within 60 days of launch; sales reps freed up 40% of their time",
+    "tools_used": ["Figma", "Mixpanel", "Amplitude", "SQL"],
+    "timeframe": "2022-Q1",
+    "difficulty": "hard",
+    "challenge": "Engineering team was skeptical — they'd seen two failed attempts at self-serve before",
+    "your_decision": "Scoped MVP to just 3 setup steps instead of full feature parity to ship in 6 weeks",
+    "team_role": "lead",
+    "what_you_learned": "Ruthless scoping based on data (80% of users only needed 3 steps) was the unlock",
+    "behavioral_tags": ["customer-focus", "data-driven", "delivery", "cross-functional"],
+    "skills_demonstrated": ["product management", "user research", "data analysis", "SQL", "Figma", "roadmapping"],
+    "metrics": [
+      { "value": 7, "unit": "percentage points", "direction": "increased", "timeframe": "60 days post-launch", "confidence": "exact" },
+      { "value": 2000000, "unit": "USD ARR", "direction": "increased", "confidence": "estimated" }
+    ]
+  },
+  {
+    "_note": "Example 3: Minimal viable atom (for when details are sparse)",
+    "action_verb": "Built",
+    "action_detail": "automated reconciliation tool for monthly financial close process",
+    "company": "FinanceCo",
+    "role": "Financial Analyst",
+    "result_text": "Reduced monthly close time from 3 days to 4 hours",
+    "tools_used": ["Excel VBA", "Python"],
+    "timeframe": "2021",
+    "team_role": "solo",
+    "skills_demonstrated": ["Python", "Excel", "financial analysis", "process automation"],
+    "metrics": [
+      { "value": 3, "unit": "days→4 hours", "direction": "decreased", "confidence": "exact" }
+    ]
+  },
+  {
+    "_note": "Example 4: Leadership / people management achievement",
+    "action_verb": "Grew",
+    "action_detail": "data engineering team from 3 to 9 engineers over 18 months while maintaining 0 attrition",
+    "company": "TechStartup",
+    "role": "Engineering Manager",
+    "context": "Company was scaling rapidly from seed to Series B with 3x data volume growth",
+    "you_specifically": "I personally ran all hiring loops, created the leveling rubric, and set up bi-weekly 1:1 cadence and quarterly growth plans",
+    "result_text": "Team delivered data platform serving 200+ internal users with 99.9% uptime; 3 engineers promoted in 18 months",
+    "timeframe": "2022–2023",
+    "difficulty": "hard",
+    "challenge": "Hiring market was extremely competitive; had to build strong employer brand with no brand recognition",
+    "team_role": "lead",
+    "behavioral_tags": ["leadership", "mentorship", "hiring", "execution"],
+    "skills_demonstrated": ["engineering management", "hiring", "team building", "data engineering", "Spark", "dbt"],
+    "metrics": [
+      { "value": 200, "unit": "% headcount growth", "direction": "increased", "timeframe": "18 months", "confidence": "exact" },
+      { "value": 99.9, "unit": "% uptime", "direction": "maintained", "confidence": "exact" }
+    ]
+  }
+]
