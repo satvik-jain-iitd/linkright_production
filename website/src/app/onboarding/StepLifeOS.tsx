@@ -95,7 +95,41 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
         <h2 className="text-2xl font-bold text-foreground">
           Career Story Collection
         </h2>
-        <p className="text-destructive">{error}</p>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
+          <p className="text-sm font-medium text-red-700">
+            Something went wrong while setting up your session.
+          </p>
+          <p className="text-xs text-red-600">{error}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                // Re-trigger initToken
+                fetch("/api/profile/token")
+                  .then((r) => r.json())
+                  .then((d) => {
+                    if (d.token) { setToken(d.token); setAtomsSaved(d.atoms_saved ?? 0); setLoading(false); return; }
+                    return fetch("/api/profile/token", { method: "POST" }).then((r) => r.json().then((pd) => ({ ok: r.ok, ...pd })));
+                  })
+                  .then((pd) => {
+                    if (pd && pd.token) { setToken(pd.token); setLoading(false); }
+                    else if (pd) { setError(pd.error ?? "Failed to create token"); setLoading(false); }
+                  })
+                  .catch((e) => { setError(e.message ?? "Failed to generate session code"); setLoading(false); });
+              }}
+              className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
+            >
+              Try again
+            </button>
+            <button
+              onClick={onDone}
+              className="rounded-lg border border-border px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
+            >
+              Skip for now
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

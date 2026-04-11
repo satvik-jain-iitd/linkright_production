@@ -196,6 +196,12 @@ function StepCareerBasics({
   };
 
   const handleParseFile = async (file: File) => {
+    // 500KB limit — larger files risk breaking the LLM token budget
+    if (file.size > 500 * 1024) {
+      setParseError("File too large (max 500 KB). Please paste your resume text instead.");
+      setUploadMode("paste");
+      return;
+    }
     setParsing(true);
     setParseError("");
     try {
@@ -397,11 +403,19 @@ function StepCareerBasics({
       )}
 
       {parsed && (
-        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
-          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          Resume parsed — fields pre-filled below. Edit anything that looks wrong.
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            Resume parsed — fields pre-filled below. Edit anything that looks wrong.
+          </div>
+          <button
+            onClick={() => { setParsed(false); setUploadMode("none"); setParseError(""); }}
+            className="shrink-0 text-xs text-green-600 underline hover:text-green-800 transition-colors"
+          >
+            Change resume
+          </button>
         </div>
       )}
 
@@ -560,7 +574,7 @@ function StepCareerBasics({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 pb-8">
         <button
           onClick={handleSave}
           disabled={saving || !fullName.trim()}
