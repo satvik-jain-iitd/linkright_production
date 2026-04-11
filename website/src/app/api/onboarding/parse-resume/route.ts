@@ -1,10 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-
-const PROVIDERS: Record<string, string> = {
-  groq: "https://api.groq.com/openai/v1/chat/completions",
-  openai: "https://api.openai.com/v1/chat/completions",
-  anthropic: "https://api.anthropic.com/v1/messages",
-};
+import { groqChat } from "@/lib/groq";
 
 const SYSTEM_PROMPT = `You are a resume parser. Extract structured information from the resume text provided.
 
@@ -41,9 +36,6 @@ export async function POST(request: Request) {
   }
 
   let resumeText = "";
-  let modelProvider = "groq";
-  let modelId = "llama-3.1-8b-instant";
-  let apiKey = "";
 
   const contentType = request.headers.get("content-type") ?? "";
 
@@ -51,9 +43,6 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const text = formData.get("text") as string | null;
-    modelProvider = (formData.get("model_provider") as string) || "groq";
-    modelId = (formData.get("model_id") as string) || "llama-3.1-8b-instant";
-    apiKey = (formData.get("api_key") as string) || "";
 
     if (file) {
       // For text files, read directly. For PDF, we need text extraction.
@@ -80,86 +69,25 @@ export async function POST(request: Request) {
   } else {
     const body = await request.json();
     resumeText = body.text ?? "";
-    modelProvider = body.model_provider ?? "groq";
-    modelId = body.model_id ?? "llama-3.1-8b-instant";
-    apiKey = body.api_key ?? "";
   }
 
   if (!resumeText.trim()) {
     return Response.json({ error: "No resume text provided" }, { status: 400 });
   }
 
-  if (!apiKey) {
-    // Try to load from user_api_keys
-    const { data: keyRow } = await supabase
-      .from("user_api_keys")
-      .select("api_key, provider")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (keyRow) {
-      apiKey = keyRow.api_key;
-      modelProvider = keyRow.provider;
-    } else {
-      return Response.json(
-        { error: "No API key found. Please add your API key first." },
-        { status: 400 }
-      );
-    }
-  }
-
   // Truncate to avoid token limits (~4000 chars ≈ ~1000 tokens)
   const truncated = resumeText.slice(0, 8000);
 
   try {
-    let parsed: Record<string, unknown> | null = null;
+    const rawText = await groqChat(
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: truncated },
+      ],
+      { maxTokens: 1024, temperature: 0 }
+    );
 
-    if (modelProvider === "anthropic") {
-      const res = await fetch(PROVIDERS.anthropic, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: modelId,
-          max_tokens: 1024,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: truncated }],
-        }),
-      });
-      const data = await res.json();
-      const rawText =
-        data?.content?.[0]?.text ?? data?.error?.message ?? "";
-      parsed = extractJson(rawText);
-    } else {
-      // OpenAI-compatible (groq, openai)
-      const endpoint = PROVIDERS[modelProvider] ?? PROVIDERS.groq;
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: truncated },
-          ],
-          temperature: 0,
-          max_tokens: 1024,
-        }),
-      });
-      const data = await res.json();
-      const rawText =
-        data?.choices?.[0]?.message?.content ?? data?.error?.message ?? "";
-      parsed = extractJson(rawText);
-    }
+    const parsed = extractJson(rawText);
 
     if (!parsed) {
       return Response.json(

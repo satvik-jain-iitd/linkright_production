@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
 import { jinaEmbed } from "@/lib/jina-embed";
+import { groqChat } from "@/lib/groq";
 
 export interface JDRequirement {
   id: string;
@@ -32,7 +33,7 @@ export interface JDAnalysisResult {
   gaps: JDGap[];
 }
 
-// ── LLM helpers ─────────────────────────────────────────────────────────────
+// ── Prompts ──────────────────────────────────────────────────────────────────
 
 const EXTRACTION_PROMPT = `You are a job description analyst. Extract a structured list of requirements from this job description.
 
@@ -66,64 +67,6 @@ Rules:
 
 Return ONLY valid JSON array, no markdown:
 [{"req_id":"r1","score":85}, ...]`;
-
-function buildLlmCall(
-  provider: string,
-  modelId: string,
-  apiKey: string,
-  systemPrompt: string,
-  userMsg: string,
-  maxTokens: number
-) {
-  if (provider === "groq" || provider === "openrouter") {
-    const baseUrl =
-      provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : "https://api.groq.com/openai/v1";
-    return {
-      url: `${baseUrl}/chat/completions`,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...(provider === "openrouter" ? { "HTTP-Referer": "https://linkright.in" } : {}),
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMsg },
-        ],
-        temperature: 0.1,
-        max_tokens: maxTokens,
-      }),
-    };
-  } else {
-    return {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userMsg}` }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens },
-      }),
-    };
-  }
-}
-
-function extractLlmText(provider: string, result: Record<string, unknown>): string {
-  if (provider === "gemini") {
-    return (
-      (
-        result?.candidates as Array<{
-          content: { parts: Array<{ text: string }> };
-        }>
-      )?.[0]?.content?.parts?.[0]?.text ?? ""
-    );
-  }
-  return (
-    (result?.choices as Array<{ message: { content: string } }>)?.[0]?.message
-      ?.content ?? ""
-  );
-}
 
 function parseJsonResponse<T>(text: string): T | null {
   const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
@@ -185,10 +128,7 @@ async function searchChunks(
 // ── LLM batch relevance scoring ──────────────────────────────────────────────
 
 async function scoreRelevanceBatch(
-  pairs: { req_id: string; req_text: string; chunk: string }[],
-  provider: string,
-  modelId: string,
-  apiKey: string
+  pairs: { req_id: string; req_text: string; chunk: string }[]
 ): Promise<Record<string, number>> {
   if (pairs.length === 0) return {};
 
@@ -200,19 +140,13 @@ async function scoreRelevanceBatch(
     .join("\n\n");
 
   try {
-    const { url, headers, body } = buildLlmCall(
-      provider,
-      modelId,
-      apiKey,
-      SCORING_PROMPT,
-      `Score these ${pairs.length} pairs:\n\n${userMsg}`,
-      800
+    const text = await groqChat(
+      [
+        { role: "system", content: SCORING_PROMPT },
+        { role: "user", content: `Score these ${pairs.length} pairs:\n\n${userMsg}` },
+      ],
+      { maxTokens: 800, temperature: 0.1 }
     );
-    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) return {};
-
-    const result = await resp.json();
-    const text = extractLlmText(provider, result);
     const scores = parseJsonResponse<{ req_id: string; score: number }[]>(text);
     if (!Array.isArray(scores)) return {};
 
@@ -238,47 +172,27 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!rateLimit(`jd-analyze:${user.id}`, 5)) {
+  if (!rateLimit(`jd-analyze:${user.id}`, 1, 240_000)) {
     return rateLimitResponse("JD analysis");
   }
 
-  const { jd_text, model_provider, model_id, api_key } = await request.json();
+  const { jd_text } = await request.json();
 
-  if (!jd_text || !model_provider || !model_id || !api_key) {
+  if (!jd_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
-
-  // Resolve api_key: if it looks like a UUID (key ID from KeyManagerPanel), fetch the actual key
-  let resolvedApiKey = api_key;
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (UUID_RE.test(api_key)) {
-    const { data: keyRow } = await supabase
-      .from("user_api_keys")
-      .select("api_key_encrypted")
-      .eq("id", api_key)
-      .eq("user_id", user.id)
-      .single();
-    if (keyRow?.api_key_encrypted) {
-      resolvedApiKey = keyRow.api_key_encrypted;
-    }
-  }
-  const apiKey = resolvedApiKey;
 
   // Step 1: Extract requirements via LLM
   let requirements: JDRequirement[] = [];
   try {
-    const { url, headers, body } = buildLlmCall(
-      model_provider,
-      model_id,
-      apiKey,
-      EXTRACTION_PROMPT,
-      `Job Description:\n${jd_text.slice(0, 4000)}`,
-      1500
+    const text = await groqChat(
+      [
+        { role: "system", content: EXTRACTION_PROMPT },
+        { role: "user", content: `Job Description:\n${jd_text.slice(0, 4000)}` },
+      ],
+      { maxTokens: 1500, temperature: 0.1 }
     );
-    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) return Response.json({ error: "LLM request failed" }, { status: 502 });
-    const result = await resp.json();
-    requirements = parseRequirements(extractLlmText(model_provider, result));
+    requirements = parseRequirements(text);
   } catch {
     return Response.json({ error: "Failed to analyze JD" }, { status: 500 });
   }
@@ -356,7 +270,7 @@ export async function POST(request: Request) {
   );
 
   // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
-  const scores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, apiKey);
+  const scores = await scoreRelevanceBatch(candidatePairs);
   const scoringAvailable = Object.keys(scores).length > 0;
 
   // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)

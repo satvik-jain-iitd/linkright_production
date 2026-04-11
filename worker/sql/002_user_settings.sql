@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id),
   model_provider TEXT DEFAULT 'groq',
-  model_id TEXT DEFAULT 'llama-3.3-70b-versatile',
+  model_id TEXT DEFAULT 'llama-3.1-8b-instant',
   api_key TEXT,
   career_graph JSONB,
   updated_at TIMESTAMPTZ DEFAULT NOW()

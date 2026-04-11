@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { groqChat } from "@/lib/groq";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,14 +13,13 @@ export async function POST(request: Request) {
   }
 
   // Rate limit: 5 question generations per minute per user
-  if (!rateLimit(`questions:${user.id}`, 5)) {
+  if (!rateLimit(`questions:${user.id}`, 1, 240_000)) {
     return rateLimitResponse("question generation");
   }
 
-  const { jd_text, career_text, model_provider, model_id, api_key } =
-    await request.json();
+  const { jd_text, career_text } = await request.json();
 
-  if (!jd_text || !career_text || !model_provider || !api_key) {
+  if (!jd_text || !career_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -44,69 +44,14 @@ ${jd_text.slice(0, 3000)}
 ${career_text.slice(0, 8000)}`;
 
   try {
-    let questions: string[] = [];
-
-    if (model_provider === "openrouter" || model_provider === "groq") {
-      const baseUrl =
-        model_provider === "openrouter"
-          ? "https://openrouter.ai/api/v1"
-          : "https://api.groq.com/openai/v1";
-
-      const resp = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${api_key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: model_id,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
-        }),
-      });
-
-      if (!resp.ok) {
-        const err = await resp.text();
-        return Response.json(
-          { error: `LLM API error: ${resp.status}` },
-          { status: 502 }
-        );
-      }
-
-      const data = await resp.json();
-      const text = data.choices?.[0]?.message?.content || "";
-      questions = parseJsonArray(text).slice(0, 8);
-    } else if (model_provider === "gemini") {
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model_id}:generateContent?key=${api_key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              { parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] },
-            ],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 1000 },
-          }),
-        }
-      );
-
-      if (!resp.ok) {
-        return Response.json(
-          { error: `Gemini API error: ${resp.status}` },
-          { status: 502 }
-        );
-      }
-
-      const data = await resp.json();
-      const text =
-        data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      questions = parseJsonArray(text).slice(0, 8);
-    }
+    const text = await groqChat(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { maxTokens: 1000, temperature: 0.3 }
+    );
+    const questions = parseJsonArray(text).slice(0, 8);
 
     if (questions.length === 0) {
       return Response.json(

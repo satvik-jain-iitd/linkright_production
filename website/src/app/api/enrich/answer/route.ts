@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { groqChat } from "@/lib/groq";
 
 const REWRITE_PROMPT = `You are a career profile writer. Rewrite the following raw answer as a polished career profile paragraph.
 
@@ -58,62 +59,6 @@ async function searchChunks(
   return (data || []).map((row: { chunk_text: string }) => row.chunk_text);
 }
 
-function buildLlmBody(
-  provider: string,
-  modelId: string,
-  apiKey: string,
-  answer: string
-) {
-  if (provider === "groq" || provider === "openrouter") {
-    const baseUrl =
-      provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : "https://api.groq.com/openai/v1";
-    return {
-      url: `${baseUrl}/chat/completions`,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        ...(provider === "openrouter" ? { "HTTP-Referer": "https://linkright.in" } : {}),
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: "system", content: REWRITE_PROMPT },
-          { role: "user", content: answer },
-        ],
-        temperature: 0.3,
-        max_tokens: 300,
-      }),
-    };
-  } else {
-    return {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${REWRITE_PROMPT}\n\n${answer}` }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 300 },
-      }),
-    };
-  }
-}
-
-function extractText(provider: string, result: Record<string, unknown>): string {
-  if (provider === "gemini") {
-    return (
-      (
-        result?.candidates as Array<{
-          content: { parts: Array<{ text: string }> };
-        }>
-      )?.[0]?.content?.parts?.[0]?.text ?? ""
-    );
-  }
-  return (
-    (result?.choices as Array<{ message: { content: string } }>)?.[0]?.message
-      ?.content ?? ""
-  );
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -128,14 +73,10 @@ export async function POST(request: Request) {
     return rateLimitResponse("enrich answer");
   }
 
-  const { answer, model_provider, model_id, api_key } = await request.json();
+  const { answer } = await request.json();
 
   if (!answer || answer.trim().length < 20) {
     return Response.json({ error: "Answer too short" }, { status: 400 });
-  }
-
-  if (!model_provider || !model_id || !api_key) {
-    return Response.json({ error: "Missing LLM config" }, { status: 400 });
   }
 
   // Step 1: Deduplication — search existing career chunks
@@ -172,18 +113,14 @@ export async function POST(request: Request) {
   // Step 2: Rewrite as career profile paragraph via LLM
   let rewritten = answer.trim();
   try {
-    const { url, headers, body } = buildLlmBody(
-      model_provider,
-      model_id,
-      api_key,
-      answer
+    const text = await groqChat(
+      [
+        { role: "system", content: REWRITE_PROMPT },
+        { role: "user", content: answer },
+      ],
+      { maxTokens: 300, temperature: 0.3 }
     );
-    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(10000) });
-    if (resp.ok) {
-      const result = await resp.json();
-      const text = extractText(model_provider, result).trim();
-      if (text.length > 20) rewritten = text;
-    }
+    if (text.trim().length > 20) rewritten = text.trim();
   } catch {
     // Fall back to raw answer
   }

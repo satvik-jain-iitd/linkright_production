@@ -112,7 +112,7 @@ export function SettingsContent({ user }: { user: User }) {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
 
   const [modelProvider, setModelProvider] = useState("groq");
-  const [modelId, setModelId] = useState("llama-3.3-70b-versatile");
+  const [modelId, setModelId] = useState("llama-3.1-8b-instant");
   // Webhook token
   const [webhookTokenMasked, setWebhookTokenMasked] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
