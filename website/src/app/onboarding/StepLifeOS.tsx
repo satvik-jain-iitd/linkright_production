@@ -171,7 +171,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
           Step 2 — Open the career coach
         </p>
         <a
-          href="https://chatgpt.com/g/g-linkright-career-coach"
+          href="https://chatgpt.com/g/g-69b4af08234881918450e5278b9ba931-linkright"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
