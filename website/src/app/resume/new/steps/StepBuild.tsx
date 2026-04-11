@@ -40,6 +40,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
   const [progress, setProgress] = useState(0);
   const [draftHtml, setDraftHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const started = useRef(false);
   const subStepsRef = useRef<SubStep[]>([]);
 
@@ -232,6 +233,20 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
 
   const phaseLabel = PHASE_LABELS[phase] || phase;
 
+  const isAlreadyGenerating = error?.toLowerCase().includes("already have a resume");
+
+  const handleCancelAndRetry = async () => {
+    setCancelling(true);
+    try {
+      await fetch("/api/resume/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    } finally {
+      setCancelling(false);
+      started.current = false;
+      setError(null);
+      onRetry();
+    }
+  };
+
   if (error) {
     return (
       <div className="text-center">
@@ -239,19 +254,32 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
           <div className="text-4xl">&#x26A0;&#xFE0F;</div>
           <h2 className="mt-4 text-xl font-semibold text-red-700">Generation Failed</h2>
           <p className="mt-2 text-sm text-red-600">{error}</p>
-          <div className="mt-6 flex justify-center gap-3">
-            <button
-              onClick={onReset}
-              className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
-            >
-              Start Over
-            </button>
-            <button
-              onClick={onRetry}
-              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-            >
-              Try Again
-            </button>
+          <div className="mt-6 flex flex-col items-center gap-3">
+            {isAlreadyGenerating && (
+              <button
+                onClick={handleCancelAndRetry}
+                disabled={cancelling}
+                className="w-full rounded-full bg-red-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {cancelling ? "Cancelling..." : "Cancel Existing & Start Fresh"}
+              </button>
+            )}
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={onReset}
+                className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
+              >
+                Start Over
+              </button>
+              {!isAlreadyGenerating && (
+                <button
+                  onClick={onRetry}
+                  className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+                >
+                  Try Again
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

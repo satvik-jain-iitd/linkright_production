@@ -48,14 +48,33 @@ export function DashboardContent({ user }: { user: User }) {
   // [NAV-REDESIGN] const router = useRouter();
   const [jobs, setJobs] = useState<ResumeJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchJobs = () =>
     fetch("/api/resume/list")
       .then((r) => r.json())
       .then((data) => setJobs(data.jobs || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .catch(() => {});
+
+  useEffect(() => {
+    fetchJobs().finally(() => setLoading(false));
   }, []);
+
+  const handleCancel = async (jobId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCancellingId(jobId);
+    try {
+      await fetch("/api/resume/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      await fetchJobs();
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   // [NAV-REDESIGN] handleSignOut — AppNav handles sign out internally
   // const handleSignOut = async () => {
@@ -247,10 +266,21 @@ export function DashboardContent({ user }: { user: User }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {job.status === "processing" && (
+                      {(job.status === "queued" || job.status === "processing") && (
                         <div className="flex items-center gap-2">
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-                          <span className="text-xs text-muted">{job.progress_pct}%</span>
+                          {job.status === "processing" && (
+                            <>
+                              <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+                              <span className="text-xs text-muted">{job.progress_pct}%</span>
+                            </>
+                          )}
+                          <button
+                            onClick={(e) => handleCancel(job.id, e)}
+                            disabled={cancellingId === job.id}
+                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-500 transition-colors hover:border-red-400 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {cancellingId === job.id ? "Cancelling..." : "Cancel"}
+                          </button>
                         </div>
                       )}
                       {/* [PSA5-ayd.3.1.2] duration_ms display removed from completed cards */}
