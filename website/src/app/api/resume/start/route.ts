@@ -116,7 +116,7 @@ export async function POST(request: Request) {
 
   // Trigger worker (fire-and-forget, don't await the pipeline)
   try {
-    await fetch(`${WORKER_URL}/jobs/start`, {
+    const workerRes = await fetch(`${WORKER_URL}/jobs/start`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -141,11 +141,14 @@ export async function POST(request: Request) {
         } : null,
       }),
     });
-  } catch {
-    // Worker trigger failed — job stays queued, user can retry
+    if (!workerRes.ok) {
+      throw new Error(`Worker responded with ${workerRes.status}`);
+    }
+  } catch (err) {
+    // Worker trigger failed — mark job as failed so user can retry immediately
     await supabase
       .from("resume_jobs")
-      .update({ status: "failed", error_message: "Worker unreachable" })
+      .update({ status: "failed", error_message: `Worker unavailable: ${err instanceof Error ? err.message : "unknown"}` })
       .eq("id", job.id);
     return Response.json({ error: "Worker unavailable" }, { status: 502 });
   }
