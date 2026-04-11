@@ -1,0 +1,95 @@
+name: Website CI
+
+# Runs on every push to dev and on PRs targeting dev or main.
+# Catches TypeScript errors and build failures BEFORE Vercel deploys.
+#
+# Branch strategy:
+#   feature/* → PR → dev  (preview deploy + this CI must pass)
+#   dev       → PR → main (production deploy only after this CI passes)
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'website/**'
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - 'website/**'
+
+jobs:
+  typecheck-and-build:
+    name: Type Check + Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+        env:
+          # Stub env vars so tsc doesn't error on missing process.env references
+          NEXT_PUBLIC_SUPABASE_URL: https://fake.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: fake-anon-key
+
+      - name: Build (dry run — catches runtime import errors)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://fake.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: fake-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: fake-service-key
+          GROQ_API_KEY: fake-groq-key
+          WORKER_URL: http://localhost:8001
+          WORKER_SECRET: fake-worker-secret
+          ORACLE_BACKEND_URL: http://localhost:8000
+          ORACLE_BACKEND_SECRET: fake-oracle-secret
+          CUSTOM_GPT_SECRET: fake-gpt-secret
+
+  oracle-backend-ci:
+    name: Oracle Backend — Import Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: oracle-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+          cache-dependency-path: oracle-backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt eval_type_backport
+
+      - name: Check imports (syntax + type annotations)
+        run: python -c "
+import os
+os.environ['NEO4J_URI'] = 'bolt://localhost:7687'
+os.environ['NEO4J_USERNAME'] = 'neo4j'
+os.environ['NEO4J_PASSWORD'] = 'fake'
+os.environ['ORACLE_BACKEND_SECRET'] = 'fake'
+os.environ['SUPABASE_URL'] = 'https://fake.supabase.co'
+os.environ['SUPABASE_SERVICE_ROLE_KEY'] = 'fake'
+import main
+print('Oracle backend imports OK')
+"
