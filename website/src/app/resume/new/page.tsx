@@ -29,13 +29,14 @@ export default async function NewResumePage({
   // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
   // [BYOK-REMOVED]     .eq("user_id", user.id),
   // [BYOK-REMOVED] ]);
-  const { count: chunkCount } = await supabase
-    .from("career_chunks")
+  // Gate on career_nuggets (created during onboarding) rather than career_chunks
+  // (career_chunks require the async worker to run — nuggets are immediate)
+  const { count: nuggetCount } = await supabase
+    .from("career_nuggets")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  // [BYOK-REMOVED] if ((keyCount ?? 0) === 0 || (chunkCount ?? 0) === 0) {
-  if ((chunkCount ?? 0) === 0) {
+  if ((nuggetCount ?? 0) === 0) {
     redirect("/onboarding");
   }
 
