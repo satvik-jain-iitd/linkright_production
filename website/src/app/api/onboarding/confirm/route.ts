@@ -77,6 +77,16 @@ interface ExtractedNugget {
   paraphrase: string;
 }
 
+// ── event_date sanitizer ────────────────────────────────────────────────────
+
+function sanitizeEventDate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;          // already YYYY-MM-DD
+  if (/^\d{4}-\d{2}$/.test(raw)) return `${raw}-01`;         // YYYY-MM → YYYY-MM-01
+  if (/^\d{4}$/.test(raw)) return `${raw}-01-01`;             // YYYY → YYYY-01-01
+  return null;                                                  // range / unparseable → null
+}
+
 // ── Route handler ───────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -183,6 +193,13 @@ export async function POST(request: Request) {
       );
     }
 
+    // Get nugget_index (next sequential index for this user)
+    const { count: nuggetCount } = await supabase
+      .from("career_nuggets")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    const nugget_index = nuggetCount ?? 0;
+
     // Validate and sanitize fields
     const validSectionTypes = [
       "work_experience",
@@ -202,6 +219,7 @@ export async function POST(request: Request) {
 
     const dbRow = {
       user_id: user.id,
+      nugget_index,
       nugget_text: nugget.nugget_text.slice(0, 200),
       answer: nugget.answer,
       question: "",
@@ -225,7 +243,7 @@ export async function POST(request: Request) {
       temporality: validTemporality.includes(nugget.temporality)
         ? nugget.temporality
         : "past",
-      event_date: nugget.event_date ?? null,
+      event_date: sanitizeEventDate(nugget.event_date),
       company: nugget.company ?? null,
       role: nugget.role ?? null,
       people: [] as string[],
