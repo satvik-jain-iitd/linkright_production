@@ -204,11 +204,11 @@ export async function POST(request: Request) {
   // Step 1b: Fetch career_nuggets for composite scoring
   const { data: nuggetRows } = await supabase
     .from("career_nuggets")
-    .select("id, company, role, answer, event_date, nugget_type, leadership_signal, organization")
+    .select("id, company, role, answer, event_date, section_type, leadership_signal")
     .eq("user_id", user.id);
   const userNuggets: import("@/lib/jd-matcher").NuggetMeta[] = (nuggetRows ?? []).map(
     (n: Record<string, unknown>) => ({
-      section_type: String(n["nugget_type"] ?? ""),
+      section_type: String(n["section_type"] ?? ""),
       company: (n["company"] as string | null) ?? null,
       role: (n["role"] as string | null) ?? null,
       event_date: (n["event_date"] as string | null) ?? null,
