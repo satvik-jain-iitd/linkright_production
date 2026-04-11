@@ -1,6 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+
+// Use service role for the UPDATE (RLS blocks user-role updates on resume_jobs)
+// Auth check is still done via the user session client first.
+function serviceClient() {
+  return createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function POST(request: Request) {
+  // Auth gate — user session client
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,9 +24,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const { job_id } = body as { job_id?: string };
 
+  const admin = serviceClient();
+
   if (job_id) {
-    // Cancel a specific job (must belong to this user)
-    const { error } = await supabase
+    const { error } = await admin
       .from("resume_jobs")
       .update({ status: "failed", error_message: "Cancelled by user" })
       .eq("id", job_id)
@@ -28,8 +40,8 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   }
 
-  // No job_id — cancel ALL active jobs for this user
-  const { error } = await supabase
+  // Cancel ALL active jobs for this user
+  const { error } = await admin
     .from("resume_jobs")
     .update({ status: "failed", error_message: "Cancelled by user" })
     .eq("user_id", user.id)
