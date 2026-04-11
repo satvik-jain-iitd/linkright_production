@@ -3,6 +3,84 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const WORKER_URL = process.env.WORKER_URL!;
 const WORKER_SECRET = process.env.WORKER_SECRET!;
+const ORACLE_URL = process.env.ORACLE_BACKEND_URL;
+const ORACLE_SECRET = process.env.ORACLE_BACKEND_SECRET;
+
+/** Try Oracle ARM for structured career atoms; fall back to raw career_text silently. */
+async function getCareerContext(
+  userId: string,
+  jdText: string,
+  careerText: string
+): Promise<string> {
+  if (!ORACLE_URL || !ORACLE_SECRET) return careerText;
+
+  try {
+    const embedRes = await fetch(`${ORACLE_URL}/lifeos/embed`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ORACLE_SECRET}`,
+      },
+      body: JSON.stringify({ text: jdText }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!embedRes.ok) return careerText;
+    const { embedding } = await embedRes.json();
+
+    const atomsRes = await fetch(`${ORACLE_URL}/lifeos/career-nodes`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ORACLE_SECRET}`,
+      },
+      body: JSON.stringify({ user_id: userId, jd_embedding: embedding }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!atomsRes.ok) return careerText;
+    const { atoms } = await atomsRes.json();
+
+    if (!atoms || atoms.length === 0) return careerText;
+
+    const formatted = formatAtoms(atoms);
+    // >= 5 atoms: rich structured data is sufficient
+    if (atoms.length >= 5) return formatted;
+    // 1-4 atoms: combine both
+    return `${formatted}\n\nAdditional career context:\n${careerText}`;
+  } catch {
+    // Oracle unavailable — fall back silently
+    return careerText;
+  }
+}
+
+function formatAtoms(atoms: Array<{
+  achievement: Record<string, unknown>;
+  experience: Record<string, unknown>;
+  metrics: Array<Record<string, unknown>>;
+  skills: string[];
+}>): string {
+  return atoms
+    .map((a, i) => {
+      const ach = a.achievement;
+      const exp = a.experience;
+      const metrics = a.metrics
+        .map((m) => `${m.direction} ${m.value} ${m.unit}`)
+        .join(", ");
+      return [
+        `[Career Highlight ${i + 1}]`,
+        `Role: ${exp.role} at ${exp.company}`,
+        `Action: ${ach.action_verb} ${ach.action_detail}`,
+        ach.context ? `Context: ${ach.context}` : null,
+        ach.you_specifically ? `Your contribution: ${ach.you_specifically}` : null,
+        ach.result_text ? `Result: ${ach.result_text}` : null,
+        metrics ? `Metrics: ${metrics}` : null,
+        a.skills.length > 0 ? `Skills: ${a.skills.join(", ")}` : null,
+        ach.timeframe ? `Period: ${ach.timeframe}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -93,6 +171,9 @@ export async function POST(request: Request) {
   // }
   const resolved_api_key = process.env.GROQ_API_KEY || "";
 
+  // Hybrid retrieval: try Oracle ARM atoms, fall back to raw career_text
+  const effective_career_text = await getCareerContext(user.id, jd_text, career_text);
+
   // Create job row in Supabase
   const { data: job, error: insertError } = await supabase
     .from("resume_jobs")
@@ -100,7 +181,7 @@ export async function POST(request: Request) {
       user_id: user.id,
       status: "queued",
       jd_text,
-      career_text,
+      career_text: effective_career_text,
       model_provider: body.model_provider || "groq",
       model_id: body.model_id || "llama-3.1-8b-instant",
       template_id: template_id || "cv-a4-standard",
@@ -126,7 +207,7 @@ export async function POST(request: Request) {
         job_id: job.id,
         user_id: user.id,
         jd_text,
-        career_text,
+        career_text: effective_career_text,
         model_provider: body.model_provider || "groq",
         model_id: body.model_id || "llama-3.1-8b-instant",
         api_key: resolved_api_key,

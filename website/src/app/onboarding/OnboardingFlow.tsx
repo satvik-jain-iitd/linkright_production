@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChatMessage, type Message } from "./ChatMessage";
 import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
+import { StepLifeOS } from "./StepLifeOS";
 import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -1144,13 +1145,8 @@ export function OnboardingFlow() {
       )}
 
       {step === 3 && (
-        <StepConversation
-          selectedRoles={selectedRoles}
-          // [BYOK-REMOVED] modelProvider={modelProvider}
-          // [BYOK-REMOVED] modelId={modelId}
-          // [BYOK-REMOVED] apiKey={apiKey}
-          onDone={() => setStep(4)}
-        />
+        // [LIFEOS] StepConversation replaced with StepLifeOS (Custom GPT career coaching session)
+        <StepLifeOS onDone={() => setStep(4)} />
       )}
 
       {step === 4 && <StepSummary />}

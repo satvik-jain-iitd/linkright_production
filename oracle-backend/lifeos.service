@@ -1,0 +1,21 @@
+# systemd service for LifeOS FastAPI backend
+# Install: sudo cp lifeos.service /etc/systemd/system/
+#          sudo systemctl daemon-reload
+#          sudo systemctl enable lifeos
+#          sudo systemctl start lifeos
+
+[Unit]
+Description=LifeOS FastAPI Backend
+After=network.target
+
+[Service]
+WorkingDirectory=/home/ubuntu/lifeos-backend
+EnvironmentFile=/home/ubuntu/lifeos-backend/.env
+ExecStart=/home/ubuntu/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
