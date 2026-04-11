@@ -8,7 +8,7 @@ info:
   version: 1.0.0
 
 servers:
-  - url: https://linkright.in
+  - url: https://sync.linkright.in
     description: Production (Vercel)
 
 security:
