@@ -207,6 +207,39 @@ def _save_checkpoint(ctx: PipelineContext, sb: Client, phase_name: str, status: 
 
 MAX_LLM_RETRIES = 5
 
+
+async def _oracle_call_with_fallback(
+    ctx: PipelineContext,
+    oracle_llm,
+    fallback_llm,
+    system: str,
+    user: str,
+    phase: int,
+    temperature: float = 0.2,
+) -> LLMResponse:
+    """Call Oracle LLM directly (bypasses key_manager Groq routing), falls back to Groq on any error.
+
+    Use this instead of _llm_call when you want Oracle llama3.2:1b — _llm_call's key_manager
+    path ignores the llm parameter and always creates a Groq provider, bypassing Oracle.
+    """
+    try:
+        import time as _time
+        start = _time.time()
+        resp = await oracle_llm.complete(system, user, temperature=temperature)
+        duration = int((_time.time() - start) * 1000)
+        ctx._llm_log.append({
+            "phase": phase,
+            "input_tokens": resp.input_tokens,
+            "output_tokens": resp.output_tokens,
+            "duration_ms": duration,
+            "model": resp.model,
+        })
+        return resp
+    except Exception as e:
+        logger.warning(f"Job {ctx.job_id} phase {phase}: Oracle failed ({e}), falling back to Groq")
+        return await _llm_call(ctx, fallback_llm, system, user, phase=phase, temperature=temperature)
+
+
 async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: int, temperature: float = 0.3) -> LLMResponse:
     """Call LLM with retry on rate limit (429) and track tokens + timing.
 
@@ -909,8 +942,10 @@ async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm)
 
             try:
                 _oracle_3_5a = _get_oracle_llm()
-                _phase3_5a_llm = _oracle_3_5a if _oracle_3_5a is not None else llm
-                resp = await _llm_call(ctx, _phase3_5a_llm, system_prompt, user_prompt, phase=3, temperature=0.2)
+                if _oracle_3_5a is not None:
+                    resp = await _oracle_call_with_fallback(ctx, _oracle_3_5a, llm, system_prompt, user_prompt, phase=3, temperature=0.2)
+                else:
+                    resp = await _llm_call(ctx, llm, system_prompt, user_prompt, phase=3, temperature=0.2)
                 rewritten = resp.text.strip() if resp else None
                 # Strip accidental markdown fences
                 if rewritten and rewritten.startswith("```"):
@@ -1623,7 +1658,10 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             bullets_section=bullets_section,
         )
 
-        resp = await _llm_call(ctx, _phase5_llm, system_msg, user_msg, phase=5, temperature=0.2)
+        if _oracle is not None:
+            resp = await _oracle_call_with_fallback(ctx, _oracle, llm, system_msg, user_msg, phase=5, temperature=0.2)
+        else:
+            resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=5, temperature=0.2)
         trace_generation(
             trace_name="pipeline", generation_name="phase_5_width",
             model=resp.model, system_prompt=system_msg, user_input=user_msg,
@@ -1683,7 +1721,10 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
             range_min_90=range_min_90,
             bullets_section=retry_section,
         )
-        resp2 = await _llm_call(ctx, _phase5_llm, system_msg, retry_user, phase=5, temperature=0.2)
+        if _oracle is not None:
+            resp2 = await _oracle_call_with_fallback(ctx, _oracle, llm, system_msg, retry_user, phase=5, temperature=0.2)
+        else:
+            resp2 = await _llm_call(ctx, llm, system_msg, retry_user, phase=5, temperature=0.2)
         try:
             revisions2 = _parse_json(resp2.text).get("revised_bullets", [])
         except (json.JSONDecodeError, KeyError):
