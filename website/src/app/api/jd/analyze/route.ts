@@ -2,8 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
 import { jinaEmbed } from "@/lib/jina-embed";
-import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
-// [BYOK-REMOVED] import { resolveApiKey } from "@/lib/resolve-api-key";
+import { groqChat } from "@/lib/groq";
 
 export interface JDRequirement {
   id: string;
@@ -34,7 +33,7 @@ export interface JDAnalysisResult {
   gaps: JDGap[];
 }
 
-// ── LLM prompts ─────────────────────────────────────────────────────────────
+// ── Prompts ──────────────────────────────────────────────────────────────────
 
 const EXTRACTION_PROMPT = `You are a job description analyst. Extract a structured list of requirements from this job description.
 
@@ -68,6 +67,15 @@ Rules:
 
 Return ONLY valid JSON array, no markdown:
 [{"req_id":"r1","score":85}, ...]`;
+
+function parseJsonResponse<T>(text: string): T | null {
+  const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+  try {
+    return JSON.parse(clean) as T;
+  } catch {
+    return null;
+  }
+}
 
 function parseRequirements(text: string): JDRequirement[] {
   const parsed = parseJsonResponse<unknown[]>(text);
@@ -120,10 +128,7 @@ async function searchChunks(
 // ── LLM batch relevance scoring ──────────────────────────────────────────────
 
 async function scoreRelevanceBatch(
-  pairs: { req_id: string; req_text: string; chunk: string }[],
-  provider: string,
-  modelId: string,
-  apiKey: string
+  pairs: { req_id: string; req_text: string; chunk: string }[]
 ): Promise<Record<string, number>> {
   if (pairs.length === 0) return {};
 
@@ -135,19 +140,13 @@ async function scoreRelevanceBatch(
     .join("\n\n");
 
   try {
-    const { url, headers, body } = buildLlmCall(
-      provider,
-      modelId,
-      apiKey,
-      SCORING_PROMPT,
-      `Score these ${pairs.length} pairs:\n\n${userMsg}`,
-      800
+    const text = await groqChat(
+      [
+        { role: "system", content: SCORING_PROMPT },
+        { role: "user", content: `Score these ${pairs.length} pairs:\n\n${userMsg}` },
+      ],
+      { maxTokens: 800, temperature: 0.1 }
     );
-    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(15000) });
-    if (!resp.ok) return {};
-
-    const result = await resp.json();
-    const text = extractLlmText(provider, result);
     const scores = parseJsonResponse<{ req_id: string; score: number }[]>(text);
     if (!Array.isArray(scores)) return {};
 
@@ -173,57 +172,29 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!rateLimit(`jd-analyze:${user.id}`, 5)) {
+  if (!rateLimit(`jd-analyze:${user.id}`, 1, 240_000)) {
     return rateLimitResponse("JD analysis");
   }
 
-  // [BYOK-REMOVED] api_key no longer required from client — server provides the key
-  const { jd_text, model_provider: _model_provider, model_id: _model_id /* , api_key */ } = await request.json();
+  const { jd_text } = await request.json();
 
-  // [BYOK-REMOVED] api_key removed from required fields check
-  // if (!jd_text || !model_provider || !model_id || !api_key) {
   if (!jd_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Server-side defaults for LLM config
-  const apiKey = process.env.GROQ_API_KEY || "";
-  const model_provider = _model_provider || "groq";
-  const model_id = _model_id || "llama-3.1-8b-instant";
-
-  // Step 1: Extract requirements via LLM (with 1 retry)
+  // Step 1: Extract requirements via LLM
   let requirements: JDRequirement[] = [];
   try {
-    const { url, headers, body } = buildLlmCall(
-      model_provider,
-      model_id,
-      apiKey,
-      EXTRACTION_PROMPT,
-      `Job Description:\n${jd_text.slice(0, 4000)}`,
-      1500
+    const text = await groqChat(
+      [
+        { role: "system", content: EXTRACTION_PROMPT },
+        { role: "user", content: `Job Description:\n${jd_text.slice(0, 4000)}` },
+      ],
+      { maxTokens: 1500, temperature: 0.1 }
     );
-
-    let resp = await fetch(url, { method: "POST", headers, body: body, signal: AbortSignal.timeout(15000) }).catch(() => null);
-    // Retry once on failure with backoff
-    if (!resp || !resp.ok) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const retry = buildLlmCall(model_provider, model_id, apiKey, EXTRACTION_PROMPT, `Job Description:\n${jd_text.slice(0, 4000)}`, 1500);
-      resp = await fetch(retry.url, { method: "POST", headers: retry.headers, body: retry.body, signal: AbortSignal.timeout(20000) }).catch(() => null);
-    }
-
-    if (!resp || !resp.ok) {
-      const status = resp?.status;
-      const hint = status === 429
-        ? `Your ${model_provider} API key is rate-limited. Wait a minute and try again.`
-        : status === 401
-          ? `Your ${model_provider} API key appears invalid. Check it in Settings.`
-          : `${model_provider} API returned ${status || "no response"}. The provider may be temporarily down — try again shortly.`;
-      return Response.json({ error: hint }, { status: 502 });
-    }
-    const result = await resp.json();
-    requirements = parseRequirements(extractLlmText(model_provider, result));
+    requirements = parseRequirements(text);
   } catch {
-    return Response.json({ error: "Failed to analyze JD — network error. Check your internet connection and try again." }, { status: 500 });
+    return Response.json({ error: "Failed to analyze JD" }, { status: 500 });
   }
 
   if (requirements.length === 0) {
@@ -286,52 +257,20 @@ export async function POST(request: Request) {
     }
   }
 
-  // Step 2: Text search — gather top 3 candidate chunks per requirement
-  const candidateGroups: { req_id: string; req_text: string; chunks: string[] }[] = [];
+  // Step 2: Text search — gather top candidate chunk per requirement
+  const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
 
   await Promise.allSettled(
     requirements.map(async (req) => {
       const chunks = await searchChunks(supabase, user.id, req.text);
       if (chunks.length > 0) {
-        candidateGroups.push({ req_id: req.id, req_text: req.text, chunks: chunks.slice(0, 3) });
+        candidatePairs.push({ req_id: req.id, req_text: req.text, chunk: chunks[0] });
       }
     })
   );
 
-  // Flatten: score each (requirement, chunk) variant, then pick best per requirement
-  const allPairs: { req_id: string; req_text: string; chunk: string; variant: number }[] = [];
-  for (const group of candidateGroups) {
-    for (let vi = 0; vi < group.chunks.length; vi++) {
-      allPairs.push({
-        req_id: vi === 0 ? group.req_id : `${group.req_id}__v${vi}`,
-        req_text: group.req_text,
-        chunk: group.chunks[vi],
-        variant: vi,
-      });
-    }
-  }
-
   // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
-  const candidatePairs = allPairs.map(({ req_id, req_text, chunk }) => ({ req_id, req_text, chunk }));
-  const rawScores = await scoreRelevanceBatch(candidatePairs, model_provider, model_id, apiKey);
-
-  // Pick best scoring chunk per original requirement
-  const scores: Record<string, number> = {};
-  const bestChunkByReq: Record<string, string> = {};
-  for (const group of candidateGroups) {
-    let bestScore = -1;
-    let bestChunk = group.chunks[0];
-    for (let vi = 0; vi < group.chunks.length; vi++) {
-      const variantId = vi === 0 ? group.req_id : `${group.req_id}__v${vi}`;
-      const s = rawScores[variantId] ?? -1;
-      if (s > bestScore) {
-        bestScore = s;
-        bestChunk = group.chunks[vi];
-      }
-    }
-    if (bestScore >= 0) scores[group.req_id] = bestScore;
-    bestChunkByReq[group.req_id] = bestChunk;
-  }
+  const scores = await scoreRelevanceBatch(candidatePairs);
   const scoringAvailable = Object.keys(scores).length > 0;
 
   // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)
@@ -362,8 +301,10 @@ export async function POST(request: Request) {
   const matches: JDMatch[] = [];
   const gaps: JDGap[] = [];
 
+  const candidateByReqId = Object.fromEntries(candidatePairs.map((p) => [p.req_id, p.chunk]));
+
   for (const req of requirements) {
-    const chunk = bestChunkByReq[req.id];
+    const chunk = candidateByReqId[req.id];
     const score = scores[req.id] ?? -1;
     const compositeResult = compositeByText[req.text];
     const compositeScore = compositeResult?.composite_score ?? 0;

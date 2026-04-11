@@ -1,0 +1,120 @@
+role: po
+stream_name: content-ideation
+
+feature_analyses:
+  - feature_name: "Trend Monitor Agent"
+    analysis: >
+      Two core user needs here: (1) passive, automated trend collection so the user
+      never has to manually search for topics, and (2) noise reduction via career-context
+      filtering so the firehose doesn't overwhelm. Both are p1 — without them the entire
+      ideation stream has no inputs. The error-handling story (poll failure, missing
+      context) is explicitly included because a crashed agent silently breaking the
+      pipeline is a business-critical failure mode.
+    tasks:
+      - title: "Implement TrendMonitorAgent scheduler with configurable poll interval"
+        task_type: implementation
+        description: >
+          Create TrendMonitorAgent class in modules/flex/agents/trend_monitor_agent.py.
+          Agent reads poll_interval_hours from agent_config.py, checks last_run_at
+          against current time, and skips if within interval. Calls all 4 source
+          adapters in parallel, merges results, writes to trends_store with
+          source/timestamp/engagement_score fields.
+      - title: "Implement career-context relevance filter for raw trends"
+        task_type: implementation
+        description: >
+          Add relevance_filter() method to TrendMonitorAgent that computes keyword
+          overlap + embedding cosine similarity between each raw trend title and the
+          user's configured career context. Filter threshold is configurable
+          (default: 0.4). Fallback to store-all if context is not configured.
+      - title: "Write user-facing config schema for career context"
+        task_type: implementation
+        description: >
+          Add CareerContext Pydantic model to agent_config.py with fields: role,
+          industry, target_audience, seniority, niche_keywords (list[str]).
+          Validate on load; log clear error if required fields missing.
+
+  - feature_name: "Ideation Scoring Engine"
+    analysis: >
+      This feature's primary user value is prioritization — not all trends are
+      equal, and the user should spend creative energy on the highest-leverage
+      opportunities. The composite score (3 axes, configurable weights) must be
+      deterministic and transparent so the user can trust and audit it. The CLI
+      dashboard story is p2 from a pure value standpoint but p1 for usability —
+      without a human-readable output, the scoring is invisible.
+    tasks:
+      - title: "Define scoring weight configuration schema"
+        task_type: implementation
+        description: >
+          Add ScoringConfig Pydantic model to modules/flex/config/scoring_config.py
+          with fields: relevance_weight (float, default 0.4), timeliness_weight
+          (float, default 0.35), audience_fit_weight (float, default 0.25).
+          Validate that weights sum to 1.0; raise ConfigError otherwise.
+      - title: "Implement 'flex ideation list' CLI command"
+        task_type: implementation
+        description: >
+          Add 'list' subcommand to modules/flex/cli/ideation_commands.py. Reads
+          top-N (default 10) from scored_opportunities_store, renders a rich table
+          with rank/topic/scores/source/age. Includes --select <id> flag to trigger
+          brief generation. Shows empty state message if store is empty.
+
+  - feature_name: "Content Brief Generator"
+    analysis: >
+      This is the core deliverable of the ideation stream — the handoff artifact
+      to content-drafting. Both stories are p1. The first ensures structured,
+      validated brief output that downstream agents can consume reliably. The
+      second (platform override) is p1 because without platform-specific hooks,
+      the brief is generic and loses its primary value. The retry + error story
+      prevents silent brief failures poisoning the drafting pipeline.
+      Assumption: ContentBrief is the canonical handoff schema between
+      content-ideation and content-drafting streams — flag for cross-stream review.
+    tasks:
+      - title: "Define ContentBrief Pydantic model"
+        task_type: implementation
+        description: >
+          Create modules/flex/models/content_brief.py with ContentBrief model:
+          brief_id (UUID), opportunity_id (str), angles (list[Angle]), hooks per angle
+          (list[str], min 2), target_platform (enum), tone (enum), effort_estimate
+          (str), personal_context (list[LifeOSEntry] optional), status (enum:
+          draft/manually_enriched/approved), created_at.
+      - title: "Write platform-specific prompt templates"
+        task_type: implementation
+        description: >
+          Create modules/flex/prompts/brief_generation_prompts.py with a
+          PLATFORM_PROMPTS dict keyed by platform (linkedin, x, youtube, instagram,
+          facebook). Each value is a prompt template string with {opportunity_title},
+          {career_context}, {personal_context} placeholders and platform-specific
+          formatting instructions.
+      - title: "Implement 'flex brief generate' CLI command"
+        task_type: implementation
+        description: >
+          Add 'generate' subcommand to modules/flex/cli/brief_commands.py.
+          Accepts opportunity_id positional arg and optional --platform flag.
+          Invokes BriefGeneratorAgent.generate(), prints brief summary to console,
+          saves to briefs_store, outputs brief_id for chaining.
+
+  - feature_name: "LifeOS Integration"
+    analysis: >
+      This feature is p2 because the ideation pipeline functions without it, but
+      it's the differentiator that makes content authentic vs generic. Two risks:
+      (1) LifeOS path misconfiguration silently breaking brief generation — handled
+      by graceful fallback, (2) auto-matched context being low-quality — handled by
+      the manual pin story. Both stories are p2. Assumption: LifeOS data lives in a
+      local YAML/JSON directory at a user-configured path. If LifeOS has a different
+      structure, this must be re-evaluated.
+    tasks:
+      - title: "Document LifeOS data contract and expected schema"
+        task_type: implementation
+        description: >
+          Add LifeOSEntry Pydantic model to modules/flex/models/lifeos_entry.py with
+          fields: entry_id (str), title (str), type (enum: achievement/learning/
+          milestone/project), date (date), description (str), tags (list[str]).
+          Document the expected directory structure in a docstring.
+      - title: "Implement 'flex brief enrich' CLI command with overwrite guard"
+        task_type: implementation
+        description: >
+          Add 'enrich' subcommand to modules/flex/cli/brief_commands.py. Accepts
+          brief_id and --lifeos-entry flags. Validates both IDs, checks existing
+          status, prompts for confirmation if manually_enriched, updates brief
+          personal_context and status in briefs_store.
+
+completed: true

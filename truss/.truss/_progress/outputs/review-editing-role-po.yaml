@@ -1,0 +1,103 @@
+role: po
+stream_name: review-editing
+
+feature_analyses:
+  - feature_name: "QA Review Agent"
+    analysis: >
+      Non-negotiable: automated QA must run before human review, not alongside it.
+      The human reviewer should see a pre-scored draft, not raw AI output. FK Grade 7
+      is the target — not a hard block, but a prominent flag. Grammar failures are
+      hard blocks (QA status='qa_flagged'). Brand voice rules are user-configurable
+      in brand_voice_rules.yaml — the agent must not hardcode any brand preferences.
+      The inline suggestion UX (underlined spans) is p1, not p2 — without it, the
+      QA report is a wall of text the user won't read. Accept/Ignore actions are both
+      required: forcing users to accept all suggestions breaks creative autonomy.
+    tasks:
+      - title: "Define QAReport Pydantic model and QACheck structure"
+        task_type: implementation
+        description: >
+          modules/flex/models/qa_report.py: QAReport with draft_id (str), overall_passed (bool),
+          grammar: QACheck, readability: QACheck, brand_voice: QACheck, platform_constraints: QACheck,
+          reviewed_at (datetime). QACheck: passed (bool), suggestions (list[Suggestion]),
+          accepted_count (int default=0), ignored_count (int default=0).
+          Suggestion: suggestion_id (UUID), location (CharRange: start, end), issue (str),
+          recommendation (str), category (enum: grammar/readability/brand_voice/platform), status
+          (enum: pending/accepted/ignored).
+
+      - title: "Define brand_voice_rules.yaml schema and validation"
+        task_type: implementation
+        description: >
+          Create modules/flex/config/brand_voice_rules.yaml template with:
+          avoid_words: list[str], prefer_words: list[str], tone_keywords: list[str],
+          max_fk_grade: float (default 9.0), sentence_length_max: int (default 20 words).
+          Add BrandVoiceRules Pydantic model to validate on load. Document in README.
+
+      - title: "Implement 'flex review queue' and 'flex review show' CLI commands"
+        task_type: implementation
+        description: >
+          modules/flex/cli/review_commands.py:
+          queue: lists all pending drafts (status='qa_passed' or 'qa_flagged') with
+          columns (platform, topic, QA status, age, word count). --status filter.
+          Quick-approve inline for qa_passed drafts: 'flex review approve <draft_id>'.
+          show <draft_id>: prints full draft body + QA report summary with suggestions.
+
+  - feature_name: "Human-in-the-Loop Approval"
+    analysis: >
+      Hard rule: no draft reaches publishing without an explicit Approve action.
+      The system must make this impossible to bypass — not a UI convention but an
+      architectural constraint. drafts_store must enforce: only status='approved' drafts
+      are returned by get_approved(). Three-action model (Approve/Request Changes/Reject)
+      covers all reviewer intents without ambiguity. 'Request Changes' must store notes —
+      a changeless request is useless. Quick Approve is a UX win for high-volume
+      creators who trust their QA-passed drafts. Approval audit trail (timestamp, notes)
+      is a compliance requirement for brand accounts.
+    tasks:
+      - title: "Define ApprovalRecord Pydantic model for audit trail"
+        task_type: implementation
+        description: >
+          modules/flex/models/approval_record.py: ApprovalRecord with record_id (UUID),
+          draft_id (str), decision (enum: approved/changes_requested/rejected),
+          decided_at (datetime), notes (str | None), reviewer_context (str — platform,
+          word_count, qa_status at time of decision). Stored in approval_records_store.
+
+      - title: "Implement 'flex review approve/reject/request-changes' CLI commands"
+        task_type: implementation
+        description: >
+          review_commands.py:
+          approve <draft_id>: updates draft status='approved', creates ApprovalRecord,
+          prints "✓ Draft approved. Queued for publishing."
+          reject <draft_id> [--reason]: updates status='rejected', requires --reason,
+          creates ApprovalRecord with reason.
+          request-changes <draft_id> --notes "...": updates status='changes_requested',
+          stores notes in ApprovalRecord.
+          All commands require confirmation before executing (except quick-approve with --yes flag).
+
+  - feature_name: "Feedback Loop and Style Learning"
+    analysis: >
+      This is p2 but architecturally simple: capture the diff, call LLM once,
+      write a YAML file. The value is compounding — early users won't notice it,
+      but after 10+ approvals, draft quality measurably improves. Trivial edit
+      threshold (< 10 chars) prevents noise from punctuation fixes. The 'flex voice
+      edits' CLI is the accountability surface — without it, the feedback loop is
+      invisible and users don't trust it. The most important implementation detail:
+      feedback entries must be appended to the existing voice corpus directory,
+      not a separate location, so VoiceConsistencyEngine picks them up automatically.
+    tasks:
+      - title: "Define VoiceCorpusEntry model for user_edit type"
+        task_type: implementation
+        description: >
+          modules/flex/models/voice_corpus_entry.py: VoiceCorpusEntry with entry_id (UUID),
+          type (enum: past_post/user_edit), created_at, platform (optional),
+          text (str), edit_metadata (optional EditMetadata: original_text, edited_text,
+          edit_type enum: word_sub/restructure/addition/deletion, style_signal str).
+          Saved as YAML to voice_corpus_path directory.
+
+      - title: "Implement 'flex voice edits' CLI command"
+        task_type: implementation
+        description: >
+          voice_commands.py: edits subcommand reads voice_corpus_path for entries with
+          type='user_edit', prints table (date, edit_type, original snippet 20 chars,
+          edited snippet 20 chars, style_signal). Empty state message if no edits.
+          --last <n> flag to show only last N edits.
+
+completed: true

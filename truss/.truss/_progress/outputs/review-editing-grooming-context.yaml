@@ -1,0 +1,38 @@
+stream_name: review-editing
+stream_objective: "Design and implement review, editing, and human-in-the-loop approval pipeline"
+domain: bmad-dev
+timestamp: "2026-04-08T00:00:00Z"
+
+upstream_artifacts:
+  draft_contract:
+    source: "content-drafting/Platform-Specialist Drafting Agents"
+    path: "modules/flex/models/draft.py"
+    contract: "drafts_store.get_pending_review() returns Drafts with status='ready_for_review' or status='selected'"
+    key_fields:
+      - "draft_id (UUID)"
+      - "brief_id (str)"
+      - "platform (Platform enum)"
+      - "version (int)"
+      - "body (str)"
+      - "platform_fields (dict)"
+      - "status (ready_for_review/selected/archived/published)"
+
+scope_items:
+  - id: 0
+    description: "QA agent for grammar, readability (FK Grade 7 target), and brand voice compliance"
+  - id: 1
+    description: "Pixel-perfect preview rendering per platform before approval"
+  - id: 2
+    description: "Human-in-the-loop approval checkpoint — nothing publishes without user sign-off"
+  - id: 3
+    description: "Feedback loop: user edits feed back into the style model"
+
+cross_stream_dependencies:
+  upstream:
+    - stream: content-drafting
+      artifact: "drafts_store — Draft with status='ready_for_review' or 'selected'"
+      contract: "QAReviewAgent reads drafts_store.get_pending_review()"
+  downstream:
+    - stream: publishing-orchestration
+      artifact: "drafts_store — Draft with status='approved'"
+      contract: "PublishingOrchestrator reads drafts_store.get_approved() to schedule publishing"

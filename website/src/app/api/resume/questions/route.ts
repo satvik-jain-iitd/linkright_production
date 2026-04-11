@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { buildLlmCall, extractLlmText } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
+import { groqChat } from "@/lib/groq";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -14,19 +13,15 @@ export async function POST(request: Request) {
   }
 
   // Rate limit: 5 question generations per minute per user
-  if (!rateLimit(`questions:${user.id}`, 5)) {
+  if (!rateLimit(`questions:${user.id}`, 1, 240_000)) {
     return rateLimitResponse("question generation");
   }
 
-  const { jd_text, career_text, model_provider, model_id, api_key } =
-    await request.json();
+  const { jd_text, career_text } = await request.json();
 
-  if (!jd_text || !career_text || !model_provider || !api_key) {
+  if (!jd_text || !career_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
-
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
 
   const systemPrompt = `You are a career coach preparing to write a targeted resume. Read the candidate's career profile and the job description carefully.
 
@@ -49,31 +44,13 @@ ${jd_text.slice(0, 3000)}
 ${career_text.slice(0, 8000)}`;
 
   try {
-    const { url, headers, body } = buildLlmCall(
-      model_provider,
-      model_id || "llama-3.1-8b-instant",
-      resolvedKey,
-      systemPrompt,
-      userPrompt,
-      1000
+    const text = await groqChat(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { maxTokens: 1000, temperature: 0.3 }
     );
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!resp.ok) {
-      return Response.json(
-        { error: `LLM API error: ${resp.status}` },
-        { status: 502 }
-      );
-    }
-
-    const data = await resp.json();
-    const text = extractLlmText(model_provider, data);
     const questions = parseJsonArray(text).slice(0, 8);
 
     if (questions.length === 0) {

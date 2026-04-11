@@ -1,0 +1,177 @@
+stream_name: analytics
+
+summary:
+  feature_count: 3
+  story_count: 6
+  task_count: 18
+  conflicts_found: 1
+  conflicts_resolved: 1
+  gaps: 0
+
+conflicts:
+  - feature: "Content Recommendation Engine"
+    conflict_type: "cross_stream_serialization_contract"
+    positions:
+      architect: "RecommendationEngine.get_for_ideation() returns list[Recommendation] Pydantic objects — clean typed interface for internal consumers"
+      qa: "ideation CLI must display recommendations without importing analytics modules — Pydantic objects create a circular import; only JSON-serializable public fields (topic_suggestion, format_suggestion, timing_suggestion, rationale) are needed"
+    decision: "get_for_ideation() returns list[dict] with only public fields (topic_suggestion, format_suggestion, timing_suggestion, rationale, confidence_score, platform). recommendations_store.get_top_n() reads JSON directly from SQLite — no Pydantic deserialization in ideation path."
+    rationale: "Avoids circular import between analytics and ideation modules. All field validation is done by Pydantic at write time (before storage); reading back as dict is safe. JSON dict is already the wire format for cross-stream contracts in this pipeline."
+    impact: "RecommendationEngine.get_for_ideation() signature changes from list[Recommendation] to list[dict]. recommendations_store.get_top_n() returns raw dict rows. Ideation CLI reads from recommendations_store directly without loading analytics module."
+
+task_ids:
+  "Performance Tracking and Data Ingestion":
+    feature_id: "Claude-7ir.8"
+    story_ids: ["Claude-7ir.8.S1", "Claude-7ir.8.S2"]
+    task_ids: ["Claude-7ir.8.S1.T1", "Claude-7ir.8.S1.T2", "Claude-7ir.8.S1.T3", "Claude-7ir.8.S1.T4", "Claude-7ir.8.S1.T5", "Claude-7ir.8.S2.T1", "Claude-7ir.8.S2.T2", "Claude-7ir.8.S2.T3"]
+  "Analytics Dashboard and Pattern Detection":
+    feature_id: "Claude-7ir.9"
+    story_ids: ["Claude-7ir.9.S1", "Claude-7ir.9.S2"]
+    task_ids: ["Claude-7ir.9.S1.T1", "Claude-7ir.9.S1.T2", "Claude-7ir.9.S1.T3", "Claude-7ir.9.S2.T1", "Claude-7ir.9.S2.T2"]
+  "Content Recommendation Engine":
+    feature_id: "Claude-7ir.10"
+    story_ids: ["Claude-7ir.10.S1", "Claude-7ir.10.S2"]
+    task_ids: ["Claude-7ir.10.S1.T1", "Claude-7ir.10.S1.T2", "Claude-7ir.10.S1.T3", "Claude-7ir.10.S2.T1", "Claude-7ir.10.S2.T2"]
+
+features:
+  - name: "Performance Tracking and Data Ingestion"
+    priority: p1
+    integration_notes: "Roles: po (MetricsSnapshot Pydantic model with platform-flexible metrics dict, three-point polling schedule constants, flex analytics post CLI), architect (PlatformAnalyticsAdapter ABC with 5 concrete adapters, AnalyticsPoller with polling_schedule_store, metrics_store SQLite with JSON metrics payload, tenacity retry with Retry-After header), designer (post metrics card with 3-snapshot sparkline, post_deleted state treatment, metric delta badge), qa (adapter mocked API tests per platform, 429/404/401 paths, AnalyticsPoller 3-snapshot lifecycle, polling_schedule round-trip, claim-before-process prevents duplicate polling). Input: publish_records_store.get_published_without_analytics(). Output: metrics_snapshots → PatternDetectionEngine."
+    stories:
+      - title: "As a content creator, I want my posts automatically tracked across 3 time windows so I can see early virality, sustained engagement, and long-tail reach"
+        acceptance_criteria:
+          - "Given PublishRecord inserted, When AnalyticsPoller.schedule() called, Then 3 rows inserted into polling_schedule with scheduled_at = published_at+1h, +24h, +7d and status='pending'"
+          - "Given polling_schedule row with scheduled_at <= now AND status='pending', When AnalyticsPoller.run() called, Then adapter.poll(platform_post_id) called and MetricsSnapshot inserted"
+          - "Given platform returns 404, When adapter.poll() called, Then publish_record marked post_deleted, remaining poll rows status='cancelled', no further polls attempted"
+          - "Given platform returns 429 with Retry-After: 30, When adapter.poll() called, Then waits 30s and retries once before failing"
+          - "Given platform returns 401, When adapter.poll() called, Then raises immediately without retry"
+        tasks:
+          - title: "Create PlatformAnalyticsAdapter ABC and 5 platform adapters"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/analytics/platform_analytics_adapters.py: ABC with poll(platform_post_id, api_credentials) -> dict[str, int|float]. 5 adapters: LinkedInAnalyticsAdapter (/ugcPosts/{id}/statistics), XAnalyticsAdapter (/tweets/{id}?tweet.fields=public_metrics), YouTubeAnalyticsAdapter (/videos?part=statistics), InstagramAnalyticsAdapter (/ig_media/{id}?fields=impressions,likes,saves,comments_count), FacebookAnalyticsAdapter (/post_id/insights). 404 → POST_DELETED sentinel. 429 + Retry-After → tenacity custom wait. 401 → raise immediately."
+
+          - title: "Implement AnalyticsPoller with 3-point scheduling and polling_schedule_store"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/analytics/analytics_poller.py: schedule(publish_record): insert 3 rows (poll_number=1/2/3, scheduled_at=+1h/+24h/+7d, status='pending'). run(): SELECT WHERE scheduled_at <= now AND status='pending' → UPDATE status='in_progress' (claim), adapter.poll(), INSERT MetricsSnapshot, UPDATE status='completed'. 404: mark publish_record post_deleted, UPDATE remaining rows status='cancelled'."
+
+          - title: "Implement metrics_store with SQLite and JSON metrics payload"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/store/metrics_store.py: SQLite metrics_snapshots(id, publish_record_id, platform, polled_at, poll_number, metrics TEXT). metrics=json.dumps(dict). Methods: insert(), get_by_publish_record(id), get_latest(id), get_all_for_platform(platform), get_for_pattern_analysis(platform, limit=100)."
+
+          - title: "Define MetricsSnapshot Pydantic model with platform-flexible metrics dict"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/models/metrics_snapshot.py: MetricsSnapshot(snapshot_id UUID, publish_record_id str, platform Platform enum, polled_at datetime, poll_number int (1/2/3), metrics dict[str, int|float]). Core keys: impressions, likes, comments. Platform-specific: shares (LinkedIn/X/Facebook), clicks (LinkedIn), saves (Instagram), views (YouTube), retweets (X). Define EXPECTED_METRICS dict per platform for validation."
+
+          - title: "Define three-point polling schedule and 'flex analytics post' CLI"
+            task_type: implementation
+            source_role: po
+            description: "AnalyticsPoller schedule constants: poll_1h = +timedelta(hours=1), poll_24h = +timedelta(hours=24), poll_7d = +timedelta(days=7). CLI: flex analytics post <post_id> → latest MetricsSnapshot with delta vs previous snapshot. flex analytics post <post_id> --all → all 3 snapshots in table."
+
+      - title: "As a content creator, I want a visual metrics card for each post so I can see growth trend and platform-specific engagement at a glance"
+        acceptance_criteria:
+          - "Given MetricsSnapshot exists, When post metrics card rendered, Then sparkline shows trend across all 3 snapshot points (green if trending up, red if declining)"
+          - "Given post was deleted on platform, When metrics card shown, Then struck-through topic, gray icon, message 'Post was deleted from [Platform] on [date]. Final metrics shown below.' with last snapshot data"
+          - "Given 3 snapshots exist, When delta badge shown, Then displays +/- change since previous snapshot (green positive, neutral flat)"
+        tasks:
+          - title: "Design post metrics card with sparkline and snapshot timeline"
+            task_type: design
+            source_role: designer
+            description: "Post Metrics Card: Header (platform icon, topic 2 lines, published date). Metrics strip: 4-5 pill badges (icon + number, largest metric prominent). Sparkline (80px×24px): trend line across 3 snapshots, green up/red declining. Delta badge: '+240 impressions since 1h ago'. Snapshot timeline (collapsible): 3 rows (1h/24h/7d) with timestamp + metric values. post_deleted state: strikethrough topic, gray icon, explanation message with last snapshot. Accessibility: aria-label on sparkline and metric pills."
+
+          - title: "Write unit tests for all 5 PlatformAnalyticsAdapters with mocked API responses"
+            task_type: test
+            source_role: qa
+            description: "tests/flex/agents/analytics/test_platform_analytics_adapters.py: Per adapter: mock platform API response → verify metrics dict keys match EXPECTED_METRICS. test_404_returns_post_deleted_signal (all adapters). test_429_with_retry_after: mock 429 Retry-After: 30 → waits 30s, retries once. test_auth_error_raises_immediately: mock 401 → raises without retry. LinkedIn: impressions/likes/comments/shares/clicks. X: impressions/likes/retweets/replies. YouTube: views/likes/comments. Instagram: impressions/likes/saves/comments_count. Facebook: impressions/likes/shares/comments."
+
+          - title: "Write integration tests for AnalyticsPoller scheduling and 3-snapshot lifecycle"
+            task_type: test
+            source_role: qa
+            description: "tests/flex/agents/analytics/test_analytics_poller.py: test_schedule_creates_3_rows, test_schedule_times_correct (poll_1=+1h, poll_2=+24h, poll_3=+7d), test_run_polls_due_records (scheduled_at <= now → adapter called), test_run_skips_future_records (2h future → not polled), test_post_deleted_cancels_remaining (POST_DELETED → remaining rows cancelled), test_completed_poll_not_reprocessed. tests/flex/store/test_metrics_store.py: test_insert_and_get_by_publish_record, test_get_latest_returns_highest_poll_number, test_get_all_for_platform."
+
+  - name: "Analytics Dashboard and Pattern Detection"
+    priority: p1
+    integration_notes: "Roles: po (PerformanceSummary Pydantic model, flex analytics dashboard CLI with --platform flag, flex analytics patterns subcommand, 5-post minimum enforced with plain-English insights capped at 3), architect (PatternDetectionEngine pure function with 3 algorithms: time_window/topic/format, engagement_rate formula, PatternInsufficient return type, group-by logic with stopword filtering), designer (hero bar with best post, platform tabs, post list with engagement_rate progress bar, pattern insight cards with quote-mark format, 'Need 5+ posts' empty state with n/5 progress indicator), qa (PatternDetectionEngine property tests with controlled fixtures, exactly-4 vs exactly-5 threshold, zero-impressions edge case, top_topic detection, max 3 insights, metrics_store get_for_pattern_analysis contract). Input: metrics_snapshots via metrics_store. Output: PatternResult → RecommendationEngine."
+    stories:
+      - title: "As a content creator, I want to understand what content patterns drive the most engagement so I can repeat what works"
+        acceptance_criteria:
+          - "Given 5+ posts for a platform, When PatternDetectionEngine.detect() called, Then returns PatternResult with best_time_window, top_topic, best_format, and up to 3 plain-English insights"
+          - "Given fewer than 5 posts, When detect() called, Then returns PatternInsufficient(current_count, required=5) — not an exception"
+          - "Given 5 Tuesday posts with 2x engagement vs other days, When detect() called for LinkedIn, Then best_time_window = Tuesday"
+          - "Given impressions=0, When engagement_rate computed, Then result is 0.0 (no ZeroDivisionError)"
+        tasks:
+          - title: "Implement PatternDetectionEngine with 3-algorithm analysis"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/analytics/pattern_detection_engine.py: detect(snapshots, min_posts=5) -> PatternResult | PatternInsufficient. If len < min_posts: return PatternInsufficient(platform, current_count, required=5). Algorithm 1: time_window — group by (day_of_week, hour_bucket), mean engagement_rate = (likes+comments+shares)/impressions (0 if impressions=0). Algorithm 2: topic — join brief topics via publish_record.brief_id, group by keywords (split, lowercase, filter stopwords), mean engagement. Algorithm 3: format — group by platform_fields structure (thread length for X, body length bucket for LinkedIn), mean engagement. Output: PatternResult(best_time_window, top_topic, best_format, insights list[str] max=3)."
+
+          - title: "Define PerformanceSummary model and implement 'flex analytics dashboard' CLI"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/models/performance_summary.py: PerformanceSummary(platform, total_posts, avg_impressions, avg_engagement_rate, top_post_id, top_post_topic, bottom_post_id, pattern_insights list[str] max=3). analytics_commands.py: dashboard subcommand → per-platform summary table. --platform flag for single platform. patterns subcommand → 3 insights per platform as bullet points. Insight format: plain English ('Your Tuesday posts outperform Thursday by 40%')."
+
+          - title: "Design analytics dashboard with platform tabs, hero stat, and pattern insights"
+            task_type: design
+            source_role: designer
+            description: "Hero Bar: 'This week's best: [platform icon] [topic] — [N] impressions'. Platform tabs: [All] [LinkedIn] [X] [YouTube] [Instagram] [Facebook]. Per-tab: summary row (total posts, avg impressions, avg engagement rate, top performer). Post list: sorted by engagement_rate desc. Each: topic (2 lines), publish date, engagement_rate as progress bar, top metric, mini sparkline. Patterns section: up to 3 insight cards, large quote-mark icon, 16px insight text, supporting stat chip ('Based on 8 posts'). 'Need 5+' empty state: progress indicator n/5 + encouragement text. Mobile: tabs → dropdown, list → single-column cards."
+
+      - title: "As a content creator, I want to see an analytics dashboard sorted by engagement so I know my best-performing content instantly"
+        acceptance_criteria:
+          - "Given 'flex analytics dashboard' run, Then per-platform summary with total posts, avg impressions, avg engagement rate, top performer shown"
+          - "Given platform has exactly 4 posts, When patterns section shown, Then PatternInsufficient state displayed (not patterns) with count 4/5"
+          - "Given platform has exactly 5 posts, When patterns section shown, Then PatternResult displayed (not insufficient)"
+        tasks:
+          - title: "Write unit tests for PatternDetectionEngine with controlled metric fixtures"
+            task_type: test
+            source_role: qa
+            description: "tests/flex/agents/analytics/test_pattern_detection_engine.py: test_insufficient_data_at_4_posts (4 snapshots → PatternInsufficient current_count=4), test_sufficient_data_at_5_posts (5 → PatternResult), test_best_time_window_detected (5 Tuesday posts 200 avg eng, 5 Thursday 80 → best_day=Tuesday), test_engagement_rate_formula (100 likes+20 comments+30 shares/1000 impressions=0.15), test_engagement_rate_zero_impressions (→ 0.0, no ZeroDivisionError), test_top_topic_detected (3 AI posts 180 avg, 2 Career 60 → top_topic contains 'AI'), test_insights_max_3 (PatternResult → max 3 insight strings), test_pattern_insufficient_message (includes current count and required count)."
+
+          - title: "Write integration tests for metrics_store get_for_pattern_analysis"
+            task_type: test
+            source_role: qa
+            description: "tests/flex/store/test_metrics_store.py: test_get_for_pattern_analysis_limit (100 records for platform → correct subset returned), test_get_for_pattern_analysis_platform_filter (10 records across 3 platforms → only correct platform returned), test_zero_engagement_records_included (posts with 0 engagement in metrics → not excluded from pattern analysis — they are signal too), test_get_latest_returns_highest_poll_number (3 snapshots → returns poll_number=3)."
+
+  - name: "Content Recommendation Engine"
+    priority: p2
+    integration_notes: "Roles: po (Recommendation Pydantic model, recommendations_store SQLite with upsert_by_platform/get_top_n, flex analytics recommend CLI with rationale and source posts display, confidence < 0.4 shown but flagged as 'Low confidence'), architect (RecommendationEngine.generate() calling PatternDetectionEngine then Claude API for structured JSON, confidence_score = min(n/20,1.0) × (top_pattern_engagement/avg_engagement), upsert-not-accumulate semantics, get_for_ideation() returns list[dict] with public fields only per conflict resolution), designer (recommendation cards with confidence signal bars 0-4, expandable rationale and source post chips, ideation integration card with amber-50 background + 'Based on your performance' label), qa (RecommendationEngine mock LLM tests, confidence_score boundary tests, upsert-not-accumulate contract, get_for_ideation top-2 by confidence, cross-stream JSON-serializable contract test). Input: PatternResult from PatternDetectionEngine. Output: recommendations_store → ideation stream get_for_ideation()."
+    stories:
+      - title: "As a content creator, I want personalized content recommendations based on my performance data so I know exactly what to post next"
+        acceptance_criteria:
+          - "Given 5+ posts and PatternResult available, When RecommendationEngine.generate() called, Then 3-5 Recommendation objects returned with topic_suggestion, format_suggestion, timing_suggestion, rationale, confidence_score"
+          - "Given fewer than 5 posts, When generate() called, Then returns [] (no recommendations)"
+          - "Given n=25 posts with high engagement delta, When confidence_score computed, Then score capped at 1.0"
+          - "Given confidence_score < 0.4, When recommendation returned, Then confidence_level='low' (still shown, not hidden)"
+          - "Given generate() called twice for same platform, When recommendations_store queried, Then only latest set exists (upsert, not accumulate)"
+        tasks:
+          - title: "Implement RecommendationEngine with LLM synthesis and recommendations_store"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/analytics/recommendation_engine.py: generate(platform): call PatternDetectionEngine.detect(). If PatternInsufficient: return []. Build template with pattern data, call Claude API to generate 3-5 Recommendation objects as structured JSON. confidence_score = min(n_posts/20, 1.0) × (top_pattern_engagement/avg_engagement). Store via recommendations_store.upsert_by_platform(platform, recs). get_for_ideation(n=2): reads recommendations_store.get_top_n(n) as list[dict] with fields: topic_suggestion, format_suggestion, timing_suggestion, rationale, confidence_score, platform."
+
+          - title: "Define Recommendation model and implement 'flex analytics recommend' CLI"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/models/recommendation.py: Recommendation(rec_id UUID, platform Platform, topic_suggestion str, format_suggestion str, timing_suggestion str, rationale str, confidence_score float, confidence_level str ('high'/'medium'/'low'), source_post_ids list[str], generated_at datetime). modules/flex/store/recommendations_store.py: SQLite recs table. upsert_by_platform() replaces existing, get_by_platform(platform), get_top_n(n=2) returns list[dict] with public fields. analytics_commands.py: recommend <platform> → recs with rationale and source posts. Low confidence flagged."
+
+          - title: "Design recommendation cards with confidence signal bars and source post links"
+            task_type: design
+            source_role: designer
+            description: "Recommendation Card: platform badge, confidence bars (0-4 signal bar icons filled to level), 'Low confidence' chip if < 0.4. 3 recommendation lines: 📅 timing, 📝 topic, 📐 format. Rationale (expandable): 1-2 sentences with specific numbers. Source posts (expandable): 2-3 post title chips, clickable to metrics card. Ideation Integration Card: amber-50 background, left border 4px amber-400, label 'Based on your performance' (12px caps), 1-2 rec lines as bullets, [See full analysis] link. Empty state: 'No recommendations yet — need 5+ posts per platform.' with how-it-works explainer."
+
+      - title: "As a content creator, I want my top recommendations surfaced in the ideation view so I can act on them immediately when planning new content"
+        acceptance_criteria:
+          - "Given top 2 recommendations exist in recommendations_store, When 'flex ideation list' run, Then top 2 by confidence_score shown above scored opportunities with amber-50 card design"
+          - "Given recommendations_store queried by ideation CLI, When loading, Then no analytics module imported (public fields dict only)"
+          - "Given cross-stream contract: analytics→ideation, When Recommendation data displayed by ideation CLI, Then all public fields (topic_suggestion, format_suggestion, timing_suggestion, rationale) accessible without analytics module import"
+        tasks:
+          - title: "Write unit tests for RecommendationEngine confidence scoring and ideation integration"
+            task_type: test
+            source_role: qa
+            description: "tests/flex/agents/analytics/test_recommendation_engine.py: test_insufficient_data_returns_empty (PatternInsufficient → []), test_generates_3_to_5_recommendations (mock LLM → 3-5 Recommendation objects), test_confidence_score_capped_at_1 (n=25, high delta → 1.0), test_confidence_score_below_threshold (n=5, moderate delta → < 0.4 → confidence_level='low'), test_recommendations_upserted_by_platform (generate() twice → 1 set in store), test_get_for_ideation_returns_top_2_by_confidence (5 recs varied confidence → top 2 returned), test_low_confidence_still_shown (< 0.4 → returned with confidence_level='low')."
+
+          - title: "Write cross-stream contract test for analytics→ideation serialization"
+            task_type: test
+            source_role: qa
+            description: "tests/flex/integration/test_analytics_ideation_contract.py: test_get_for_ideation_returns_dicts_not_pydantic (get_for_ideation() result is list[dict], not list[Recommendation]). test_dict_has_public_fields_only (keys: topic_suggestion, format_suggestion, timing_suggestion, rationale, confidence_score, platform — no internal fields like rec_id or source_post_ids). test_ideation_display_no_analytics_import (import ideation CLI module with sys.modules analytics blocked → display succeeds). test_recommendations_json_serializable (json.dumps(get_for_ideation()) → no TypeError)."

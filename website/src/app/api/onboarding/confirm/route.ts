@@ -1,7 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
+import { groqChat } from "@/lib/groq";
+
+function parseJsonResponse<T>(text: string): T | null {
+  const clean = text
+    .trim()
+    .replace(/^```(?:json)?\n?/, "")
+    .replace(/\n?```$/, "")
+    .trim();
+  try {
+    return JSON.parse(clean) as T;
+  } catch {
+    return null;
+  }
+}
 
 // ── System prompts ──────────────────────────────────────────────────────────
 
@@ -85,9 +97,6 @@ export async function POST(request: Request) {
     user_answer?: string;
     action?: "confirm" | "correct";
     correction?: string;
-    model_provider?: string;
-    model_id?: string;
-    api_key?: string;
   };
 
   try {
@@ -96,8 +105,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { user_answer, action, correction, model_provider, model_id, api_key } =
-    body;
+  const { user_answer, action, correction } = body;
 
   if (!user_answer || !action) {
     return Response.json(
@@ -120,48 +128,20 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!model_provider || !model_id || !api_key) {
-    return Response.json(
-      { error: "Missing LLM config (model_provider, model_id, api_key)" },
-      { status: 400 }
-    );
-  }
-
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
-
   // ── Handle "correct" action ─────────────────────────────────────────────
 
   if (action === "correct") {
     try {
       const userMsg = `Original statement: "${user_answer}"\n\nCorrection: "${correction}"`;
 
-      const { url, headers, body: llmBody } = buildLlmCall(
-        model_provider,
-        model_id,
-        resolvedKey,
-        CORRECTION_PROMPT,
-        userMsg,
-        400
+      const text = await groqChat(
+        [
+          { role: "system", content: CORRECTION_PROMPT },
+          { role: "user", content: userMsg },
+        ],
+        { maxTokens: 400, temperature: 0.2 }
       );
 
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: llmBody,
-        signal: AbortSignal.timeout(12000),
-      });
-
-      if (!resp.ok) {
-        const errBody = await resp.text().catch(() => "");
-        return Response.json(
-          { error: `LLM request failed (${resp.status}): ${errBody.slice(0, 200)}` },
-          { status: 502 }
-        );
-      }
-
-      const result = await resp.json();
-      const text = extractLlmText(model_provider, result);
       const parsed = parseJsonResponse<{ updated_paraphrase: string }>(text);
 
       if (!parsed?.updated_paraphrase) {
@@ -175,10 +155,9 @@ export async function POST(request: Request) {
         status: "needs_confirmation",
         updated_paraphrase: parsed.updated_paraphrase,
       });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
+    } catch {
       return Response.json(
-        { error: `Failed to process correction: ${msg}` },
+        { error: "Failed to process correction" },
         { status: 500 }
       );
     }
@@ -187,32 +166,14 @@ export async function POST(request: Request) {
   // ── Handle "confirm" action ─────────────────────────────────────────────
 
   try {
-    const { url, headers, body: llmBody } = buildLlmCall(
-      model_provider,
-      model_id,
-      resolvedKey,
-      NUGGET_EXTRACTION_PROMPT,
-      `Confirmed career statement:\n"${user_answer}"`,
-      800
+    const text = await groqChat(
+      [
+        { role: "system", content: NUGGET_EXTRACTION_PROMPT },
+        { role: "user", content: `Confirmed career statement:\n"${user_answer}"` },
+      ],
+      { maxTokens: 800, temperature: 0.2 }
     );
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: llmBody,
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!resp.ok) {
-      const errBody = await resp.text().catch(() => "");
-      return Response.json(
-        { error: `LLM request failed (${resp.status}): ${errBody.slice(0, 200)}` },
-        { status: 502 }
-      );
-    }
-
-    const result = await resp.json();
-    const text = extractLlmText(model_provider, result);
     const nugget = parseJsonResponse<ExtractedNugget>(text);
 
     if (!nugget?.nugget_text || !nugget?.answer) {
@@ -264,7 +225,7 @@ export async function POST(request: Request) {
       temporality: validTemporality.includes(nugget.temporality)
         ? nugget.temporality
         : "past",
-      event_date: (nugget.event_date && nugget.event_date !== "null" && nugget.event_date.trim() !== "") ? nugget.event_date.trim() : null,
+      event_date: nugget.event_date ?? null,
       company: nugget.company ?? null,
       role: nugget.role ?? null,
       people: [] as string[],
@@ -297,10 +258,9 @@ export async function POST(request: Request) {
       nugget_id: inserted?.id ?? null,
       paraphrase,
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
+  } catch {
     return Response.json(
-      { error: `Failed to confirm and create nugget: ${msg}` },
+      { error: "Failed to confirm and create nugget" },
       { status: 500 }
     );
   }

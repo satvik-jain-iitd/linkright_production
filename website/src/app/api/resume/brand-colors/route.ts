@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { groqChat } from "@/lib/groq";
 
 const BRAND_COLORS_PROMPT = `You are a brand identity expert. Given a company name and job description, return the company's official brand colors as a JSON object.
 
@@ -71,14 +72,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!rateLimit(`brand-colors:${user.id}`, 10)) {
+  if (!rateLimit(`brand-colors:${user.id}`, 1, 240_000)) {
     return rateLimitResponse("brand colors");
   }
 
-  const { company_name, jd_text, model_provider, model_id, api_key } =
-    await request.json();
+  const { company_name, jd_text } = await request.json();
 
-  if (!company_name || !model_provider || !model_id || !api_key) {
+  if (!company_name) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -98,67 +98,16 @@ export async function POST(request: Request) {
   }
 
   // Fallback: LLM-based color extraction
-  let url = "";
-  let headers: Record<string, string> = { "Content-Type": "application/json" };
-  let body: Record<string, unknown> = {};
-
   const userMsg = `Company: ${company_name}\n\nJob Description (first 500 chars):\n${(jd_text || "").slice(0, 500)}`;
 
-  if (model_provider === "groq") {
-    url = "https://api.groq.com/openai/v1/chat/completions";
-    headers["Authorization"] = `Bearer ${api_key}`;
-    body = {
-      model: model_id,
-      messages: [
-        { role: "system", content: BRAND_COLORS_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-      max_tokens: 200,
-      temperature: 0.1,
-    };
-  } else if (model_provider === "openrouter") {
-    url = "https://openrouter.ai/api/v1/chat/completions";
-    headers["Authorization"] = `Bearer ${api_key}`;
-    headers["HTTP-Referer"] = "https://linkright.in";
-    body = {
-      model: model_id,
-      messages: [
-        { role: "system", content: BRAND_COLORS_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-      max_tokens: 200,
-      temperature: 0.1,
-    };
-  } else if (model_provider === "gemini") {
-    url = `https://generativelanguage.googleapis.com/v1beta/models/${model_id}:generateContent?key=${api_key}`;
-    body = {
-      contents: [{ parts: [{ text: `${BRAND_COLORS_PROMPT}\n\n${userMsg}` }] }],
-      generationConfig: { maxOutputTokens: 200, temperature: 0.1 },
-    };
-  } else {
-    return Response.json({ error: "Unknown provider" }, { status: 400 });
-  }
-
   try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10000),
-    });
-
-    if (!resp.ok) {
-      return Response.json({ error: "LLM request failed" }, { status: 502 });
-    }
-
-    const result = await resp.json();
-
-    let text = "";
-    if (model_provider === "gemini") {
-      text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    } else {
-      text = result?.choices?.[0]?.message?.content || "";
-    }
+    const text = await groqChat(
+      [
+        { role: "system", content: BRAND_COLORS_PROMPT },
+        { role: "user", content: userMsg },
+      ],
+      { maxTokens: 200, temperature: 0.1 }
+    );
 
     const jsonText = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
     const colors = JSON.parse(jsonText);

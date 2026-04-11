@@ -1,0 +1,126 @@
+role: designer
+stream_name: review-editing
+
+feature_analyses:
+  - feature_name: "QA Review Agent"
+    analysis: >
+      The QA report must be scannable in < 5 seconds. Users won't read a wall of
+      text — use a traffic-light summary bar (green/amber/red per check) at the top,
+      with drill-down into suggestions inline. The inline underlined suggestion UX
+      (grammar=red, readability=amber, brand_voice=purple) follows standard editing
+      conventions (Google Docs, Word). Accept/Ignore must be one-click from the
+      tooltip — no modal, no confirmation. The QA summary bar must be persistent
+      and sticky above the draft body during scroll.
+    tasks:
+      - title: "Design QA summary bar and inline suggestion spans"
+        task_type: design
+        description: >
+          QA Summary Bar (sticky top of review view):
+          4 check pills: Grammar ✓/✗, Readability ✓/✗, Brand Voice ✓/✗, Format ✓/✗
+          Each pill: 12px label, icon (✓ green / ✗ red / ! amber), count badge if failed
+          ("Grammar ✗ 3 issues"). Clicking a pill scrolls to first failing suggestion.
+          Overall status: left-aligned badge "QA Passed" (green) or "QA Issues Found (5)" (amber).
+
+          Inline Suggestion Spans:
+          - Grammar: red wavy underline (matching Word/Google Docs convention)
+          - Readability: amber dotted underline
+          - Brand Voice: purple dashed underline
+          - Platform: blue solid underline
+          Hover → Tooltip: 140px wide, category label at top, issue description, recommendation
+          in bold, [Accept ✓] and [Ignore ×] buttons (28px height each, full tooltip width)
+          Accepted: underline removed, brief green flash on replaced text
+          Ignored: underline removed, no body change
+          Keyboard: Tab cycles through suggestions, Enter to accept, Escape to ignore
+
+          Accessibility:
+          - Suggestions exposed as aria-describedby with issue text
+          - Accept/Ignore buttons: aria-label "Accept grammar suggestion: [recommendation]"
+          - Screen reader: announces "3 grammar suggestions available" on load
+
+      - title: "Design review view layout with draft editor and QA sidebar"
+        task_type: design
+        description: >
+          Layout: 2-column on desktop (>= 1024px), single column on mobile.
+          Left (70%): Draft body in editable text area with inline suggestion spans.
+          Platform preview toggle tab at top: [Edit] [Preview].
+          Right (30%): QA sidebar — summary bar (sticky), then expandable sections
+          per check (Grammar / Readability / Brand Voice / Format), each listing
+          suggestions as cards with location context ("...paragraph 2..."),
+          Accept/Ignore actions.
+          Mobile: QA sidebar collapses to bottom sheet, triggered by floating QA badge.
+
+  - feature_name: "Human-in-the-Loop Approval"
+    analysis: >
+      The approval view is a decision surface, not a reading surface. The user's
+      eye should land on the primary action (Approve) after a quick scan. Platform
+      preview reuses the same components from content-drafting — zero new preview
+      code. The three-action model (Approve/Request Changes/Reject) must be visually
+      distinct: Approve = primary (filled green), Request Changes = secondary (outlined),
+      Reject = destructive (text only, red). Confirmation for Approve is a single
+      checkbox, not a modal — approval is frequent and low-risk. Rejection requires
+      a reason text input — high-risk action, deserves a modal.
+    tasks:
+      - title: "Design approval view with platform preview, QA summary, and three-action footer"
+        task_type: design
+        description: >
+          Approval View Layout:
+          Header: platform badge, topic title, brief_id chip, word count chip, age
+          Body: platform-native preview (full height, scrollable) — reuse preview
+          components from content-drafting with view-only mode (not editable in this view)
+          QA Summary Bar: same component as review view, appears above preview
+          Footer (sticky): 3 actions:
+            [Approve ✓] — filled, green, 160px, requires confirmation checkbox
+            [Request Changes ↩] — outlined, primary color, 160px, opens notes sidebar
+            [Reject ✗] — text-only, red, 120px, opens confirmation modal with reason input
+          Confirmation checkbox: "I've previewed this draft on [Platform] format" — required
+          to enable Approve button
+
+          Notes Sidebar (Request Changes):
+          - Slides in from right, 360px
+          - Textarea (full width, 120px min) for change notes
+          - Character counter, 500 char max
+          - 'Submit Request' primary button + 'Cancel' text button
+
+          Rejection Modal:
+          - 400px centered modal
+          - 'Reject this draft?' title
+          - Reason dropdown: Poor quality / Off-brand / Wrong platform / Other
+          - Optional text area for detail
+          - [Cancel] [Confirm Rejection] (destructive red)
+
+          Approval Queue View:
+          - Table: Platform icon, topic (2-line truncated), QA status badge, age, word count
+          - Quick Approve button: visible on hover for qa_passed rows only
+          - Pagination: 10 per page
+
+          Accessibility:
+          - Approve button: disabled until checkbox checked, aria-disabled until then
+          - Rejection modal: focus trap, Escape cancels
+          - Queue: keyboard-navigable rows, Enter to open full view
+
+  - feature_name: "Feedback Loop and Style Learning"
+    analysis: >
+      The feedback loop is invisible by design — it runs automatically after approval.
+      The only design surface is the 'flex voice edits' view which shows the history.
+      The design challenge: make the learning visible without interrupting the approval
+      flow. Solution: a small "Style learned from this edit" toast that appears briefly
+      after approve (if edits were made), not a blocking notification.
+    tasks:
+      - title: "Design style learning toast and voice edits history view"
+        task_type: design
+        description: >
+          Post-Approval Toast (appears for 4s after approve if edits were detected):
+          Bottom-right toast, 280px wide: "✨ Style learned from your edits."
+          [View Edits] text button that links to voice edits history.
+
+          Voice Edits History View (accessible from 'flex voice edits' or Settings):
+          Table: Date | Edit Type | Original (20 char preview) | Edited (20 char preview) | Style Signal
+          Edit type chips: Word Sub (blue), Restructure (purple), Addition (green), Deletion (red)
+          Style signal: italic text in a light-background chip (e.g., "Prefers simpler vocabulary")
+          Empty state: illustrated card "No edits recorded yet" + description of how it works
+
+          Accessibility:
+          - Toast: aria-live="polite" region
+          - Table: standard sortable table with aria-sort
+
+completed: true

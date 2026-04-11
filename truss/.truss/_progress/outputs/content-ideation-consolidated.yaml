@@ -1,0 +1,246 @@
+stream_name: content-ideation
+
+summary:
+  feature_count: 4
+  story_count: 8
+  task_count: 29
+  conflicts_found: 2
+  conflicts_resolved: 2
+  gaps: 0
+
+conflicts:
+  - feature: "Trend Monitor Agent"
+    conflict_type: "shared_dependency"
+    positions:
+      architect: "EmbeddingClient instantiated inside TrendMonitorAgent"
+      qa: "EmbeddingClient should be injected dependency to enable testing and avoid duplication with LifeOSConnector"
+    decision: "Extract EmbeddingClient ABC to modules/flex/llm/embedding_client.py, inject as constructor dependency in both agents"
+    rationale: "Avoids duplicate instantiation, enables provider-agnostic testing via mock injection, single source of truth for embedding config"
+    impact: "modules/flex/llm/embedding_client.py must be created before TrendMonitorAgent and LifeOSConnector are implemented"
+
+  - feature: "Content Brief Generator"
+    conflict_type: "cross_stream_schema"
+    positions:
+      po: "ContentBrief schema defined in content_brief.py, owned by content-ideation"
+      architect: "ContentBrief is the handoff artifact to content-drafting — schema must be versioned to prevent breaking changes"
+    decision: "Add brief_schema_version='1.0' to ContentBrief model. content-drafting validates on read. QA provides shared conftest.py fixture."
+    rationale: "Versioning decouples streams — content-ideation can evolve the schema while content-drafting explicitly handles version mismatches"
+    impact: "content-drafting stream must import ContentBrief model and assert brief_schema_version on consume"
+
+task_ids:
+  "Trend Monitor Agent":
+    feature_id: "Claude-7ir.1"
+    story_ids: ["Claude-7ir.1.S1", "Claude-7ir.1.S2"]
+    task_ids: ["Claude-7ir.1.S1.T1", "Claude-7ir.1.S1.T2", "Claude-7ir.1.S1.T3", "Claude-7ir.1.S1.T4", "Claude-7ir.1.S1.T5", "Claude-7ir.1.S1.T6", "Claude-7ir.1.S1.T7", "Claude-7ir.1.S2.T1"]
+  "Ideation Scoring Engine":
+    feature_id: "Claude-7ir.2"
+    story_ids: ["Claude-7ir.2.S1", "Claude-7ir.2.S2"]
+    task_ids: ["Claude-7ir.2.S1.T1", "Claude-7ir.2.S1.T2", "Claude-7ir.2.S1.T3", "Claude-7ir.2.S1.T4", "Claude-7ir.2.S1.T5", "Claude-7ir.2.S2.T1"]
+  "Content Brief Generator":
+    feature_id: "Claude-7ir.3"
+    story_ids: ["Claude-7ir.3.S1", "Claude-7ir.3.S2"]
+    task_ids: ["Claude-7ir.3.S1.T1", "Claude-7ir.3.S1.T2", "Claude-7ir.3.S1.T3", "Claude-7ir.3.S1.T4", "Claude-7ir.3.S1.T5", "Claude-7ir.3.S1.T6", "Claude-7ir.3.S2.T1"]
+  "LifeOS Integration":
+    feature_id: "Claude-7ir.4"
+    story_ids: ["Claude-7ir.4.S1", "Claude-7ir.4.S2"]
+    task_ids: ["Claude-7ir.4.S1.T1", "Claude-7ir.4.S1.T2", "Claude-7ir.4.S1.T3", "Claude-7ir.4.S1.T4", "Claude-7ir.4.S1.T5", "Claude-7ir.4.S2.T1"]
+
+features:
+  - name: "Trend Monitor Agent"
+    priority: p1
+    integration_notes: "Roles: po (CareerContext config schema, CLI fallback behavior), architect (TrendSource ABC, parallel fetching, SQLite store, shared EmbeddingClient), designer (status card, config form components), qa (unit + integration tests, failure isolation, batch embedding assertion). Output: trends_store (.flex/db/trends.db). Downstream consumer: Ideation Scoring Engine reads get_unscored(). EmbeddingClient shared with LifeOS Integration — create modules/flex/llm/embedding_client.py first."
+    stories:
+      - title: "As a content creator, I want the system to automatically fetch trending topics in my industry so I always have timely raw material without manual research"
+        acceptance_criteria:
+          - "Given TrendMonitorAgent is configured with niche keywords, When a scheduled poll runs, Then at least 10 unique trend signals are stored with source, title, url, engagement_score, and fetched_at fields"
+          - "Given a news API returns a 429 rate-limit error, When TrendMonitorAgent polls, Then the agent retries with exponential backoff (1s, 2s, 4s) and logs the failure without crashing the poll cycle"
+          - "Given the last poll ran less than the configured interval ago, When a new poll is triggered, Then the agent returns poll_skipped status with next_run_at timestamp"
+        tasks:
+          - title: "Create TrendSource ABC and 4 concrete source adapters (Google Trends, X, LinkedIn, RSS)"
+            task_type: implementation
+            source_role: architect
+            description: "TrendSource ABC with fetch() -> list[RawTrend] in modules/flex/sources/base.py. 4 adapters: GoogleTrends (pytrends), TwitterTrends (X API v2 bearer), LinkedInTrends (API/scrape with rate-limit guard), RSSNews (feedparser, configurable feed URLs). Each catches its own errors, returns empty list on failure. RawTrend: source, title, url, engagement_score, fetched_at."
+
+          - title: "Implement TrendMonitorAgent with parallel source fetching and poll-skip logic"
+            task_type: implementation
+            source_role: architect
+            description: "TrendMonitorAgent in modules/flex/agents/trend_monitor_agent.py. poll(): check last_run_at vs now, skip if within interval. ThreadPoolExecutor(max_workers=4) for parallel source calls. Merge results, call relevance_filter(), write to trends_store. Returns PollResult (trends_fetched, trends_filtered, skipped, errors, next_run_at)."
+
+          - title: "Implement trends_store with SQLite backend"
+            task_type: implementation
+            source_role: architect
+            description: "SQLite (stdlib). Tables: trends(id, source, title, url, engagement_score, relevance_score, fetched_at, filtered), metadata(key, value) for last/next_run_at. Methods: insert_batch(), get_unscored(), get_recent(hours), mark_scored(ids). DB: .flex/db/trends.db"
+
+          - title: "Extract shared EmbeddingClient ABC and implement embedding-based relevance filter"
+            task_type: implementation
+            source_role: architect
+            description: "Create modules/flex/llm/embedding_client.py with EmbeddingClient ABC (OpenAI default, Ollama for local). Inject into TrendMonitorAgent. relevance_filter(): batch embed all trend titles in 1 API call per poll, cosine_similarity, filter at threshold. Cache context_embedding by hash of CareerContext."
+
+          - title: "Define CareerContext Pydantic config schema with fallback handling"
+            task_type: implementation
+            source_role: po
+            description: "CareerContext model in agent_config.py: role, industry, target_audience, seniority, niche_keywords (list[str]). Validate on load. Fallback to store-all if not configured, log context_missing warning."
+
+          - title: "Design agent status card component and career context configuration form"
+            task_type: design
+            source_role: designer
+            description: "Status card: 320px/80px, status dot (green/amber/red), last/next run timestamps, Refresh Now. Responsive: 4/row desktop, 2 tablet, stacked mobile. Career context form: 5 fields, 400px slide-in panel desktop, full-screen mobile. Accessible: aria-labels, tab order, live regions."
+
+          - title: "Write unit and integration tests for TrendMonitorAgent, relevance filter, trends_store, source adapters"
+            task_type: test
+            source_role: qa
+            description: "Unit: poll skip/run, batch embedding (1 call not per-trend), relevance threshold boundary, context cache invalidation, failure isolation. Integration: SQLite round-trip, get_unscored, mark_scored. Edge cases: API 429, missing API key, concurrent poll detection."
+
+      - title: "As a content creator, I want trend signals filtered by my career context so I only see relevant opportunities"
+        acceptance_criteria:
+          - "Given career context configured, When poll runs, Then only trends with relevance_score >= 0.4 persisted to filtered trends store"
+          - "Given career context updated, When next poll runs, Then previously filtered trends re-evaluated against new context (not cached from old hash)"
+          - "Given no career context configured, When TrendMonitorAgent runs, Then all raw trends stored with context_missing warning logged"
+        tasks:
+          - title: "Write edge case and regression tests for career context filtering and context cache invalidation"
+            task_type: test
+            source_role: qa
+            description: "Test: context hash changes → embedding re-computed, old hash → skips re-embed, relevance_threshold=0.4 boundary (>= not >), fallback with context_missing warning logged, context update forces re-evaluation of previously filtered trends (not served from cache)."
+
+  - name: "Ideation Scoring Engine"
+    priority: p1
+    integration_notes: "Roles: po (ScoringConfig schema, flex ideation list CLI, weight validation UX), architect (scoring pipeline, 3 Scorer ABCs, TimelinessScorer decay, scored_opportunities_store), designer (opportunities list view, score visualization, empty state), qa (composite range tests, weight validation error, timeliness decay, store regression tests). Input: trends_store.get_unscored(). Output: scored_opportunities_store. CLI: flex ideation list."
+    stories:
+      - title: "As a content creator, I want trend signals automatically ranked by opportunity quality so I focus on the highest-impact content ideas"
+        acceptance_criteria:
+          - "Given trend signals, When IdeationScoringEngine.score() called, Then each signal returned with relevance_score, timeliness_score, audience_fit_score, composite_score, and rank fields"
+          - "Given two trends with identical relevance and audience_fit but fetch timestamps 1h vs 48h ago, When scored, Then 1h trend has timeliness_score at least 0.3 higher"
+          - "Given scoring weights reconfigured, When scoring runs, Then all scores recomputed with new weights without restart"
+        tasks:
+          - title: "Implement IdeationScoringEngine with 3-scorer pipeline (Relevance, Timeliness, AudienceFit)"
+            task_type: implementation
+            source_role: architect
+            description: "ScoringConfig with weights (relevance=0.4, timeliness=0.35, audience_fit=0.25; validate sum=1.0, raise ConfigError with exact sum). 3 Scorer ABCs. score_all(): fetch unscored, run scorers, composite = sum(weight * sub_score), rank, write to scored_opportunities_store. TimelinessScorer: exp(-0.03 * hours_old), velocity bonus if engagement +20%, clamped to [0,1]."
+
+          - title: "Implement scored_opportunities_store SQLite table"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/store/scored_opportunities_store.py. SQLite: scored_opportunities(id, trend_id, topic, source, relevance_score, timeliness_score, audience_fit_score, composite_score, rank, scored_at, brief_generated). Methods: insert_batch(), get_top_n(n=10), get_by_id(id), mark_brief_generated(id)."
+
+          - title: "Define ScoringConfig Pydantic schema and implement 'flex ideation list' CLI command"
+            task_type: implementation
+            source_role: po
+            description: "ScoringConfig in scoring_config.py: relevance_weight/timeliness_weight/audience_fit_weight, validate sum=1.0. list subcommand in ideation_commands.py: top-N table (rank/topic/scores/source/age), --select <id> triggers brief generation, empty state message."
+
+          - title: "Design scored opportunities list view with composite score bar and sub-score pills"
+            task_type: design
+            source_role: designer
+            description: "10 opportunity cards: rank badge (28px circle), topic (2-line truncated), composite score bar (6px primary-500), 3 sub-score pills (relevance=blue/timeliness=green/audience_fit=purple), source label, age. Expand inline. Loading: 3 skeleton cards. Empty: illustration + 'flex ideation refresh' code chip."
+
+          - title: "Write unit and regression tests for scoring engine, weight validation, scored_opportunities_store"
+            task_type: test
+            source_role: qa
+            description: "Unit: composite in [0,1], weight sum validation raises ConfigError with exact sum, weight reconfiguration recomputes scores, timeliness at 24h <= 0.5, clamped to 1.0, empty store returns []. Regression: insert+get round-trip, get_top_n sorted desc, brief_generated filter."
+
+      - title: "As a content creator, I want a prioritized opportunity dashboard so I can review and act on top scoring content ideas"
+        acceptance_criteria:
+          - "Given scored opportunities exist, When 'flex ideation list' run, Then CLI renders table with rank/topic/composite_score/relevance/timeliness/audience_fit/source/age columns"
+          - "Given opportunity selected via --select <id>, When confirmed, Then brief generation triggered and brief_id displayed"
+          - "Given no scored opportunities, When 'flex ideation list' run, Then empty state message shown with 'Run: flex ideation refresh'"
+        tasks:
+          - title: "Write integration tests for ideation list CLI: table rendering, --select flow, empty state"
+            task_type: test
+            source_role: qa
+            description: "CLI integration tests: table renders all 8 columns, --select triggers BriefGeneratorAgent and prints brief_id, empty store shows expected empty state message. Mock scored_opportunities_store for isolation."
+
+  - name: "Content Brief Generator"
+    priority: p1
+    integration_notes: "Roles: po (ContentBrief Pydantic model with brief_schema_version, platform-specific prompt templates, flex brief generate CLI), architect (BriefGeneratorAgent with structured Claude API call, retry logic, BriefGenerationError, briefs_store JSON payload), designer (brief document view with angle cards, approve action, platform badges), qa (mocked API tests, retry/error tests, platform routing, briefs_store round-trip, schema evolution test). Cross-stream handoff: briefs_store status='approved' → content-drafting. Uses Claude API (claude-3-5-sonnet-20241022)."
+    stories:
+      - title: "As a content creator, I want an AI-generated content brief for any scored opportunity so I have clear creative direction before writing"
+        acceptance_criteria:
+          - "Given scored_opportunity with composite_score >= 0.5, When BriefGeneratorAgent.generate() called, Then ContentBrief returned with at least 3 angles, 2 hooks per angle, target_platform, and tone"
+          - "Given brief generated, When persisted, Then briefs_store record has opportunity_id, brief_id (UUID), angles, hooks, platform, tone, effort_estimate, created_at, status='draft'"
+          - "Given Claude API returns malformed response, When BriefGeneratorAgent processes it, Then retry once with corrected prompt; if still malformed, raise BriefGenerationError with raw response logged"
+        tasks:
+          - title: "Define ContentBrief Pydantic model with brief_schema_version='1.0' and cross-stream contract"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/models/content_brief.py: ContentBrief with brief_id (UUID), opportunity_id, brief_schema_version='1.0', angles (list[Angle] min=3), hooks per angle (min=2), target_platform (enum), tone (enum: professional/conversational/provocative/educational), effort_estimate, personal_context (optional), status (draft/manually_enriched/approved), created_at. extra='ignore' for backward-compatible deserialization."
+
+          - title: "Write platform-specific prompt templates for all 5 platforms"
+            task_type: implementation
+            source_role: po
+            description: "modules/flex/prompts/brief_generation_prompts.py: PLATFORM_PROMPTS dict with linkedin (professional, long-form, hooks >100 chars), x (punchy, hooks <= 240 chars), youtube (narrative-driven), instagram (visual-first), facebook. Each with {opportunity_title}, {career_context}, {personal_context} placeholders."
+
+          - title: "Implement BriefGeneratorAgent with structured Claude API call, retry, and BriefGenerationError"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/agents/brief_generator_agent.py: generate(opportunity, platform, personal_context). Call Claude API (claude-3-5-sonnet-20241022) with response_format (ContentBrief JSON schema). Validate via Pydantic. On fail: retry with corrected prompt (inject validation_errors). On second fail: raise BriefGenerationError(opportunity_id, attempt=2, raw_response, validation_errors). Log to .flex/logs/brief_generator.log."
+
+          - title: "Implement briefs_store with JSON payload column"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/store/briefs_store.py: SQLite briefs(id, opportunity_id, platform, tone, status, payload TEXT, created_at, updated_at). payload=json.dumps(ContentBrief.model_dump()). Methods: insert(), get_by_id(), update_status(), update_payload(), list_recent(limit=20)."
+
+          - title: "Design content brief document view with expandable angle cards and approve action"
+            task_type: design
+            source_role: designer
+            description: "Brief header (topic, platform badge, tone chip, effort). Platform badges: LinkedIn=blue, X=black, YouTube=red, Instagram=pink, Facebook=indigo. 3 angle cards (expandable, border-left accent). Hooks as bullet list. Personal context amber callout if LifeOS matched. Footer: Edit Platform + Enrich with LifeOS + Approve. Loading skeleton for 5-15s LLM call."
+
+          - title: "Write unit and integration tests for BriefGeneratorAgent mocked API, retry, platform routing, briefs_store"
+            task_type: test
+            source_role: qa
+            description: "Unit: successful generation (all fields present), platform template selection (linkedin/x/youtube), retry on Pydantic fail, BriefGenerationError raised on second fail, store.insert called. Platform: X hooks <=240 chars, LinkedIn hooks >100 chars, invalid platform raises ValidationError. Integration: JSON payload round-trip, update_status, list_recent ordered, old payload deserializes after adding optional field."
+
+      - title: "As a content creator, I want to specify which platform a brief targets so angles and hooks are optimized for that platform's audience"
+        acceptance_criteria:
+          - "Given --platform linkedin, When BriefGeneratorAgent runs, Then hooks are >100 chars, professional tone, includes question or insight"
+          - "Given --platform x, When BriefGeneratorAgent runs, Then all hooks <= 240 characters, at least one uses provocative or question format"
+          - "Given unsupported platform (e.g., --platform tiktok), When BriefGeneratorAgent runs, Then ValidationError listing supported: linkedin, x, youtube, instagram, facebook"
+        tasks:
+          - title: "Implement 'flex brief generate' CLI command with platform flag and output chaining"
+            task_type: implementation
+            source_role: po
+            description: "Add 'generate' subcommand to modules/flex/cli/brief_commands.py. Accepts opportunity_id positional arg and optional --platform flag. Invokes BriefGeneratorAgent.generate(), prints brief summary to console, saves to briefs_store, outputs brief_id for chaining to downstream commands."
+
+  - name: "LifeOS Integration"
+    priority: p2
+    integration_notes: "Roles: po (lifeos_path config in AgentConfig, flex lifeos list CLI command, manual enrichment brief enrich CLI), architect (LifeOSConnector YAML reader + semantic search, shared EmbeddingClient DI, wire into BriefGeneratorAgent), designer (LifeOS entry picker panel, overwrite guard confirmation banner, relevance badge), qa (filesystem mocks, threshold tests, DI verification, manual enrichment overwrite guard tests). Read-only from LifeOS local YAML/JSON. Shared EmbeddingClient injected — never self-instantiated."
+    stories:
+      - title: "As a content creator, I want content briefs enriched with my real career experiences so my posts feel authentic and specific"
+        acceptance_criteria:
+          - "Given LifeOS data configured, When BriefGeneratorAgent generates brief, Then brief's personal_context contains 1-3 LifeOS entries with title, type, date, relevance_score"
+          - "Given LifeOS entry with relevance_score < 0.3, When context injection runs, Then that entry excluded from personal_context"
+          - "Given LifeOS path configured but empty directory, When LifeOSConnector runs, Then brief generation continues without personal_context, lifeos_empty warning logged"
+        tasks:
+          - title: "Implement LifeOSConnector with YAML reader, embedding search, and graceful degradation"
+            task_type: implementation
+            source_role: architect
+            description: "modules/flex/integrations/lifeos_connector.py: reads .yaml/.json from lifeos_path, parses as LifeOSEntry (skips invalid with warning). semantic_search(query, top_k=3): embed via shared EmbeddingClient, cosine_similarity, return top_k where score >= 0.3. Returns [] if lifeos_path None or empty dir — never raises. LifeOSEntry: entry_id, title, type (achievement/learning/milestone/project), date, description, tags."
+
+          - title: "Wire LifeOSConnector into BriefGeneratorAgent via dependency injection"
+            task_type: implementation
+            source_role: architect
+            description: "Modify BriefGeneratorAgent.generate() to accept optional LifeOSConnector as injected constructor dependency (not self-instantiated). If provided, call semantic_search(opportunity.topic) before building prompt. Inject matched entries as personal_context. Empty list → continue without context (not a failure)."
+
+          - title: "Add lifeos_path config to AgentConfig and implement 'flex lifeos list' CLI command"
+            task_type: implementation
+            source_role: po
+            description: "Add lifeos_path: str | None = None to AgentConfig. Add 'flex lifeos list' subcommand to brief_commands.py: instantiate LifeOSConnector, print all entries as table (id, type, title, date). Used in error message for invalid --lifeos-entry IDs."
+
+          - title: "Design LifeOS entry picker panel with overwrite guard confirmation banner"
+            task_type: design
+            source_role: designer
+            description: "400px slide-in panel desktop, full-screen sheet mobile. Search input + scrollable list. Each entry: type icon (trophy/book/flag), title, date, 2-line preview, relevance badge (green-100). Select → Attach Entry activates. If brief already manually_enriched: amber confirmation banner above CTA before attaching."
+
+          - title: "Write unit tests for LifeOSConnector filesystem/embedding and manual enrichment overwrite guard"
+            task_type: test
+            source_role: qa
+            description: "Unit: valid YAML loading (3 files → 3 entries), skip malformed with warning, path=None returns [], empty dir returns [], threshold 0.3 boundary, top_k respected, shared EmbeddingClient injected (DI verified — not duplicated). Manual enrichment: new brief proceeds without prompt, manually_enriched prompts (y=proceed, N=abort), invalid brief_id shows error, invalid lifeos_entry_id shows 'Run: flex lifeos list'."
+
+      - title: "As a content creator, I want to manually pin a LifeOS entry to a brief so I can force a connection between an achievement and a trend"
+        acceptance_criteria:
+          - "Given valid brief_id and lifeos_entry_id, When 'flex brief enrich' run, Then brief's personal_context updated with entry, status='manually_enriched'"
+          - "Given invalid lifeos_entry_id, When 'flex brief enrich' run, Then error 'Entry <id> not found in LifeOS store. Run: flex lifeos list'"
+          - "Given brief already manually_enriched, When 'flex brief enrich' run, Then user prompted 'This brief is already manually enriched. Overwrite? [y/N]' before updating"
+        tasks:
+          - title: "Implement 'flex brief enrich' CLI command with manual enrichment and overwrite guard"
+            task_type: implementation
+            source_role: po
+            description: "Add 'enrich' subcommand to brief_commands.py. Accepts brief_id and --lifeos-entry flags. Validates both IDs, checks existing status, prompts for confirmation if manually_enriched ('Overwrite? [y/N]'), updates brief personal_context and status in briefs_store. Error messages for invalid IDs include 'Run: flex lifeos list' guidance."

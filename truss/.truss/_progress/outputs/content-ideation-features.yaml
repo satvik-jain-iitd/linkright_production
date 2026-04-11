@@ -1,0 +1,168 @@
+stream_name: content-ideation
+
+features:
+  - name: "Trend Monitor Agent"
+    priority: p1
+    description: >
+      An autonomous AI agent (TrendMonitorAgent) that continuously polls trending topics
+      from LinkedIn, X/Twitter, Google Trends, and curated RSS/news feeds, then filters
+      results against the user's professional niche and career context. Runs on a
+      configurable schedule (default: every 4 hours) and persists results to a local
+      trends store for downstream scoring.
+    scope_items_covered: [0]
+    stories:
+      - title: "As a content creator, I want the system to automatically fetch trending topics in my industry so that I always have timely raw material without manual research"
+        description: >
+          TrendMonitorAgent fetches from at least 3 sources (Google Trends, X trending,
+          LinkedIn hashtag trends) filtered to the user's configured niche keywords.
+          Results are stored with source, timestamp, and raw engagement signal.
+        acceptance_criteria:
+          - "Given TrendMonitorAgent is configured with niche keywords, When a scheduled poll runs, Then at least 10 unique trend signals are stored in trends_store with source, title, url, engagement_score, and fetched_at fields"
+          - "Given a news API returns a 429 rate-limit error, When TrendMonitorAgent polls, Then the agent retries with exponential backoff (1s, 2s, 4s) and logs the failure without crashing the entire poll cycle"
+          - "Given the last poll ran less than the configured interval ago, When a new poll is triggered, Then the agent skips execution and returns a 'poll_skipped' status with next_run_at timestamp"
+
+      - title: "As a content creator, I want trend signals filtered by my career context so that I only see opportunities relevant to my professional brand"
+        description: >
+          User configures professional context (current role, industry, target audience,
+          seniority) in agent config. TrendMonitorAgent scores each raw trend against
+          context using keyword overlap and semantic similarity (via embeddings), then
+          filters out signals below a relevance_threshold.
+        acceptance_criteria:
+          - "Given a user has configured their career context (role: 'Product Manager', industry: 'Fintech', audience: 'startup founders'), When TrendMonitorAgent processes raw trends, Then only trends with relevance_score >= 0.4 are persisted to the filtered trends store"
+          - "Given a user updates their career context config, When the next poll runs, Then previously filtered-out trends are re-evaluated against the new context (not cached)"
+          - "Given no career context is configured, When TrendMonitorAgent runs, Then it falls back to storing all raw trends and logs a 'context_missing' warning"
+
+    files_affected:
+      - "modules/flex/agents/trend_monitor_agent.py"
+      - "modules/flex/sources/google_trends_source.py"
+      - "modules/flex/sources/twitter_trends_source.py"
+      - "modules/flex/sources/linkedin_trends_source.py"
+      - "modules/flex/sources/rss_news_source.py"
+      - "modules/flex/store/trends_store.py"
+      - "modules/flex/config/agent_config.py"
+    dependencies: []
+
+  - name: "Ideation Scoring Engine"
+    priority: p1
+    description: >
+      A scoring pipeline that takes raw trend signals from TrendMonitorAgent and produces
+      a ranked list of content opportunities. Each opportunity is scored on 3 axes:
+      relevance (career context fit), timeliness (recency + velocity), and audience_fit
+      (platform-specific engagement potential). Outputs a scored_opportunities list
+      consumed by the brief generator.
+    scope_items_covered: [1]
+    stories:
+      - title: "As a content creator, I want trend signals automatically ranked by opportunity quality so that I focus energy on the highest-impact content ideas"
+        description: >
+          IdeationScoringEngine computes a composite_score (0-1) for each trend using
+          weighted sub-scores: relevance_score (0.4 weight), timeliness_score (0.35 weight),
+          audience_fit_score (0.25 weight). Top-N results are returned sorted by
+          composite_score descending.
+        acceptance_criteria:
+          - "Given a list of trend signals with engagement data, When IdeationScoringEngine.score() is called, Then each signal is returned with relevance_score, timeliness_score, audience_fit_score, composite_score, and rank fields"
+          - "Given two trends with identical relevance and audience_fit but different fetch timestamps (1 hour ago vs 48 hours ago), When scored, Then the trend fetched 1 hour ago receives a timeliness_score at least 0.3 higher than the 48-hour-old trend"
+          - "Given composite_score weights are reconfigured (e.g., timeliness weight raised to 0.5), When scoring runs, Then all scores are recomputed using the new weights without restart"
+
+      - title: "As a content creator, I want to see a prioritized opportunity dashboard so that I can quickly review and act on top scoring content ideas"
+        description: >
+          The scored opportunities are surfaced in a CLI dashboard (flex ideation list)
+          showing top 10 opportunities with score breakdown, source, and an 'act' action
+          to trigger brief generation for a selected opportunity.
+        acceptance_criteria:
+          - "Given scored opportunities exist in the store, When 'flex ideation list' is run, Then the CLI renders a table with columns: rank, topic, composite_score, relevance, timeliness, audience_fit, source, age"
+          - "Given an opportunity is selected via 'flex ideation list --select <id>', When confirmed, Then brief generation is triggered for that opportunity and a confirmation message is displayed"
+          - "Given no scored opportunities exist, When 'flex ideation list' is run, Then an empty state message 'No opportunities scored yet. Run: flex ideation refresh' is displayed"
+
+    files_affected:
+      - "modules/flex/agents/ideation_scoring_engine.py"
+      - "modules/flex/store/scored_opportunities_store.py"
+      - "modules/flex/cli/ideation_commands.py"
+      - "modules/flex/config/scoring_config.py"
+    dependencies:
+      - "Trend Monitor Agent"
+
+  - name: "Content Brief Generator"
+    priority: p1
+    description: >
+      BriefGeneratorAgent takes a scored opportunity and generates a structured content
+      brief including: suggested angles (3 minimum), hook options (2 per angle), target
+      platform recommendation, tone guidance, estimated effort, and suggested post format.
+      Uses Claude API with structured output. Brief is saved to briefs_store for handoff
+      to content-drafting stream.
+    scope_items_covered: [2]
+    stories:
+      - title: "As a content creator, I want an AI-generated content brief for any scored opportunity so that I have a clear creative direction before writing"
+        description: >
+          BriefGeneratorAgent receives a scored_opportunity object and calls Claude API
+          to generate a ContentBrief with angles, hooks, platform recommendation, and
+          tone. Result is persisted to briefs_store with status 'draft'.
+        acceptance_criteria:
+          - "Given a scored_opportunity with composite_score >= 0.5, When BriefGeneratorAgent.generate() is called, Then a ContentBrief is returned with at least 3 angles, 2 hooks per angle, 1 target_platform, and a tone field (one of: professional, conversational, provocative, educational)"
+          - "Given BriefGeneratorAgent generates a brief, When the brief is persisted, Then briefs_store record contains opportunity_id, brief_id (UUID), angles, hooks, platform, tone, effort_estimate, created_at, and status='draft'"
+          - "Given the Claude API returns a malformed response (missing required fields), When BriefGeneratorAgent processes the response, Then it retries once with a corrected prompt, and if still malformed, raises BriefGenerationError with the raw response logged"
+
+      - title: "As a content creator, I want to specify which platform a brief targets so that angles and hooks are optimized for that platform's audience"
+        description: >
+          User can override the platform recommendation by passing --platform flag to
+          'flex brief generate'. BriefGeneratorAgent uses platform-specific prompt
+          templates for LinkedIn (professional, long-form), X (punchy, 280-char hooks),
+          YouTube (narrative-driven), Instagram (visual-first captions).
+        acceptance_criteria:
+          - "Given a user runs 'flex brief generate <opportunity_id> --platform linkedin', When BriefGeneratorAgent runs, Then generated hooks are formatted for LinkedIn (>100 chars, professional tone, includes a question or insight)"
+          - "Given a user runs 'flex brief generate <opportunity_id> --platform x', When BriefGeneratorAgent runs, Then all hooks are <= 240 characters and at least one uses a provocative or question format"
+          - "Given an unsupported platform string is passed (e.g., --platform tiktok), When BriefGeneratorAgent runs, Then it returns a validation error listing supported platforms: linkedin, x, youtube, instagram, facebook"
+
+    files_affected:
+      - "modules/flex/agents/brief_generator_agent.py"
+      - "modules/flex/store/briefs_store.py"
+      - "modules/flex/prompts/brief_generation_prompts.py"
+      - "modules/flex/cli/brief_commands.py"
+      - "modules/flex/models/content_brief.py"
+    dependencies:
+      - "Ideation Scoring Engine"
+
+  - name: "LifeOS Integration"
+    priority: p2
+    description: >
+      Connects the ideation pipeline to the user's LifeOS data store (career achievements,
+      learnings, project notes, milestones) to enrich content briefs with authentic personal
+      context. LifeOSConnector reads structured YAML/JSON from a configured LifeOS path,
+      performs semantic search to find entries relevant to each opportunity, and injects
+      matched entries as 'personal_context' into ContentBrief.
+    scope_items_covered: [3]
+    stories:
+      - title: "As a content creator, I want content briefs enriched with my real career experiences so that my posts feel authentic and specific rather than generic"
+        description: >
+          LifeOSConnector reads the user's LifeOS data (achievements, learnings, milestones)
+          and, for each brief generated, finds the top 3 semantically relevant entries to
+          inject as personal_context. Brief is regenerated with this context if entries
+          are found.
+        acceptance_criteria:
+          - "Given LifeOS data exists at the configured path with at least 1 achievement entry, When BriefGeneratorAgent generates a brief, Then the brief's personal_context field contains 1-3 LifeOS entries with fields: title, type, date, and relevance_score"
+          - "Given a LifeOS entry has relevance_score < 0.3 against the opportunity, When context injection runs, Then that entry is excluded from personal_context (not included just because it exists)"
+          - "Given the LifeOS path is configured but the directory is empty, When LifeOSConnector runs, Then brief generation continues without personal_context and logs a 'lifeos_empty' warning (not an error)"
+
+      - title: "As a content creator, I want to manually pin a specific LifeOS entry to a brief so that I can force a connection between an achievement and a trend"
+        description: >
+          User runs 'flex brief enrich <brief_id> --lifeos-entry <entry_id>' to manually
+          attach a LifeOS entry to a brief. This overwrites the auto-matched context for
+          that brief and marks it 'manually_enriched'.
+        acceptance_criteria:
+          - "Given a valid brief_id and lifeos_entry_id, When 'flex brief enrich' is run, Then the brief's personal_context is updated with the specified entry and brief status is updated to 'manually_enriched'"
+          - "Given an invalid lifeos_entry_id is provided, When 'flex brief enrich' is run, Then an error message is shown: 'Entry <id> not found in LifeOS store. Run: flex lifeos list'"
+          - "Given a brief already has manually_enriched status, When 'flex brief enrich' is run again, Then the user is prompted with 'This brief is already manually enriched. Overwrite? [y/N]' before updating"
+
+    files_affected:
+      - "modules/flex/integrations/lifeos_connector.py"
+      - "modules/flex/store/lifeos_store.py"
+      - "modules/flex/agents/brief_generator_agent.py"
+      - "modules/flex/cli/brief_commands.py"
+      - "modules/flex/models/lifeos_entry.py"
+    dependencies:
+      - "Content Brief Generator"
+
+coverage_map:
+  "AI agent that monitors trending topics, industry news, and user's career/professional context": "Trend Monitor Agent"
+  "Ideation scoring system to prioritize content opportunities (relevance, timeliness, audience fit)": "Ideation Scoring Engine"
+  "Content brief generation with suggested angles, hooks, and target platform": "Content Brief Generator"
+  "Integration with LifeOS for authentic content sourcing from career achievements and learnings": "LifeOS Integration"

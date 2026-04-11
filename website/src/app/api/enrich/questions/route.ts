@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { buildLlmCall, extractLlmText } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
 import type { JDGap } from "@/app/api/jd/analyze/route";
+import { groqChat } from "@/lib/groq";
 
 const QUESTION_PROMPT = `You are a career coach helping someone fill gaps in their resume.
 
@@ -24,7 +23,7 @@ Rules:
 - Prioritize "required" gaps over "preferred"`;
 
 function parseQuestions(text: string): { req_id: string; question: string }[] {
-  let clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+  const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   try {
     const parsed = JSON.parse(clean);
     if (Array.isArray(parsed)) {
@@ -48,49 +47,31 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!rateLimit(`enrich-questions:${user.id}`, 5)) {
+  if (!rateLimit(`enrich-questions:${user.id}`, 1, 240_000)) {
     return rateLimitResponse("enrich questions");
   }
 
-  const { gaps, model_provider, model_id, api_key } = await request.json();
+  const { gaps } = await request.json();
 
   if (!gaps || !Array.isArray(gaps) || gaps.length === 0) {
     return Response.json({ questions: [] });
   }
 
-  if (!model_provider || !model_id || !api_key) {
-    return Response.json({ error: "Missing LLM config" }, { status: 400 });
-  }
+  const gapList = (gaps as JDGap[])
+    .slice(0, 8) // cap at 8 gaps
+    .map((g) => `- [${g.importance}] ${g.text} (${g.category})`)
+    .join("\n");
 
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
+  const userMsg = `Gaps to address:\n${gapList}`;
 
   try {
-    const gapList = (gaps as JDGap[])
-      .slice(0, 8)
-      .map((g) => `- [${g.importance}] ${g.text} (${g.category})`)
-      .join("\n");
-    const userMsg = `Gaps to address:\n${gapList}`;
-
-    const { url, headers, body } = buildLlmCall(
-      model_provider,
-      model_id,
-      resolvedKey,
-      QUESTION_PROMPT,
-      userMsg,
-      800
+    const text = await groqChat(
+      [
+        { role: "system", content: QUESTION_PROMPT },
+        { role: "user", content: userMsg },
+      ],
+      { maxTokens: 800, temperature: 0.3 }
     );
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!resp.ok) {
-      return Response.json({ error: "LLM request failed" }, { status: 502 });
-    }
-    const result = await resp.json();
-    const text = extractLlmText(model_provider, result);
     const questions = parseQuestions(text);
     return Response.json({ questions });
   } catch {

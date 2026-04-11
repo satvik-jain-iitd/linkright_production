@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { buildLlmCall, extractLlmText } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
+import { groqChat } from "@/lib/groq";
+// TODO: Add Langfuse TypeScript SDK tracing here
 
 const SYSTEM_PROMPT = `You are a resume editor. The user has selected a specific element from their resume and wants you to edit it.
 
@@ -25,7 +25,7 @@ Rules:
 - explanation should be 1 sentence describing what changed`;
 
 function parseEditResponse(text: string): { updated_html: string; explanation: string } | null {
-  let clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
+  const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
   try {
     const parsed = JSON.parse(clean);
     if (parsed.updated_html && typeof parsed.updated_html === "string") {
@@ -60,24 +60,17 @@ export async function POST(request: Request) {
     instruction,
     full_resume_html,
     job_context,
-    model_provider,
-    model_id,
-    api_key,
   } = await request.json();
 
-  if (!selected_html || !instruction || !model_provider || !model_id || !api_key) {
+  if (!selected_html || !instruction) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
-
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
 
   const jobContextStr = job_context
     ? `Company: ${job_context.company || "Unknown"}\nRole: ${job_context.role || "Unknown"}\nKey requirements: ${(job_context.requirements || []).slice(0, 5).join(", ")}`
     : "";
 
-  try {
-    const userMsg = `Selected element:
+  const userMsg = `Selected element:
 \`\`\`html
 ${selected_html}
 \`\`\`
@@ -90,28 +83,14 @@ ${jobContextStr}
 Full resume (for context only — edit only the selected element):
 ${(full_resume_html || "").slice(0, 3000)}`;
 
-    const { url, headers, body } = buildLlmCall(
-      model_provider,
-      model_id,
-      resolvedKey,
-      SYSTEM_PROMPT,
-      userMsg,
-      600
+  try {
+    const text = await groqChat(
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMsg },
+      ],
+      { maxTokens: 600, temperature: 0.3 }
     );
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!resp.ok) {
-      return Response.json({ error: "LLM request failed" }, { status: 502 });
-    }
-
-    const result = await resp.json();
-    const text = extractLlmText(model_provider, result);
     const parsed = parseEditResponse(text);
 
     if (!parsed) {

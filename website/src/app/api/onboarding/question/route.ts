@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { computeOverallConfidence } from "@/lib/confidence";
-import { buildLlmCall, extractLlmText, parseJsonResponse } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
+import { groqChat } from "@/lib/groq";
 
 // ── L1 section types ────────────────────────────────────────────────────────
 
@@ -19,6 +18,19 @@ const L1_SECTION_TYPES = [
 ] as const;
 
 type L1SectionType = (typeof L1_SECTION_TYPES)[number];
+
+function parseJsonResponse<T>(text: string): T | null {
+  const clean = text
+    .trim()
+    .replace(/^```(?:json)?\n?/, "")
+    .replace(/\n?```$/, "")
+    .trim();
+  try {
+    return JSON.parse(clean) as T;
+  } catch {
+    return null;
+  }
+}
 
 // ── Coverage analysis ───────────────────────────────────────────────────────
 
@@ -197,9 +209,6 @@ export async function POST(request: Request) {
     target_roles?: string[];
     conversation_history?: Array<{ role: string; content: string }>;
     confirmed_nuggets?: string[];
-    model_provider?: string;
-    model_id?: string;
-    api_key?: string;
   };
 
   try {
@@ -212,17 +221,7 @@ export async function POST(request: Request) {
     target_roles = [],
     conversation_history = [],
     confirmed_nuggets = [],
-    model_provider,
-    model_id,
-    api_key,
   } = body;
-
-  if (!model_provider || !model_id || !api_key) {
-    return Response.json({ error: "Missing LLM config (model_provider, model_id, api_key)" }, { status: 400 });
-  }
-
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
 
   // Step 1: Fetch existing nuggets for user
   const { data: nuggets, error: dbError } = await supabase
@@ -324,28 +323,14 @@ export async function POST(request: Request) {
 
   // Step 5: Call LLM when no bank question found
   try {
-    const { url, headers, body: llmBody } = buildLlmCall(
-      model_provider,
-      model_id,
-      resolvedKey,
-      QUESTION_SYSTEM_PROMPT,
-      userMsg,
-      300
+    const text = await groqChat(
+      [
+        { role: "system", content: QUESTION_SYSTEM_PROMPT },
+        { role: "user", content: userMsg },
+      ],
+      { maxTokens: 300, temperature: 0.4 }
     );
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers,
-      body: llmBody,
-      signal: AbortSignal.timeout(12000),
-    });
-
-    if (!resp.ok) {
-      return Response.json({ error: "LLM request failed" }, { status: 502 });
-    }
-
-    const result = await resp.json();
-    const text = extractLlmText(model_provider, result);
     const parsed = parseJsonResponse<{ question: string }>(text);
 
     if (!parsed?.question) {

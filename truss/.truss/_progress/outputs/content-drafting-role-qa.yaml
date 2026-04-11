@@ -1,0 +1,136 @@
+role: qa
+stream_name: content-drafting
+
+feature_analyses:
+  - feature_name: "Platform-Specialist Drafting Agents"
+    analysis: >
+      Five agents each have their own structural validation logic — tests must cover
+      each platform's format constraints independently. The most critical test category:
+      platform format violations that would cause downstream review failures (LinkedIn
+      post too short, X tweet over 280 chars, YouTube missing script_outline). The
+      DraftingOrchestrator failure isolation test is the highest-priority edge case —
+      one failed draft must not poison the queue. The briefs_store integration
+      (approved-undrafted query) requires a join-like test across two stores.
+    tasks:
+      - title: "Write unit tests for all 5 platform-specialist DraftingAgent subclasses"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/drafting/test_platform_agents.py
+          LinkedIn:
+          - test_linkedin_draft_body_length: mock Claude returning 1400-char body → passes
+          - test_linkedin_draft_too_short: mock returning 800-char body → Pydantic raises or retry triggered
+          - test_linkedin_staircase_format: body has multi-sentence paragraphs → agent re-prompts (or accepted based on retried result)
+          X:
+          - test_x_thread_length_valid: mock returning 5 tweets → Draft.thread has 5 items
+          - test_x_tweet_over_280: mock returning tweet with 290 chars → Pydantic validation fails, retry triggered
+          - test_x_hook_in_first_tweet: thread[0] must contain hook text from ContentBrief
+          YouTube:
+          - test_youtube_title_under_60: title with 65 chars → validation fails
+          - test_youtube_description_word_count: description <200 words → retry
+          - test_youtube_script_outline_structure: outline missing timestamp → validation fails
+          Instagram:
+          - test_instagram_caption_length: caption 220 chars → validation fails
+          - test_instagram_hashtag_count: 10 hashtags → validation fails (< 15)
+          - test_instagram_emoji_in_caption: no emoji → validation fails
+          Facebook:
+          - test_facebook_body_length: 350-char body → validation fails
+          - test_facebook_no_hashtags: body contains '#' → validation fails
+          All platforms:
+          - test_retry_on_pydantic_failure: first response fails → agent makes 2nd API call
+          - test_schema_version_check: ContentBrief with wrong version → SchemaVersionError raised
+
+      - title: "Write integration tests for DraftingOrchestrator failure isolation and queue processing"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/drafting/test_drafting_orchestrator.py
+          Cases:
+          - test_orchestrator_drafts_all_approved: 3 approved briefs → 3 drafts created in drafts_store
+          - test_orchestrator_continues_after_failure: brief[1] causes API error → brief[0] and brief[2] still drafted
+          - test_brief_stays_approved_after_failure: API error on brief → briefs_store status unchanged (still 'approved')
+          - test_orchestrator_skips_already_drafted: brief already has draft → orchestrator skips it
+          - test_platform_agent_registry_dispatch: brief with platform='instagram' → InstagramDraftingAgent instantiated
+          - test_orchestrator_injects_voice_profile: VoiceConsistencyEngine provided → get_voice_instruction called per agent
+
+      - title: "Write integration tests for drafts_store SQLite operations"
+        task_type: test
+        description: >
+          Test file: tests/flex/store/test_drafts_store.py
+          Cases:
+          - test_insert_and_get_by_id: insert Draft → get_by_id returns identical object with all platform_fields
+          - test_get_pending_review_returns_correct_status: insert 3 (1 ready_for_review, 2 other) → get_pending_review returns 1
+          - test_update_status_changes_field: insert draft, update_status('selected') → status updated, updated_at changed
+          - test_list_by_brief_returns_all_versions: insert v1 + v2 for same brief_id → list_by_brief returns both
+          - test_payload_json_round_trip: insert draft with nested platform_fields → retrieve, deserialize, platform_fields identical
+
+  - feature_name: "Tone and Voice Consistency Engine"
+    analysis: >
+      VoiceConsistencyEngine's cache invalidation is the highest-risk behaviour —
+      stale cache would silently apply an outdated voice profile to all drafts.
+      The SHA256 hash of file mtimes must be tested with file modifications. The
+      'draft without voice if corpus empty' graceful degradation must be tested
+      explicitly — it's the onboarding path for new users. The voice_instruction
+      string injected into agent prompt must be tested to ensure it's a natural
+      language string, not a raw JSON dump of VoiceProfile.
+    tasks:
+      - title: "Write unit tests for VoiceConsistencyEngine corpus loading, LLM analysis, and cache invalidation"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/test_voice_consistency_engine.py
+          Cases:
+          - test_profile_built_from_corpus: 5 .txt files in tmp_path → VoiceProfile returned with all required fields
+          - test_cache_hit_on_unchanged_corpus: build_profile() called twice, no files changed → LLM called once (cache hit)
+          - test_cache_invalidated_on_file_change: modify one corpus file → build_profile() makes second LLM call
+          - test_cache_invalidated_on_new_file: add new file → cache invalidated
+          - test_empty_corpus_returns_none: corpus dir empty → get_voice_instruction returns None, warning logged
+          - test_no_corpus_path_returns_none: voice_corpus_path=None → get_voice_instruction returns None (no exception)
+          - test_voice_instruction_is_natural_language: VoiceProfile with analytical tone → get_voice_instruction(platform) returns a string containing 'analytical' or 'concise' (not raw JSON)
+          - test_max_20_posts_sampled: corpus with 30 files → LLM receives max 20 posts (not all 30)
+
+  - feature_name: "Draft Versioning and A/B Variants"
+    analysis: >
+      DraftVersioningEngine's alternate tone rotation must be deterministic and
+      tested to ensure Version A and Version B use different tones. The 1-angle
+      fallback (both variants use same angle, different tone) must be verified
+      separately. The --select workflow must confirm: (1) selected draft gets
+      status='selected', (2) other draft gets status='archived', (3) both changes
+      are atomic (no partial state in failure case).
+    tasks:
+      - title: "Write unit tests for DraftVersioningEngine variant generation and tone rotation"
+        task_type: test
+        description: >
+          Test file: tests/flex/agents/test_draft_versioning_engine.py
+          Cases:
+          - test_two_variants_created: brief with 2 angles → 2 Draft records in drafts_store, version=1 and version=2
+          - test_variants_use_different_angles: v1 uses angle[0], v2 uses angle[1] → prompts differ (angle text present in each)
+          - test_variants_use_different_tones: v1 tone=brief.tone, v2 tone=alternate → tones differ
+          - test_tone_rotation_deterministic: professional → conversational, conversational → provocative, etc.
+          - test_single_angle_fallback: brief with 1 angle → both variants use same angle, different tones, warning logged
+          - test_both_variants_status_ready: after generate_variants() → both drafts have status='ready_for_review'
+
+      - title: "Write CLI integration tests for 'flex draft compare --select' workflow atomicity"
+        task_type: test
+        description: >
+          Test file: tests/flex/cli/test_draft_compare_command.py
+          Cases:
+          - test_compare_shows_both_versions: 2 drafts for brief_id → CLI output contains both version headers
+          - test_select_marks_selected_archived: --select 1 → draft v1 status='selected', draft v2 status='archived'
+          - test_select_is_atomic: simulate drafts_store write failure on archive → selected status also rolled back
+          - test_select_requires_confirmation: without confirmation → no status change
+          - test_compare_single_draft_shows_generate_prompt: only 1 draft → shows 'Generate Variant B' message
+
+edge_cases:
+  - "DraftingOrchestrator runs while previous poll is still in progress (overlap): second run should detect in-flight drafts and skip"
+  - "ContentBrief has 0 hooks for a given angle (malformed): DraftingAgent should raise BriefValidationError, not pass None to Claude"
+  - "Voice corpus file with BOM or non-UTF8 encoding: VoiceConsistencyEngine must handle with chardet or explicit utf-8-sig read"
+  - "Draft body contains platform-specific characters that fail Pydantic str validation (null bytes): sanitize before storage"
+  - "DraftVersioningEngine called for a brief that already has 2 variants: should return existing variants, not generate new ones"
+
+integration_notes: >
+  Cross-stream: drafts_store.get_pending_review() is the handoff contract to review-editing.
+  Draft.status='ready_for_review' is the trigger. QA must verify this contract holds
+  after select/archive operations — a 'selected' draft must still appear in pending_review
+  (it's ready for the human reviewer to confirm selection before publishing).
+  SchemaVersionError from DraftingAgent (when ContentBrief version mismatches) must
+  be caught by DraftingOrchestrator and logged with brief_id for manual triage.
+
+completed: true

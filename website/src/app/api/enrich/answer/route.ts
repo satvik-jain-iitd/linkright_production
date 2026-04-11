@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { buildLlmCall, extractLlmText } from "@/lib/llm-call";
-import { resolveApiKey } from "@/lib/resolve-api-key";
+import { groqChat } from "@/lib/groq";
 
 const REWRITE_PROMPT = `You are a career profile writer. Rewrite the following raw answer as a polished career profile paragraph.
 
@@ -74,18 +73,11 @@ export async function POST(request: Request) {
     return rateLimitResponse("enrich answer");
   }
 
-  const { answer, model_provider, model_id, api_key } = await request.json();
+  const { answer } = await request.json();
 
   if (!answer || answer.trim().length < 20) {
     return Response.json({ error: "Answer too short" }, { status: 400 });
   }
-
-  if (!model_provider || !model_id || !api_key) {
-    return Response.json({ error: "Missing LLM config" }, { status: 400 });
-  }
-
-  // Resolve UUID key → actual API key
-  const resolvedKey = await resolveApiKey(supabase, user.id, api_key);
 
   // Step 1: Deduplication — search existing career chunks
   const searchQueries = buildSearchQueries(answer);
@@ -121,20 +113,14 @@ export async function POST(request: Request) {
   // Step 2: Rewrite as career profile paragraph via LLM
   let rewritten = answer.trim();
   try {
-    const { url, headers, body } = buildLlmCall(
-      model_provider,
-      model_id,
-      resolvedKey,
-      REWRITE_PROMPT,
-      answer,
-      300
+    const text = await groqChat(
+      [
+        { role: "system", content: REWRITE_PROMPT },
+        { role: "user", content: answer },
+      ],
+      { maxTokens: 300, temperature: 0.3 }
     );
-    const resp = await fetch(url, { method: "POST", headers, body, signal: AbortSignal.timeout(10000) });
-    if (resp.ok) {
-      const result = await resp.json();
-      const text = extractLlmText(model_provider, result).trim();
-      if (text.length > 20) rewritten = text;
-    }
+    if (text.trim().length > 20) rewritten = text.trim();
   } catch {
     // Fall back to raw answer
   }

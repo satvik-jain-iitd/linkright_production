@@ -1,0 +1,75 @@
+role: po
+stream_name: analytics
+
+feature_analyses:
+  - feature_name: "Performance Tracking and Data Ingestion"
+    analysis: >
+      Three-point polling (1h, 24h, 7d) captures early virality, sustained engagement,
+      and long-tail reach. The 1h snapshot is the most actionable — it tells the creator
+      whether to boost or cross-post. The 7d snapshot is the baseline for pattern
+      detection. post_deleted handling is essential: platforms delete posts and the
+      poller must not loop forever on 404s. The raw metric fields must match what each
+      platform actually provides — YouTube provides views/likes/comments but not shares;
+      Instagram provides saves which others don't. MetricsSnapshot must be platform-flexible.
+    tasks:
+      - title: "Define MetricsSnapshot Pydantic model with platform-flexible metrics dict"
+        task_type: implementation
+        description: >
+          modules/flex/models/metrics_snapshot.py: MetricsSnapshot(snapshot_id UUID,
+          publish_record_id str, platform Platform enum, polled_at datetime,
+          poll_number int (1/2/3 = 1h/24h/7d snapshot), metrics dict[str, int | float]
+          for platform-flexible fields). Core keys all platforms support: impressions,
+          likes, comments. Platform-specific: shares (LinkedIn/X/Facebook), clicks (LinkedIn),
+          saves (Instagram), views (YouTube), retweets (X).
+          Define EXPECTED_METRICS dict per platform for validation.
+
+      - title: "Define three-point polling schedule and 'flex analytics post' CLI"
+        task_type: implementation
+        description: >
+          AnalyticsPoller schedule: poll_1h_after = published_at + timedelta(hours=1),
+          poll_24h_after = published_at + timedelta(hours=24), poll_7d_after = published_at +
+          timedelta(days=7). Store next_poll_at in publish_records or a polling_schedule_store.
+          'flex analytics post <post_id>': shows latest MetricsSnapshot with delta vs previous.
+          'flex analytics post --all': shows all 3 snapshots in a table.
+
+  - feature_name: "Analytics Dashboard and Pattern Detection"
+    analysis: >
+      The dashboard must answer two questions in 5 seconds: "How am I doing overall?"
+      and "What's my best content?" Aggregate stats (avg impressions, engagement rate)
+      answer Q1. Top performer list answers Q2. Pattern insights must be plain English —
+      not "FK Grade 7.2 on Tue" but "Your Tuesday posts outperform Thursday by 40%".
+      Minimum 5 posts per platform for reliable patterns is a hard rule: showing patterns
+      on 2 posts is misleading. The 3-insight cap per platform prevents insight overload.
+    tasks:
+      - title: "Define PerformanceSummary model and implement 'flex analytics dashboard' CLI"
+        task_type: implementation
+        description: >
+          modules/flex/models/performance_summary.py: PerformanceSummary(platform, total_posts,
+          avg_impressions, avg_engagement_rate, top_post_id, top_post_topic, bottom_post_id,
+          pattern_insights list[str] max=3).
+          analytics_commands.py: dashboard subcommand shows per-platform summary table.
+          --platform flag for single platform view. patterns subcommand shows 3 insights per
+          platform as bullet points.
+
+  - feature_name: "Content Recommendation Engine"
+    analysis: >
+      Recommendations are only valuable if they're specific and actionable. "Post more
+      about AI" is useless. "Your posts about AI Agents on LinkedIn at 08:30 get 3.2x
+      more engagement — post another this week" is actionable. The integration with
+      content-ideation ('flex ideation list' showing recommendations) is a cross-stream
+      contract: recommendations must be readable by the ideation CLI. Store recommendations
+      in a separate recommendations_store so ideation stream can query without loading
+      all analytics data. Confidence_score < 0.4 should still be shown but flagged —
+      hiding low-confidence recommendations reduces transparency.
+    tasks:
+      - title: "Define Recommendation model and implement 'flex analytics recommend' CLI"
+        task_type: implementation
+        description: >
+          modules/flex/models/recommendation.py: Recommendation(rec_id UUID, platform Platform,
+          topic_suggestion str, format_suggestion str, timing_suggestion str, rationale str,
+          confidence_score float, source_post_ids list[str], generated_at datetime).
+          modules/flex/store/recommendations_store.py: SQLite recs table. Methods: upsert_by_platform(),
+          get_by_platform(platform), get_top_n(n=2) for ideation cross-stream integration.
+          analytics_commands.py: recommend <platform> subcommand shows recs with rationale and source posts.
+
+completed: true

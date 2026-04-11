@@ -1,0 +1,89 @@
+role: po
+stream_name: publishing-orchestration
+
+feature_analyses:
+  - feature_name: "Postiz Publishing Integration"
+    analysis: >
+      The Postiz integration is the single external dependency of the entire pipeline —
+      everything works internally until this moment. The retry contract (3 attempts,
+      exponential backoff) must be specified precisely: 2s, 4s, 8s. PostizAuthError
+      must not retry (401 is not a transient error — retrying wastes quota and time).
+      Notification on failure is non-negotiable: a failed publish with no alert means
+      the creator misses their posting window with no recourse. publish_records_store
+      is the handoff artifact to analytics — its schema (platform_post_id, published_at)
+      must be agreed before analytics stream implements polling.
+    tasks:
+      - title: "Define PostizConfig Pydantic model and publish_records contract"
+        task_type: implementation
+        description: >
+          modules/flex/config/postiz_config.py: PostizConfig with postiz_api_key (str),
+          postiz_base_url (str default='https://api.postiz.com'), channel_ids (dict:
+          platform → channel_id str), retry_attempts (int default=3),
+          retry_backoff_seconds (list[int] default=[2,4,8]).
+          modules/flex/models/publish_record.py: PublishRecord(record_id UUID, draft_id str,
+          platform Platform enum, platform_post_id str, scheduled_at datetime, published_at datetime,
+          status enum: scheduled/published/failed/post_deleted).
+
+      - title: "Define publish failure notification spec and user-facing error messages"
+        task_type: implementation
+        description: >
+          PublishFailureNotifier contract: notification includes platform name, brief topic
+          (loaded from briefs_store via draft.brief_id), error type (PostizAuthError/
+          PostizRateLimitError/PostizServerError), retry command ('flex publish retry <draft_id>').
+          Add 'flex publish retry <draft_id>' command to publish_commands.py.
+          AgentMail: if AGENTMAIL_INBOX configured, send structured message with draft_id,
+          platform, error_type, failed_at.
+
+      - title: "Implement 'flex publish queue', 'flex publish cancel', 'flex publish retry' CLI"
+        task_type: implementation
+        description: >
+          modules/flex/cli/publish_commands.py:
+          queue: lists scheduled + pending drafts (columns: platform, topic, scheduled_at, status).
+          cancel <draft_id>: sets status='cancelled', calls Postiz DELETE /api/v1/posts/{id} if already scheduled.
+          retry <draft_id>: resets status='approved', triggers PublishingOrchestrator for that draft.
+          schedule <draft_id> --at <datetime>: overrides SchedulingEngine computed time.
+
+  - feature_name: "Intelligent Scheduling Engine"
+    analysis: >
+      Platform-specific best-practice windows are the baseline — they must be hardcoded
+      as constants (not derived from analytics at first, since analytics data doesn't exist
+      yet on day 1). Historical data override is an enhancement, not the baseline. Timezone
+      handling is critical: users in different timezones need local optimal times, not UTC.
+      Queue reorder via --before is the right UX (relative positioning, not absolute datetime
+      swapping). Cancel must also call Postiz to remove the scheduled post from their queue
+      — a cancelled draft that still publishes via Postiz is a data consistency bug.
+    tasks:
+      - title: "Define platform scheduling windows constants and timezone config"
+        task_type: implementation
+        description: >
+          modules/flex/agents/publishing/scheduling_engine.py: PLATFORM_WINDOWS dict with
+          default optimal windows per platform (LinkedIn: Tue/Wed/Thu 08:00-10:00,
+          X: any weekday 09:00-10:00 or 19:00-21:00, YouTube: Fri/Sat 15:00-17:00,
+          Instagram: Mon/Wed/Fri 11:00-13:00, Facebook: Wed/Thu 13:00-15:00).
+          Add user_timezone: str (IANA timezone, default='UTC') to AgentConfig.
+          compute_optimal_time(platform, timezone): returns next occurrence of the
+          optimal window in user's timezone.
+
+  - feature_name: "Pipeline Coordinator Agent"
+    analysis: >
+      The pipeline coordinator is the heart of the automation promise: set it up once
+      and content flows through stages with only human approval gates interrupting.
+      The message bus must be lightweight — no external infrastructure (no Redis, no
+      Kafka). An in-process queue (asyncio.Queue or threading.Queue) is sufficient
+      for the scale of 1 user's content. PipelineCheckpoint log is the accountability
+      surface — 'flex pipeline log <brief_id>' must answer "why did this fail?" for
+      any content item. Quarantine (item isolated after unhandled error) prevents a
+      broken item from blocking the entire queue.
+    tasks:
+      - title: "Define PipelineCheckpoint model and pipeline CLI commands"
+        task_type: implementation
+        description: >
+          modules/flex/models/pipeline_checkpoint.py: PipelineCheckpoint(checkpoint_id UUID,
+          brief_id str, draft_id str | None, stage enum: ideation/drafting/qa/approval/scheduling/
+          publishing, status enum: started/completed/error/quarantined, input_status str,
+          output_status str, agent_used str, started_at datetime, completed_at datetime | None,
+          error_type str | None, error_detail str | None).
+          modules/flex/cli/pipeline_commands.py: log <brief_id> shows full checkpoint history.
+          run: starts PipelineCoordinator in foreground. status: shows all active items.
+
+completed: true

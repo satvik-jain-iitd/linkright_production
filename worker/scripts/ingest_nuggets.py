@@ -158,7 +158,7 @@ async def main() -> None:
             nuggets.append(n)
 
         t0 = time.time()
-        asyncio.run(embed_nuggets(nuggets, os.environ["JINA_API_KEY"], sb, args.user_id))
+        await embed_nuggets(nuggets, os.environ["JINA_API_KEY"], sb, args.user_id)
         print(f"\n[done] Embedded {len(nuggets)} nuggets in {time.time() - t0:.0f}s")
         sys.exit(0)
 

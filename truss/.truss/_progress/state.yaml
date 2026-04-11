@@ -1,0 +1,8 @@
+current_workflow: decomposition
+current_step: approved
+streams:
+  content-ideation: ready
+  publishing-orchestration: ready
+  analytics: ready
+  review-editing: ready
+  content-drafting: ready
