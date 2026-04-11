@@ -21,7 +21,7 @@ Return JSON array. Each nugget:
   "importance": "P0=career-defining (top 3 ever), P1=strong supporting, P2=contextual, P3=peripheral",
   "factuality": "fact"/"opinion"/"aspiration",
   "temporality": "past"/"present"/"future",
-  "event_date": "YYYY-MM-DD format strictly (e.g. 2024-03-01). If only month+year known use YYYY-MM-01. If only year use YYYY-01-01. null if truly unknown.",
+  "event_date": "STRICT YYYY-MM-DD format (e.g. 2024-03-01). If only month+year known use YYYY-MM-01. If only year known use YYYY-01-01. null if truly unknown. NEVER use formats like 'March 2024' or '2024 Q1'.",
   "company": "company name (REQUIRED for work_experience)",
   "role": "exact title at the time (REQUIRED for work_experience)",
   "people": ["collaborator or stakeholder name if mentioned"],

@@ -13,19 +13,24 @@ export default async function DashboardPage() {
   }
 
   // Onboarding gate: redirect if user hasn't completed setup
-  const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
-    supabase
-      .from("user_api_keys")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("is_active", true),
-    supabase
-      .from("career_chunks")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id),
-  ]);
+  // [BYOK-REMOVED] const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
+  // [BYOK-REMOVED]   supabase
+  // [BYOK-REMOVED]     .from("user_api_keys")
+  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
+  // [BYOK-REMOVED]     .eq("user_id", user.id)
+  // [BYOK-REMOVED]     .eq("is_active", true),
+  // [BYOK-REMOVED]   supabase
+  // [BYOK-REMOVED]     .from("career_chunks")
+  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
+  // [BYOK-REMOVED]     .eq("user_id", user.id),
+  // [BYOK-REMOVED] ]);
+  const { count: chunkCount } = await supabase
+    .from("career_chunks")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id);
 
-  if ((keyCount ?? 0) === 0 || (chunkCount ?? 0) === 0) {
+  // [BYOK-REMOVED] if ((keyCount ?? 0) === 0 || (chunkCount ?? 0) === 0) {
+  if ((chunkCount ?? 0) === 0) {
     redirect("/onboarding");
   }
 

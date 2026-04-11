@@ -1,13 +1,13 @@
 // DELETE: Remove a key
 // PATCH: Update priority, label, or active status
 
-import { createClient } from "@/lib/supabase/server";
-import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+// [BYOK-REMOVED] Supabase + rate-limit imports no longer needed
+// import { createClient } from "@/lib/supabase/server";
+// import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE() {
+  // [BYOK-REMOVED] API key management disabled — server manages keys
+  /* [BYOK-REMOVED]
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -33,12 +33,13 @@ export async function DELETE(
   }
 
   return Response.json({ deleted: true });
+  */
+  return Response.json({ error: "API key management is handled server-side" }, { status: 410 });
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH() {
+  // [BYOK-REMOVED] API key management disabled — server manages keys
+  /* [BYOK-REMOVED]
   const { id } = await params;
   const supabase = await createClient();
   const {
@@ -80,4 +81,6 @@ export async function PATCH(
   }
 
   return Response.json({ key: data });
+  */
+  return Response.json({ error: "API key management is handled server-side" }, { status: 410 });
 }

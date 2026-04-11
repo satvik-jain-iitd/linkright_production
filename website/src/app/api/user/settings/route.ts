@@ -30,7 +30,22 @@ export async function GET() {
     .neq("is_active", false)  // exclude soft-deleted chunks (future-proof for versioning)
     .order("chunk_index", { ascending: true });
 
-  const career_text = chunks?.map((c: { chunk_text: string }) => c.chunk_text).join("\n\n") || "";
+  let career_text = chunks?.map((c: { chunk_text: string }) => c.chunk_text).join("\n\n") || "";
+
+  // Fallback: if no career_chunks exist, reconstruct career_text from career_nuggets
+  if (!career_text) {
+    const { data: nuggets } = await supabase
+      .from("career_nuggets")
+      .select("answer, company, role")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+    if (nuggets && nuggets.length > 0) {
+      career_text = nuggets
+        .map((n: { answer: string | null }) => n.answer)
+        .filter(Boolean)
+        .join("\n\n");
+    }
+  }
 
   return Response.json({
     model_provider: settings?.model_provider || "",

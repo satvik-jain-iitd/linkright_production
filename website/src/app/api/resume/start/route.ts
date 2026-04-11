@@ -20,9 +20,12 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { jd_text, career_text, model_provider, model_id, api_key, template_id, qa_answers, override_theme_colors } = body;
+  // [BYOK-REMOVED] api_key destructured but no longer required from client
+  const { jd_text, career_text, model_provider, model_id, /* api_key, */ template_id, qa_answers, override_theme_colors, target_role, target_company } = body; // [PSA5-ayd.1.1.3]
 
-  if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
+  // [BYOK-REMOVED] api_key removed from required fields — server provides the key
+  // if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
+  if (!jd_text || !career_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -64,30 +67,31 @@ export async function POST(request: Request) {
     );
   }
 
-  // Resolve api_key: if it looks like a UUID (key ID from KeyManagerPanel), fetch the actual key
-  let resolved_api_key = api_key;
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (UUID_RE.test(api_key)) {
-    const { data: keyRow } = await supabase
-      .from("user_api_keys")
-      .select("api_key_encrypted")
-      .eq("id", api_key)
-      .eq("user_id", user.id)
-      .single();
-    if (keyRow?.api_key_encrypted) {
-      resolved_api_key = keyRow.api_key_encrypted;
-    } else {
-      // Fallback: try user_settings
-      const { data: settings } = await supabase
-        .from("user_settings")
-        .select("api_key")
-        .eq("user_id", user.id)
-        .single();
-      if (settings?.api_key) {
-        resolved_api_key = settings.api_key;
-      }
-    }
-  }
+  // [BYOK-REMOVED] UUID key resolution block — server now provides the key
+  // let resolved_api_key = api_key;
+  // const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // if (UUID_RE.test(api_key)) {
+  //   const { data: keyRow } = await supabase
+  //     .from("user_api_keys")
+  //     .select("api_key")
+  //     .eq("id", api_key)
+  //     .eq("user_id", user.id)
+  //     .single();
+  //   if (keyRow?.api_key) {
+  //     resolved_api_key = keyRow.api_key;
+  //   } else {
+  //     // Fallback: try user_settings
+  //     const { data: settings } = await supabase
+  //       .from("user_settings")
+  //       .select("api_key")
+  //       .eq("user_id", user.id)
+  //       .single();
+  //     if (settings?.api_key) {
+  //       resolved_api_key = settings.api_key;
+  //     }
+  //   }
+  // }
+  const resolved_api_key = process.env.GROQ_API_KEY || "";
 
   // Create job row in Supabase
   const { data: job, error: insertError } = await supabase
@@ -97,9 +101,11 @@ export async function POST(request: Request) {
       status: "queued",
       jd_text,
       career_text,
-      model_provider,
-      model_id,
+      model_provider: body.model_provider || "groq",
+      model_id: body.model_id || "llama-3.1-8b-instant",
       template_id: template_id || "cv-a4-standard",
+      target_role: target_role || null, // [PSA5-ayd.1.1.3]
+      target_company: target_company || null, // [PSA5-ayd.1.1.3]
     })
     .select("id")
     .single();
@@ -121,8 +127,8 @@ export async function POST(request: Request) {
         user_id: user.id,
         jd_text,
         career_text,
-        model_provider,
-        model_id,
+        model_provider: body.model_provider || "groq",
+        model_id: body.model_id || "llama-3.1-8b-instant",
         api_key: resolved_api_key,
         template_id: template_id || "cv-a4-standard",
         qa_answers: qa_answers || [],

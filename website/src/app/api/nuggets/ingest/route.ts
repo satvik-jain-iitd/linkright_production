@@ -29,7 +29,9 @@ const NuggetSchema = z.object({
 
 type ValidNugget = z.infer<typeof NuggetSchema>;
 
-// Normalize freeform date strings to PostgreSQL-safe YYYY-MM-DD format
+// Normalize freeform date strings (from LLM output) to PostgreSQL-safe YYYY-MM-DD format.
+// Handles: YYYY-MM-DD, YYYY-MM, YYYY, "Month YYYY", "YYYY Month", "Q1 YYYY" patterns.
+// Returns null instead of crashing on unparseable input.
 function normalizeDate(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const s = raw.trim();

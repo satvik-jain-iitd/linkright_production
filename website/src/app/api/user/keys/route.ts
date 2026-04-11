@@ -1,15 +1,20 @@
 // GET: List all keys for user (masked)
 // POST: Add new key
 
-import { createClient } from "@/lib/supabase/server";
-import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+// [BYOK-REMOVED] Supabase + rate-limit imports no longer needed
+// import { createClient } from "@/lib/supabase/server";
+// import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
+/* [BYOK-REMOVED]
 function maskKey(key: string): string {
   if (key.length <= 8) return "****";
   return key.slice(0, 4) + "..." + key.slice(-4);
 }
+*/
 
-export async function GET(request: Request) {
+export async function GET() {
+  // [BYOK-REMOVED] API key management disabled — server manages keys
+  /* [BYOK-REMOVED]
   const supabase = await createClient();
   const {
     data: { user },
@@ -52,9 +57,13 @@ export async function GET(request: Request) {
   }));
 
   return Response.json({ keys: masked });
+  */
+  return Response.json({ keys: [], message: "API key management is handled server-side" });
 }
 
-export async function POST(request: Request) {
+export async function POST() {
+  // [BYOK-REMOVED] API key management disabled — server manages keys
+  /* [BYOK-REMOVED]
   const supabase = await createClient();
   const {
     data: { user },
@@ -85,6 +94,22 @@ export async function POST(request: Request) {
         error: `Invalid provider. Must be one of: ${validProviders.join(", ")}`,
       },
       { status: 400 }
+    );
+  }
+
+  // Check for duplicate key (same user + provider + key value)
+  const { data: dupes } = await supabase
+    .from("user_api_keys")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("provider", provider)
+    .eq("api_key_encrypted", api_key)
+    .limit(1);
+
+  if (dupes && dupes.length > 0) {
+    return Response.json(
+      { error: "This API key already exists for this provider" },
+      { status: 409 }
     );
   }
 
@@ -123,4 +148,6 @@ export async function POST(request: Request) {
   }
 
   return Response.json({ key: data }, { status: 201 });
+  */
+  return Response.json({ error: "API key management is handled server-side" }, { status: 410 });
 }

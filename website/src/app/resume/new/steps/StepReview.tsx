@@ -113,6 +113,9 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
   const [chatLoading, setChatLoading] = useState(false);
   const [selectorMode, setSelectorMode] = useState(false);
 
+  // [PSA5-8y3.2.2.1] Download dropdown state
+  const [downloadOpen, setDownloadOpen] = useState(false);
+
   // Template lock state
   const [lockedSections, setLockedSections] = useState<string[]>([]);
   const [savedTemplate, setSavedTemplate] = useState(false);
@@ -355,18 +358,32 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
           >
             + New Resume
           </button>
-          <button
-            onClick={downloadHtml}
-            className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-hover"
-          >
-            Download HTML
-          </button>
-          <button
-            onClick={printResume}
-            className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-          >
-            Print / Save PDF
-          </button>
+          {/* [PSA5-8y3.2.2.1] old Download HTML + Print/Save PDF buttons replaced by dropdown below */}
+          {/* [PSA5-8y3.2.2.1] Single download dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setDownloadOpen(o => !o)}
+              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover flex items-center gap-2"
+            >
+              Download Resume <span>▾</span>
+            </button>
+            {downloadOpen && (
+              <div className="absolute right-0 mt-1 w-44 rounded-xl border border-border bg-surface shadow-lg z-50">
+                <button
+                  onClick={() => { printResume(); setDownloadOpen(false); }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-surface-hover rounded-t-xl"
+                >
+                  PDF (via print)
+                </button>
+                <button
+                  onClick={() => { downloadHtml(); setDownloadOpen(false); }}
+                  className="w-full px-4 py-2.5 text-left text-sm text-muted hover:bg-surface-hover rounded-b-xl"
+                >
+                  HTML file
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -397,28 +414,39 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
               </div>
             </div>
           )}
-          {stats.llm_calls !== undefined && (
-            <div className="rounded-xl border border-border bg-surface px-4 py-3">
-              <div className="text-xs text-muted">LLM Calls</div>
-              <div className="text-lg font-bold">{stats.llm_calls as number}</div>
-            </div>
-          )}
-          {stats.total_input_tokens !== undefined && (
-            <div className="rounded-xl border border-border bg-surface px-4 py-3">
-              <div className="text-xs text-muted">Tokens (in/out)</div>
-              <div className="text-lg font-bold">
-                {Math.round((stats.total_input_tokens as number) / 1000)}K /{" "}
-                {Math.round((stats.total_output_tokens as number) / 1000)}K
+          {/* [PSA5-8y3.2.1.1] Engineering metrics collapsed into details */}
+          {(stats.llm_calls !== undefined || stats.total_input_tokens !== undefined || stats.total_llm_time_ms !== undefined) && (
+            <details className="mt-2">
+              <summary className="cursor-pointer select-none text-xs text-muted hover:text-foreground">
+                Advanced metrics
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {/* [PSA5-8y3.2.1.1] old inline placement removed */}
+                {stats.llm_calls !== undefined && (
+                  <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                    <div className="text-xs text-muted">LLM Calls</div>
+                    <div className="text-lg font-bold">{stats.llm_calls as number}</div>
+                  </div>
+                )}
+                {stats.total_input_tokens !== undefined && (
+                  <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                    <div className="text-xs text-muted">Tokens (in/out)</div>
+                    <div className="text-lg font-bold">
+                      {Math.round((stats.total_input_tokens as number) / 1000)}K /{" "}
+                      {Math.round((stats.total_output_tokens as number) / 1000)}K
+                    </div>
+                  </div>
+                )}
+                {stats.total_llm_time_ms !== undefined && (
+                  <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                    <div className="text-xs text-muted">LLM Time</div>
+                    <div className="text-lg font-bold">
+                      {Math.round((stats.total_llm_time_ms as number) / 1000)}s
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-          {stats.total_llm_time_ms !== undefined && (
-            <div className="rounded-xl border border-border bg-surface px-4 py-3">
-              <div className="text-xs text-muted">LLM Time</div>
-              <div className="text-lg font-bold">
-                {Math.round((stats.total_llm_time_ms as number) / 1000)}s
-              </div>
-            </div>
+            </details>
           )}
         </div>
       )}
@@ -466,7 +494,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
           <div className="flex-1 overflow-y-auto p-4" style={{ maxHeight: "500px" }}>
             {chatHistory.length === 0 && (
               <div className="py-6 text-center text-xs text-muted">
-                <p>Click &quot;Select Element&quot; below, then click</p>
+                <p>Click &ldquo;Select Element&rdquo; below, then click</p>
                 <p>any part of the resume to edit it.</p>
               </div>
             )}
@@ -577,7 +605,8 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                     : "border-border bg-background text-muted hover:text-foreground"
                 }`}
               >
-                {selectorMode ? "Cancel" : "Select El"}
+                {/* [PSA5-8y3.3.2.1] Changed "Select El" → "Select Element" */}
+                {selectorMode ? "Cancel" : "Select Element"}
               </button>
               <input
                 type="text"

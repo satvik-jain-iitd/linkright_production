@@ -45,31 +45,23 @@ function GradeBadge({ grade, score }: { grade: string; score?: number }) {
   );
 }
 
-function ScoreBar({ score, passed }: { score: number; passed: boolean }) {
-  const clampedScore = Math.min(100, Math.max(0, score));
-  const barColor = passed ? "bg-green-500" : clampedScore >= 50 ? "bg-amber-400" : "bg-red-400";
-  return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-border" role="presentation">
-      <div
-        className={`h-full rounded-full transition-all ${barColor}`}
-        style={{ width: `${clampedScore}%` }}
-      />
-    </div>
-  );
-}
-
 export function QualityPanel({ stats }: QualityPanelProps) {
-  const [suggestionsOpen, setSuggestionsOpen] = useState(
-    () => {
-      const grade = stats.quality_grade;
-      return grade === "C" || grade === "D" || grade === "F";
-    }
-  );
+  // [PSA5-8y3.1.1.2] showAllSuggestions toggle
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
 
   // Graceful degradation: nothing to show
   if (!stats.quality_grade) return null;
 
   const { quality_grade, quality_score, quality_checks, quality_suggestions, ats_blocked } = stats;
+
+  // [PSA5-8y3.1.1.2] Top 3 always visible, rest behind show-more
+  const TOP_N = 3;
+  const visibleSuggestions = quality_suggestions
+    ? showAllSuggestions
+      ? quality_suggestions
+      : quality_suggestions.slice(0, TOP_N)
+    : [];
+  const hasMore = quality_suggestions ? quality_suggestions.length > TOP_N : false;
 
   return (
     <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
@@ -92,56 +84,46 @@ export function QualityPanel({ stats }: QualityPanelProps) {
         </div>
       )}
 
-      {/* Metric cards grid */}
+      {/* [PSA5-8y3.1.1.1] Pass/fail pills — replaced score-bar cards */}
       {quality_checks && quality_checks.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="flex flex-wrap gap-2">
           {quality_checks.map((check) => (
-            <div
+            <span
               key={check.name}
-              className="rounded-lg border border-border bg-background p-3"
-              aria-label={`${check.name}: ${Math.round(check.score)} out of 100, ${check.passed ? "passed" : "needs improvement"}. ${check.detail}`}
+              title={check.detail || ""}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                check.passed ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-foreground">{check.name}</span>
-                <span
-                  className={`text-xs font-semibold ${check.passed ? "text-green-600" : "text-red-500"}`}
-                  aria-hidden="true"
-                >
-                  {Math.round(check.score)}
-                </span>
-              </div>
-              <div className="mt-2">
-                <ScoreBar score={check.score} passed={check.passed} />
-              </div>
-              {check.detail && (
-                <p className="mt-1.5 text-[11px] leading-tight text-muted">{check.detail}</p>
-              )}
-            </div>
+              <span>{check.passed ? "✓" : "✗"}</span>
+              {check.name.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
+            </span>
           ))}
         </div>
       )}
 
-      {/* Suggestions panel */}
+      {/* [PSA5-8y3.1.1.2] Top 3 suggestions always visible, show-more for rest */}
       {quality_suggestions && quality_suggestions.length > 0 && (
         <div className="rounded-lg border border-border">
-          <button
-            onClick={() => setSuggestionsOpen((o) => !o)}
-            className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-surface-hover"
-            aria-expanded={suggestionsOpen}
-          >
-            <span>Suggestions ({quality_suggestions.length})</span>
-            <span className="text-muted" aria-hidden="true">
-              {suggestionsOpen ? "▲" : "▼"}
-            </span>
-          </button>
-          {suggestionsOpen && (
-            <ul className="divide-y divide-border border-t border-border">
-              {quality_suggestions.map((suggestion, i) => (
-                <li key={i} className="px-4 py-2.5 text-xs text-foreground">
-                  {suggestion}
-                </li>
-              ))}
-            </ul>
+          <div className="border-b border-border px-4 py-3">
+            <p className="text-sm font-medium text-foreground">Suggestions ({quality_suggestions.length})</p>
+          </div>
+          <ul className="divide-y divide-border">
+            {visibleSuggestions.map((suggestion, i) => (
+              <li key={i} className="px-4 py-2.5 text-xs text-foreground">
+                {suggestion}
+              </li>
+            ))}
+          </ul>
+          {hasMore && (
+            <button
+              onClick={() => setShowAllSuggestions((o) => !o)}
+              className="w-full px-4 py-2.5 text-left text-xs text-muted hover:text-foreground border-t border-border"
+            >
+              {showAllSuggestions
+                ? "Show less ▲"
+                : `Show ${quality_suggestions.length - TOP_N} more ▼`}
+            </button>
           )}
         </div>
       )}

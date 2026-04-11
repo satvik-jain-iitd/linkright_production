@@ -11,3 +11,8 @@ PORT = int(os.environ.get("PORT", "8000"))
 
 # Feature flags
 USE_NUGGETS = os.getenv("USE_NUGGETS", "false").lower() == "true"
+
+# Default LLM configuration (BYOK fallback — server-side key for zero-config)
+DEFAULT_MODEL_PROVIDER = os.getenv("DEFAULT_MODEL_PROVIDER", "groq")
+DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "llama-3.1-8b-instant")
+DEFAULT_API_KEY = os.getenv("GROQ_API_KEY", "")

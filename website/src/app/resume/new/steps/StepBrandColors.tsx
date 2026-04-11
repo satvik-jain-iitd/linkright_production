@@ -265,7 +265,7 @@ export function StepBrandColors({ data, update, next, back }: Props) {
       }
       const result = await resp.json();
       if (!result.colors) {
-        setBrandFetchError("Couldn't find colors for this domain. Try entering the full domain like 'company.com', or upload a CSS file instead.");
+        setBrandFetchError("BrandFetch couldn't find colors. Try uploading a CSS/HTML file above, or enter hex codes manually below.");
         return;
       }
       setColors((prev) => ({
@@ -566,9 +566,9 @@ export function StepBrandColors({ data, update, next, back }: Props) {
                 />
               </svg>
               <p className="text-sm text-muted">
-                Drop CSS/HTML file here or <span className="text-accent underline">click to browse</span>
+                Drop a CSS or HTML file here to extract brand colors (<span className="text-accent underline">click to browse</span>)
               </p>
-              <p className="text-xs text-muted/60">.css, .html, .txt, .zip accepted</p>
+              <p className="text-xs text-muted/60">Re-upload to try a different file &middot; .css, .html, .txt accepted</p>
             </>
           )}
         </div>

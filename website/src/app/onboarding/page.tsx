@@ -12,24 +12,28 @@ export default async function OnboardingPage() {
     redirect("/auth");
   }
 
-  // Check onboarding status: does user have API key + career data?
-  const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
-    supabase
-      .from("user_api_keys")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("is_active", true),
-    supabase
-      .from("career_chunks")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id),
-  ]);
+  // Check onboarding status: does user have career data?
+  // [BYOK-REMOVED] const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
+  // [BYOK-REMOVED]   supabase
+  // [BYOK-REMOVED]     .from("user_api_keys")
+  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
+  // [BYOK-REMOVED]     .eq("user_id", user.id)
+  // [BYOK-REMOVED]     .eq("is_active", true),
+  // [BYOK-REMOVED]   supabase
+  // [BYOK-REMOVED]     .from("career_chunks")
+  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
+  // [BYOK-REMOVED]     .eq("user_id", user.id),
+  // [BYOK-REMOVED] ]);
+  const { count: chunkCount } = await supabase
+    .from("career_chunks")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id);
 
-  const hasApiKey = (keyCount ?? 0) > 0;
+  // [BYOK-REMOVED] const hasApiKey = (keyCount ?? 0) > 0;
   const hasCareerData = (chunkCount ?? 0) > 0;
 
   // Already onboarded → go to dashboard
-  if (hasApiKey && hasCareerData) {
+  if (hasCareerData) {
     redirect("/dashboard");
   }
 

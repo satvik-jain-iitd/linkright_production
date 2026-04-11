@@ -1,40 +1,41 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { AppNav } from "@/components/AppNav";
 
-function Navbar({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const ctaHref = isLoggedIn ? "/dashboard" : "/auth";
-  const ctaLabel = isLoggedIn ? "Dashboard" : "Get Started";
-
-  return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="text-lg font-bold tracking-tight">
-          Link<span className="text-accent">Right</span>
-        </Link>
-        <div className="hidden items-center gap-8 text-sm text-muted sm:flex">
-          <Link href="#features" className="transition-colors hover:text-foreground">
-            Features
-          </Link>
-          <Link href="/pricing" className="transition-colors hover:text-foreground">
-            Pricing
-          </Link>
-          <Link
-            href={ctaHref}
-            className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-          >
-            {ctaLabel}
-          </Link>
-        </div>
-        <Link
-          href={ctaHref}
-          className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white sm:hidden"
-        >
-          {ctaLabel}
-        </Link>
-      </div>
-    </nav>
-  );
-}
+// [NAV-REDESIGN] function Navbar({ isLoggedIn }: { isLoggedIn: boolean }) {
+// [NAV-REDESIGN]   const ctaHref = isLoggedIn ? "/dashboard" : "/auth";
+// [NAV-REDESIGN]   const ctaLabel = isLoggedIn ? "Dashboard" : "Get Started";
+// [NAV-REDESIGN]
+// [NAV-REDESIGN]   return (
+// [NAV-REDESIGN]     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+// [NAV-REDESIGN]       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+// [NAV-REDESIGN]         <Link href="/" className="text-lg font-bold tracking-tight">
+// [NAV-REDESIGN]           Link<span className="text-accent">Right</span>
+// [NAV-REDESIGN]         </Link>
+// [NAV-REDESIGN]         <div className="hidden items-center gap-8 text-sm text-muted sm:flex">
+// [NAV-REDESIGN]           <Link href="#features" className="transition-colors hover:text-foreground">
+// [NAV-REDESIGN]             Features
+// [NAV-REDESIGN]           </Link>
+// [NAV-REDESIGN]           <Link href="/pricing" className="transition-colors hover:text-foreground">
+// [NAV-REDESIGN]             Pricing
+// [NAV-REDESIGN]           </Link>
+// [NAV-REDESIGN]           <Link
+// [NAV-REDESIGN]             href={ctaHref}
+// [NAV-REDESIGN]             className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+// [NAV-REDESIGN]           >
+// [NAV-REDESIGN]             {ctaLabel}
+// [NAV-REDESIGN]           </Link>
+// [NAV-REDESIGN]         </div>
+// [NAV-REDESIGN]         <Link
+// [NAV-REDESIGN]           href={ctaHref}
+// [NAV-REDESIGN]           className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white sm:hidden"
+// [NAV-REDESIGN]         >
+// [NAV-REDESIGN]           {ctaLabel}
+// [NAV-REDESIGN]         </Link>
+// [NAV-REDESIGN]       </div>
+// [NAV-REDESIGN]     </nav>
+// [NAV-REDESIGN]   );
+// [NAV-REDESIGN] }
 
 function Hero() {
   return (
@@ -43,20 +44,38 @@ function Hero() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(15,190,175,0.08)_0%,_transparent_70%)]" />
 
       <div className="relative z-10 mx-auto max-w-3xl text-center">
+        {/* [BRAND-REMOVED] Introducing Sync by LinkRight badge
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-muted">
           <span className="inline-block h-2 w-2 rounded-full bg-accent" />
           Introducing Sync by LinkRight
         </div>
+        */}
 
         <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
           Your resume.<br />
           <span className="text-accent">Pixel-perfect.</span> Every time.
         </h1>
 
-        <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted sm:text-xl">
-          AI that writes resume bullets filling 95-100% of the page width. Brand
-          colors from the target company. Zero AI-detectable writing.
-        </p>
+        {/* // [HERO-REDESIGN] old single paragraph subheadline */}
+        {/* // [HERO-REDESIGN] <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted sm:text-xl"> */}
+        {/* // [HERO-REDESIGN]   AI that writes resume bullets filling 95-100% of the page width. Brand */}
+        {/* // [HERO-REDESIGN]   colors from the target company. Zero AI-detectable writing. */}
+        {/* // [HERO-REDESIGN] </p> */}
+
+        <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3 text-left">
+          <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
+            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
+            Width-optimized bullets filling <span className="text-accent font-medium">95-100%</span> of the page
+          </p>
+          <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
+            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
+            Auto-matched <span className="text-accent font-medium">brand colors</span> from the target company
+          </p>
+          <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
+            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
+            Human-sounding writing that <span className="text-accent font-medium">passes AI detectors</span>
+          </p>
+        </div>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link
@@ -65,8 +84,9 @@ function Hero() {
           >
             Start for Free
           </Link>
+          {/* // [HERO-REDESIGN] <a href="#features" ... > was pointing to features instead of how-it-works */}
           <a
-            href="#features"
+            href="#how-it-works"
             className="rounded-full border border-border px-8 py-3.5 text-base font-medium text-foreground/70 transition-colors hover:border-accent hover:text-accent"
           >
             See how it works
@@ -204,7 +224,7 @@ const steps = [
 
 function HowItWorks() {
   return (
-    <section className="border-t border-border px-6 py-24">
+    <section id="how-it-works" className="border-t border-border px-6 py-24">
       <div className="mx-auto max-w-6xl">
         <div className="mb-16 text-center">
           <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
@@ -215,16 +235,31 @@ function HowItWorks() {
           </h2>
         </div>
 
-        <div className="grid gap-8 sm:grid-cols-3">
-          {steps.map((s) => (
-            <div key={s.number} className="relative text-center">
-              <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-lg font-bold text-accent">
-                {s.number}
+        <div className="grid gap-0 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:gap-8">
+          {steps.map((s, i) => (
+            <div key={s.number} className="contents">
+              <div className="relative text-center">
+                <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-lg font-bold text-accent">
+                  {s.number}
+                </div>
+                <h3 className="mb-3 text-lg font-semibold">{s.title}</h3>
+                <p className="text-sm leading-relaxed text-muted">
+                  {s.description}
+                </p>
               </div>
-              <h3 className="mb-3 text-lg font-semibold">{s.title}</h3>
-              <p className="text-sm leading-relaxed text-muted">
-                {s.description}
-              </p>
+              {i < steps.length - 1 && (
+                <>
+                  {/* [LANDING-P2] horizontal connector — desktop only */}
+                  <div className="hidden items-center sm:flex" aria-hidden="true">
+                    <div className="w-12 border-t-2 border-dashed border-accent/30" />
+                    <span className="text-accent/40 text-lg -ml-1">&rarr;</span>
+                  </div>
+                  {/* [LANDING-P2] vertical connector — mobile only */}
+                  <div className="flex justify-center py-4 sm:hidden" aria-hidden="true">
+                    <div className="h-8 border-l-2 border-dashed border-accent/30" />
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -242,16 +277,16 @@ function Pricing() {
             Pricing
           </p>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            We&apos;re figuring out pricing
+            Start free, upgrade when you need more
           </h2>
           <p className="mx-auto mt-4 max-w-md text-muted">
-            Your first resume is free. Help us decide what comes next.
+            Your first resume is free. Pro plans from &#8377;299/mo.
           </p>
           <Link
             href="/pricing"
             className="mt-8 inline-block rounded-full bg-cta px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl hover:shadow-cta/30"
           >
-            Share Your Thoughts
+            See Plans
           </Link>
         </div>
       </div>
@@ -260,10 +295,10 @@ function Pricing() {
 }
 
 const stats = [
-  { value: "14", label: "bullets per resume" },
-  { value: "95-100%", label: "line fill rate" },
-  { value: "33", label: "quality rules" },
-  { value: "0", label: "AI words detected" },
+  { value: "14", label: "tailored bullets vs. 8 industry average" },
+  { value: "95-100%", label: "line fill rate (industry: ~70%)" },
+  { value: "33", label: "quality rules enforced per resume" },
+  { value: "0", label: "AI words detected by GPTZero" },
 ];
 
 function SocialProof() {
@@ -326,13 +361,11 @@ function Footer() {
         </div>
         <div className="flex items-center gap-8 text-sm text-muted">
           <Link href="#features" className="transition-colors hover:text-foreground">
-            Sync
+            {/* [BRAND-REMOVED] was "Sync" */}
+            Features
           </Link>
           <Link href="/pricing" className="transition-colors hover:text-foreground">
             Pricing
-          </Link>
-          <Link href="#" className="transition-colors hover:text-foreground">
-            Docs
           </Link>
         </div>
         <p className="text-sm text-muted">
@@ -350,7 +383,23 @@ export default async function Home() {
 
   return (
     <>
-      <Navbar isLoggedIn={isLoggedIn} />
+      <AppNav user={user ?? null} variant="landing" />
+      {/* [PSA5-382.3.1.1] Returning user dashboard banner */}
+      {user && (
+        <div className="fixed top-16 left-0 right-0 z-40 border-b border-accent/20 bg-accent/5 backdrop-blur-sm">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
+            <p className="text-sm text-foreground/80">
+              Welcome back! You have an active account.
+            </p>
+            <Link
+              href="/dashboard"
+              className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+            >
+              Go to Dashboard →
+            </Link>
+          </div>
+        </div>
+      )}
       <Hero />
       <Features />
       <HowItWorks />

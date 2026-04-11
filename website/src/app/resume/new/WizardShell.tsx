@@ -2,14 +2,18 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { AppNav } from "@/components/AppNav";
 import { VerticalStepper } from "@/components/VerticalStepper";
 import { StepJobDetails } from "./steps/StepJobDetails";
-import { StepJDAnalysis } from "./steps/StepJDAnalysis";
-import { StepBrandColors } from "./steps/StepBrandColors";
-import { StepEnrich } from "./steps/StepEnrich";
+// [WIZARD-STREAMLINE] StepJDAnalysis merged into StepJobDetails — import kept for type only
+// [WIZARD-STREAMLINE] import { StepJDAnalysis } from "./steps/StepJDAnalysis";
+// [WIZARD-STREAMLINE] StepBrandColors + StepEnrich merged into StepCustomize
+// import { StepBrandColors } from "./steps/StepBrandColors";
+// import { StepEnrich } from "./steps/StepEnrich";
+import { StepCustomize } from "./steps/StepCustomize";
 import { StepBuild } from "./steps/StepBuild";
 import { StepReview } from "./steps/StepReview";
-import type { JDAnalysisResult } from "./steps/StepJDAnalysis";
+import type { JDAnalysisResult } from "./steps/StepJobDetails";
 
 export interface WizardData {
   jd_text: string;
@@ -36,22 +40,25 @@ interface SubStep {
 }
 
 const STEP_LABELS = [
-  "Job Details",
-  "JD Analysis",
-  "Brand Colors",
-  "Enrich",
+  "Job Details",     // [WIZARD-STREAMLINE] includes JD Analysis inline
+  "Customize",       // [WIZARD-STREAMLINE] Brand Colors + Enrich merged
   "Build",
   "Review",
 ];
 
-const STORAGE_KEY = "linkright_wizard_v7";
+// [WIZARD-STREAMLINE] Bumped from v7 → v9 due to step index change (6 steps → 4 steps)
+const STORAGE_KEY = "linkright_wizard_v9";
+
+// [BYOK-REMOVED] Hardcoded provider/model — no user selection
+const model_provider = "groq";
+const model_id = "llama-3.1-8b-instant";
 
 const EMPTY_DATA: WizardData = {
   jd_text: "",
   career_text: "",
-  model_provider: "groq",
-  model_id: "llama-3.1-8b-instant",
-  api_key: "",
+  model_provider,   // [BYOK-REMOVED] hardcoded, was user-selectable
+  model_id,         // [BYOK-REMOVED] hardcoded, was user-selectable
+  api_key: "",      // [BYOK-REMOVED] no longer used, kept for interface compat
   job_id: null,
   qa_answers: [],
   target_company: "",
@@ -70,21 +77,27 @@ function loadSaved(): { step: number; data: WizardData } | null {
   }
 }
 
-export function WizardShell({ userId, jobId }: { userId: string; jobId?: string }) {
+export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jobId?: string; retryJdText?: string }) { // [PSA5-ayd.2.1.3]
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
-  // If jobId param present, always go straight to Review (step 5) — skip Build re-render
+  // [WIZARD-STREAMLINE] 4 steps: JobDetails=0, Customize=1, Build=2, Review=3
+  // If jobId param present, go straight to Review (step 3)
   // If saved job_id and was on Build/Review, resume there
   const initialStep = jobId
-    ? 5
+    ? 3
     : saved?.data?.job_id
-      ? saved.step >= 4
+      ? saved.step >= 2
         ? saved.step
-        : 4
+        : 2
       : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
-  const [data, setData] = useState<WizardData>(saved?.data ?? { ...EMPTY_DATA });
+  // [PSA5-ayd.2.1.3] Pre-fill jd_text from retry_jd query param if provided
+  const initialData: WizardData = saved?.data ?? { ...EMPTY_DATA };
+  if (retryJdText && !jobId) {
+    initialData.jd_text = retryJdText;
+  }
+  const [data, setData] = useState<WizardData>(initialData);
   const [retryKey, setRetryKey] = useState(0);
   const [buildSubSteps, setBuildSubSteps] = useState<SubStep[]>([]);
 
@@ -92,9 +105,10 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
   useEffect(() => {
     if (!jobId) return;
     // Already loaded this job in session — just jump to review
+    // [WIZARD-STREAMLINE] Review is now step 3 (4 steps total)
     const current = loadSaved();
     if (current?.data?.job_id === jobId) {
-      setStep(5);
+      setStep(3);
       return;
     }
     async function restoreJob() {
@@ -110,12 +124,12 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
         model_id: job.model_id || prev.model_id,
         target_company: job.target_company || "",
       }));
-      setStep(5);
+      setStep(3);
     }
     restoreJob();
   }, [jobId]);
 
-  // Load settings from user_settings (career_text, model) + api_key from user_api_keys
+  // Load settings from user_settings (career_text only — model is hardcoded now)
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -123,6 +137,8 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
         if (!resp.ok) return;
         const settings = await resp.json();
 
+        // [BYOK-REMOVED] API key fetching from user_api_keys disabled — server manages keys
+        /* [BYOK-REMOVED]
         const provider = settings.model_provider || "groq";
 
         // Fetch primary key from user_api_keys for this provider
@@ -137,13 +153,15 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
         } catch {
           // Keys endpoint not available — fall back to settings
         }
+        */
 
         setData((prev) => ({
           ...prev,
           career_text: prev.career_text || settings.career_text || "",
-          model_provider: prev.model_provider || provider,
-          model_id: prev.model_id || settings.model_id || "llama-3.1-8b-instant",
-          api_key: prev.api_key || primaryKeyId || settings.api_key || "",
+          // [BYOK-REMOVED] model_provider and model_id no longer loaded from settings — hardcoded
+          // model_provider: prev.model_provider || provider,
+          // model_id: prev.model_id || settings.model_id || "llama-3.1-8b-instant",
+          // api_key: prev.api_key || primaryKeyId || settings.api_key || "",
         }));
       } catch {
         // Settings not available yet — user will configure inline
@@ -185,34 +203,42 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
   };
 
   // Build step definitions for VerticalStepper
+  // [WIZARD-STREAMLINE] Build is step 2 in 4-step wizard
   const stepDefs = STEP_LABELS.map((label, i) => ({
     label,
-    subSteps: i === 4 ? buildSubSteps : undefined,
+    subSteps: i === 2 ? buildSubSteps : undefined,
   }));
 
-  // Review step gets full-width layout (no max-w-3xl)
-  const isReview = step === 5;
+  // [WIZARD-STREAMLINE] Review is step 3 (last step) — gets full-width layout
+  const isReview = step === 3;
 
   return (
     <>
       {/* Navbar */}
-      <nav className="border-b border-border bg-surface/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
-          <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-            Link<span className="text-accent">Right</span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="text-sm text-muted transition-colors hover:text-foreground"
-          >
-            &larr; Dashboard
-          </Link>
-        </div>
-      </nav>
+      <AppNav user={null} variant="minimal" />
+      {
+      // [NAV-REDESIGN] <nav className="border-b border-border bg-surface/80 backdrop-blur-xl">
+      // [NAV-REDESIGN]   <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+      // [NAV-REDESIGN]     <Link href="/dashboard" className="text-lg font-bold tracking-tight">
+      // [NAV-REDESIGN]       Link<span className="text-accent">Right</span>
+      // [NAV-REDESIGN]     </Link>
+      // [NAV-REDESIGN]     <Link
+      // [NAV-REDESIGN]       href="/dashboard"
+      // [NAV-REDESIGN]       className="text-sm text-muted transition-colors hover:text-foreground"
+      // [NAV-REDESIGN]     >
+      // [NAV-REDESIGN]       &larr; Dashboard
+      // [NAV-REDESIGN]     </Link>
+      // [NAV-REDESIGN]   </div>
+      // [NAV-REDESIGN] </nav>
+      }
 
       {/* Sidebar + Content layout */}
       <div className="flex flex-col lg:flex-row min-h-[calc(100vh-3.5rem)]">
-        <VerticalStepper steps={stepDefs} currentStep={step} />
+        <VerticalStepper
+          steps={stepDefs}
+          currentStep={step}
+          onStepClick={(i) => { if (i < step) setStep(i); }}
+        />
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
@@ -221,20 +247,10 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
               <StepJobDetails data={data} update={update} next={next} />
             )}
             {step === 1 && (
-              <StepJDAnalysis data={data} update={update} next={next} back={back} />
+              <StepCustomize data={data} update={update} next={next} back={back} />
             )}
+            {/* [WIZARD-STREAMLINE] StepBrandColors + StepEnrich replaced by StepCustomize above */}
             {step === 2 && (
-              <StepBrandColors data={data} update={update} next={next} back={back} />
-            )}
-            {step === 3 && (
-              <StepEnrich
-                data={data}
-                update={update}
-                next={next}
-                back={back}
-              />
-            )}
-            {step === 4 && (
               <StepBuild
                 key={retryKey}
                 data={data}
@@ -245,7 +261,7 @@ export function WizardShell({ userId, jobId }: { userId: string; jobId?: string 
                 onSubSteps={setBuildSubSteps}
               />
             )}
-            {step === 5 && <StepReview data={data} onNewResume={reset} />}
+            {step === 3 && <StepReview data={data} onNewResume={reset} />}
           </div>
         </main>
       </div>

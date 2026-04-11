@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+// [NAV-REDESIGN] import Link from "next/link";
+import { AppNav } from "@/components/AppNav";
 import { ExtractionPromptModal } from "@/components/ExtractionPromptModal";
 
 /* ---------- Types ---------- */
@@ -141,7 +142,7 @@ function ReadinessSection({
   return (
     <div className="rounded-2xl border border-border bg-surface p-5">
       <h2 className="text-base font-semibold text-foreground">Readiness by Section</h2>
-      <p className="mt-1 text-sm text-muted">Percentage of nuggets ready for retrieval per section type</p>
+      <p className="mt-1 text-sm text-muted">Percentage of career highlights ready for retrieval per section type</p>
       <div className="mt-4 space-y-3">
         {entries.map(([section, { total, ready, pct }]) => (
           <div key={section}>
@@ -256,99 +257,185 @@ function FiltersBar({
   );
 }
 
-const IMPORTANCE_COLORS: Record<string, string> = {
-  critical: "bg-red-100 text-red-700",
-  high: "bg-orange-100 text-orange-700",
-  medium: "bg-amber-100 text-amber-700",
-  low: "bg-gray-100 text-gray-600",
-  unset: "bg-gray-100 text-gray-500",
+// [PSA5-8y3.4.2.1] IMPORTANCE_COLORS with word-key map commented out — replaced by P0-P3 IMPORTANCE_MAP
+// const IMPORTANCE_COLORS: Record<string, string> = {
+//   critical: "bg-red-100 text-red-700",
+//   high: "bg-orange-100 text-orange-700",
+//   medium: "bg-amber-100 text-amber-700",
+//   low: "bg-gray-100 text-gray-600",
+//   unset: "bg-gray-100 text-gray-500",
+// };
+
+// [PSA5-8y3.4.2.1] Map P0-P3 DB values to human-readable labels + colors
+const IMPORTANCE_MAP: Record<string, { label: string; color: string }> = {
+  P0: { label: "Essential", color: "bg-red-100 text-red-700" },
+  P1: { label: "Important", color: "bg-orange-100 text-orange-700" },
+  P2: { label: "Useful", color: "bg-amber-100 text-amber-700" },
+  P3: { label: "Minor", color: "bg-gray-100 text-gray-600" },
 };
 
-function NuggetsTable({ nuggets }: { nuggets: NuggetRow[] }) {
+const SECTION_LABEL_MAP: Record<string, string> = {
+  work_experience: "Work Experience",
+  education: "Education",
+  project: "Project",
+  award: "Award",
+  skill: "Skill",
+  unknown: "Uncategorized",
+};
+
+function sectionLabel(raw: string | null): string {
+  if (!raw) return "Uncategorized";
+  return SECTION_LABEL_MAP[raw] || raw;
+}
+
+function NuggetsCards({ nuggets, onDelete }: { nuggets: NuggetRow[]; onDelete: (id: string) => void }) {
   if (nuggets.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted">
-        No nuggets found matching your filters.
+        No career highlights found matching your filters.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-border bg-surface text-xs font-semibold uppercase tracking-wide text-muted">
-          <tr>
-            <th className="px-4 py-3">ID</th>
-            <th className="px-4 py-3">Answer</th>
-            <th className="px-4 py-3">Company</th>
-            <th className="px-4 py-3">Role</th>
-            <th className="px-4 py-3">Date</th>
-            <th className="px-4 py-3">Importance</th>
-            <th className="px-4 py-3">Section</th>
-            <th className="px-4 py-3">Emb</th>
-            <th className="px-4 py-3">Rel</th>
-            <th className="px-4 py-3">Tags</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border bg-background">
-          {nuggets.map((n) => (
-            <tr key={n.id} className="hover:bg-surface-hover transition-colors">
-              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-muted">
-                {n.id.slice(0, 8)}
-              </td>
-              <td
-                className="max-w-xs truncate px-4 py-2.5 text-foreground"
-                title={n.answer || ""}
-              >
-                {(n.answer || "").length > 80
-                  ? (n.answer || "").slice(0, 80) + "..."
-                  : n.answer || "-"}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-foreground">
-                {n.company || <span className="text-muted">-</span>}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-foreground">
-                {n.role || <span className="text-muted">-</span>}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-xs text-muted">
-                {n.event_date || "-"}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5">
-                <span
-                  className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${
-                    IMPORTANCE_COLORS[n.importance || "unset"] || IMPORTANCE_COLORS.unset
-                  }`}
-                >
-                  {n.importance || "unset"}
-                </span>
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5">
-                <span className="inline-block rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                  {n.section_type || "-"}
-                </span>
-              </td>
-              <td className="px-4 py-2.5 text-center">
-                {n.is_embedded ? (
-                  <span className="text-green-600" title="Embedded">
-                    &#10003;
-                  </span>
-                ) : (
-                  <span className="text-muted">-</span>
-                )}
-              </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-xs text-foreground">
-                {n.resume_relevance !== null ? n.resume_relevance.toFixed(2) : "-"}
-              </td>
-              <td className="max-w-[120px] truncate px-4 py-2.5 text-xs text-muted">
-                {n.tags && n.tags.length > 0 ? n.tags.join(", ") : "-"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {nuggets.map((n) => (
+        <div
+          key={n.id}
+          className="relative rounded-xl border border-border bg-surface p-4 hover:border-accent/30 transition-colors"
+        >
+          {/* Edit / Delete buttons */}
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            <button
+              title="Edit"
+              className="rounded-md p-1.5 text-muted hover:bg-accent/10 hover:text-accent transition-colors"
+              onClick={() => {/* placeholder – edit handler */}}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+              </svg>
+            </button>
+            <button
+              title="Delete"
+              className="rounded-md p-1.5 text-muted hover:bg-red-100 hover:text-red-600 transition-colors"
+              onClick={async () => {
+                // [PSA5-z0c.2.1.2] delete handler with confirm dialog
+                if (!window.confirm("Delete this highlight? This cannot be undone.")) return;
+                try {
+                  const res = await fetch(`/api/nuggets/${n.id}`, { method: "DELETE" });
+                  if (res.ok) {
+                    onDelete(n.id);
+                  }
+                } catch {
+                  // silently fail for now
+                }
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Answer text (truncated) */}
+          <p
+            className="pr-16 text-sm text-foreground leading-relaxed line-clamp-3"
+            title={n.answer || ""}
+          >
+            {n.answer || "No answer text"}
+          </p>
+
+          {/* Metadata row */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {/* Company badge */}
+            {n.company && (
+              <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+                {n.company}
+              </span>
+            )}
+
+            {/* Role */}
+            {n.role && (
+              <span className="text-xs text-muted">{n.role}</span>
+            )}
+          </div>
+
+          {/* Bottom row: section type + importance */}
+          <div className="mt-3 flex items-center justify-between">
+            <span className="inline-block rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+              {sectionLabel(n.section_type)}
+            </span>
+
+            <span
+              className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${
+                IMPORTANCE_MAP[n.importance || ""]?.color || "bg-gray-100 text-gray-500"
+              }`}
+            >
+              {IMPORTANCE_MAP[n.importance || ""]?.label || n.importance || "—"}
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
+
+// [CARD-REDESIGN] Old table component replaced by NuggetsCards above
+// [CARD-REDESIGN] function NuggetsTable({ nuggets }: { nuggets: NuggetRow[] }) {
+// [CARD-REDESIGN]   if (nuggets.length === 0) {
+// [CARD-REDESIGN]     return (
+// [CARD-REDESIGN]       <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted">
+// [CARD-REDESIGN]         No career highlights found matching your filters.
+// [CARD-REDESIGN]       </div>
+// [CARD-REDESIGN]     );
+// [CARD-REDESIGN]   }
+// [CARD-REDESIGN]   return (
+// [CARD-REDESIGN]     <div className="overflow-x-auto rounded-2xl border border-border">
+// [CARD-REDESIGN]       <table className="w-full text-left text-sm">
+// [CARD-REDESIGN]         <thead className="border-b border-border bg-surface text-xs font-semibold uppercase tracking-wide text-muted">
+// [CARD-REDESIGN]           <tr>
+// [CARD-REDESIGN]             <th className="px-4 py-3">ID</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Answer</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Company</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Role</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Date</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Importance</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Section</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Emb</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Rel</th>
+// [CARD-REDESIGN]             <th className="px-4 py-3">Tags</th>
+// [CARD-REDESIGN]           </tr>
+// [CARD-REDESIGN]         </thead>
+// [CARD-REDESIGN]         <tbody className="divide-y divide-border bg-background">
+// [CARD-REDESIGN]           {nuggets.map((n) => (
+// [CARD-REDESIGN]             <tr key={n.id} className="hover:bg-surface-hover transition-colors">
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-muted">{n.id.slice(0, 8)}</td>
+// [CARD-REDESIGN]               <td className="max-w-xs truncate px-4 py-2.5 text-foreground" title={n.answer || ""}>
+// [CARD-REDESIGN]                 {(n.answer || "").length > 80 ? (n.answer || "").slice(0, 80) + "..." : n.answer || "-"}
+// [CARD-REDESIGN]               </td>
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5 text-foreground">{n.company || "-"}</td>
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5 text-foreground">{n.role || "-"}</td>
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5 text-xs text-muted">{n.event_date || "-"}</td>
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5">
+// [CARD-REDESIGN]                 <span className={`inline-block rounded-md px-2 py-0.5 text-xs font-medium ${IMPORTANCE_COLORS[n.importance || "unset"] || IMPORTANCE_COLORS.unset}`}>
+// [CARD-REDESIGN]                   {n.importance || "unset"}
+// [CARD-REDESIGN]                 </span>
+// [CARD-REDESIGN]               </td>
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5">
+// [CARD-REDESIGN]                 <span className="inline-block rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">{n.section_type || "-"}</span>
+// [CARD-REDESIGN]               </td>
+// [CARD-REDESIGN]               <td className="px-4 py-2.5 text-center">
+// [CARD-REDESIGN]                 {n.is_embedded ? <span className="text-green-600" title="Embedded">&#10003;</span> : <span className="text-muted">-</span>}
+// [CARD-REDESIGN]               </td>
+// [CARD-REDESIGN]               <td className="whitespace-nowrap px-4 py-2.5 text-xs text-foreground">{n.resume_relevance !== null ? n.resume_relevance.toFixed(2) : "-"}</td>
+// [CARD-REDESIGN]               <td className="max-w-[120px] truncate px-4 py-2.5 text-xs text-muted">{n.tags && n.tags.length > 0 ? n.tags.join(", ") : "-"}</td>
+// [CARD-REDESIGN]             </tr>
+// [CARD-REDESIGN]           ))}
+// [CARD-REDESIGN]         </tbody>
+// [CARD-REDESIGN]       </table>
+// [CARD-REDESIGN]     </div>
+// [CARD-REDESIGN]   );
+// [CARD-REDESIGN] }
 
 function Pagination({
   page,
@@ -366,7 +453,7 @@ function Pagination({
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted">
-        {total} nugget{total !== 1 ? "s" : ""} total
+        {total} career highlight{total !== 1 ? "s" : ""} total
       </span>
       <div className="flex items-center gap-3">
         <button
@@ -393,7 +480,7 @@ function Pagination({
 
 /* ---------- Main Component ---------- */
 
-export default function NuggetsDashboard() {
+export default function NuggetsDashboard({ user }: { user?: import("@supabase/supabase-js").User | null }) {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [nuggets, setNuggets] = useState<NuggetRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -408,6 +495,7 @@ export default function NuggetsDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPersonal, setShowPersonal] = useState(false); // [PSA5-z0c.1.1.1] personal highlights toggle
 
   // Fetch analytics on mount
   useEffect(() => {
@@ -423,13 +511,15 @@ export default function NuggetsDashboard() {
       .catch(() => setError("Failed to load analytics"));
   }, []);
 
-  // Fetch nuggets on page/filter change
+  // Fetch nuggets on page/filter/showPersonal change
   useEffect(() => {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page), limit: "50" });
     Object.entries(filters).forEach(([k, v]) => {
       if (v) params.set(k, v);
     });
+    // [PSA5-z0c.1.1.3] server-side filter: exclude primary_layer B unless showPersonal is on
+    if (!showPersonal) params.set("primary_layer", "A");
     fetch(`/api/nuggets/list?${params}`)
       .then((r) => r.json())
       .then((data) => {
@@ -438,7 +528,7 @@ export default function NuggetsDashboard() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [page, filters]);
+  }, [page, filters, showPersonal]);
 
   // Reset page when filters change
   const handleFiltersChange = (f: Filters) => {
@@ -465,46 +555,50 @@ export default function NuggetsDashboard() {
   return (
     <div className="min-h-screen">
       {/* Navbar */}
-      <nav className="flex items-center justify-between border-b border-border px-6 py-4">
-        <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-          Link<span className="text-accent">Right</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="text-sm text-muted transition-colors hover:text-foreground"
-          >
-            &larr; Dashboard
-          </Link>
-          <Link
-            href="/dashboard/settings"
-            className="text-sm text-muted transition-colors hover:text-foreground"
-          >
-            Settings
-          </Link>
-        </div>
-      </nav>
+      {
+        // [NAV-REDESIGN] <nav className="flex items-center justify-between border-b border-border px-6 py-4">
+        // [NAV-REDESIGN]   <Link href="/dashboard" className="text-lg font-bold tracking-tight">
+        // [NAV-REDESIGN]     Link<span className="text-accent">Right</span>
+        // [NAV-REDESIGN]   </Link>
+        // [NAV-REDESIGN]   <div className="flex items-center gap-4">
+        // [NAV-REDESIGN]     <Link
+        // [NAV-REDESIGN]       href="/dashboard"
+        // [NAV-REDESIGN]       className="text-sm text-muted transition-colors hover:text-foreground"
+        // [NAV-REDESIGN]     >
+        // [NAV-REDESIGN]       &larr; Dashboard
+        // [NAV-REDESIGN]     </Link>
+        // [NAV-REDESIGN]     [BYOK-REMOVED] Settings link removed
+        // [NAV-REDESIGN]     <Link
+        // [NAV-REDESIGN]       href="/dashboard/settings"
+        // [NAV-REDESIGN]       className="text-sm text-muted transition-colors hover:text-foreground"
+        // [NAV-REDESIGN]     >
+        // [NAV-REDESIGN]       Settings
+        // [NAV-REDESIGN]     </Link>
+        // [NAV-REDESIGN]   </div>
+        // [NAV-REDESIGN] </nav>
+      }
+      <AppNav user={user ?? null} />
 
       <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
         {/* Title + Import button */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Career Nuggets</h1>
+            <h1 className="text-2xl font-bold text-foreground">Career Highlights</h1>
             <p className="mt-1 text-sm text-muted">
-              Analytics and management for your nugget library
+              Analytics and management for your career highlights library
             </p>
           </div>
           <button
             onClick={() => setShowImportModal(true)}
             className="rounded-full bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
-            + Import Nuggets
+            + Import Career Highlights
           </button>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <SummaryCard label="Total Nuggets" value={analytics.summary.total} />
+          <SummaryCard label="Total Career Highlights" value={analytics.summary.total} />
           <SummaryCard label="Embedded" value={`${analytics.summary.pct_embedded}%`} />
           <SummaryCard label="Retrieval Ready" value={analytics.summary.retrieval_ready} />
           <SummaryCard
@@ -529,14 +623,33 @@ export default function NuggetsDashboard() {
         {/* Filters */}
         <FiltersBar filters={filters} onChange={handleFiltersChange} analytics={analytics} />
 
-        {/* Nuggets Table */}
+        {/* [PSA5-z0c.1.1.2] Toggle for personal highlights */}
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={showPersonal}
+              onChange={(e) => setShowPersonal(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 rounded-full bg-border peer-checked:bg-accent transition-colors" />
+            <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </div>
+          <span className="text-xs text-muted">Show personal highlights</span>
+        </label>
+
+        {/* Career Highlights Cards */}
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
           </div>
         ) : (
-          <NuggetsTable nuggets={nuggets} />
+          <NuggetsCards
+            nuggets={nuggets}
+            onDelete={(id) => setNuggets((prev: NuggetRow[]) => prev.filter((item) => item.id !== id))}
+          />
         )}
+        {/* [CARD-REDESIGN] was: <NuggetsTable nuggets={nuggets} /> */}
 
         {/* Pagination */}
         <Pagination page={page} total={total} limit={50} onChange={setPage} />
