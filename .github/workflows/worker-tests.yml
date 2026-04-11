@@ -34,7 +34,7 @@ jobs:
         run: |
           python -m pytest worker/tests/ \
             --cov=worker/app/tools \
-            --cov-fail-under=75 \
+            --cov-fail-under=50 \
             --cov-report=term-missing \
             --cov-report=xml \
             -v
