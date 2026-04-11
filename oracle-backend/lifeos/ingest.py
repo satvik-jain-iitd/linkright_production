@@ -1,4 +1,5 @@
 """Atom ingestion — embed, conflict check, MERGE to Neo4j, mirror to Supabase."""
+from __future__ import annotations
 
 import hashlib
 import os

@@ -6,6 +6,7 @@ All endpoints require:
 Run:
   uvicorn main:app --host 0.0.0.0 --port 8000
 """
+from __future__ import annotations
 
 import os
 import logging
