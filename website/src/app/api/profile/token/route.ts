@@ -55,6 +55,17 @@ export async function POST() {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
+  // Fire-and-forget: warm up Oracle (Neo4j + nomic-embed-text cold start) in background.
+  // By the time user finishes the interview (~30-60 min), Oracle will be fully warm.
+  const oracleUrl = process.env.ORACLE_BACKEND_URL;
+  const oracleSecret = process.env.ORACLE_BACKEND_SECRET;
+  if (oracleUrl && oracleSecret) {
+    fetch(`${oracleUrl}/lifeos/warmup`, {
+      headers: { Authorization: `Bearer ${oracleSecret}` },
+      signal: AbortSignal.timeout(60_000),
+    }).then(undefined, (e) => console.warn("[token] Oracle warmup failed:", e?.message));
+  }
+
   return Response.json({
     token: data.token,
     expires_at: data.expires_at,
