@@ -82,8 +82,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "token, user_id, and atom are required" }, { status: 400 });
   }
 
-  // Rate limit: max 30 ingestions per hour per user (generous for a full session)
-  if (!rateLimit(`gpt-ingest:${user_id}`, 30, 3600_000)) {
+  // Rate limit: Custom GPT path = 30/hr (abuse prevention); LR- token path = 200/hr (user's own data)
+  const isLRToken = token.startsWith("LR-");
+  const rateKey = `gpt-ingest:${user_id}`;
+  const rateMax = isLRToken ? 200 : 30;
+  if (!rateLimit(rateKey, rateMax, 3600_000)) {
     return rateLimitResponse("atom ingestion");
   }
 
@@ -98,11 +101,24 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(30000), // nomic-embed-text cold start (15s) + Neo4j write (5s) + buffer
     });
 
-    const data = await res.json();
+    // Read as text first — Oracle may return non-JSON on errors
+    const rawText = await res.text();
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      // Oracle returned non-JSON (e.g. plain "Internal Server Error" from uvicorn crash)
+      console.error(`[ingest-atom] Oracle ${res.status} non-JSON response:`, rawText.slice(0, 500));
+      return Response.json(
+        { ok: false, error: `Oracle error ${res.status}: ${rawText.slice(0, 300)}` },
+        { status: 502 }
+      );
+    }
 
     if (!res.ok) {
+      console.error(`[ingest-atom] Oracle ${res.status}:`, data);
       return Response.json(
-        { ok: false, error: data.detail ?? "Oracle ingest failed" },
+        { ok: false, error: data.detail ?? data.error ?? "Oracle ingest failed" },
         { status: res.status }
       );
     }
@@ -115,8 +131,10 @@ export async function POST(request: Request) {
     // Include user_id in response so Claude Code skill can use it for session-close
     return Response.json({ ...data, user_id });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error(`[ingest-atom] fetch error:`, msg);
     return Response.json(
-      { ok: false, error: `Service unavailable: ${err instanceof Error ? err.message : "unknown"}` },
+      { ok: false, error: `Oracle unreachable: ${msg}` },
       { status: 503 }
     );
   }
