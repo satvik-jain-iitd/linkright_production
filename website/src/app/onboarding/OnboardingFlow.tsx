@@ -999,7 +999,7 @@ interface GraphData {
   };
 }
 
-function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
+function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; onBack?: () => void }) {
   const router = useRouter();
   const [stats, setStats] = useState<SummaryStats | null>(initialStats ?? null);
   const [loading, setLoading] = useState(!initialStats);
@@ -1052,6 +1052,14 @@ function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
           <p className="mt-1 text-sm text-muted">
             {graphData.stats.achievements} achievements · {graphData.stats.experiences} companies · {graphData.stats.skills} skills
           </p>
+        )}
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="mt-3 text-xs text-muted hover:text-foreground underline underline-offset-2 transition-colors"
+          >
+            ← Add more achievements
+          </button>
         )}
       </div>
 
@@ -1247,7 +1255,7 @@ export function OnboardingFlow() {
         <StepLifeOS onDone={() => setStep(4)} />
       )}
 
-      {step === 4 && <StepSummary />}
+      {step === 4 && <StepSummary onBack={() => setStep(3)} />}
     </div>
   );
 }
