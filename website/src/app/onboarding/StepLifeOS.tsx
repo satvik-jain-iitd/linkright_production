@@ -214,24 +214,38 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
           Step 3 — Status
         </p>
         {sessionComplete ? (
-          <div className="flex items-center gap-2 text-success">
-            <span className="text-lg">✓</span>
-            <span className="font-semibold">
-              {atomsSaved} career highlight{atomsSaved !== 1 ? "s" : ""} saved
-            </span>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-muted">
-              <span className="animate-spin text-sm">⟳</span>
-              <span>
-                {atomsSaved > 0
-                  ? `${atomsSaved} career highlight${atomsSaved !== 1 ? "s" : ""} saved so far…`
-                  : "Waiting for your Claude Code session to complete…"}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-success">
+              <span className="text-lg">✓</span>
+              <span className="font-semibold">
+                {atomsSaved} career highlight{atomsSaved !== 1 ? "s" : ""} saved to your graph
               </span>
             </div>
-            {atomsSaved === 0 && (
-              <p className="text-xs text-muted pl-5">
+            <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
+              <div className="h-full bg-success transition-all duration-700" style={{ width: "100%" }} />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted">
+                {atomsSaved > 0
+                  ? `${atomsSaved} career highlight${atomsSaved !== 1 ? "s" : ""} saved`
+                  : "Waiting for your Claude Code session…"}
+              </span>
+              {atomsSaved > 0 && (
+                <span className="text-xs text-muted animate-pulse">saving…</span>
+              )}
+            </div>
+            {atomsSaved > 0 ? (
+              <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 transition-all duration-700 rounded-full"
+                  style={{ width: `${Math.min(atomsSaved * 3, 90)}%` }}
+                />
+              </div>
+            ) : (
+              <p className="text-xs text-muted">
                 This updates automatically once you run the skill and answer the questions.
               </p>
             )}

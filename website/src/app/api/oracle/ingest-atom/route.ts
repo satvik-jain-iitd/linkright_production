@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${ORACLE_SECRET}`,
       },
       body: JSON.stringify({ token, user_id, atom }),
-      signal: AbortSignal.timeout(15000), // embed + Neo4j write can take a few seconds
+      signal: AbortSignal.timeout(30000), // nomic-embed-text cold start (15s) + Neo4j write (5s) + buffer
     });
 
     const data = await res.json();

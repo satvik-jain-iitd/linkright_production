@@ -6,6 +6,7 @@ import { ChatMessage, type Message } from "./ChatMessage";
 import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
 import { StepLifeOS } from "./StepLifeOS";
 import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
+import { CareerGraph } from "@/components/CareerGraph";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -987,10 +988,23 @@ interface SummaryStats {
   label?: "excellent" | "good" | "fair" | "insufficient";
 }
 
+interface GraphData {
+  elements: { data: Record<string, unknown> }[];
+  stats: {
+    achievements: number;
+    experiences: number;
+    skills: number;
+    companies: { name: string; role: string; count: number }[];
+    topSkills: { name: string; count: number }[];
+  };
+}
+
 function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
   const router = useRouter();
   const [stats, setStats] = useState<SummaryStats | null>(initialStats ?? null);
   const [loading, setLoading] = useState(!initialStats);
+  const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [graphLoading, setGraphLoading] = useState(true);
 
   useEffect(() => {
     if (initialStats) return;
@@ -1012,58 +1026,85 @@ function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
       .finally(() => setLoading(false));
   }, [initialStats]);
 
+  useEffect(() => {
+    fetch("/api/profile/career-graph")
+      .then((r) => r.json())
+      .then((data) => setGraphData(data))
+      .catch(() => setGraphData(null))
+      .finally(() => setGraphLoading(false));
+  }, []);
+
   const score = stats?.confidence ?? 0;
+  const hasGraph = graphData && graphData.elements.length > 0;
 
   return (
-    <div className="space-y-8 text-center">
-      <div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
           <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-foreground">
-          You&apos;re ready!
-        </h2>
-        <p className="mt-2 text-muted">
-          Your career profile is set up. Here&apos;s a summary.
-        </p>
+        <h2 className="text-2xl font-bold text-foreground">You&apos;re ready!</h2>
+        {hasGraph && (
+          <p className="mt-1 text-sm text-muted">
+            {graphData.stats.achievements} achievements · {graphData.stats.experiences} companies · {graphData.stats.skills} skills
+          </p>
+        )}
       </div>
 
-      {loading ? (
-        <div className="h-12 flex items-center justify-center">
+      {/* Career Knowledge Graph */}
+      {graphLoading ? (
+        <div className="h-[420px] rounded-xl border border-border bg-surface flex items-center justify-center">
           <span className="flex gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "0ms" }} />
             <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "150ms" }} />
             <span className="w-1.5 h-1.5 rounded-full bg-muted animate-bounce" style={{ animationDelay: "300ms" }} />
           </span>
         </div>
-      ) : stats ? (
-        <div className="space-y-6 text-left">
-          {/* Confidence bar */}
+      ) : hasGraph ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted uppercase tracking-wide">Your Career Knowledge Graph</p>
+          <CareerGraph elements={graphData.elements as Parameters<typeof CareerGraph>[0]["elements"]} />
+        </div>
+      ) : null}
+
+      {/* Stats row */}
+      {!loading && stats && (
+        <div className="space-y-4 text-left">
           <ConfidenceProgressBar
             score={score}
             label={stats.label}
             nuggetCount={stats.nugget_count}
           />
 
-          {/* Summary stats */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-xl border border-border bg-surface p-4 text-center">
-              <p className="text-2xl font-bold text-primary-600">
-                {stats.nugget_count}
-              </p>
-              <p className="text-xs text-muted mt-1">nuggets captured</p>
+          {/* Company + skills breakdown side by side */}
+          {hasGraph && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                <p className="text-[10px] font-medium text-muted uppercase tracking-wide">By Company</p>
+                {graphData.stats.companies.slice(0, 5).map((c) => (
+                  <div key={`${c.name}:${c.role}`} className="flex items-center justify-between">
+                    <span className="text-xs text-foreground truncate max-w-[120px]">{c.name}</span>
+                    <span className="text-xs text-muted shrink-0">{c.count}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                <p className="text-[10px] font-medium text-muted uppercase tracking-wide">Top Skills</p>
+                {graphData.stats.topSkills.slice(0, 5).map((s, i) => (
+                  <div key={s.name} className="flex items-center justify-between">
+                    <span className="text-xs text-foreground truncate max-w-[120px]">
+                      {i + 1}. {s.name}
+                    </span>
+                    <span className="text-xs text-muted shrink-0">{s.count}×</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="rounded-xl border border-border bg-surface p-4 text-center">
-              <p className="text-2xl font-bold text-primary-600 capitalize">
-                {stats.label ?? "—"}
-              </p>
-              <p className="text-xs text-muted mt-1">profile quality</p>
-            </div>
-          </div>
+          )}
 
-          {/* Warning if low score */}
           {score < 60 && (
             <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
               <p className="text-sm text-yellow-800">
@@ -1072,8 +1113,9 @@ function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
             </div>
           )}
         </div>
-      ) : null}
+      )}
 
+      {/* CTA buttons */}
       <div className="space-y-3">
         <button
           onClick={() => router.push("/resume/new")}
