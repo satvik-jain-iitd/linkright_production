@@ -1011,11 +1011,12 @@ function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
     fetch("/api/onboarding/status")
       .then((r) => r.json())
       .then((data) => {
-        const score = Math.round((data.confidence ?? 0) * 100);
+        // data.confidence is an object { score, label, nugget_count } — not a number
+        const score: number = data.confidence?.score ?? 0;
         const label: SummaryStats["label"] =
           score >= 90 ? "excellent" : score >= 75 ? "good" : score >= 60 ? "fair" : "insufficient";
         setStats({
-          nugget_count: data.nugget_count ?? 0,
+          nugget_count: data.confidence?.nugget_count ?? 0,
           confidence: score,
           label,
         });
