@@ -345,12 +345,12 @@ function StepCareerBasics({
               onClick={() => fileInputRef.current?.click()}
               className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
             >
-              Upload .txt file
+              Upload PDF / DOCX / TXT
             </button>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".txt,.text,text/plain"
+              accept=".pdf,.docx,.doc,.txt,.text,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -1169,12 +1169,53 @@ function ProgressBar({ step }: { step: Step }) {
 
 // ── Main OnboardingFlow ───────────────────────────────────────────────────
 
+const ROLES_KEY = "lr_selected_roles";
+
 export function OnboardingFlow() {
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step | null>(null); // null = loading
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  // [BYOK-REMOVED] const [modelProvider, setModelProvider] = useState("groq");
-  // [BYOK-REMOVED] const [modelId, setModelId] = useState(PROVIDER_MODEL_MAP.groq);
-  // [BYOK-REMOVED] const [apiKey, setApiKey] = useState("");
+
+  // On mount: restore target roles from localStorage + detect step from Supabase
+  useEffect(() => {
+    const saved = localStorage.getItem(ROLES_KEY);
+    if (saved) {
+      try { setSelectedRoles(JSON.parse(saved)); } catch { /* ignore */ }
+    }
+
+    fetch("/api/onboarding/status")
+      .then((r) => r.json())
+      .then((data: {
+        has_career_data?: boolean;
+        session_started?: boolean;
+        session_complete?: boolean;
+      }) => {
+        if (data.session_complete || data.session_started) {
+          // Interview done or in progress → jump to summary or skill step
+          setStep(data.session_complete ? 4 : 3);
+        } else if (data.has_career_data) {
+          // Career basics saved → skip to interview step
+          setStep(3);
+        } else {
+          // Fresh user: start from step 1 (roles) or step 2 if roles already picked
+          const hasSavedRoles = !!saved && JSON.parse(saved).length > 0;
+          setStep(hasSavedRoles ? 2 : 1);
+        }
+      })
+      .catch(() => setStep(1)); // fallback: show step 1
+  }, []);
+
+  const handleRolesChange = (roles: string[]) => {
+    setSelectedRoles(roles);
+    localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
+  };
+
+  if (step === null) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="h-6 w-6 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1183,7 +1224,7 @@ export function OnboardingFlow() {
       {step === 1 && (
         <StepWelcome
           selectedRoles={selectedRoles}
-          onRolesChange={setSelectedRoles}
+          onRolesChange={handleRolesChange}
           onNext={() => setStep(2)}
         />
       )}

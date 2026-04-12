@@ -25,6 +25,8 @@ Rules:
 - If a field is not found, use empty string or empty array
 - Return valid JSON only, no code blocks`;
 
+const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -45,23 +47,57 @@ export async function POST(request: Request) {
     const text = formData.get("text") as string | null;
 
     if (file) {
-      // For text files, read directly. For PDF, we need text extraction.
-      // We'll try to read as text — browser-uploaded PDFs are binary,
-      // so we rely on text files or pre-extracted text.
-      const fileText = await file.text();
-      // Basic heuristic: if it contains mostly printable chars, use it
-      const printableRatio =
-        (fileText.match(/[\x20-\x7E\n\r\t]/g) ?? []).length / fileText.length;
-      if (printableRatio > 0.7) {
-        resumeText = fileText;
-      } else {
+      if (file.size > MAX_SIZE_BYTES) {
         return Response.json(
-          {
-            error:
-              "PDF binary files cannot be parsed directly. Please copy-paste your resume text instead.",
-          },
+          { error: "File too large (max 10 MB). Please upload a smaller file." },
           { status: 400 }
         );
+      }
+
+      const name = file.name.toLowerCase();
+      const buffer = Buffer.from(await file.arrayBuffer());
+
+      if (name.endsWith(".pdf")) {
+        // PDF extraction
+        try {
+          // pdf-parse is a CJS module — import whole module, use as function
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pdfParse = (await import("pdf-parse")) as any;
+          const fn = pdfParse.default ?? pdfParse;
+          const parsed = await fn(buffer);
+          resumeText = parsed.text;
+        } catch (e) {
+          console.error("pdf-parse error:", e);
+          return Response.json(
+            { error: "Could not read this PDF. Try copy-pasting your resume text instead." },
+            { status: 422 }
+          );
+        }
+      } else if (name.endsWith(".docx") || name.endsWith(".doc")) {
+        // DOCX/DOC extraction
+        try {
+          const mammoth = await import("mammoth");
+          const result = await mammoth.extractRawText({ buffer });
+          resumeText = result.value;
+        } catch (e) {
+          console.error("mammoth error:", e);
+          return Response.json(
+            { error: "Could not read this Word document. Try copy-pasting your resume text instead." },
+            { status: 422 }
+          );
+        }
+      } else {
+        // Plain text (.txt or unknown) — read directly
+        const fileText = buffer.toString("utf-8");
+        const printableRatio =
+          (fileText.match(/[\x20-\x7E\n\r\t]/g) ?? []).length / Math.max(fileText.length, 1);
+        if (printableRatio < 0.7) {
+          return Response.json(
+            { error: "File format not supported. Please upload a PDF, Word doc (.docx), or .txt file." },
+            { status: 400 }
+          );
+        }
+        resumeText = fileText;
       }
     } else if (text) {
       resumeText = text;
@@ -75,7 +111,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "No resume text provided" }, { status: 400 });
   }
 
-  // Truncate to avoid token limits (~4000 chars ≈ ~1000 tokens)
+  // Truncate to avoid token limits (~8000 chars ≈ ~2000 tokens)
   const truncated = resumeText.slice(0, 8000);
 
   try {
