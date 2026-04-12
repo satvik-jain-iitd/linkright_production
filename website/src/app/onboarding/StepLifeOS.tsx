@@ -165,22 +165,36 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
         <p className="text-xs text-muted">Expires in 24 hours</p>
       </div>
 
-      {/* Box 2: Open ChatGPT */}
-      <div className="rounded-lg border border-border bg-surface p-5 space-y-3">
+      {/* Box 2: Download Claude skill */}
+      <div className="rounded-lg border border-border bg-surface p-5 space-y-4">
         <p className="text-sm font-medium text-muted uppercase tracking-wide">
-          Step 2 — Open the career coach
+          Step 2 — Run the career coach in Claude Code
         </p>
         <a
-          href="https://chatgpt.com/g/g-69b4af08234881918450e5278b9ba931-linkright"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/interview-coach-skill.zip"
+          download="interview-coach-skill.zip"
           className="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
         >
-          Open Career Coach →
+          Download Interview Coach Skill ↓
         </a>
-        <p className="text-xs text-muted">
-          Paste your session code when asked. Answer ~10 questions about your experience.
-        </p>
+        <ol className="space-y-1.5 text-sm text-muted list-none">
+          <li className="flex gap-2">
+            <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">1</span>
+            <span>Open Claude Code (claude.ai/code or the desktop app)</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">2</span>
+            <span>Drag and drop the downloaded zip into the Claude Code window to install the skill</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">3</span>
+            <span>Type <code className="font-mono text-xs bg-surface-alt border border-border rounded px-1 py-0.5">/interview-coach</code> and press Enter</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">4</span>
+            <span>Enter your session code above when the skill asks for it</span>
+          </li>
+        </ol>
       </div>
 
       {/* Box 3: Status */}
@@ -196,13 +210,20 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-muted">
-            <span className="animate-spin text-sm">⟳</span>
-            <span>
-              {atomsSaved > 0
-                ? `${atomsSaved} saved so far…`
-                : "Waiting for session to start…"}
-            </span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-muted">
+              <span className="animate-spin text-sm">⟳</span>
+              <span>
+                {atomsSaved > 0
+                  ? `${atomsSaved} career highlight${atomsSaved !== 1 ? "s" : ""} saved so far…`
+                  : "Waiting for your Claude Code session to complete…"}
+              </span>
+            </div>
+            {atomsSaved === 0 && (
+              <p className="text-xs text-muted pl-5">
+                This updates automatically once you run the skill and answer the questions.
+              </p>
+            )}
           </div>
         )}
       </div>

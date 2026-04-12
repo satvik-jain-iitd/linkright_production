@@ -39,6 +39,7 @@ Logos/
 
 # Archives
 *.zip
+!website/public/interview-coach-skill.zip
 
 # Temporary files
 /tmp/
