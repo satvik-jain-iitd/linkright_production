@@ -20,13 +20,15 @@ interface NuggetRow {
   event_date: string | null;
   leadership_signal: string | null;
   answer: string | null;
+  atom_type: string | null;
+  life_domain: string | null;
 }
 
 interface CytoNode {
   data: {
     id: string;
     label: string;
-    type: "achievement" | "experience" | "skill";
+    type: "achievement" | "experience" | "skill" | "decision" | "character";
     size: number;
     // extra metadata for click panel
     company?: string;
@@ -35,6 +37,7 @@ interface CytoNode {
     importance?: string;
     answer?: string;
     count?: number; // for skill: how many achievements use it
+    life_domain?: string;
   };
 }
 
@@ -51,6 +54,8 @@ interface GraphStats {
   achievements: number;
   experiences: number;
   skills: number;
+  decisions: number;
+  characters: number;
   companies: { name: string; role: string; count: number }[];
   topSkills: { name: string; count: number }[];
 }
@@ -67,7 +72,7 @@ export async function GET() {
 
   const { data: nuggets, error } = await supabase
     .from("career_nuggets")
-    .select("id, nugget_text, company, role, tags, importance, event_date, leadership_signal, answer")
+    .select("id, nugget_text, company, role, tags, importance, event_date, leadership_signal, answer, atom_type, life_domain")
     .eq("user_id", user.id)
     .order("event_date", { ascending: false });
 
@@ -76,7 +81,7 @@ export async function GET() {
   }
 
   if (!nuggets || nuggets.length === 0) {
-    return Response.json({ elements: [], stats: { achievements: 0, experiences: 0, skills: 0, companies: [], topSkills: [] } });
+    return Response.json({ elements: [], stats: { achievements: 0, experiences: 0, skills: 0, decisions: 0, characters: 0, companies: [], topSkills: [] } });
   }
 
   const nodes: CytoNode[] = [];
@@ -91,7 +96,46 @@ export async function GET() {
   // Node size by importance
   const importanceSize: Record<string, number> = { P0: 42, P1: 36, P2: 30, P3: 24 };
 
+  let decisionCount = 0;
+  let characterCount = 0;
+
   for (const nugget of nuggets as NuggetRow[]) {
+    const atomType = (nugget.atom_type ?? "achievement") as "achievement" | "decision" | "character";
+
+    // ── Decision node ─────────────────────────────────────────────────────
+    if (atomType === "decision") {
+      decisionCount++;
+      nodes.push({
+        data: {
+          id: nugget.id,
+          label: (nugget.nugget_text ?? "Decision").slice(0, 50),
+          type: "decision",
+          size: 30,
+          date: nugget.event_date ?? undefined,
+          answer: nugget.answer ? nugget.answer.slice(0, 200) : undefined,
+          life_domain: nugget.life_domain ?? undefined,
+        },
+      });
+      continue;
+    }
+
+    // ── Character node ────────────────────────────────────────────────────
+    if (atomType === "character") {
+      characterCount++;
+      nodes.push({
+        data: {
+          id: nugget.id,
+          label: (nugget.nugget_text ?? "Formative Experience").slice(0, 50),
+          type: "character",
+          size: 30,
+          date: nugget.event_date ?? undefined,
+          answer: nugget.answer ? nugget.answer.slice(0, 200) : undefined,
+          life_domain: nugget.life_domain ?? undefined,
+        },
+      });
+      continue;
+    }
+
     // ── Achievement node ──────────────────────────────────────────────────
     const label = (nugget.nugget_text ?? "Achievement").slice(0, 50);
     const size = importanceSize[nugget.importance ?? "P2"] ?? 30;
@@ -191,10 +235,16 @@ export async function GET() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
+  const achievementCount = (nuggets as NuggetRow[]).filter(
+    (n) => !n.atom_type || n.atom_type === "achievement"
+  ).length;
+
   const stats: GraphStats = {
-    achievements: (nuggets as NuggetRow[]).length,
+    achievements: achievementCount,
     experiences: experienceIds.size,
     skills: skillIds.size,
+    decisions: decisionCount,
+    characters: characterCount,
     companies,
     topSkills,
   };

@@ -6,7 +6,7 @@ import type cytoscape from "cytoscape";
 export interface CytoElementData {
   id: string;
   label?: string;
-  type?: "achievement" | "experience" | "skill";
+  type?: "achievement" | "experience" | "skill" | "decision" | "character";
   size?: number;
   source?: string;
   target?: string;
@@ -17,6 +17,7 @@ export interface CytoElementData {
   importance?: string;
   answer?: string;
   count?: number;
+  life_domain?: string;
 }
 
 export interface CytoElement {
@@ -25,7 +26,7 @@ export interface CytoElement {
 
 interface SelectedNode {
   id: string;
-  type: "achievement" | "experience" | "skill";
+  type: "achievement" | "experience" | "skill" | "decision" | "character";
   label: string;
   company?: string;
   role?: string;
@@ -33,6 +34,7 @@ interface SelectedNode {
   importance?: string;
   answer?: string;
   count?: number;
+  life_domain?: string;
 }
 
 interface CareerGraphProps {
@@ -43,6 +45,8 @@ const NODE_COLORS = {
   achievement: "#3B82F6",
   experience: "#8B5CF6",
   skill: "#10B981",
+  decision: "#F59E0B",
+  character: "#F43F5E",
 } as const;
 
 export function CareerGraph({ elements }: CareerGraphProps) {
@@ -138,10 +142,42 @@ export function CareerGraph({ elements }: CareerGraphProps) {
             },
           },
           {
+            selector: 'node[type="decision"]',
+            style: {
+              "background-color": "#F59E0B",
+              label: "data(label)",
+              "font-size": 9,
+              width: "data(size)",
+              height: "data(size)",
+              color: "#ffffff",
+              "text-valign": "center" as const,
+              "text-halign": "center" as const,
+              "text-wrap": "wrap" as const,
+              "text-max-width": "70",
+              shape: "diamond" as const,
+            },
+          },
+          {
+            selector: 'node[type="character"]',
+            style: {
+              "background-color": "#F43F5E",
+              label: "data(label)",
+              "font-size": 9,
+              width: "data(size)",
+              height: "data(size)",
+              color: "#ffffff",
+              "text-valign": "center" as const,
+              "text-halign": "center" as const,
+              "text-wrap": "wrap" as const,
+              "text-max-width": "70",
+              shape: "ellipse" as const,
+            },
+          },
+          {
             selector: "node:selected",
             style: {
               "border-width": 3,
-              "border-color": "#F59E0B",
+              "border-color": "#ffffff",
             },
           },
         ] as unknown as cytoscape.StylesheetJson;
@@ -170,7 +206,7 @@ export function CareerGraph({ elements }: CareerGraphProps) {
 
         cy.on("tap", "node", (evt) => {
           const node = evt.target;
-          const nodeType = node.data("type") as "achievement" | "experience" | "skill" | undefined;
+          const nodeType = node.data("type") as "achievement" | "experience" | "skill" | "decision" | "character" | undefined;
           if (!nodeType) return;
           setSelected({
             id: node.data("id") as string,
@@ -182,6 +218,7 @@ export function CareerGraph({ elements }: CareerGraphProps) {
             importance: node.data("importance") as string | undefined,
             answer: node.data("answer") as string | undefined,
             count: node.data("count") as number | undefined,
+            life_domain: node.data("life_domain") as string | undefined,
           });
         });
 
@@ -211,14 +248,17 @@ export function CareerGraph({ elements }: CareerGraphProps) {
           </div>
         )}
         {/* Legend */}
-        <div className="absolute bottom-3 left-3 flex gap-3 bg-gray-950/80 backdrop-blur-sm rounded-lg px-3 py-1.5">
-          {(["achievement", "experience", "skill"] as const).map((type) => (
+        <div className="absolute bottom-3 left-3 flex flex-wrap gap-2 bg-gray-950/80 backdrop-blur-sm rounded-lg px-3 py-1.5">
+          {(["achievement", "experience", "skill", "decision", "character"] as const).map((type) => (
             <span key={type} className="flex items-center gap-1.5 text-xs text-gray-300">
               <span
-                className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: NODE_COLORS[type] }}
+                className={`inline-block w-2.5 h-2.5 shrink-0 ${type === "experience" ? "rounded-sm" : type === "decision" ? "" : "rounded-full"}`}
+                style={{
+                  backgroundColor: NODE_COLORS[type],
+                  clipPath: type === "decision" ? "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" : undefined,
+                }}
               />
-              {type.charAt(0).toUpperCase() + type.slice(1)}
+              {type === "character" ? "Formative" : type.charAt(0).toUpperCase() + type.slice(1)}
             </span>
           ))}
         </div>
@@ -277,9 +317,15 @@ export function CareerGraph({ elements }: CareerGraphProps) {
               </p>
             </div>
           )}
+          {selected.life_domain && (
+            <div>
+              <p className="text-[10px] text-muted uppercase tracking-wide">Life Domain</p>
+              <p className="text-xs text-foreground capitalize">{selected.life_domain}</p>
+            </div>
+          )}
           {selected.answer && (
             <div>
-              <p className="text-[10px] text-muted uppercase tracking-wide">Result</p>
+              <p className="text-[10px] text-muted uppercase tracking-wide">{selected.type === "decision" ? "Why Chosen" : selected.type === "character" ? "What Changed" : "Result"}</p>
               <p className="text-xs text-muted leading-relaxed">{selected.answer}…</p>
             </div>
           )}

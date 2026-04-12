@@ -131,5 +131,119 @@
     "cross-functional", "leadership", "mentorship", "innovation", "cost-reduction",
     "revenue-growth", "risk-management", "process-improvement", "communication",
     "strategic-thinking", "execution", "crisis-management", "hiring"
-  ]
+  ],
+
+  "life_domain_values": ["career", "education", "relationships", "health", "identity", "community"],
+
+  "decision_schema": {
+    "_meta": {
+      "purpose": "Captures a pivotal choice — what was chosen, what was given up, and why. Use when an answer involves a fork in the road, a tradeoff, or a road not taken.",
+      "atom_type": "decision",
+      "required_fields": ["the_choice", "alternative_not_taken", "why_chosen"]
+    },
+    "atom_type": {
+      "type": "literal",
+      "value": "decision",
+      "description": "Discriminator field — must be exactly 'decision'."
+    },
+    "the_choice": {
+      "type": "string",
+      "required": true,
+      "description": "What was chosen — concrete, one sentence.",
+      "good_example": "Rejected PwC Strategy offer and stayed for IIT PhD",
+      "bad_example": "Decided to not go to PwC"
+    },
+    "alternative_not_taken": {
+      "type": "string",
+      "required": true,
+      "description": "What was given up — the other path.",
+      "good_example": "PwC Strategy consulting role in Delhi, ₹18L CTC"
+    },
+    "why_chosen": {
+      "type": "string",
+      "required": true,
+      "description": "The reasoning — 1-2 sentences. What made this the right call at the time.",
+      "good_example": "Research felt unfinished; wanted depth over early salary. Also IIT reputation felt more aligned with PM path."
+    },
+    "tradeoff": {
+      "type": "string",
+      "required": false,
+      "description": "What was sacrificed or risked.",
+      "good_example": "4 more years of student stipend; delayed financial independence"
+    },
+    "outcome": {
+      "type": "string",
+      "required": false,
+      "description": "How it actually played out — in hindsight.",
+      "good_example": "Led to IIT alumni network, IIT brand on resume, and eventual PM placement"
+    },
+    "timeframe": {
+      "type": "string",
+      "required": false,
+      "description": "When the decision was made. YYYY-MM or year.",
+      "example": "2020-06"
+    },
+    "tags": {
+      "type": "array<string>",
+      "required": false,
+      "description": "2-4 descriptive tags.",
+      "example": ["career-inflection", "risk-taking", "education", "identity"]
+    },
+    "life_domain": {
+      "type": "enum",
+      "values": ["career", "education", "relationships", "health", "identity", "community"],
+      "required": false,
+      "description": "Which life area this decision belongs to."
+    }
+  },
+
+  "character_schema": {
+    "_meta": {
+      "purpose": "Captures a formative experience — something that happened and genuinely changed how you think, operate, or see yourself. Use when an answer is about growth through adversity, identity shifts, or values crystallizing.",
+      "atom_type": "character",
+      "required_fields": ["experience_text", "what_changed"]
+    },
+    "atom_type": {
+      "type": "literal",
+      "value": "character",
+      "description": "Discriminator field — must be exactly 'character'."
+    },
+    "experience_text": {
+      "type": "string",
+      "required": true,
+      "description": "What happened — concrete, 1-2 sentences. NOT what changed — just the event.",
+      "good_example": "Failed GATE mains by 3 marks in my final attempt after 18 months of preparation",
+      "bad_example": "I had a hard time during IIT"
+    },
+    "what_changed": {
+      "type": "string",
+      "required": true,
+      "description": "How this experience changed the way you think, lead, or operate — 1-2 sentences.",
+      "good_example": "Stopped defining self-worth by singular performance events. Learned to reframe failure as data, not verdict."
+    },
+    "value_crystallized": {
+      "type": "string",
+      "required": false,
+      "description": "The specific value, belief, or principle that hardened after this experience.",
+      "good_example": "Resilience through reframing, not denial. Outcome ≠ identity."
+    },
+    "timeframe": {
+      "type": "string",
+      "required": false,
+      "description": "When this happened. YYYY-MM or year.",
+      "example": "2019-03"
+    },
+    "tags": {
+      "type": "array<string>",
+      "required": false,
+      "description": "2-4 descriptive tags.",
+      "example": ["resilience", "identity", "failure", "growth"]
+    },
+    "life_domain": {
+      "type": "enum",
+      "values": ["career", "education", "relationships", "health", "identity", "community"],
+      "required": false,
+      "description": "Which life area this formative experience belongs to."
+    }
+  }
 }
