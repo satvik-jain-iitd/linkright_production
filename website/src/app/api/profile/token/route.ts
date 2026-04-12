@@ -1,5 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+
+function serviceClient() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 /** Generate a human-readable session token for Custom GPT linking.
  *  Format: LR-XXXXXXXX (8 uppercase hex chars)
@@ -20,6 +28,13 @@ export async function POST() {
   if (!rateLimit(`profile-token-gen:${user.id}`, 10)) {
     return rateLimitResponse("token generation");
   }
+
+  // Invalidate any existing unexpired tokens for this user before creating a new one
+  await serviceClient()
+    .from("profile_tokens")
+    .delete()
+    .eq("user_id", user.id)
+    .is("used_at", null);
 
   // Generate LR-XXXXXXXX format token
   const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(4)))

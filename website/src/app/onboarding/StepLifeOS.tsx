@@ -8,11 +8,20 @@ interface StepLifeOSProps {
 
 export function StepLifeOS({ onDone }: StepLifeOSProps) {
   const [token, setToken] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [atomsSaved, setAtomsSaved] = useState(0);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function formatExpiry(isoStr: string): string {
+    const ms = new Date(isoStr).getTime() - Date.now();
+    if (ms <= 0) return "expired";
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `Expires in ${h}h ${m}m` : `Expires in ${m}m`;
+  }
 
   // Fetch or generate token on mount
   useEffect(() => {
@@ -24,6 +33,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
 
         if (getData.token) {
           setToken(getData.token);
+          setExpiresAt(getData.expires_at ?? null);
           setAtomsSaved(getData.atoms_saved ?? 0);
           setLoading(false);
           return;
@@ -36,6 +46,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
         if (!postRes.ok) throw new Error(postData.error ?? "Failed to create token");
 
         setToken(postData.token);
+        setExpiresAt(postData.expires_at ?? null);
         setLoading(false);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to generate session code");
@@ -162,7 +173,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
             {copied ? "Copied!" : "Copy"}
           </button>
         </div>
-        <p className="text-xs text-muted">Expires in 24 hours</p>
+        <p className="text-xs text-muted">{expiresAt ? formatExpiry(expiresAt) : "Expires in 24 hours"}</p>
       </div>
 
       {/* Box 2: Download Claude skill */}

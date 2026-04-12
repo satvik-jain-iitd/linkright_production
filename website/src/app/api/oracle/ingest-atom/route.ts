@@ -107,6 +107,11 @@ export async function POST(request: Request) {
       );
     }
 
+    // Increment atoms_saved counter for new atoms (not conflicts/duplicates)
+    if (data.ok && !data.conflict) {
+      serviceClient().rpc("increment_atoms_saved", { p_token: token }).catch(() => {});
+    }
+
     // Include user_id in response so Claude Code skill can use it for session-close
     return Response.json({ ...data, user_id });
   } catch (err) {
