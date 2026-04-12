@@ -6,7 +6,7 @@ import { ChatMessage, type Message } from "./ChatMessage";
 import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
 import { StepLifeOS } from "./StepLifeOS";
 import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
-import { CareerGraph } from "@/components/CareerGraph";
+import { CareerGraph, type CytoElement } from "@/components/CareerGraph";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -989,7 +989,7 @@ interface SummaryStats {
 }
 
 interface GraphData {
-  elements: { data: Record<string, unknown> }[];
+  elements: CytoElement[];
   stats: {
     achievements: number;
     experiences: number;
@@ -1066,7 +1066,7 @@ function StepSummary({ initialStats }: { initialStats?: SummaryStats }) {
       ) : hasGraph ? (
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted uppercase tracking-wide">Your Career Knowledge Graph</p>
-          <CareerGraph elements={graphData.elements as Parameters<typeof CareerGraph>[0]["elements"]} />
+          <CareerGraph elements={graphData.elements} />
         </div>
       ) : null}
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type cytoscape from "cytoscape";
 
-interface CytoElementData {
+export interface CytoElementData {
   id: string;
   label?: string;
   type?: "achievement" | "experience" | "skill";
@@ -18,7 +19,7 @@ interface CytoElementData {
   count?: number;
 }
 
-interface CytoElement {
+export interface CytoElement {
   data: CytoElementData;
 }
 
@@ -46,78 +47,71 @@ const NODE_COLORS = {
 
 export function CareerGraph({ elements }: CareerGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<unknown>(null);
+  const cyRef = useRef<cytoscape.Core | null>(null);
   const [selected, setSelected] = useState<SelectedNode | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || elements.length === 0) return;
 
-    let cy: {
-      destroy: () => void;
-      on: (event: string, selector: string, handler: (evt: { target: { data: (key: string) => unknown } }) => void) => void;
-    };
+    let destroyed = false;
 
-    // Dynamically import to avoid SSR issues with DOM manipulation
-    Promise.all([
-      import("cytoscape"),
-      import("cytoscape-fcose"),
-      import("react-cytoscapejs"),
-    ])
+    Promise.all([import("cytoscape"), import("cytoscape-fcose")])
       .then(([cytoscapeModule, fcoseModule]) => {
+        if (destroyed) return;
         const cytoscape = cytoscapeModule.default;
         const fcose = fcoseModule.default;
 
-        // Register fcose layout (safe to call multiple times)
         try { cytoscape.use(fcose); } catch { /* already registered */ }
 
+        // Stylesheet cast: cytoscape's type for StylesheetJson is complex;
+        // runtime behavior is correct, so we cast to avoid string-literal mismatch.
         const stylesheet = [
           {
             selector: 'node[type="achievement"]',
             style: {
-              "background-color": NODE_COLORS.achievement,
+              "background-color": "#3B82F6",
               label: "data(label)",
               "font-size": 9,
               width: "data(size)",
               height: "data(size)",
               color: "#ffffff",
-              "text-valign": "center",
-              "text-halign": "center",
-              "text-wrap": "wrap",
-              "text-max-width": 70,
-              "text-overflow-wrap": "anywhere",
+              "text-valign": "center" as const,
+              "text-halign": "center" as const,
+              "text-wrap": "wrap" as const,
+              "text-max-width": "70",
             },
           },
           {
             selector: 'node[type="experience"]',
             style: {
-              "background-color": NODE_COLORS.experience,
+              "background-color": "#8B5CF6",
               label: "data(label)",
               "font-size": 11,
               "font-weight": "bold",
               width: "data(size)",
               height: "data(size)",
               color: "#ffffff",
-              "text-valign": "center",
-              "text-halign": "center",
-              "text-wrap": "wrap",
-              "text-max-width": 80,
-              shape: "roundrectangle",
+              "text-valign": "center" as const,
+              "text-halign": "center" as const,
+              "text-wrap": "wrap" as const,
+              "text-max-width": "80",
+              shape: "roundrectangle" as const,
             },
           },
           {
             selector: 'node[type="skill"]',
             style: {
-              "background-color": NODE_COLORS.skill,
+              "background-color": "#10B981",
               label: "data(label)",
               "font-size": 8,
               width: "data(size)",
               height: "data(size)",
               color: "#ffffff",
-              "text-valign": "center",
-              "text-halign": "center",
-              "text-wrap": "wrap",
-              "text-max-width": 60,
+              "text-valign": "center" as const,
+              "text-halign": "center" as const,
+              "text-wrap": "wrap" as const,
+              "text-max-width": "60",
             },
           },
           {
@@ -126,8 +120,8 @@ export function CareerGraph({ elements }: CareerGraphProps) {
               width: 2,
               "line-color": "#8B5CF6",
               "target-arrow-color": "#8B5CF6",
-              "target-arrow-shape": "triangle",
-              "curve-style": "bezier",
+              "target-arrow-shape": "triangle" as const,
+              "curve-style": "bezier" as const,
               opacity: 0.6,
             },
           },
@@ -137,10 +131,10 @@ export function CareerGraph({ elements }: CareerGraphProps) {
               width: 1,
               "line-color": "#10B981",
               "target-arrow-color": "#10B981",
-              "target-arrow-shape": "triangle",
-              "curve-style": "bezier",
+              "target-arrow-shape": "triangle" as const,
+              "curve-style": "bezier" as const,
               opacity: 0.35,
-              "line-style": "dashed",
+              "line-style": "dashed" as const,
             },
           },
           {
@@ -150,15 +144,15 @@ export function CareerGraph({ elements }: CareerGraphProps) {
               "border-color": "#F59E0B",
             },
           },
-        ];
+        ] as unknown as cytoscape.StylesheetJson;
 
-        cy = cytoscape({
+        const cy = cytoscape({
           container: containerRef.current!,
-          elements,
+          elements: elements as cytoscape.ElementDefinition[],
           style: stylesheet,
           layout: {
             name: "fcose",
-            // @ts-expect-error fcose types
+            // @ts-expect-error fcose-specific options not in base layout type
             nodeRepulsion: 9000,
             idealEdgeLength: 90,
             edgeElasticity: 0.45,
@@ -176,18 +170,18 @@ export function CareerGraph({ elements }: CareerGraphProps) {
 
         cy.on("tap", "node", (evt) => {
           const node = evt.target;
-          const nodeType = node.data("type") as "achievement" | "experience" | "skill";
+          const nodeType = node.data("type") as "achievement" | "experience" | "skill" | undefined;
           if (!nodeType) return;
           setSelected({
-            id: node.data("id"),
+            id: node.data("id") as string,
             type: nodeType,
-            label: node.data("label") ?? "",
-            company: node.data("company"),
-            role: node.data("role"),
-            date: node.data("date"),
-            importance: node.data("importance"),
-            answer: node.data("answer"),
-            count: node.data("count"),
+            label: (node.data("label") as string | undefined) ?? "",
+            company: node.data("company") as string | undefined,
+            role: node.data("role") as string | undefined,
+            date: node.data("date") as string | undefined,
+            importance: node.data("importance") as string | undefined,
+            answer: node.data("answer") as string | undefined,
+            count: node.data("count") as number | undefined,
           });
         });
 
@@ -196,8 +190,9 @@ export function CareerGraph({ elements }: CareerGraphProps) {
       .catch(console.error);
 
     return () => {
+      destroyed = true;
       if (cyRef.current) {
-        (cyRef.current as { destroy: () => void }).destroy();
+        cyRef.current.destroy();
         cyRef.current = null;
       }
     };
@@ -212,7 +207,7 @@ export function CareerGraph({ elements }: CareerGraphProps) {
         <div ref={containerRef} className="w-full h-full" />
         {!ready && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs text-muted">Rendering graph…</span>
+            <span className="text-xs text-gray-400">Rendering graph…</span>
           </div>
         )}
         {/* Legend */}
@@ -220,7 +215,7 @@ export function CareerGraph({ elements }: CareerGraphProps) {
           {(["achievement", "experience", "skill"] as const).map((type) => (
             <span key={type} className="flex items-center gap-1.5 text-xs text-gray-300">
               <span
-                className="inline-block w-2.5 h-2.5 rounded-full"
+                className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: NODE_COLORS[type] }}
               />
               {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -277,7 +272,9 @@ export function CareerGraph({ elements }: CareerGraphProps) {
           {selected.count !== undefined && (
             <div>
               <p className="text-[10px] text-muted uppercase tracking-wide">Used in</p>
-              <p className="text-xs text-foreground">{selected.count} achievement{selected.count !== 1 ? "s" : ""}</p>
+              <p className="text-xs text-foreground">
+                {selected.count} achievement{selected.count !== 1 ? "s" : ""}
+              </p>
             </div>
           )}
           {selected.answer && (
