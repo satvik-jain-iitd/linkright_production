@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     .from("profile_tokens")
     .update({ used_at: new Date().toISOString() })
     .eq("token", token)
-    .catch(() => {});
+    .then(undefined, () => {});
 
   try {
     const res = await fetch(`${ORACLE_URL}/lifeos/session-close`, {
