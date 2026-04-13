@@ -188,7 +188,7 @@ async def _run_nugget_refresh(user_id: str) -> None:
             api_key=None,
             template_id="cv-a4-standard",
         )
-        await phase_0_nuggets(ctx, sb, groq_api_key=os.getenv("GROQ_API_KEY"), force=True)
+        await phase_0_nuggets(ctx, sb, groq_api_key=os.getenv("PLATFORM_GROQ_API_KEY") or os.getenv("GROQ_API_KEY"), force=True)
         nugget_count = len(ctx._nuggets) if ctx._nuggets else 0
         logger.info("nugget_refresh: done user=%s, %d nuggets", user_id, nugget_count)
     except Exception as exc:
@@ -212,26 +212,15 @@ async def refresh_nuggets(
 # it only generates Jina embeddings for nuggets already in the DB.
 # Called by session-close after TruthEngine interview completes.
 
-from dataclasses import dataclass as _dataclass, field as _field
-from typing import Optional as _Optional
-
-
-@_dataclass
-class _EmbedNugget:
-    """Minimal nugget shape for embed_nuggets() — only needs .id and .answer."""
-    id: _Optional[str] = None
-    answer: str = ""
-
-
 async def _run_nugget_embed(user_id: str) -> None:
-    """Background task: embed career_nuggets where embedding IS NULL."""
-    try:
-        from .tools.nugget_embedder import embed_nuggets
+    """Background task: embed career_nuggets where embedding IS NULL.
 
-        jina_api_key = os.getenv("JINA_API_KEY", "")
-        if not jina_api_key:
-            logger.warning("nugget_embed: no JINA_API_KEY — skipping")
-            return
+    Uses Oracle's nomic-embed-text model (local, free, fast) for embeddings.
+    Falls back to Jina if Oracle unavailable and JINA_API_KEY is set.
+    Embedding dimensions: 768 (matches career_nuggets.embedding vector(768)).
+    """
+    try:
+        import httpx
 
         sb = create_supabase()
 
@@ -250,12 +239,57 @@ async def _run_nugget_embed(user_id: str) -> None:
 
         logger.info("nugget_embed: user=%s — %d nuggets to embed", user_id, len(rows))
 
-        # Convert DB rows to minimal nugget objects that embed_nuggets expects
-        nuggets = [_EmbedNugget(id=r["id"], answer=r.get("answer", "")) for r in rows]
+        oracle_url = os.getenv("ORACLE_BACKEND_URL", "")
+        oracle_secret = os.getenv("ORACLE_BACKEND_SECRET", "")
 
-        embeddings = await embed_nuggets(nuggets, jina_api_key, sb, user_id)
-        embedded_count = sum(1 for e in embeddings if e)
-        logger.info("nugget_embed: done user=%s, %d/%d embedded", user_id, embedded_count, len(nuggets))
+        embedded_count = 0
+
+        if oracle_url:
+            # ── Primary path: Oracle nomic-embed-text (local model, no API key needed) ──
+            async with httpx.AsyncClient(timeout=15) as client:
+                for row in rows:
+                    answer_text = (row.get("answer") or "").strip()
+                    if not answer_text:
+                        continue
+                    try:
+                        resp = await client.post(
+                            f"{oracle_url.rstrip('/')}/lifeos/embed",
+                            headers={
+                                "Content-Type": "application/json",
+                                "Authorization": f"Bearer {oracle_secret}",
+                            },
+                            json={"text": answer_text},
+                        )
+                        resp.raise_for_status()
+                        embedding = resp.json().get("embedding")
+                        if embedding and isinstance(embedding, list):
+                            sb.table("career_nuggets").update(
+                                {"embedding": embedding}
+                            ).eq("id", row["id"]).execute()
+                            embedded_count += 1
+                    except Exception as exc:
+                        logger.warning("nugget_embed: Oracle embed failed for id=%s: %s", row["id"], exc)
+                    # Small delay between calls to be gentle on Oracle
+                    await asyncio.sleep(0.2)
+        else:
+            # ── Fallback path: Jina embeddings (only if JINA_API_KEY is set) ──
+            from dataclasses import dataclass, field
+            from typing import Optional
+            from .tools.nugget_embedder import embed_nuggets
+
+            jina_api_key = os.getenv("JINA_API_KEY", "")
+            if not jina_api_key:
+                logger.warning("nugget_embed: no ORACLE_BACKEND_URL and no JINA_API_KEY — skipping")
+                return
+
+            @dataclass
+            class _EmbedNugget:
+                id: Optional[str] = None
+                answer: str = ""
+
+            nuggets = [_EmbedNugget(id=r["id"], answer=r.get("answer", "")) for r in rows]
+            embeddings = await embed_nuggets(nuggets, jina_api_key, sb, user_id)
+            embedded_count = sum(1 for e in embeddings if e)
 
     except Exception as exc:
         logger.exception("nugget_embed: failed for user=%s — %s", user_id, exc)
