@@ -204,3 +204,69 @@ async def refresh_nuggets(
     verify_secret(authorization)
     background_tasks.add_task(_run_nugget_refresh, req.user_id)
     return {"status": "processing", "user_id": req.user_id}
+
+
+# ── Nugget embed endpoint ───────────────────────────────────────────────
+# Embeds existing career_nuggets where embedding IS NULL.
+# Unlike /nuggets/refresh, this does NOT re-extract nuggets from chunks —
+# it only generates Jina embeddings for nuggets already in the DB.
+# Called by session-close after TruthEngine interview completes.
+
+from dataclasses import dataclass as _dataclass, field as _field
+from typing import Optional as _Optional
+
+
+@_dataclass
+class _EmbedNugget:
+    """Minimal nugget shape for embed_nuggets() — only needs .id and .answer."""
+    id: _Optional[str] = None
+    answer: str = ""
+
+
+async def _run_nugget_embed(user_id: str) -> None:
+    """Background task: embed career_nuggets where embedding IS NULL."""
+    try:
+        from .tools.nugget_embedder import embed_nuggets
+
+        jina_api_key = os.getenv("JINA_API_KEY", "")
+        if not jina_api_key:
+            logger.warning("nugget_embed: no JINA_API_KEY — skipping")
+            return
+
+        sb = create_supabase()
+
+        # Fetch nuggets without embeddings
+        result = (
+            sb.table("career_nuggets")
+            .select("id, answer")
+            .eq("user_id", user_id)
+            .is_("embedding", "null")
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            logger.info("nugget_embed: no un-embedded nuggets for user=%s", user_id)
+            return
+
+        logger.info("nugget_embed: user=%s — %d nuggets to embed", user_id, len(rows))
+
+        # Convert DB rows to minimal nugget objects that embed_nuggets expects
+        nuggets = [_EmbedNugget(id=r["id"], answer=r.get("answer", "")) for r in rows]
+
+        embeddings = await embed_nuggets(nuggets, jina_api_key, sb, user_id)
+        embedded_count = sum(1 for e in embeddings if e)
+        logger.info("nugget_embed: done user=%s, %d/%d embedded", user_id, embedded_count, len(nuggets))
+
+    except Exception as exc:
+        logger.exception("nugget_embed: failed for user=%s — %s", user_id, exc)
+
+
+@app.post("/nuggets/embed", status_code=202)
+async def embed_nuggets_endpoint(
+    req: NuggetRefreshRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    verify_secret(authorization)
+    background_tasks.add_task(_run_nugget_embed, req.user_id)
+    return {"status": "processing", "user_id": req.user_id}

@@ -10,7 +10,9 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
   const [token, setToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [atomsSaved, setAtomsSaved] = useState(0);
-  const [atomsTotal, setAtomsTotal] = useState(10);
+  // No fixed total — atom count varies per user (20–50+ depending on experience).
+  // The API doesn't expose a pre-announced total. During ingestion we show just the
+  // running count; once session_complete the final tally is the de-facto total.
   const [sessionComplete, setSessionComplete] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -69,8 +71,6 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
       const data = await res.json();
       const saved = data.atoms_saved ?? 0;
       setAtomsSaved(saved);
-      // If atoms exceed our expected total, raise the ceiling
-      if (saved > atomsTotal) setAtomsTotal(saved);
 
       if (data.session_complete) {
         setSessionComplete(true);
@@ -78,7 +78,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
     } catch {
       // Ignore poll errors
     }
-  }, [token, sessionComplete, atomsTotal]);
+  }, [token, sessionComplete]);
 
   useEffect(() => {
     if (!token) return;
@@ -234,7 +234,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted">
                 {atomsSaved > 0
-                  ? `${atomsSaved} of ${atomsTotal} career highlights`
+                  ? `${atomsSaved} career highlight${atomsSaved !== 1 ? "s" : ""} saved`
                   : "Waiting for your Claude Code session…"}
               </span>
               {atomsSaved > 0 && (
@@ -243,9 +243,10 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
             </div>
             {atomsSaved > 0 ? (
               <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
+                {/* Indeterminate-style: bar grows with count but never reaches 100% until session_complete */}
                 <div
-                  className="h-full bg-primary-500 transition-all duration-700 rounded-full"
-                  style={{ width: `${Math.min(Math.round((atomsSaved / atomsTotal) * 100), 90)}%` }}
+                  className="h-full bg-primary-500 transition-all duration-700 rounded-full animate-pulse"
+                  style={{ width: `${Math.min(60 + atomsSaved, 90)}%` }}
                 />
               </div>
             ) : (

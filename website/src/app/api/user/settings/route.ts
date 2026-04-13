@@ -33,6 +33,7 @@ export async function GET() {
   let career_text = chunks?.map((c: { chunk_text: string }) => c.chunk_text).join("\n\n") || "";
 
   // Fallback: if no career_chunks exist, reconstruct career_text from career_nuggets
+  // Groups by company/role for better structure in resume generation context
   if (!career_text) {
     const { data: nuggets } = await supabase
       .from("career_nuggets")
@@ -40,9 +41,15 @@ export async function GET() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: true });
     if (nuggets && nuggets.length > 0) {
-      career_text = nuggets
-        .map((n: { answer: string | null }) => n.answer)
-        .filter(Boolean)
+      const grouped = new Map<string, string[]>();
+      for (const n of nuggets) {
+        const key = [n.company, n.role].filter(Boolean).join(" - ") || "General";
+        if (!grouped.has(key)) grouped.set(key, []);
+        const text = n.answer;
+        if (text) grouped.get(key)!.push(text);
+      }
+      career_text = Array.from(grouped.entries())
+        .map(([heading, answers]) => `## ${heading}\n${answers.join("\n")}`)
         .join("\n\n");
     }
   }

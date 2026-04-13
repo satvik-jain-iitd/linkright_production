@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+
+// Load .env.local so teardown has access to SUPABASE_SERVICE_ROLE_KEY
+dotenv.config({ path: '.env.local' });
 
 export default defineConfig({
   testDir: './tests',
@@ -13,23 +17,27 @@ export default defineConfig({
   reporter: [['html', { open: 'on-failure' }]],
 
   projects: [
-    // Step 1: Auth setup — creates test user and saves login state
-    // Runs ONCE before all other projects
+    // Phase 1: Create test user + save auth state
     {
       name: 'setup',
       testMatch: /.*\.setup\.ts/,
     },
 
-    // Step 2: All tests — use saved auth state from setup
+    // Phase 2: Run all tests with saved auth state
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Every test starts already logged in
         storageState: 'playwright/.auth/user.json',
       },
-      // Wait for setup to finish before running any tests
       dependencies: ['setup'],
+    },
+
+    // Phase 3: Delete test user + all their data from Supabase
+    {
+      name: 'teardown',
+      testMatch: /.*\.teardown\.ts/,
+      dependencies: ['chromium'],
     },
   ],
 

@@ -97,6 +97,24 @@ export async function POST(request: Request) {
       }
     }
 
+    // ── Nugget fallback: if no career_chunks found, search career_nuggets ──
+    // TruthEngine-only users may not have career_chunks yet (chunks are created
+    // at session-close). Fall back to full-text search on nugget answers.
+    if (rows.length === 0) {
+      const { data: nuggetResults } = await supabase
+        .from("career_nuggets")
+        .select("answer")
+        .eq("user_id", user.id)
+        .textSearch("answer", prefixQuery, { config: "english" })
+        .limit(5);
+      if (nuggetResults && nuggetResults.length > 0) {
+        rows = nuggetResults.map((n: { answer: string }, i: number) => ({
+          chunk_text: n.answer,
+          chunk_index: i,
+        }));
+      }
+    }
+
     if (!include_scores) {
       return Response.json({
         chunks: rows.slice(0, 3).map((r) => r.chunk_text),

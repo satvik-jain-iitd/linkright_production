@@ -144,7 +144,7 @@ function StepCareerBasics({
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // [PDF-REMOVED] const fileInputRef = useRef<HTMLInputElement>(null);
 
   const applyParsed = (data: Record<string, unknown>) => {
     if (typeof data.full_name === "string" && data.full_name) setFullName(data.full_name);
@@ -197,38 +197,36 @@ function StepCareerBasics({
     }
   };
 
-  const handleParseFile = async (file: File) => {
-    // 500KB limit — larger files risk breaking the LLM token budget
-    if (file.size > 500 * 1024) {
-      setParseError("File too large (max 500 KB). Please paste your resume text instead.");
-      setUploadMode("paste");
-      return;
-    }
-    setParsing(true);
-    setParseError("");
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      // [BYOK-REMOVED] formData.append("model_provider", modelProvider);
-      // [BYOK-REMOVED] formData.append("model_id", modelId);
-      // [BYOK-REMOVED] formData.append("api_key", apiKey);
-      const res = await fetch("/api/onboarding/parse-resume", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (res.ok && data.parsed) {
-        applyParsed(data.parsed);
-      } else {
-        setParseError(data.error ?? "Could not parse file. Please paste your resume text instead.");
-        setUploadMode("paste");
-      }
-    } catch {
-      setParseError("Network error. Please try again.");
-    } finally {
-      setParsing(false);
-    }
-  };
+  // [PDF-REMOVED] PDF/DOCX file upload disabled — pdf-parse unreliable in production.
+  // Keep paste-only flow. Re-enable when a reliable PDF library is found.
+  // const handleParseFile = async (file: File) => {
+  //   if (file.size > 500 * 1024) {
+  //     setParseError("File too large (max 500 KB). Please paste your resume text instead.");
+  //     setUploadMode("paste");
+  //     return;
+  //   }
+  //   setParsing(true);
+  //   setParseError("");
+  //   try {
+  //     const formData = new FormData();
+  //     formData.append("file", file);
+  //     const res = await fetch("/api/onboarding/parse-resume", {
+  //       method: "POST",
+  //       body: formData,
+  //     });
+  //     const data = await res.json();
+  //     if (res.ok && data.parsed) {
+  //       applyParsed(data.parsed);
+  //     } else {
+  //       setParseError(data.error ?? "Could not parse file. Please paste your resume text instead.");
+  //       setUploadMode("paste");
+  //     }
+  //   } catch {
+  //     setParseError("Network error. Please try again.");
+  //   } finally {
+  //     setParsing(false);
+  //   }
+  // };
 
   const addEducation = () => {
     setEducation([...education, { institution: "", degree: "", year: "" }]);
@@ -342,6 +340,7 @@ function StepCareerBasics({
             >
               Paste resume text
             </button>
+            {/* [PDF-REMOVED] File upload disabled — pdf-parse unreliable in production.
             <button
               onClick={() => fileInputRef.current?.click()}
               className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
@@ -359,6 +358,7 @@ function StepCareerBasics({
                 e.target.value = "";
               }}
             />
+            */}
           </div>
           {parsing && (
             <p className="text-sm text-primary-600 animate-pulse">
@@ -985,6 +985,7 @@ function StepConversation({
 interface SummaryStats {
   nugget_count: number;
   confidence: number;
+  atoms_saved?: number;  // fallback: raw atoms from TruthEngine, even if nuggets not yet processed
   companies?: string[];
   label?: "excellent" | "good" | "fair" | "insufficient";
 }
@@ -1021,12 +1022,14 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
           // data.confidence is an object { score, label, nugget_count } — not a number
           const score: number = data.confidence?.score ?? 0;
           const nuggetCount: number = data.confidence?.nugget_count ?? 0;
+          // atoms_saved = raw atoms ingested by TruthEngine (always available even if nuggets not yet processed)
+          const atomsSaved: number = data.atoms_saved ?? 0;
           const label: SummaryStats["label"] =
             score >= 90 ? "excellent" : score >= 75 ? "good" : score >= 60 ? "fair" : "insufficient";
-          setStats({ nugget_count: nuggetCount, confidence: score, label });
+          setStats({ nugget_count: nuggetCount, confidence: score, label, atoms_saved: atomsSaved });
 
-          // Stop polling once we have real data
-          if (nuggetCount > 0) cancelled = true;
+          // Stop polling once we have nuggets OR atoms (whichever comes first)
+          if (nuggetCount > 0 || atomsSaved > 0) cancelled = true;
         })
         .catch(() => {
           if (!cancelled) setStats({ nugget_count: 0, confidence: 0, label: "insufficient" });
@@ -1105,11 +1108,23 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
       {/* Stats row */}
       {!loading && stats && (
         <div className="space-y-4 text-left">
-          <ConfidenceProgressBar
-            score={score}
-            label={stats.label}
-            nuggetCount={stats.nugget_count}
-          />
+          {/* If nuggets haven't been processed yet but atoms exist, show atoms count */}
+          {stats.nugget_count === 0 && (stats.atoms_saved ?? 0) > 0 ? (
+            <div className="rounded-xl border border-primary-200 bg-primary-50 px-4 py-3 space-y-1">
+              <p className="text-sm font-semibold text-primary-700">
+                {stats.atoms_saved} career highlights collected
+              </p>
+              <p className="text-xs text-primary-600">
+                Your career data is being processed. Nugget scoring will appear shortly.
+              </p>
+            </div>
+          ) : (
+            <ConfidenceProgressBar
+              score={score}
+              label={stats.label}
+              nuggetCount={stats.nugget_count}
+            />
+          )}
 
           {/* Company + skills breakdown side by side */}
           {hasGraph && (

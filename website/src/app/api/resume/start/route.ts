@@ -169,7 +169,7 @@ export async function POST(request: Request) {
   //     }
   //   }
   // }
-  const resolved_api_key = process.env.GROQ_API_KEY || "";
+  const resolved_api_key = process.env.PLATFORM_GROQ_API_KEY || process.env.GROQ_API_KEY || "";
 
   // Hybrid retrieval: try Oracle ARM atoms, fall back to raw career_text
   const effective_career_text = await getCareerContext(user.id, jd_text, career_text);

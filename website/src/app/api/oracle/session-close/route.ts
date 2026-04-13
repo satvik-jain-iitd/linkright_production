@@ -103,10 +103,123 @@ export async function POST(request: Request) {
       );
     }
 
+    // ── Post-close: create career_chunks from nuggets + trigger embedding ──
+    // Fire-and-forget: don't block the response
+    createChunksFromNuggets(user_id).catch((err) =>
+      console.error("[session-close] chunk creation failed:", err)
+    );
+    triggerNuggetEmbedding(user_id).catch((err) =>
+      console.error("[session-close] embed trigger failed:", err)
+    );
+
     return Response.json({ ok: true });
   } catch (err) {
     // Session close failure is non-critical — log but return ok to not block user
     console.error("session-close proxy error:", err);
     return Response.json({ ok: true, warning: "session-close had an issue but session data is safe" });
+  }
+}
+
+// ── career_chunks creation from career_nuggets ────────────────────────────
+// After TruthEngine interview, nuggets exist but career_chunks may be empty.
+// Text search, career_text reconstruction, and resume generation all read
+// from career_chunks. This function synthesizes chunks from nuggets.
+
+async function createChunksFromNuggets(userId: string) {
+  const sb = serviceClient();
+
+  // Skip if user already has career_chunks (from manual paste in onboarding step 2)
+  const { count: existingChunks } = await sb
+    .from("career_chunks")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  if ((existingChunks ?? 0) > 0) {
+    console.log("[session-close] user already has career_chunks, skipping synthesis");
+    return;
+  }
+
+  // Fetch all career_nuggets for this user
+  const { data: nuggets } = await sb
+    .from("career_nuggets")
+    .select("nugget_text, answer, company, role, section_type")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  if (!nuggets || nuggets.length === 0) {
+    console.log("[session-close] no nuggets found, skipping chunk creation");
+    return;
+  }
+
+  // Group by company + role for structured text
+  const grouped = new Map<string, string[]>();
+  for (const n of nuggets) {
+    const key = [n.company, n.role].filter(Boolean).join(" - ") || "General";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(n.answer || n.nugget_text);
+  }
+
+  // Format as structured text blocks and chunk at ~1000 chars
+  const fullText = Array.from(grouped.entries())
+    .map(([heading, answers]) => `## ${heading}\n\n${answers.map((a) => `• ${a}`).join("\n")}`)
+    .join("\n\n");
+
+  // Simple chunking: split at ~1000 char boundaries on paragraph breaks
+  const MAX_CHUNK = 1000;
+  const paragraphs = fullText.split("\n\n");
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const para of paragraphs) {
+    if (current.length + para.length + 2 > MAX_CHUNK && current.length > 0) {
+      chunks.push(current.trim());
+      current = "";
+    }
+    current += (current ? "\n\n" : "") + para;
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  // Insert chunks into career_chunks
+  const rows = chunks.map((text, i) => ({
+    user_id: userId,
+    chunk_index: i,
+    chunk_text: text,
+    is_active: true,
+  }));
+
+  const { error } = await sb.from("career_chunks").insert(rows);
+  if (error) {
+    console.error("[session-close] chunk insert failed:", error.message);
+  } else {
+    console.log(`[session-close] created ${rows.length} career_chunks for user ${userId.slice(0, 8)}…`);
+  }
+}
+
+// ── Trigger nugget embedding via worker ───────────────────────────────────
+// Calls the worker's /nuggets/embed endpoint to generate Jina embeddings
+// for career_nuggets that don't have them yet.
+
+async function triggerNuggetEmbedding(userId: string) {
+  const workerUrl = process.env.WORKER_URL;
+  const workerSecret = process.env.WORKER_SECRET;
+
+  if (!workerUrl || workerUrl.includes("localhost")) {
+    console.log("[session-close] WORKER_URL not set or localhost — skipping embed trigger");
+    return;
+  }
+
+  try {
+    await fetch(`${workerUrl}/nuggets/embed`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(workerSecret ? { Authorization: `Bearer ${workerSecret}` } : {}),
+      },
+      body: JSON.stringify({ user_id: userId }),
+      signal: AbortSignal.timeout(5000),
+    });
+    console.log("[session-close] triggered nugget embedding for user", userId.slice(0, 8));
+  } catch (err) {
+    // Non-critical — embeddings improve JD matching but aren't required
+    console.warn("[session-close] embed trigger failed (non-critical):", err instanceof Error ? err.message : err);
   }
 }
