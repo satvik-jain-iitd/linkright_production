@@ -58,14 +58,14 @@ export async function POST(request: Request) {
       const buffer = Buffer.from(await file.arrayBuffer());
 
       if (name.endsWith(".pdf")) {
-        // PDF extraction
+        // PDF extraction — pdf-parse v2 uses a class-based API
         try {
-          // pdf-parse is a CJS module — import whole module, use as function
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pdfParse = (await import("pdf-parse")) as any;
-          const fn = pdfParse.default ?? pdfParse;
-          const parsed = await fn(buffer);
-          resumeText = parsed.text;
+          const { PDFParse } = (await import("pdf-parse")) as any;
+          const parser = new PDFParse({ data: new Uint8Array(buffer) });
+          const result = await parser.getText({ pageJoiner: "\n" });
+          resumeText = result.text;
+          await parser.destroy();
         } catch (e) {
           console.error("pdf-parse error:", e);
           return Response.json(

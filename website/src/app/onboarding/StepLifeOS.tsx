@@ -10,6 +10,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
   const [token, setToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [atomsSaved, setAtomsSaved] = useState(0);
+  const [atomsTotal, setAtomsTotal] = useState(10);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -66,7 +67,10 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
       if (!res.ok) return;
 
       const data = await res.json();
-      setAtomsSaved(data.atoms_saved ?? 0);
+      const saved = data.atoms_saved ?? 0;
+      setAtomsSaved(saved);
+      // If atoms exceed our expected total, raise the ceiling
+      if (saved > atomsTotal) setAtomsTotal(saved);
 
       if (data.session_complete) {
         setSessionComplete(true);
@@ -74,7 +78,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
     } catch {
       // Ignore poll errors
     }
-  }, [token, sessionComplete]);
+  }, [token, sessionComplete, atomsTotal]);
 
   useEffect(() => {
     if (!token) return;
@@ -230,7 +234,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted">
                 {atomsSaved > 0
-                  ? `${atomsSaved} career highlight${atomsSaved !== 1 ? "s" : ""} saved`
+                  ? `${atomsSaved} of ${atomsTotal} career highlights`
                   : "Waiting for your Claude Code session…"}
               </span>
               {atomsSaved > 0 && (
@@ -241,7 +245,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
               <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
                 <div
                   className="h-full bg-primary-500 transition-all duration-700 rounded-full"
-                  style={{ width: `${Math.min(atomsSaved * 3, 90)}%` }}
+                  style={{ width: `${Math.min(Math.round((atomsSaved / atomsTotal) * 100), 90)}%` }}
                 />
               </div>
             ) : (

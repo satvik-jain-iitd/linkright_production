@@ -1,0 +1,48 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1101 >>
+stream
+BT /F1 16 Tf 72 750 Td (Jane Doe) Tj ET
+BT /F1 10 Tf 72 732 Td (jane.doe@email.com | \(555\) 123-4567 | linkedin.com/in/janedoe) Tj ET
+BT /F1 10 Tf 72 714 Td () Tj ET
+BT /F1 12 Tf 72 696 Td (WORK EXPERIENCE) Tj ET
+BT /F1 10 Tf 72 678 Td (Senior Software Engineer | Acme Corp | 2021 - Present) Tj ET
+BT /F1 10 Tf 72 660 Td (Led development of microservices architecture serving 2M users.) Tj ET
+BT /F1 10 Tf 72 642 Td (Reduced API latency by 40% through caching and query optimization.) Tj ET
+BT /F1 10 Tf 72 624 Td () Tj ET
+BT /F1 10 Tf 72 606 Td (Software Engineer | StartupXYZ | 2019 - 2021) Tj ET
+BT /F1 10 Tf 72 588 Td (Built React frontend and Node.js REST API from scratch.) Tj ET
+BT /F1 10 Tf 72 570 Td (Implemented CI/CD pipeline with GitHub Actions and Docker.) Tj ET
+BT /F1 10 Tf 72 552 Td () Tj ET
+BT /F1 12 Tf 72 534 Td (EDUCATION) Tj ET
+BT /F1 10 Tf 72 516 Td (B.S. Computer Science | State University | 2019) Tj ET
+BT /F1 10 Tf 72 498 Td () Tj ET
+BT /F1 12 Tf 72 480 Td (SKILLS) Tj ET
+BT /F1 10 Tf 72 462 Td (TypeScript, React, Node.js, Python, PostgreSQL, AWS, Docker, Kubernetes) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001394 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1464
+%%EOF

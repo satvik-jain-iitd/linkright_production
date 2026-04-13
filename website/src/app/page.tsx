@@ -360,7 +360,7 @@ function Footer() {
           <p className="mt-1 text-sm text-muted">AI-powered career tools</p>
         </div>
         <div className="flex items-center gap-8 text-sm text-muted">
-          <Link href="#features" className="transition-colors hover:text-foreground">
+          <Link href="/features" className="transition-colors hover:text-foreground">
             {/* [BRAND-REMOVED] was "Sync" */}
             Features
           </Link>

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChatMessage, type Message } from "./ChatMessage";
 import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
 import { StepLifeOS } from "./StepLifeOS";
@@ -503,7 +504,7 @@ function StepCareerBasics({
                 value={edu.year}
                 onChange={(e) => updateEducation(idx, "year", e.target.value)}
                 placeholder="Year"
-                className="w-20 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-32 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               {education.length > 1 && (
                 <button
@@ -1008,23 +1009,45 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
 
   useEffect(() => {
     if (initialStats) return;
-    fetch("/api/onboarding/status")
-      .then((r) => r.json())
-      .then((data) => {
-        // data.confidence is an object { score, label, nugget_count } — not a number
-        const score: number = data.confidence?.score ?? 0;
-        const label: SummaryStats["label"] =
-          score >= 90 ? "excellent" : score >= 75 ? "good" : score >= 60 ? "fair" : "insufficient";
-        setStats({
-          nugget_count: data.confidence?.nugget_count ?? 0,
-          confidence: score,
-          label,
-        });
-      })
-      .catch(() => {
-        setStats({ nugget_count: 0, confidence: 0, label: "insufficient" });
-      })
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    let pollCount = 0;
+    const MAX_POLLS = 12; // 60s max polling (12 × 5s)
+
+    const fetchStats = () => {
+      fetch("/api/onboarding/status")
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          // data.confidence is an object { score, label, nugget_count } — not a number
+          const score: number = data.confidence?.score ?? 0;
+          const nuggetCount: number = data.confidence?.nugget_count ?? 0;
+          const label: SummaryStats["label"] =
+            score >= 90 ? "excellent" : score >= 75 ? "good" : score >= 60 ? "fair" : "insufficient";
+          setStats({ nugget_count: nuggetCount, confidence: score, label });
+
+          // Stop polling once we have real data
+          if (nuggetCount > 0) cancelled = true;
+        })
+        .catch(() => {
+          if (!cancelled) setStats({ nugget_count: 0, confidence: 0, label: "insufficient" });
+        })
+        .finally(() => setLoading(false));
+    };
+
+    // Fetch immediately on mount
+    fetchStats();
+
+    // Poll every 5s to pick up newly created nuggets (async atom→nugget pipeline)
+    const interval = setInterval(() => {
+      pollCount++;
+      if (cancelled || pollCount >= MAX_POLLS) {
+        clearInterval(interval);
+        return;
+      }
+      fetchStats();
+    }, 5_000);
+
+    return () => { cancelled = true; clearInterval(interval); };
   }, [initialStats]);
 
   useEffect(() => {
@@ -1126,18 +1149,18 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
 
       {/* CTA buttons */}
       <div className="space-y-3">
-        <button
-          onClick={() => router.push("/resume/new")}
-          className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 transition-colors"
+        <Link
+          href="/resume/new"
+          className="block w-full rounded-xl bg-primary-500 px-6 py-3 text-center text-base font-semibold text-white hover:bg-primary-600 transition-colors"
         >
           Create Your First Resume
-        </button>
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="w-full rounded-xl border border-border px-6 py-3 text-base font-medium text-muted hover:bg-surface-hover transition-colors"
+        </Link>
+        <Link
+          href="/dashboard"
+          className="block w-full rounded-xl border border-border px-6 py-3 text-center text-base font-medium text-muted hover:bg-surface-hover transition-colors"
         >
           Go to Dashboard
-        </button>
+        </Link>
       </div>
     </div>
   );

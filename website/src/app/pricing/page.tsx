@@ -162,7 +162,7 @@ export default async function PricingPage() {
           <div className="flex items-center gap-8 text-sm text-muted">
             {// [PRICING-REDESIGN] Changed "Sync" to "Features"
             null}
-            <Link href="/#features" className="transition-colors hover:text-foreground">
+            <Link href="/features" className="transition-colors hover:text-foreground">
               Features
             </Link>
             <Link href="/pricing" className="transition-colors hover:text-foreground">
