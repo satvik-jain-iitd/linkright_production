@@ -18,7 +18,7 @@ export async function GET() {
   // Fetch user_settings row
   const { data: settings } = await supabase
     .from("user_settings")
-    .select("model_provider, model_id, api_key, career_graph, updated_at")
+    .select("model_provider, model_id, api_key, career_graph, target_roles, updated_at")
     .eq("user_id", user.id)
     .single();
 
@@ -59,6 +59,7 @@ export async function GET() {
     model_id: settings?.model_id || "",
     api_key: settings?.api_key || "",
     career_graph: settings?.career_graph || null,
+    target_roles: settings?.target_roles || [],
     career_text,
     updated_at: settings?.updated_at || null,
   });
@@ -79,7 +80,7 @@ export async function PUT(request: Request) {
   }
 
   const body = await request.json();
-  const { model_provider, model_id, api_key, career_graph } = body;
+  const { model_provider, model_id, api_key, career_graph, target_roles } = body;
 
   const updates: Record<string, unknown> = {
     user_id: user.id,
@@ -90,6 +91,7 @@ export async function PUT(request: Request) {
   // Never overwrite api_key with empty/null — only update when a real value is provided
   if (api_key !== undefined && api_key !== null && api_key !== "") updates.api_key = api_key;
   if (career_graph !== undefined) updates.career_graph = career_graph;
+  if (target_roles !== undefined && Array.isArray(target_roles)) updates.target_roles = target_roles;
 
   const { data, error } = await supabase
     .from("user_settings")

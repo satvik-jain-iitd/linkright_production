@@ -1254,6 +1254,12 @@ export function OnboardingFlow() {
   const handleRolesChange = (roles: string[]) => {
     setSelectedRoles(roles);
     localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
+    // Persist to database — fire-and-forget (localStorage is fallback for offline)
+    fetch("/api/user/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_roles: roles }),
+    }).catch(() => { /* silent — localStorage has the data */ });
   };
 
   if (step === null) {

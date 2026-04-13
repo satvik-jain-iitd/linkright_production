@@ -22,4 +22,6 @@ services:
         sync: false
       - key: ORACLE_BACKEND_SECRET
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
     healthCheckPath: /health

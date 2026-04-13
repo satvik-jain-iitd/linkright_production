@@ -18,6 +18,11 @@ DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "llama-3.1-8b-instant")
 # Render env may use PLATFORM_GROQ_API_KEY (matches Vercel convention) — check both
 DEFAULT_API_KEY = os.getenv("PLATFORM_GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
 
+# Gemini Flash — used for heavy reasoning phases (Phase 1+2 JD parse, Phase 4a bullets)
+# Falls back to default Groq/user provider if not configured
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-1.5-flash")
+
 # Oracle ARM — local LLM endpoint for Phase 5 width rewriting
 # Phase 5 (bullet width tweaking) + Phase 3.5a (summary width) use local llama3.2:1b
 # To disable local LLM and fall back to Groq: unset ORACLE_BACKEND_URL

@@ -37,12 +37,13 @@ from ..tools.score_bullets import resume_score_bullets, ScoreBulletsInput, Candi
 from ..qmd_search import hybrid_search as qmd_hybrid_search, fallback_fts_search
 from . import prompts
 from ..langfuse_client import trace_generation, get_prompt
-from ..tools.nugget_extractor import extract_nuggets
+from ..tools.nugget_extractor import extract_nuggets, Nugget
 from ..tools.nugget_embedder import embed_nuggets
 from ..tools.quality_judge import judge_quality
 from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
 from ..key_manager import KeyManager
 from ..llm.oracle import OracleProvider
+from ..llm.gemini import GeminiProvider
 from .. import config as worker_config
 import os
 
@@ -56,6 +57,16 @@ def _get_oracle_llm() -> OracleProvider | None:
             base_url=worker_config.ORACLE_BACKEND_URL,
             secret=worker_config.ORACLE_BACKEND_SECRET,
             endpoint="rewrite",
+        )
+    return None
+
+# Gemini Flash — used for heavy reasoning phases (Phase 1+2, Phase 4a)
+# Falls back to default user LLM (Groq) if not configured
+def _get_gemini_llm() -> GeminiProvider | None:
+    if worker_config.GEMINI_API_KEY:
+        return GeminiProvider(
+            api_key=worker_config.GEMINI_API_KEY,
+            model_id=worker_config.GEMINI_MODEL_ID,
         )
     return None
 
@@ -137,6 +148,13 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
       8    → Final assembly → output_html
     """
     llm = get_provider(ctx.model_provider, ctx.api_key, ctx.model_id)
+    _gemini = _get_gemini_llm()   # Gemini Flash for heavy reasoning phases
+    _oracle = _get_oracle_llm()   # Oracle 1B for simple rewriting phases
+
+    if _gemini:
+        logger.info("run_pipeline: Gemini Flash available (%s)", worker_config.GEMINI_MODEL_ID)
+    if _oracle:
+        logger.info("run_pipeline: Oracle ARM available for rewriting")
 
     # Initialize KeyManager if user has keys in DB
     km = KeyManager(sb, ctx.user_id)
@@ -147,17 +165,17 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
 
     await phase_0_nuggets(
         ctx, sb,
-        groq_api_key=os.environ.get("GROQ_API_KEY"),
+        groq_api_key=os.environ.get("PLATFORM_GROQ_API_KEY") or os.environ.get("GROQ_API_KEY"),
         byok_api_key=ctx.api_key,
     )
-    await phase_1_parse_and_strategy(ctx, sb, llm)
+    await phase_1_parse_and_strategy(ctx, sb, _gemini or llm)  # Gemini preferred: heavy reasoning
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
     await phase_3_5_stencil_draft(ctx, sb)
     await phase_3_5a_professional_summary(ctx, sb, llm)
-    await phase_4a_verbose_bullets(ctx, sb, llm)
+    await phase_4a_verbose_bullets(ctx, sb, _gemini or llm)  # Gemini preferred: creative writing
     await phase_4b_ranking(ctx, sb)
-    await phase_4c_condense_bullets(ctx, sb, llm)
+    await phase_4c_condense_bullets(ctx, sb, _oracle or llm)  # Oracle preferred: simple shortening
     await phase_5_width_opt(ctx, sb, llm)
     await phase_6_scoring(ctx, sb)
     await phase_7_validation(ctx, sb)
@@ -473,11 +491,38 @@ def _fetch_relevant_chunks(ctx: PipelineContext, sb: Client, keywords: list[str]
 
 # ── Phase 0: Nugget extraction + embedding (USE_NUGGETS=true only) ──────
 
+def _db_row_to_nugget(row: dict) -> Nugget:
+    """Convert a career_nuggets DB row to a Nugget dataclass."""
+    return Nugget(
+        nugget_index=row.get("nugget_index", 0),
+        nugget_text=row.get("nugget_text", ""),
+        question=row.get("question", ""),
+        alt_questions=row.get("alt_questions") or [],
+        answer=row.get("answer", ""),
+        primary_layer=row.get("primary_layer", "A"),
+        section_type=row.get("section_type"),
+        importance=row.get("importance", "P2"),
+        factuality=row.get("factuality", "fact"),
+        temporality=row.get("temporality", "past"),
+        duration=row.get("duration", "point_in_time"),
+        leadership_signal=row.get("leadership_signal", "none"),
+        company=row.get("company"),
+        role=row.get("role"),
+        event_date=row.get("event_date"),
+        people=row.get("people") or [],
+        tags=row.get("tags") or [],
+        id=row.get("id"),
+    )
+
+
 async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | None = None, byok_api_key: str | None = None, force: bool = False, force_delete: bool = False):
     """Phase 0: LLM-powered nugget extraction + embedding (USE_NUGGETS=true only).
 
+    If the user already has career_nuggets (e.g., from TruthEngine onboarding),
+    skip the expensive 70B extraction and load existing nuggets instead.
+
     Args:
-        force: If True, bypass the USE_NUGGETS feature flag (used by /nuggets/refresh endpoint).
+        force: If True, bypass the USE_NUGGETS feature flag AND skip-check (used by /nuggets/refresh endpoint).
         force_delete: If True, delete existing nuggets before extraction. Default False — preserves existing data.
     """
     from ..config import USE_NUGGETS
@@ -485,6 +530,29 @@ async def phase_0_nuggets(ctx: PipelineContext, sb: Client, groq_api_key: str | 
         return
 
     t0 = time.time()
+
+    # ── Skip extraction if user already has nuggets from onboarding ──
+    # This saves a Groq 70B call + Jina embedding batch per resume.
+    if not force and not force_delete:
+        try:
+            existing = sb.table("career_nuggets").select("id", count="exact").eq("user_id", ctx.user_id).execute()
+            existing_count = existing.count or 0
+            if existing_count > 0:
+                logger.info(f"[Phase 0] User has {existing_count} existing nuggets — loading from DB (skipping extraction)")
+                rows = (
+                    sb.table("career_nuggets")
+                    .select("*")
+                    .eq("user_id", ctx.user_id)
+                    .order("nugget_index")
+                    .execute()
+                    .data or []
+                )
+                ctx._nuggets = [_db_row_to_nugget(row) for row in rows]
+                logger.info(f"[Phase 0] Loaded {len(ctx._nuggets)} nuggets in {int((time.time()-t0)*1000)}ms")
+                return
+        except Exception as e:
+            logger.warning(f"[Phase 0] Failed to check existing nuggets: {e} — proceeding with extraction")
+
     logger.info(f"[Phase 0] Starting nugget extraction for user {ctx.user_id}")
 
     jina_api_key = os.environ.get("JINA_API_KEY", "")
