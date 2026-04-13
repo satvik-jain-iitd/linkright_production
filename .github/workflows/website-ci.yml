@@ -59,7 +59,6 @@ jobs:
           WORKER_SECRET: fake-worker-secret
           ORACLE_BACKEND_URL: http://localhost:8000
           ORACLE_BACKEND_SECRET: fake-oracle-secret
-          CUSTOM_GPT_SECRET: fake-gpt-secret
 
   oracle-backend-ci:
     name: Oracle Backend — Import Check
