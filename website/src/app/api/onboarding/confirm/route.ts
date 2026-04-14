@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
+import { isDuplicateNugget } from "@/lib/nugget-dedup";
 
 function parseJsonResponse<T>(text: string): T | null {
   const clean = text
@@ -255,6 +256,26 @@ export async function POST(request: Request) {
         ? nugget.leadership_signal
         : "none",
     };
+
+    // ── Semantic dedup check before insert ───────────────────────────────────
+    const isDupe = await isDuplicateNugget(
+      supabase,
+      user.id,
+      dbRow.nugget_text,
+      dbRow.company,
+      dbRow.role,
+      dbRow.event_date
+    );
+    if (isDupe) {
+      console.log(`[onboarding/confirm] dedup: skipping duplicate "${dbRow.nugget_text.slice(0, 60)}"`);
+      // Return a "confirmed" response — from user's perspective, it's fine
+      return Response.json({
+        status: "confirmed",
+        nugget_id: null,
+        paraphrase: nugget.paraphrase || `So what I understand is: ${nugget.answer}. Is this correct?`,
+        _deduped: true,
+      });
+    }
 
     const { data: inserted, error: dbError } = await supabase
       .from("career_nuggets")

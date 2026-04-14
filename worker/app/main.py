@@ -224,12 +224,14 @@ async def _run_nugget_embed(user_id: str) -> None:
 
         sb = create_supabase()
 
-        # Fetch nuggets without embeddings
+        # Fetch nuggets without embeddings — only TruthEngine/onboarding interviews.
+        # Resume-parsed structured data (user_work_history) never gets embeddings.
         result = (
             sb.table("career_nuggets")
-            .select("id, answer")
+            .select("id, answer, tags")
             .eq("user_id", user_id)
             .is_("embedding", "null")
+            .overlaps("tags", ["source:truthengine", "source:onboarding"])
             .execute()
         )
         rows = result.data or []

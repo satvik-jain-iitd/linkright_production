@@ -1,5 +1,48 @@
 import { createClient } from "@/lib/supabase/server";
 import { groqChat } from "@/lib/groq";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+
+function serviceSupabase() {
+  return createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
+interface ParsedExperience {
+  company: string;
+  role: string;
+  start_date?: string;
+  end_date?: string;
+  bullets?: string[];
+}
+
+/** Upsert work experiences into user_work_history. Fire-and-forget safe. */
+async function saveWorkHistory(userId: string, experiences: ParsedExperience[]): Promise<void> {
+  if (!experiences || experiences.length === 0) return;
+  const sb = serviceSupabase();
+  const rows = experiences
+    .filter((e) => e.company?.trim() && e.role?.trim())
+    .map((e) => ({
+      user_id: userId,
+      company: e.company.trim(),
+      role: e.role.trim(),
+      start_date: e.start_date?.trim() ?? null,
+      end_date: e.end_date?.trim() ?? null,
+      bullets: Array.isArray(e.bullets) ? e.bullets.filter(Boolean) : [],
+      source: "resume_parse",
+      updated_at: new Date().toISOString(),
+    }));
+  if (rows.length === 0) return;
+  const { error } = await sb
+    .from("user_work_history")
+    .upsert(rows, { onConflict: "user_id,company,role", ignoreDuplicates: false });
+  if (error) {
+    console.error("[parse-resume] saveWorkHistory error:", error.message);
+  } else {
+    console.log(`[parse-resume] saved ${rows.length} work history rows for user=${userId}`);
+  }
+}
 
 const SYSTEM_PROMPT = `You are a resume parser. Extract structured information from the resume text provided.
 
@@ -14,7 +57,16 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
   ],
   "skills": ["skill1", "skill2"],
   "certifications": ["cert1", "cert2"],
-  "career_text": "full raw text representation of work experience section only"
+  "career_text": "full raw text representation of work experience section only",
+  "experiences": [
+    {
+      "company": "Company Name",
+      "role": "Job Title",
+      "start_date": "YYYY-MM or Month YYYY",
+      "end_date": "YYYY-MM or Month YYYY or present",
+      "bullets": ["bullet 1 text", "bullet 2 text"]
+    }
+  ]
 }
 
 Rules:
@@ -22,6 +74,7 @@ Rules:
 - skills: list individual skill strings, max 30
 - certifications: list individual certifications, max 10
 - career_text: extract ONLY the work experience/employment history as plain text — not education or skills
+- experiences: extract every job/role found. bullets = exact bullet point text from the resume, max 8 per role
 - If a field is not found, use empty string or empty array
 - Return valid JSON only, no code blocks`;
 
@@ -129,6 +182,16 @@ export async function POST(request: Request) {
       return Response.json(
         { error: "Could not parse resume. Please enter your details manually." },
         { status: 422 }
+      );
+    }
+
+    // ── Save structured work experiences to DB (fire-and-forget) ──────────
+    // Stored in user_work_history — separate from career_nuggets (no embeddings).
+    // Used by resume builder as structured backbone for companies + bullet points.
+    const experiences = Array.isArray(parsed.experiences) ? parsed.experiences : [];
+    if (experiences.length > 0) {
+      saveWorkHistory(user.id, experiences as ParsedExperience[]).catch((err) =>
+        console.error("[parse-resume] saveWorkHistory failed:", err)
       );
     }
 

@@ -154,6 +154,7 @@ export async function POST(request: Request) {
 // the Claude Code skill, not a browser session.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDuplicateNugget } from "@/lib/nugget-dedup";
 
 const VALID_SECTION_TYPES = [
   "work_experience", "independent_project", "skill", "education",
@@ -200,14 +201,10 @@ async function syncAtomToNugget(
   const answerParts = [context, `${verb} ${detail}`.trim(), result].filter(Boolean);
   const answer = answerParts.join(". ").trim() || nuggetText;
 
-  // ── Dedup check: skip if identical nugget_text already exists for this user ──
-  const { data: existing } = await sb
-    .from("career_nuggets")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("nugget_text", nuggetText)
-    .limit(1);
-  if (existing && existing.length > 0) {
+  // ── Dedup check: 3-gate hybrid (exact → metadata context → cosine/Jaccard) ──
+  const eventDate = sanitizeEventDate(atom.timeframe ?? atom.event_date);
+  const isDupe = await isDuplicateNugget(sb, userId, nuggetText, company, role, eventDate);
+  if (isDupe) {
     console.log(`[ingest-atom] nugget dedup: skipping duplicate "${nuggetText.slice(0, 60)}…"`);
     return;
   }
@@ -263,7 +260,7 @@ async function syncAtomToNugget(
     leadership_signal: leadershipSignal,
     company,
     role,
-    event_date: sanitizeEventDate(atom.timeframe ?? atom.event_date),
+    event_date: eventDate, // already computed above for dedup check
     people: [],
     tags,
   };
