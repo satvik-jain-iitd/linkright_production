@@ -1,153 +1,101 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 interface StepLifeOSProps {
   onDone: () => void;
 }
 
 export function StepLifeOS({ onDone }: StepLifeOSProps) {
-  const [token, setToken] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [atomsSaved, setAtomsSaved] = useState(0);
-  // No fixed total — atom count varies per user (20–50+ depending on experience).
-  // The API doesn't expose a pre-announced total. During ingestion we show just the
-  // running count; once session_complete the final tally is the de-facto total.
-  const [sessionComplete, setSessionComplete] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Upload state
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    total: number; inserted: number; duplicates: number; rejected: number;
+  } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function formatExpiry(isoStr: string): string {
-    const ms = new Date(isoStr).getTime() - Date.now();
-    if (ms <= 0) return "expired";
-    const h = Math.floor(ms / 3600000);
-    const m = Math.floor((ms % 3600000) / 60000);
-    return h > 0 ? `Expires in ${h}h ${m}m` : `Expires in ${m}m`;
-  }
+  // Embedding progress
+  const [embedProgress, setEmbedProgress] = useState<{
+    total: number; embedded: number; progress_pct: number;
+  } | null>(null);
+  const [embedDone, setEmbedDone] = useState(false);
 
-  // Fetch or generate token on mount
-  useEffect(() => {
-    async function initToken() {
+  // Poll embedding status after upload
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startEmbedPoll = useCallback(() => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
       try {
-        // Try to get existing active token first
-        const getRes = await fetch("/api/profile/token");
-        const getData = await getRes.json();
-
-        if (getData.token) {
-          setToken(getData.token);
-          setExpiresAt(getData.expires_at ?? null);
-          setAtomsSaved(getData.atoms_saved ?? 0);
-          setLoading(false);
-          return;
+        const res = await fetch("/api/nuggets/embedding-status");
+        if (!res.ok) return;
+        const data = await res.json();
+        setEmbedProgress(data);
+        if (data.pending === 0 && data.total > 0) {
+          setEmbedDone(true);
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
         }
-
-        // Generate new token
-        const postRes = await fetch("/api/profile/token", { method: "POST" });
-        const postData = await postRes.json();
-
-        if (!postRes.ok) throw new Error(postData.error ?? "Failed to create token");
-
-        setToken(postData.token);
-        setExpiresAt(postData.expires_at ?? null);
-        setLoading(false);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to generate session code");
-        setLoading(false);
-      }
-    }
-
-    initToken();
+      } catch { /* ignore */ }
+    }, 2000);
   }, []);
 
-  // Poll status every 5 seconds once token is set
-  const poll = useCallback(async () => {
-    if (!token || sessionComplete) return;
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  // Handle file upload
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    setUploadError(null);
+    setUploadResult(null);
+    setEmbedDone(false);
 
     try {
-      const res = await fetch(`/api/profile/token/status?token=${token}`);
-      if (!res.ok) return;
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("File too large (max 5 MB)");
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/nuggets/upload", {
+        method: "POST",
+        body: formData,
+      });
 
       const data = await res.json();
-      const saved = data.atoms_saved ?? 0;
-      setAtomsSaved(saved);
 
-      if (data.session_complete) {
-        setSessionComplete(true);
+      if (!res.ok) {
+        throw new Error(data.error || "Upload failed");
       }
-    } catch {
-      // Ignore poll errors
+
+      setUploadResult(data);
+
+      // Start polling embedding progress
+      if (data.inserted > 0) {
+        startEmbedPoll();
+      } else {
+        setEmbedDone(true);
+      }
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploading(false);
     }
-  }, [token, sessionComplete]);
-
-  useEffect(() => {
-    if (!token) return;
-    const interval = setInterval(poll, 5000);
-    return () => clearInterval(interval);
-  }, [token, poll]);
-
-  const handleCopy = async () => {
-    if (!token) return;
-    await navigator.clipboard.writeText(token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-8">
-        <h2 className="text-2xl font-bold text-foreground">
-          Career Story Collection
-        </h2>
-        <p className="text-muted">Generating your session code…</p>
-      </div>
-    );
-  }
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleUpload(file);
+  };
 
-  if (error) {
-    return (
-      <div className="space-y-8">
-        <h2 className="text-2xl font-bold text-foreground">
-          Career Story Collection
-        </h2>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-3">
-          <p className="text-sm font-medium text-red-700">
-            Something went wrong while setting up your session.
-          </p>
-          <p className="text-xs text-red-600">{error}</p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                setError(null);
-                setLoading(true);
-                // Re-trigger initToken
-                fetch("/api/profile/token")
-                  .then((r) => r.json())
-                  .then((d) => {
-                    if (d.token) { setToken(d.token); setAtomsSaved(d.atoms_saved ?? 0); setLoading(false); return; }
-                    return fetch("/api/profile/token", { method: "POST" }).then((r) => r.json().then((pd) => ({ ok: r.ok, ...pd })));
-                  })
-                  .then((pd) => {
-                    if (pd && pd.token) { setToken(pd.token); setLoading(false); }
-                    else if (pd) { setError(pd.error ?? "Failed to create token"); setLoading(false); }
-                  })
-                  .catch((e) => { setError(e.message ?? "Failed to generate session code"); setLoading(false); });
-              }}
-              className="rounded-lg bg-primary-500 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
-            >
-              Try again
-            </button>
-            <button
-              onClick={onDone}
-              className="rounded-lg border border-border px-4 py-2 text-sm text-muted hover:text-foreground transition-colors"
-            >
-              Skip for now
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleUpload(file);
+  };
 
   return (
     <div className="space-y-6">
@@ -156,108 +104,136 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
           Career Story Collection
         </h2>
         <p className="mt-2 text-muted">
-          Our AI coach will ask you about your work — 10 questions, ~15 minutes.
-          Your answers become structured career atoms powering your resumes and interview prep.
+          Upload your career data to power resume generation and JD matching.
+          Run the interview skill in Claude Code first, then upload the JSON file here.
         </p>
       </div>
 
-      {/* Box 1: Session code */}
-      <div className="rounded-lg border border-border bg-surface p-5 space-y-3">
-        <p className="text-sm font-medium text-muted uppercase tracking-wide">
-          Step 1 — Your session code
-        </p>
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xl font-bold text-foreground tracking-widest">
-            {token}
-          </span>
-          <button
-            onClick={handleCopy}
-            className="shrink-0 rounded-md border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground hover:border-primary-400 transition-colors"
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        </div>
-        <p className="text-xs text-muted">{expiresAt ? formatExpiry(expiresAt) : "Expires in 24 hours"}</p>
-      </div>
-
-      {/* Box 2: Download Claude skill */}
+      {/* Box 1: How to generate JSON */}
       <div className="rounded-lg border border-border bg-surface p-5 space-y-4">
         <p className="text-sm font-medium text-muted uppercase tracking-wide">
-          Step 2 — Run the career coach in Claude Code
+          Step 1 — Generate career data in Claude Code
         </p>
-        <a
-          href="/interview-coach-skill.zip"
-          download="interview-coach-skill.zip"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
-        >
-          Download Interview Coach Skill ↓
-        </a>
         <ol className="space-y-1.5 text-sm text-muted list-none">
           <li className="flex gap-2">
             <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">1</span>
-            <span>Open Claude Code (claude.ai/code or the desktop app)</span>
+            <span>Open Claude Code (claude.ai/code or desktop app)</span>
           </li>
           <li className="flex gap-2">
             <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">2</span>
-            <span>Drag and drop the downloaded zip into the Claude Code window to install the skill</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">3</span>
             <span>Type <code className="font-mono text-xs bg-surface-alt border border-border rounded px-1 py-0.5">/interview-coach</code> and press Enter</span>
           </li>
           <li className="flex gap-2">
+            <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">3</span>
+            <span>Answer ~10 questions about your career (~15 minutes)</span>
+          </li>
+          <li className="flex gap-2">
             <span className="shrink-0 font-mono text-xs bg-surface-alt border border-border rounded px-1.5 py-0.5 text-foreground">4</span>
-            <span>Enter your session code above when the skill asks for it</span>
+            <span>Download the <code className="font-mono text-xs bg-surface-alt border border-border rounded px-1 py-0.5">career_nuggets_*.json</code> file</span>
           </li>
         </ol>
       </div>
 
-      {/* Box 3: Status */}
-      <div className="rounded-lg border border-border bg-surface p-5 space-y-3">
+      {/* Box 2: Upload JSON */}
+      <div className="rounded-lg border border-border bg-surface p-5 space-y-4">
         <p className="text-sm font-medium text-muted uppercase tracking-wide">
-          Step 3 — Status
+          Step 2 — Upload your career data
         </p>
-        {sessionComplete ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-success">
-              <span className="text-lg">✓</span>
-              <span className="font-semibold">
-                {atomsSaved} career highlight{atomsSaved !== 1 ? "s" : ""} saved to your graph
-              </span>
+        <div
+          className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background px-6 py-8 text-center transition-colors hover:border-primary-400 hover:bg-surface"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? (
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-400/30 border-t-primary-500" />
+              Processing nuggets...
             </div>
-            <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
-              <div className="h-full bg-success transition-all duration-700" style={{ width: "100%" }} />
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted">
-                {atomsSaved > 0
-                  ? `${atomsSaved} career highlight${atomsSaved !== 1 ? "s" : ""} saved`
-                  : "Waiting for your Claude Code session…"}
-              </span>
-              {atomsSaved > 0 && (
-                <span className="text-xs text-muted animate-pulse">saving…</span>
-              )}
-            </div>
-            {atomsSaved > 0 ? (
-              <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
-                {/* Indeterminate-style: bar grows with count but never reaches 100% until session_complete */}
-                <div
-                  className="h-full bg-primary-500 transition-all duration-700 rounded-full animate-pulse"
-                  style={{ width: `${Math.min(60 + atomsSaved, 90)}%` }}
-                />
-              </div>
-            ) : (
-              <p className="text-xs text-muted">
-                This updates automatically once you run the skill and answer the questions.
+          ) : (
+            <>
+              <svg className="h-8 w-8 text-muted" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <p className="text-sm text-muted">
+                Drop <code className="font-mono text-xs">career_nuggets.json</code> here or{" "}
+                <span className="text-primary-500 underline">click to browse</span>
+              </p>
+              <p className="text-xs text-muted/60">.json files only</p>
+            </>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        {/* Upload result */}
+        {uploadResult && (
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-1">
+            <p className="text-sm font-medium text-green-700">
+              {uploadResult.inserted} nugget{uploadResult.inserted !== 1 ? "s" : ""} uploaded
+              {uploadResult.duplicates > 0 && `, ${uploadResult.duplicates} duplicate${uploadResult.duplicates !== 1 ? "s" : ""} skipped`}
+            </p>
+            {uploadResult.rejected > 0 && (
+              <p className="text-xs text-amber-600">
+                {uploadResult.rejected} nugget{uploadResult.rejected !== 1 ? "s" : ""} had validation errors
               </p>
             )}
           </div>
         )}
+
+        {/* Upload error */}
+        {uploadError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+            <p className="text-sm text-red-700">{uploadError}</p>
+          </div>
+        )}
       </div>
 
+      {/* Box 3: Embedding progress */}
+      {uploadResult && uploadResult.inserted > 0 && (
+        <div className="rounded-lg border border-border bg-surface p-5 space-y-3">
+          <p className="text-sm font-medium text-muted uppercase tracking-wide">
+            Step 3 — Embedding
+          </p>
+          {embedDone ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-green-600">
+                <span className="text-lg">✓</span>
+                <span className="font-semibold">
+                  All nuggets embedded and ready for matching
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
+                <div className="h-full bg-green-500 transition-all duration-700" style={{ width: "100%" }} />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted">
+                  {embedProgress
+                    ? `Embedding: ${embedProgress.embedded}/${embedProgress.total}`
+                    : "Starting embedding..."}
+                </span>
+                <span className="text-xs text-muted animate-pulse">processing...</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 transition-all duration-500 rounded-full"
+                  style={{ width: `${embedProgress?.progress_pct ?? 5}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Navigation */}
       <div className="flex items-center justify-between pt-2">
         <button
           onClick={onDone}
@@ -266,7 +242,7 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
           Skip for now →
         </button>
 
-        {sessionComplete && atomsSaved > 0 && (
+        {(embedDone || (uploadResult && uploadResult.inserted === 0)) && (
           <button
             onClick={onDone}
             className="rounded-lg bg-primary-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
