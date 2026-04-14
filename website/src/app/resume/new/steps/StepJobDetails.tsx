@@ -178,12 +178,24 @@ export function StepJobDetails({ data, update, next }: Props) {
 
   // [WIZARD-STREAMLINE] Analysis logic (merged from StepJDAnalysis)
   function buildVerifyRows(result: JDAnalysisResult) {
+    // v4: derive match info from role_scores[].best_nugget_per_req
+    const coveredSet = new Set(result.covered_reqs ?? []);
+    // Find best nugget text per requirement across all roles
+    const bestNuggetTextByReq: Record<string, string> = {};
+    for (const rs of result.role_scores ?? []) {
+      for (const [reqId, match] of Object.entries(rs.best_nugget_per_req ?? {})) {
+        if (!bestNuggetTextByReq[reqId]) {
+          bestNuggetTextByReq[reqId] = match.nugget_text;
+        }
+      }
+    }
+
     const rows: VerifyRow[] = result.requirements.map((req) => {
-      const match = result.matches.find((m) => m.req_id === req.id);
+      const isCovered = coveredSet.has(req.id);
       return {
         req,
-        chunk: match?.chunk ?? null,
-        status: match ? match.status : "gap",
+        chunk: bestNuggetTextByReq[req.id] ?? null,
+        status: isCovered ? "met" : "gap",
         userOverride: undefined,
       };
     });

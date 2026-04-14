@@ -1,8 +1,24 @@
+/**
+ * POST /api/jd/analyze
+ *
+ * v4 rewrite — per-role relevance scoring.
+ *
+ * Flow:
+ *   1. Groq 8B extracts JD requirements
+ *   2. Oracle nomic-embed-text embeds each requirement (768-dim)
+ *   3. For each company/role: find best nugget per requirement (cosine)
+ *   4. Rank roles → primary / secondary / tertiary
+ *   5. Identify gaps (uncovered requirements)
+ *
+ * Returns: { requirements[], role_scores[], coverage_pct, gaps[] }
+ */
+
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { scoreRequirementsWithNuggets, maxSemanticScore } from "@/lib/jd-matcher";
-import { jinaEmbed } from "@/lib/jina-embed";
 import { groqChat } from "@/lib/groq";
+import { cosineSimilarity } from "@/lib/jd-matcher";
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface JDRequirement {
   id: string;
@@ -11,13 +27,41 @@ export interface JDRequirement {
   importance: "required" | "preferred";
 }
 
-export interface JDMatch {
-  req_id: string;
-  chunk: string;
-  status: "met" | "partial";
-  score: number;
-  llm_status: "met" | "partial" | "gap";
-  composite_score: number;
+interface NuggetRow {
+  id: string;
+  company: string | null;
+  role: string | null;
+  nugget_text: string;
+  answer: string;
+  embedding: number[] | null;
+  importance: string;
+  event_date: string | null;
+}
+
+interface WorkHistoryRow {
+  company: string;
+  role: string;
+  start_date: string | null;
+  end_date: string | null;
+  bullets: string[];
+}
+
+interface BestNuggetMatch {
+  nugget_id: string;
+  nugget_text: string;
+  cosine_score: number;
+}
+
+export interface RoleScore {
+  company: string;
+  role: string;
+  dates: string;
+  relevance_score: number;
+  classification: "primary" | "secondary" | "tertiary";
+  covers: string[];
+  best_nugget_per_req: Record<string, BestNuggetMatch>;
+  nugget_count: number;
+  has_interview_data: boolean;
 }
 
 export interface JDGap {
@@ -29,8 +73,12 @@ export interface JDGap {
 
 export interface JDAnalysisResult {
   requirements: JDRequirement[];
-  matches: JDMatch[];
+  role_scores: RoleScore[];
+  primary_role: string;
+  coverage_pct: number;
+  covered_reqs: string[];
   gaps: JDGap[];
+  required_gap_count: number;
 }
 
 // ── Prompts ──────────────────────────────────────────────────────────────────
@@ -54,27 +102,11 @@ Rules:
 - Keep "text" concise (under 80 chars) but specific
 - Note experience duration requirements (e.g. '5+ years of experience in X') as a separate requirement with type 'experience_duration'`;
 
-const SCORING_PROMPT = `You are a career screener evaluating resume candidates.
-
-For each pair below, score 0-100 how well the candidate experience demonstrates the job requirement FROM A PROFESSIONAL/CAREER PERSPECTIVE ONLY.
-
-Rules:
-- Only professional work counts: roles held, projects delivered, quantified outcomes, technical skills used at work
-- Personal stories, exam/JEE scores, mentoring family members, hobbies, personal life = 0-15 max
-- 80-100: Clear direct professional evidence for this exact requirement
-- 50-79: Tangential or partial professional evidence (related but incomplete)
-- 0-49: Not professionally relevant, or is personal/life/educational content not about work output
-
-Return ONLY valid JSON array, no markdown:
-[{"req_id":"r1","score":85}, ...]`;
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseJsonResponse<T>(text: string): T | null {
   const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-  try {
-    return JSON.parse(clean) as T;
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(clean) as T; } catch { return null; }
 }
 
 function parseRequirements(text: string): JDRequirement[] {
@@ -94,70 +126,147 @@ function parseRequirements(text: string): JDRequirement[] {
     }));
 }
 
-// ── Career text search ───────────────────────────────────────────────────────
+// ── Oracle embedding ─────────────────────────────────────────────────────────
 
-async function searchChunks(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  query: string
-): Promise<string[]> {
-  const STOPWORDS = new Set([
-    "experience", "years", "strong", "knowledge", "ability", "understanding",
-    "what", "with", "this", "from", "which", "when", "were", "have",
-  ]);
+async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
+  const oracleUrl = process.env.ORACLE_BACKEND_URL ?? "";
+  const oracleSecret = process.env.ORACLE_BACKEND_SECRET ?? "";
+  if (!oracleUrl) return texts.map(() => null);
 
-  const words = query
-    .replace(/[^a-zA-Z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w: string) => w.length >= 4 && !STOPWORDS.has(w.toLowerCase()))
-    .map((w: string) => w.toLowerCase());
-  const unique = [...new Set(words)].slice(0, 4);
-  if (unique.length === 0) return [];
-
-  const prefixQuery = unique.map((w) => `'${w}':*`).join(" | ");
-  const { data } = await supabase
-    .from("career_chunks")
-    .select("chunk_text")
-    .eq("user_id", userId)
-    .textSearch("chunk_text", prefixQuery, { config: "english" })
-    .limit(5);
-
-  return (data || []).map((row: { chunk_text: string }) => row.chunk_text);
+  const results: (number[] | null)[] = [];
+  for (const text of texts) {
+    try {
+      const resp = await fetch(`${oracleUrl.replace(/\/$/, "")}/lifeos/embed`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${oracleSecret}`,
+        },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!resp.ok) { results.push(null); continue; }
+      const data = (await resp.json()) as { embedding?: number[] };
+      results.push(Array.isArray(data.embedding) ? data.embedding : null);
+    } catch {
+      results.push(null);
+    }
+  }
+  return results;
 }
 
-// ── LLM batch relevance scoring ──────────────────────────────────────────────
+// ── Per-role scoring (core innovation) ───────────────────────────────────────
 
-async function scoreRelevanceBatch(
-  pairs: { req_id: string; req_text: string; chunk: string }[]
-): Promise<Record<string, number>> {
-  if (pairs.length === 0) return {};
+const COSINE_THRESHOLD = 0.45;
 
-  const userMsg = pairs
-    .map(
-      (p, i) =>
-        `${i + 1}. [${p.req_id}] Requirement: "${p.req_text}"\n   Experience: "${p.chunk.slice(0, 400)}"`
-    )
-    .join("\n\n");
+function scoreRolesAgainstRequirements(
+  requirements: JDRequirement[],
+  reqEmbeddings: (number[] | null)[],
+  nuggets: NuggetRow[],
+  workHistory: WorkHistoryRow[]
+): RoleScore[] {
+  // Build role → nuggets map
+  const roleMap = new Map<string, { company: string; role: string; nuggets: NuggetRow[] }>();
 
-  try {
-    const text = await groqChat(
-      [
-        { role: "system", content: SCORING_PROMPT },
-        { role: "user", content: `Score these ${pairs.length} pairs:\n\n${userMsg}` },
-      ],
-      { maxTokens: 800, temperature: 0.1 }
-    );
-    const scores = parseJsonResponse<{ req_id: string; score: number }[]>(text);
-    if (!Array.isArray(scores)) return {};
-
-    return Object.fromEntries(
-      scores
-        .filter((s) => s.req_id && typeof s.score === "number")
-        .map((s) => [s.req_id, Math.max(0, Math.min(100, Math.round(s.score)))])
-    );
-  } catch {
-    return {}; // fallback: caller uses text-search result without scoring
+  for (const n of nuggets) {
+    if (!n.company) continue;
+    const key = `${n.company}|||${n.role ?? ""}`;
+    if (!roleMap.has(key)) {
+      roleMap.set(key, { company: n.company, role: n.role ?? "", nuggets: [] });
+    }
+    roleMap.get(key)!.nuggets.push(n);
   }
+
+  // Add roles from work_history that have no nuggets (resume-only roles)
+  for (const wh of workHistory) {
+    const key = `${wh.company}|||${wh.role}`;
+    if (!roleMap.has(key)) {
+      roleMap.set(key, { company: wh.company, role: wh.role, nuggets: [] });
+    }
+  }
+
+  // Build work_history lookup for dates
+  const whLookup = new Map<string, WorkHistoryRow>();
+  for (const wh of workHistory) {
+    whLookup.set(`${wh.company}|||${wh.role}`, wh);
+  }
+
+  // Score each role
+  const roleScores: RoleScore[] = [];
+
+  for (const [key, roleData] of roleMap.entries()) {
+    const wh = whLookup.get(key);
+    const dates = wh
+      ? `${wh.start_date ?? "?"} – ${wh.end_date ?? "present"}`
+      : "";
+
+    const bestPerReq: Record<string, BestNuggetMatch> = {};
+    const covers: string[] = [];
+    const cosineScores: number[] = [];
+
+    // Filter nuggets with embeddings for this role
+    const roleNuggets = roleData.nuggets.filter(
+      (n) => Array.isArray(n.embedding) && n.embedding.length > 0
+    );
+
+    for (let i = 0; i < requirements.length; i++) {
+      const req = requirements[i];
+      const reqEmb = reqEmbeddings[i];
+      if (!reqEmb) continue;
+
+      let bestCosine = 0;
+      let bestNugget: NuggetRow | null = null;
+
+      for (const n of roleNuggets) {
+        const sim = cosineSimilarity(reqEmb, n.embedding!);
+        if (sim > bestCosine) {
+          bestCosine = sim;
+          bestNugget = n;
+        }
+      }
+
+      cosineScores.push(bestCosine);
+
+      if (bestCosine >= COSINE_THRESHOLD && bestNugget) {
+        covers.push(req.id);
+        bestPerReq[req.id] = {
+          nugget_id: bestNugget.id,
+          nugget_text: bestNugget.nugget_text,
+          cosine_score: Math.round(bestCosine * 1000) / 1000,
+        };
+      }
+    }
+
+    // Role relevance = avg of best cosines per requirement
+    const avgCosine =
+      cosineScores.length > 0
+        ? cosineScores.reduce((a, b) => a + b, 0) / cosineScores.length
+        : 0;
+
+    roleScores.push({
+      company: roleData.company,
+      role: roleData.role,
+      dates,
+      relevance_score: Math.round(avgCosine * 1000) / 1000,
+      classification: "tertiary", // will be set below
+      covers,
+      best_nugget_per_req: bestPerReq,
+      nugget_count: roleData.nuggets.length,
+      has_interview_data: roleData.nuggets.length > 0,
+    });
+  }
+
+  // Sort by relevance descending
+  roleScores.sort((a, b) => b.relevance_score - a.relevance_score);
+
+  // Classify: top = primary, #2 = secondary, rest = tertiary
+  for (let i = 0; i < roleScores.length; i++) {
+    if (i === 0) roleScores[i].classification = "primary";
+    else if (i === 1) roleScores[i].classification = "secondary";
+    else roleScores[i].classification = "tertiary";
+  }
+
+  return roleScores;
 }
 
 // ── Route handler ────────────────────────────────────────────────────────────
@@ -172,17 +281,22 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!rateLimit(`jd-analyze:${user.id}`, 1, 240_000)) {
+  if (!rateLimit(`jd-analyze:${user.id}`, 3, 60_000)) {
     return rateLimitResponse("JD analysis");
   }
 
-  const { jd_text } = await request.json();
-
-  if (!jd_text) {
-    return Response.json({ error: "Missing required fields" }, { status: 400 });
+  let body: { jd_text?: string };
+  try { body = await request.json(); } catch {
+    return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Step 1: Extract requirements via LLM
+  const { jd_text } = body;
+  if (!jd_text || typeof jd_text !== "string" || jd_text.trim().length < 50) {
+    return Response.json({ error: "jd_text required (min 50 chars)" }, { status: 400 });
+  }
+
+  // ── Step 1: Extract requirements (Groq 8B) ────────────────────────────
+
   let requirements: JDRequirement[] = [];
   try {
     const text = await groqChat(
@@ -193,203 +307,84 @@ export async function POST(request: Request) {
       { maxTokens: 1500, temperature: 0.1 }
     );
     requirements = parseRequirements(text);
-  } catch {
+  } catch (err) {
+    console.error("[jd/analyze] Groq extraction failed:", err);
     return Response.json({ error: "Failed to analyze JD" }, { status: 500 });
   }
 
   if (requirements.length === 0) {
-    return Response.json({ error: "Could not extract requirements" }, { status: 500 });
+    return Response.json({ error: "Could not extract requirements from JD" }, { status: 422 });
   }
 
-  // Step 1b: Fetch career_nuggets for composite scoring
-  const { data: nuggetRows } = await supabase
-    .from("career_nuggets")
-    .select("id, company, role, answer, event_date, section_type, leadership_signal")
-    .eq("user_id", user.id);
-  const userNuggets: import("@/lib/jd-matcher").NuggetMeta[] = (nuggetRows ?? []).map(
-    (n: Record<string, unknown>) => ({
-      section_type: String(n["section_type"] ?? ""),
-      company: (n["company"] as string | null) ?? null,
-      role: (n["role"] as string | null) ?? null,
-      event_date: (n["event_date"] as string | null) ?? null,
-      answer: (n["answer"] as string | null) ?? null,
-    })
+  // ── Step 2: Embed requirements (Oracle nomic-embed-text) ───────────────
+
+  const reqTexts = requirements.map((r) => r.text);
+  const reqEmbeddings = await oracleEmbedBatch(reqTexts);
+
+  const embeddedCount = reqEmbeddings.filter((e) => e !== null).length;
+  if (embeddedCount === 0) {
+    console.warn("[jd/analyze] No embeddings generated — Oracle may be down. Proceeding without semantic scoring.");
+  }
+
+  // ── Step 3: Fetch user's nuggets (with embeddings) + work_history ──────
+
+  const [nuggetResult, whResult] = await Promise.all([
+    supabase
+      .from("career_nuggets")
+      .select("id, company, role, nugget_text, answer, embedding, importance, event_date")
+      .eq("user_id", user.id)
+      .eq("primary_layer", "A"), // Only career nuggets, not life insights
+    supabase
+      .from("user_work_history")
+      .select("company, role, start_date, end_date, bullets")
+      .eq("user_id", user.id),
+  ]);
+
+  const nuggets: NuggetRow[] = (nuggetResult.data ?? []) as NuggetRow[];
+  const workHistory: WorkHistoryRow[] = (whResult.data ?? []) as WorkHistoryRow[];
+
+  // ── Step 4: Per-role relevance scoring ─────────────────────────────────
+
+  const roleScores = scoreRolesAgainstRequirements(
+    requirements,
+    reqEmbeddings,
+    nuggets,
+    workHistory
   );
 
-  // Step 1c: Semantic scoring via Jina embeddings (optional, degrades gracefully)
-  //
-  // Strategy:
-  //   1. Embed all requirements in one Jina batch call
-  //   2. Fetch stored nugget embeddings from career_nuggets
-  //   3. For each requirement, take max cosine similarity across all nuggets
-  //   This runs in parallel with text search (Step 2) but we await it before
-  //   building semanticScores below.
-  // ── Step 1c: Semantic scoring via embeddings ──────────────────────────
-  // Two paths: Oracle nomic-embed-text (preferred, free) or Jina (fallback).
-  // Both produce 768-dim vectors stored in career_nuggets.embedding.
-  // IMPORTANT: nugget embeddings and query embeddings must use the SAME model.
-  const jinaApiKey = process.env.JINA_API_KEY ?? "";
-  const oracleUrl = process.env.ORACLE_BACKEND_URL ?? "";
-  const oracleSecret = process.env.ORACLE_BACKEND_SECRET ?? "";
-  const jinaSemanticScores: Record<string, number> = {};
+  // ── Step 5: Compute coverage + gaps ────────────────────────────────────
 
-  if (userNuggets.length > 0) {
-    try {
-      // Fetch stored embeddings for this user's nuggets
-      const { data: embeddingRows } = await supabase
-        .from("career_nuggets")
-        .select("id, embedding")
-        .eq("user_id", user.id)
-        .not("embedding", "is", null);
-
-      const nuggetEmbeddings: number[][] = (embeddingRows ?? [])
-        .map((row: { id: string; embedding: unknown }) => row.embedding as unknown)
-        .filter((emb: unknown): emb is number[] => Array.isArray(emb) && emb.length > 0);
-
-      if (nuggetEmbeddings.length > 0) {
-        const reqTexts = requirements.map((r) => r.text.slice(0, 200));
-        let reqEmbeddings: number[][] | null = null;
-
-        if (oracleUrl) {
-          // ── Oracle path: embed each requirement via nomic-embed-text ──
-          // Same model that generated nugget embeddings → consistent vector space
-          const embeddings: number[][] = [];
-          for (const text of reqTexts) {
-            try {
-              const res = await fetch(`${oracleUrl}/lifeos/embed`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${oracleSecret}`,
-                },
-                body: JSON.stringify({ text }),
-                signal: AbortSignal.timeout(5000),
-              });
-              if (res.ok) {
-                const { embedding } = await res.json();
-                embeddings.push(embedding);
-              } else {
-                embeddings.push([]); // placeholder — will reduce similarity to 0
-              }
-            } catch {
-              embeddings.push([]);
-            }
-          }
-          if (embeddings.some((e) => e.length > 0)) {
-            reqEmbeddings = embeddings;
-          }
-        } else if (jinaApiKey) {
-          // ── Jina fallback: batch embed all requirements ──
-          // Only use if nugget embeddings were also generated by Jina (same vector space)
-          reqEmbeddings = await jinaEmbed(reqTexts, jinaApiKey);
-        }
-
-        if (reqEmbeddings && reqEmbeddings.length === requirements.length) {
-          for (let i = 0; i < requirements.length; i++) {
-            if (reqEmbeddings[i].length > 0) {
-              const sim = maxSemanticScore(reqEmbeddings[i], nuggetEmbeddings);
-              jinaSemanticScores[requirements[i].text] = sim;
-            }
-          }
-        }
-      }
-    } catch {
-      // Semantic scoring failed — composite falls back to exact + metadata only
+  const coveredReqs = new Set<string>();
+  for (const rs of roleScores) {
+    for (const reqId of rs.covers) {
+      coveredReqs.add(reqId);
     }
   }
 
-  // Step 2: Text search — gather top candidate chunk per requirement
-  const candidatePairs: { req_id: string; req_text: string; chunk: string }[] = [];
+  const gaps: JDGap[] = requirements
+    .filter((r) => !coveredReqs.has(r.id))
+    .map((r) => ({
+      req_id: r.id,
+      text: r.text,
+      category: r.category,
+      importance: r.importance,
+    }));
 
-  await Promise.allSettled(
-    requirements.map(async (req) => {
-      const chunks = await searchChunks(supabase, user.id, req.text);
-      if (chunks.length > 0) {
-        candidatePairs.push({ req_id: req.id, req_text: req.text, chunk: chunks[0] });
-      }
-    })
-  );
+  const coveragePct = Math.round((coveredReqs.size / requirements.length) * 100);
+  const requiredGapCount = gaps.filter((g) => g.importance === "required").length;
+  const primaryRole = roleScores.length > 0 ? roleScores[0].company : "";
 
-  // Step 3: LLM batch relevance scoring — career-perspective only, 80% threshold
-  const scores = await scoreRelevanceBatch(candidatePairs);
-  const scoringAvailable = Object.keys(scores).length > 0;
+  // ── Return result ──────────────────────────────────────────────────────
 
-  // Step 3b: Composite scoring via jd-matcher (post-processing validation layer)
-  // Semantic score = Jina cosine similarity if available, else LLM score (normalised 0→1).
-  // Jina is preferred because it uses actual embedding vectors rather than LLM text judgement.
-  const semanticScores: Record<string, number> = {};
-  for (const req of requirements) {
-    if (typeof jinaSemanticScores[req.text] === "number") {
-      semanticScores[req.text] = jinaSemanticScores[req.text];
-    } else {
-      const llmScore = scores[req.id];
-      if (typeof llmScore === "number") {
-        semanticScores[req.text] = llmScore / 100;
-      }
-    }
-  }
+  const result: JDAnalysisResult = {
+    requirements,
+    role_scores: roleScores,
+    primary_role: primaryRole,
+    coverage_pct: coveragePct,
+    covered_reqs: [...coveredReqs],
+    gaps,
+    required_gap_count: requiredGapCount,
+  };
 
-  const compositeResults = scoreRequirementsWithNuggets(
-    requirements.map((r) => ({ text: r.text, type: r.category })),
-    userNuggets,
-    semanticScores
-  );
-  const compositeByText = Object.fromEntries(
-    compositeResults.map((r) => [r.requirement, r])
-  );
-
-  // Step 4: Classify matches vs gaps based on scores
-  const matches: JDMatch[] = [];
-  const gaps: JDGap[] = [];
-
-  const candidateByReqId = Object.fromEntries(candidatePairs.map((p) => [p.req_id, p.chunk]));
-
-  for (const req of requirements) {
-    const chunk = candidateByReqId[req.id];
-    const score = scores[req.id] ?? -1;
-    const compositeResult = compositeByText[req.text];
-    const compositeScore = compositeResult?.composite_score ?? 0;
-
-    if (!chunk) {
-      // No text search hit at all
-      gaps.push({ req_id: req.id, text: req.text, category: req.category, importance: req.importance });
-      continue;
-    }
-
-    // Determine LLM classification
-    let llmStatus: "met" | "partial" | "gap";
-    if (scoringAvailable) {
-      if (score >= 80) llmStatus = "met";
-      else if (score >= 50) llmStatus = "partial";
-      else llmStatus = "gap";
-    } else {
-      llmStatus = "partial";
-    }
-
-    // Post-processing: validate/override LLM classification with composite score
-    let finalStatus: "met" | "partial" | "gap" = llmStatus;
-    if (llmStatus === "gap" && compositeScore > 0.6) {
-      // LLM was too strict — composite says there's evidence
-      finalStatus = "partial";
-    } else if (llmStatus === "met" && compositeScore < 0.3) {
-      // LLM was too lenient — composite says evidence is weak
-      finalStatus = "partial";
-    }
-
-    if (finalStatus === "gap") {
-      gaps.push({ req_id: req.id, text: req.text, category: req.category, importance: req.importance });
-    } else {
-      matches.push({
-        req_id: req.id,
-        chunk,
-        status: finalStatus,
-        score,
-        llm_status: llmStatus,
-        composite_score: compositeScore,
-      });
-    }
-  }
-
-  const result: JDAnalysisResult = { requirements, matches, gaps };
   return Response.json(result);
 }
