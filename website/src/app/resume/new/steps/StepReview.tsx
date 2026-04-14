@@ -5,6 +5,7 @@ import type { WizardData } from "../WizardShell";
 import { QualityPanel } from "@/components/QualityPanel";
 import type { QualityStats } from "@/components/QualityPanel";
 import { TemplateLockPanel } from "@/components/TemplateLockPanel";
+import { measureBulletWidth, type MeasureResult } from "@/lib/bullet-width";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -20,20 +21,12 @@ interface SelectedElement {
 }
 
 const PRESETS: { label: string; prompt: string }[] = [
-  { label: "Make more impactful", prompt: "Make more impactful" },
-  {
-    label: "Expand to fill width (98%)",
-    prompt:
-      "Expand this bullet point to fill approximately 98% of the line width. Add meaningful detail, context, or metrics. Keep it to a single line.",
-  },
-  { label: "Make more concise", prompt: "Make more concise" },
-  { label: "Quantify with metrics", prompt: "Quantify with metrics" },
-  { label: "Improve action verb", prompt: "Improve action verb" },
-  {
-    label: "Justify",
-    prompt:
-      "Rewrite this bullet point so it reads as justified, professional prose with no informal language or hedging.",
-  },
+  { label: "More impactful", prompt: "Make this bullet more impactful — lead with the outcome/result (XYZ format: impact first, measurement second, action last)" },
+  { label: "Quantify", prompt: "Add specific metrics to this bullet — percentages, dollar amounts, team sizes, timelines. Use numbers from my career context." },
+  { label: "XYZ format", prompt: "Rewrite in XYZ format: X=impact/outcome FIRST, Y=how it was measured, Z=what I specifically did. Lead with the result, not the action." },
+  { label: "Concise", prompt: "Make more concise — cut adjectives and setup clauses, keep metrics and outcomes" },
+  { label: "Stronger verb", prompt: "Replace the action verb with a stronger, more specific alternative" },
+  { label: "JD keywords", prompt: "Naturally incorporate JD keywords into this bullet without losing meaning" },
 ];
 
 // Injected into the iframe to enable element picking
@@ -121,6 +114,10 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
   const [savedTemplate, setSavedTemplate] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
 
+  // v4: Per-bullet width measurement + fit-to-line
+  const [bulletMeasure, setBulletMeasure] = useState<MeasureResult | null>(null);
+  const [fitting, setFitting] = useState(false);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -150,12 +147,23 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "element_selected") {
-        setSelectedElement({
+        const el = {
           html: e.data.html,
           selector: e.data.selector,
           preview: e.data.preview,
-        });
+        };
+        setSelectedElement(el);
         setSelectorMode(false);
+
+        // v4: auto-measure width if it's a bullet point (li element)
+        if (el.html.startsWith("<li")) {
+          // Extract inner text (strip outer <li> tag and inner HTML)
+          const innerMatch = el.html.match(/<li[^>]*>([\s\S]*)<\/li>/i);
+          const innerHtml = innerMatch ? innerMatch[1].trim() : el.preview;
+          setBulletMeasure(measureBulletWidth(innerHtml));
+        } else {
+          setBulletMeasure(null);
+        }
       }
     };
     window.addEventListener("message", handler);
@@ -556,6 +564,94 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                   ×
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* v4: Per-bullet width measurement + Fit to line */}
+          {selectedElement && bulletMeasure && (
+            <div className="border-t border-border px-4 py-2">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Width
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-border">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      bulletMeasure.status === "PASS"
+                        ? "bg-green-500"
+                        : bulletMeasure.status === "OVERFLOW"
+                          ? "bg-red-500"
+                          : "bg-amber-500"
+                    }`}
+                    style={{ width: `${Math.min(bulletMeasure.fill_pct, 100)}%` }}
+                  />
+                </div>
+                <span
+                  className={`font-mono text-xs font-medium ${
+                    bulletMeasure.status === "PASS"
+                      ? "text-green-700"
+                      : bulletMeasure.status === "OVERFLOW"
+                        ? "text-red-600"
+                        : "text-amber-600"
+                  }`}
+                >
+                  {bulletMeasure.fill_pct}%
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[10px] text-muted">
+                <span>{bulletMeasure.status === "PASS" ? "Fits in one line" : bulletMeasure.status === "OVERFLOW" ? "Wraps to 2 lines" : "Too short"}</span>
+                <span>{bulletMeasure.weighted_total.toFixed(1)} / 101.4 CU</span>
+              </div>
+              {bulletMeasure.status !== "PASS" && (
+                <button
+                  onClick={async () => {
+                    if (!selectedElement) return;
+                    setFitting(true);
+                    try {
+                      const innerMatch = selectedElement.html.match(/<li[^>]*>([\s\S]*)<\/li>/i);
+                      const innerHtml = innerMatch ? innerMatch[1].trim() : selectedElement.preview;
+                      const resp = await fetch("/api/resume/fit-bullet", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          current_bullet: innerHtml,
+                          action: bulletMeasure.status === "OVERFLOW" ? "shrink" : "expand",
+                        }),
+                      });
+                      if (resp.ok) {
+                        const result = await resp.json();
+                        if (result.fitted_bullet) {
+                          // Apply to iframe
+                          const iframe = iframeRef.current;
+                          if (iframe?.contentDocument) {
+                            const el = iframe.contentDocument.querySelector(selectedElement.selector);
+                            if (el) {
+                              el.innerHTML = result.fitted_bullet;
+                              setHtml(iframe.contentDocument.documentElement.outerHTML);
+                            }
+                          }
+                          setBulletMeasure(measureBulletWidth(result.fitted_bullet));
+                        }
+                      }
+                    } catch { /* silent */ } finally {
+                      setFitting(false);
+                    }
+                  }}
+                  disabled={fitting}
+                  className="mt-2 w-full rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+                >
+                  {fitting ? (
+                    <span className="flex items-center justify-center gap-1.5">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      Fitting...
+                    </span>
+                  ) : bulletMeasure.status === "OVERFLOW" ? (
+                    "Shrink to fit one line"
+                  ) : (
+                    "Expand to fill line"
+                  )}
+                </button>
+              )}
             </div>
           )}
 
