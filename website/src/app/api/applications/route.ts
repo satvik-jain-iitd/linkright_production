@@ -154,5 +154,29 @@ export async function PUT(request: Request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!data) return Response.json({ error: "Application not found" }, { status: 404 });
+
+  // Discovery↔Kanban sync: if this is a scout-sourced application and status
+  // changed to a terminal state, update the corresponding discovery status
+  if (typeof updates.status === "string" && data.status) {
+    const terminalStatuses = ["rejected", "withdrawn", "accepted"];
+    if (terminalStatuses.includes(data.status)) {
+      // Find discovery by matching company+role (scout-tagged applications)
+      const { data: app } = await supabase
+        .from("applications")
+        .select("company, role, tags, jd_url")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .single();
+
+      if (app?.tags?.includes("scout") && app.jd_url) {
+        await supabase
+          .from("job_discoveries")
+          .update({ status: "dismissed" })
+          .eq("user_id", user.id)
+          .eq("job_url", app.jd_url);
+      }
+    }
+  }
+
   return Response.json({ application: data });
 }

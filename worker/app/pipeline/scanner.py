@@ -713,6 +713,20 @@ async def scan_all_companies(
         len(result.errors), result.duration_ms,
     )
 
+    # 7. Log scan history for debugging/observability
+    try:
+        supabase_client.table("scan_history").insert({
+            "user_id": user_id,
+            "companies_scanned": len(entries),
+            "new_jobs_found": result.new_jobs,
+            "duplicates_skipped": result.duplicates_skipped,
+            "errors": result.errors[:10],  # cap at 10 errors
+            "duration_ms": result.duration_ms,
+            "completed_at": "now()",
+        }).execute()
+    except Exception:
+        pass  # scan history logging is best-effort
+
     return result
 
 

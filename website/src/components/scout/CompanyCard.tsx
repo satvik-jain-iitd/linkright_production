@@ -10,9 +10,11 @@ interface CompanyCardProps {
     negative_keywords: string[];
     is_active: boolean;
     last_scanned_at: string | null;
+    scan_interval_minutes?: number;
   };
   onDelete: () => void;
   onToggle: () => void;
+  onIntervalChange?: (id: string, interval: number) => void;
 }
 
 const ATS_LABELS: Record<string, string> = {
@@ -27,7 +29,14 @@ const ATS_LABELS: Record<string, string> = {
   icims: "iCIMS",
 };
 
-export function CompanyCard({ company, onDelete, onToggle }: CompanyCardProps) {
+const INTERVAL_OPTIONS = [
+  { value: 15, label: "15 min" },
+  { value: 60, label: "1 hour" },
+  { value: 360, label: "6 hours" },
+  { value: 1440, label: "Daily" },
+];
+
+export function CompanyCard({ company, onDelete, onToggle, onIntervalChange }: CompanyCardProps) {
   return (
     <div
       className={`rounded-xl border p-4 transition-colors ${
@@ -93,12 +102,26 @@ export function CompanyCard({ company, onDelete, onToggle }: CompanyCardProps) {
         </div>
       )}
 
-      {/* Last scanned */}
-      <p className="mt-3 text-xs text-muted">
-        {company.last_scanned_at
-          ? `Last scanned ${new Date(company.last_scanned_at).toLocaleDateString()}`
-          : "Never scanned"}
-      </p>
+      {/* Scan interval + last scanned */}
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-xs text-muted">
+          {company.last_scanned_at
+            ? `Last scanned ${new Date(company.last_scanned_at).toLocaleDateString()}`
+            : "Never scanned"}
+        </p>
+        {onIntervalChange && (
+          <select
+            value={company.scan_interval_minutes ?? 60}
+            onChange={(e) => onIntervalChange(company.id, Number(e.target.value))}
+            className="rounded border border-border bg-background px-1.5 py-0.5 text-xs text-muted focus:border-accent focus:outline-none"
+            title="Scan frequency"
+          >
+            {INTERVAL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+      </div>
     </div>
   );
 }

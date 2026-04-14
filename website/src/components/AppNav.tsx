@@ -26,7 +26,7 @@ const LOGGED_OUT_LINKS = [
 const LOGGED_IN_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/dashboard/applications", label: "Applications" },
-  { href: "/dashboard/scout", label: "Scout" },
+  { href: "/dashboard/scout", label: "Scout", badge: true },
   { href: "/dashboard/career", label: "My Career" },
   { href: "/dashboard/nuggets", label: "Career Highlights" },
 ];
@@ -45,6 +45,17 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
   const router = useRouter();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [scoutBadge, setScoutBadge] = useState(0);
+
+  // Fetch new discovery count for Scout badge
+  useEffect(() => {
+    if (user && variant === "app") {
+      fetch("/api/discoveries?status=new&limit=1")
+        .then((r) => r.json())
+        .then((d) => setScoutBadge(d.total ?? 0))
+        .catch(() => {});
+    }
+  }, [user, variant]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -143,6 +154,11 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                   }
                 >
                   {link.label}
+                  {"badge" in link && link.badge && scoutBadge > 0 && (
+                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                      {scoutBadge > 99 ? "99+" : scoutBadge}
+                    </span>
+                  )}
                 </Link>
               );
             })}

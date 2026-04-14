@@ -28,6 +28,9 @@ export async function PUT(
   if (typeof body.careers_url === "string") allowed.careers_url = body.careers_url.trim();
   if (typeof body.ats_provider === "string") allowed.ats_provider = body.ats_provider.trim().toLowerCase();
   if (typeof body.is_active === "boolean") allowed.is_active = body.is_active;
+  if (typeof body.scan_interval_minutes === "number" && [15, 60, 360, 1440].includes(body.scan_interval_minutes)) {
+    allowed.scan_interval_minutes = body.scan_interval_minutes;
+  }
   if (Array.isArray(body.positive_keywords)) {
     allowed.positive_keywords = body.positive_keywords.filter((k): k is string => typeof k === "string");
   }
@@ -44,7 +47,7 @@ export async function PUT(
     .update(allowed)
     .eq("id", id)
     .eq("user_id", user.id)
-    .select("id, company_name, company_slug, ats_provider, positive_keywords, negative_keywords, is_active")
+    .select("id, company_name, company_slug, ats_provider, positive_keywords, negative_keywords, is_active, scan_interval_minutes")
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });

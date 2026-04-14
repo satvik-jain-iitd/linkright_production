@@ -72,6 +72,19 @@ export default function WatchlistPage() {
     }
   };
 
+  const handleIntervalChange = async (id: string, interval: number) => {
+    const res = await fetch(`/api/watchlist/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scan_interval_minutes: interval }),
+    });
+    if (res.ok) {
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, scan_interval_minutes: interval } : c))
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -101,6 +114,7 @@ export default function WatchlistPage() {
               company={company}
               onDelete={() => handleDelete(company.id)}
               onToggle={() => handleToggle(company.id, company.is_active)}
+              onIntervalChange={handleIntervalChange}
             />
           ))}
         </div>

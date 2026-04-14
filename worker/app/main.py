@@ -615,9 +615,10 @@ async def create_interview_prep(
 
 class ScanRequest(BaseModel):
     user_id: str
+    callback_url: str | None = None
 
 
-async def _run_scan(user_id: str) -> None:
+async def _run_scan(user_id: str, callback_url: str | None = None) -> None:
     """Background task: scan all active watchlist companies for new jobs."""
     try:
         from .pipeline.scanner import scan_all_companies
@@ -635,6 +636,21 @@ async def _run_scan(user_id: str) -> None:
             for err in result.errors[:5]:
                 logger.warning("scan error: %s", err)
 
+        # Webhook callback: notify website that scan is complete
+        if callback_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(callback_url, json={
+                        "user_id": user_id,
+                        "status": "completed",
+                        "new_jobs": result.new_jobs,
+                        "errors": len(result.errors),
+                        "duration_ms": result.duration_ms,
+                    })
+            except Exception as cb_err:
+                logger.warning("scan callback failed: %s", cb_err)
+
     except Exception as exc:
         logger.exception("scan: failed for user=%s — %s", user_id, exc)
 
@@ -646,5 +662,5 @@ async def scan_jobs(
     authorization: str | None = Header(None),
 ):
     verify_secret(authorization)
-    background_tasks.add_task(_run_scan, req.user_id)
+    background_tasks.add_task(_run_scan, req.user_id, req.callback_url)
     return {"status": "scanning", "user_id": req.user_id}
