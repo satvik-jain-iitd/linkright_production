@@ -9,10 +9,12 @@ Run:
 from __future__ import annotations
 
 import os
+import time
 import logging
+from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Security, Depends
+from fastapi import FastAPI, HTTPException, Security, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
@@ -39,7 +41,32 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(bearer_sch
         raise HTTPException(status_code=500, detail="Server misconfigured: no secret set")
     if credentials.credentials != ORACLE_SECRET:
         raise HTTPException(status_code=401, detail="Invalid bearer token")
-    return True
+    return credentials.credentials
+
+
+# ── In-memory rate limiter ───────────────────────────────────────────────────
+# 30 requests per minute per token per endpoint.
+
+RATE_LIMIT_MAX = 30
+RATE_LIMIT_WINDOW = 60  # seconds
+
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+
+
+def rate_limit(token: str, endpoint: str) -> None:
+    """Raise 429 if token exceeds 30 requests/minute for this endpoint."""
+    key = f"{token}:{endpoint}"
+    now = time.time()
+    timestamps = _rate_limit_store[key]
+
+    # Prune entries outside the window
+    _rate_limit_store[key] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
+    timestamps = _rate_limit_store[key]
+
+    if len(timestamps) >= RATE_LIMIT_MAX:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded — 30 requests per minute")
+
+    timestamps.append(now)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -110,15 +137,13 @@ def existing_atoms(user_id: str):
     return {"atoms": atoms, "count": len(atoms)}
 
 
-@app.post(
-    "/lifeos/ingest",
-    dependencies=[Depends(verify_token)],
-)
-def ingest(req: IngestRequest):
+@app.post("/lifeos/ingest")
+def ingest(req: IngestRequest, token: str = Depends(verify_token)):
     """
     Embed + conflict-check + MERGE to Neo4j + mirror to Supabase.
     Custom GPT calls this after EACH confirmed answer (crash-safe).
     """
+    rate_limit(token, "/lifeos/ingest")
     result = ingest_atom(req.user_id, req.atom)
     if result.get("conflict"):
         return result  # HTTP 200 with conflict flag — GPT can inform user
@@ -152,21 +177,16 @@ def career_nodes(req: CareerNodesRequest):
     return {"atoms": atoms, "count": len(atoms)}
 
 
-@app.post(
-    "/lifeos/embed",
-    dependencies=[Depends(verify_token)],
-)
-def embed_text(req: EmbedRequest):
+@app.post("/lifeos/embed")
+def embed_text(req: EmbedRequest, token: str = Depends(verify_token)):
     """Utility: embed arbitrary text. Called by Next.js to embed JD before career-nodes."""
+    rate_limit(token, "/lifeos/embed")
     embedding = embed(req.text)
     return {"embedding": embedding, "model": "nomic-embed-text", "dimensions": len(embedding)}
 
 
-@app.post(
-    "/lifeos/rewrite",
-    dependencies=[Depends(verify_token)],
-)
-def rewrite_text(req: RewriteRequest):
+@app.post("/lifeos/rewrite")
+def rewrite_text(req: RewriteRequest, token: str = Depends(verify_token)):
     """
     Resume bullet rewriting via llama3.2:1b (local Ollama).
     Called by the worker in Phase 5 (width optimization) and Phase 3.5a (summary tweaking).
@@ -174,6 +194,7 @@ def rewrite_text(req: RewriteRequest):
 
     To swap model: edit oracle-backend/lifeos/local_llm.py REWRITE_MODEL constant.
     """
+    rate_limit(token, "/lifeos/rewrite")
     try:
         result = llm_rewrite(req.prompt, system=req.system, temperature=req.temperature)
         return {"text": result, "model": "llama3.2:1b"}
@@ -181,17 +202,15 @@ def rewrite_text(req: RewriteRequest):
         raise HTTPException(status_code=503, detail=f"Rewrite model unavailable: {e}")
 
 
-@app.post(
-    "/lifeos/generate",
-    dependencies=[Depends(verify_token)],
-)
-def generate_text(req: GenerateRequest):
+@app.post("/lifeos/generate")
+def generate_text(req: GenerateRequest, token: str = Depends(verify_token)):
     """
     Quick short generation via smollm2:135m (local Ollama).
     Called by the worker for lightweight tasks (nugget extraction helpers, quick answers).
 
     To swap model: edit oracle-backend/lifeos/local_llm.py GENERATE_MODEL constant.
     """
+    rate_limit(token, "/lifeos/generate")
     try:
         result = llm_generate(req.prompt, system=req.system, temperature=req.temperature)
         return {"text": result, "model": "smollm2:135m"}

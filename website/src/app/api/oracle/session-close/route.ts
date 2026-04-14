@@ -114,9 +114,8 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true });
   } catch (err) {
-    // Session close failure is non-critical — log but return ok to not block user
     console.error("session-close proxy error:", err);
-    return Response.json({ ok: true, warning: "session-close had an issue but session data is safe" });
+    return Response.json({ ok: false, error: "Oracle backend unavailable" }, { status: 502 });
   }
 }
 

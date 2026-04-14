@@ -36,8 +36,8 @@ export async function POST() {
     .eq("user_id", user.id)
     .is("used_at", null);
 
-  // Generate LR-XXXXXXXX format token
-  const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(4)))
+  // Generate LR-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX format token (128-bit entropy)
+  const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
     .join("");
   const token = `LR-${randomHex}`;

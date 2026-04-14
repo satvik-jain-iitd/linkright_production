@@ -169,6 +169,11 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
         groq_api_key=os.environ.get("PLATFORM_GROQ_API_KEY") or os.environ.get("GROQ_API_KEY"),
         byok_api_key=ctx.api_key,
     )
+
+    # ── P0 guard: fail if career_text was provided but nuggets came back empty ──
+    if ctx.career_text and hasattr(ctx, "_nuggets") and not ctx._nuggets:
+        raise RuntimeError("Career nugget extraction failed — no career context available")
+
     await phase_1_parse_and_strategy(ctx, sb, _gemini or llm)  # Gemini preferred: heavy reasoning
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)

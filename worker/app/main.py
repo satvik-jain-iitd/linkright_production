@@ -62,7 +62,10 @@ class JobResponse(BaseModel):
 
 def verify_secret(authorization: str | None = Header(None)):
     if not WORKER_SECRET:
-        return  # no secret configured — skip check (dev mode)
+        if os.getenv("RENDER", "") or os.getenv("RAILWAY_ENVIRONMENT", "") or os.getenv("FLY_APP_NAME", ""):
+            raise HTTPException(status_code=503, detail="Worker auth not configured")
+        logger.warning("WORKER_SECRET is empty — auth check skipped (dev mode)")
+        return
     if authorization != f"Bearer {WORKER_SECRET}":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
