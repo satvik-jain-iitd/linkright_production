@@ -173,7 +173,7 @@ export async function POST(request: Request) {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 1024, temperature: 0 }
+      { maxTokens: 2048, temperature: 0 }
     );
 
     const parsed = extractJson(rawText);
