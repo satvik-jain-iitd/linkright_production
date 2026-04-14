@@ -671,6 +671,66 @@ def _insert_logo(html: str, logo_spec: LogoSpec) -> tuple[str, list[str]]:
         return html, warnings
 
 
+def _normalize_ats_text(html: str) -> str:
+    """Normalize Unicode characters that break ATS parsers.
+
+    Adopted from career-ops' normalizeTextForATS(). Only normalizes text content —
+    preserves <style> and <script> blocks intact.
+
+    Handles 7 categories:
+    - Em/en dashes → hyphens
+    - Smart quotes → straight quotes
+    - Ellipsis → three periods
+    - Zero-width characters → removed
+    - Non-breaking spaces → regular spaces
+    """
+    import re as _re
+
+    # Mask <style> and <script> blocks to preserve CSS/JS
+    masks: list[tuple[str, str]] = []
+    mask_counter = 0
+
+    def _mask_block(match):
+        nonlocal mask_counter
+        placeholder = f"__ATS_MASK_{mask_counter}__"
+        masks.append((placeholder, match.group(0)))
+        mask_counter += 1
+        return placeholder
+
+    masked = _re.sub(r'<style[^>]*>.*?</style>', _mask_block, html, flags=_re.DOTALL)
+    masked = _re.sub(r'<script[^>]*>.*?</script>', _mask_block, masked, flags=_re.DOTALL)
+
+    # Normalize text content only (between HTML tags)
+    replacements = {
+        '\u2014': '-',    # Em dash → hyphen
+        '\u2013': '-',    # En dash → hyphen
+        '\u201C': '"',    # Left double smart quote
+        '\u201D': '"',    # Right double smart quote
+        '\u201E': '"',    # Double low-9 quote
+        '\u201F': '"',    # Double high-reversed-9 quote
+        '\u2018': "'",    # Left single smart quote
+        '\u2019': "'",    # Right single smart quote (apostrophe)
+        '\u201A': "'",    # Single low-9 quote
+        '\u201B': "'",    # Single high-reversed-9 quote
+        '\u2026': '...',  # Ellipsis → three periods
+        '\u00A0': ' ',    # Non-breaking space → regular space
+    }
+
+    for char, replacement in replacements.items():
+        masked = masked.replace(char, replacement)
+
+    # Remove zero-width characters
+    zero_width = ['\u200B', '\u200C', '\u200D', '\u2060', '\uFEFF']
+    for zw in zero_width:
+        masked = masked.replace(zw, '')
+
+    # Restore masked blocks
+    for placeholder, original in masks:
+        masked = masked.replace(placeholder, original)
+
+    return masked
+
+
 def _verify_print_rules(html: str) -> list[str]:
     """Verify that @media print rules are intact.
 
@@ -769,6 +829,9 @@ async def resume_assemble_html(params: AssembleInput) -> str:
         if params.logo_spec:
             html, logo_warnings = _insert_logo(html, params.logo_spec)
             warnings.extend(logo_warnings)
+
+        # 8.5. ATS Unicode normalization (adopted from career-ops normalizeTextForATS)
+        html = _normalize_ats_text(html)
 
         # 9. Verify print rules
         print_warnings = _verify_print_rules(html)

@@ -306,3 +306,337 @@ async def embed_nuggets_endpoint(
     verify_secret(authorization)
     background_tasks.add_task(_run_nugget_embed, req.user_id)
     return {"status": "processing", "user_id": req.user_id}
+
+
+# ── Job Scoring endpoint ──────────────────────────────────────────────────
+# Scores a job description against user's career nuggets across 10 dimensions.
+# Single Gemini Flash call. Result stored in job_scores table.
+
+class ScoreRequest(BaseModel):
+    application_id: str
+    user_id: str
+
+
+async def _run_score_job(application_id: str, user_id: str) -> None:
+    """Background task: score a job application against user's career profile."""
+    try:
+        from .pipeline.scoring import score_application
+
+        sb = create_supabase()
+
+        # Fetch the application to get JD text
+        app_result = (
+            sb.table("applications")
+            .select("jd_text, company, role")
+            .eq("id", application_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        app_data = app_result.data
+        if not app_data or not app_data.get("jd_text"):
+            logger.warning("score_job: no JD text for application=%s", application_id)
+            return
+
+        # Fetch user's career graph (target_roles) if available
+        settings_result = (
+            sb.table("user_settings")
+            .select("career_graph")
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        career_graph = (settings_result.data or {}).get("career_graph")
+
+        # Run scoring
+        score = await score_application(
+            user_id=user_id,
+            jd_text=app_data["jd_text"],
+            supabase_client=sb,
+            career_graph=career_graph,
+        )
+
+        # Store in job_scores table
+        dimensions_dict = {}
+        for dim_name in [
+            "role_alignment", "skill_match", "level_fit", "compensation_fit",
+            "growth_potential", "remote_quality", "company_reputation",
+            "tech_stack", "speed_to_offer", "culture_signals",
+        ]:
+            dim = getattr(score, dim_name)
+            dim_data = {
+                "score": dim.score,
+                "weight": dim.weight,
+                "reasoning": dim.reasoning,
+                "evidence": dim.evidence,
+            }
+            if dim_name == "skill_match":
+                dim_data["gaps"] = dim.gaps
+                dim_data["hard_blockers"] = dim.hard_blockers
+            dimensions_dict[dim_name] = dim_data
+
+        sb.table("job_scores").insert({
+            "application_id": application_id,
+            "user_id": user_id,
+            "overall_grade": score.overall_grade,
+            "overall_score": score.overall_score,
+            "dimensions": dimensions_dict,
+            "role_archetype": score.role_archetype,
+            "recommended_action": score.recommended_action,
+            "skill_gaps": score.skill_gaps,
+            "hard_blockers": score.hard_blockers,
+            "keywords_matched": score.keywords_matched,
+            "legitimacy_tier": score.legitimacy_tier,
+        }).execute()
+
+        logger.info(
+            "score_job: done application=%s grade=%s score=%.2f archetype=%s",
+            application_id, score.overall_grade, score.overall_score, score.role_archetype,
+        )
+
+    except Exception as exc:
+        logger.exception("score_job: failed for application=%s — %s", application_id, exc)
+
+
+@app.post("/jobs/score", status_code=202)
+async def score_job(
+    req: ScoreRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    verify_secret(authorization)
+    background_tasks.add_task(_run_score_job, req.application_id, req.user_id)
+    return {"status": "processing", "application_id": req.application_id}
+
+
+# ── Cover Letter endpoint ─────────────────────────────────────────────────
+# Generates a cover letter from career nuggets + JD. Single Gemini call with quality gate.
+
+class CoverLetterRequest(BaseModel):
+    application_id: str
+    user_id: str
+    resume_job_id: str = ""  # optional: reuse JD analysis from a linked resume
+    recipient_name: str = ""
+
+
+async def _run_cover_letter(req: CoverLetterRequest) -> None:
+    """Background task: generate a cover letter for an application."""
+    try:
+        from .pipeline.cover_letter import generate_cover_letter, format_cover_letter_html
+
+        sb = create_supabase()
+
+        # Fetch application
+        app_result = (
+            sb.table("applications")
+            .select("jd_text, company, role")
+            .eq("id", req.application_id)
+            .eq("user_id", req.user_id)
+            .single()
+            .execute()
+        )
+        app_data = app_result.data
+        if not app_data or not app_data.get("jd_text"):
+            logger.warning("cover_letter: no JD text for application=%s", req.application_id)
+            return
+
+        # Create cover_letter row with status=generating
+        cl_row = {
+            "user_id": req.user_id,
+            "application_id": req.application_id,
+            "resume_job_id": req.resume_job_id or None,
+            "company_name": app_data["company"],
+            "role_name": app_data["role"],
+            "recipient_name": req.recipient_name or None,
+            "status": "generating",
+        }
+        cl_result = sb.table("cover_letters").insert(cl_row).select("id").single().execute()
+        cl_id = cl_result.data["id"]
+
+        # Reuse JD analysis from linked resume if available
+        jd_analysis = None
+        if req.resume_job_id:
+            rj = sb.table("resume_jobs").select("stats").eq("id", req.resume_job_id).maybe_single().execute()
+            if rj.data and rj.data.get("stats"):
+                jd_analysis = rj.data["stats"].get("jd_analysis")
+
+        # Get candidate name from user settings
+        settings = sb.table("user_settings").select("career_graph").eq("user_id", req.user_id).maybe_single().execute()
+        candidate_name = "Candidate"
+        if settings.data and settings.data.get("career_graph"):
+            candidate_name = settings.data["career_graph"].get("name", candidate_name)
+
+        # Generate cover letter body
+        body = await generate_cover_letter(
+            user_id=req.user_id,
+            company=app_data["company"],
+            role=app_data["role"],
+            jd_text=app_data["jd_text"],
+            supabase_client=sb,
+            jd_analysis=jd_analysis,
+            recipient_name=req.recipient_name or None,
+        )
+
+        # Format as HTML
+        html = format_cover_letter_html(
+            body=body,
+            company=app_data["company"],
+            role=app_data["role"],
+            candidate_name=candidate_name,
+            recipient_name=req.recipient_name or None,
+        )
+
+        # Update cover_letter row
+        sb.table("cover_letters").update({
+            "body_html": html,
+            "status": "completed",
+            "updated_at": "now()",
+        }).eq("id", cl_id).execute()
+
+        logger.info("cover_letter: done id=%s for application=%s", cl_id, req.application_id)
+
+    except Exception as exc:
+        logger.exception("cover_letter: failed for application=%s — %s", req.application_id, exc)
+        # Mark as failed if we created the row
+        try:
+            sb.table("cover_letters").update({"status": "failed"}).eq("application_id", req.application_id).eq("user_id", req.user_id).eq("status", "generating").execute()
+        except Exception:
+            pass
+
+
+@app.post("/jobs/cover-letter", status_code=202)
+async def create_cover_letter(
+    req: CoverLetterRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    verify_secret(authorization)
+    background_tasks.add_task(_run_cover_letter, req)
+    return {"status": "processing", "application_id": req.application_id}
+
+
+# ── Interview Prep endpoint ───────────────────────────────────────────────
+# Generates structured interview prep: STAR stories, company research, round breakdown.
+# Single Gemini Flash call. Triggered when application moves to Interview status.
+
+class InterviewPrepRequest(BaseModel):
+    application_id: str
+    user_id: str
+
+
+async def _run_interview_prep(application_id: str, user_id: str) -> None:
+    """Background task: generate interview prep for an application."""
+    try:
+        from .pipeline.interview_prep import generate_interview_prep
+
+        sb = create_supabase()
+
+        # Fetch application
+        app_result = (
+            sb.table("applications")
+            .select("jd_text, company, role")
+            .eq("id", application_id)
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
+        app_data = app_result.data
+        if not app_data or not app_data.get("jd_text"):
+            logger.warning("interview_prep: no JD text for application=%s", application_id)
+            return
+
+        # Fetch existing score data if available (for talking points context)
+        score_data = None
+        score_result = (
+            sb.table("job_scores")
+            .select("overall_grade, overall_score, role_archetype, skill_gaps, dimensions")
+            .eq("application_id", application_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if score_result.data:
+            score_data = score_result.data
+
+        # Generate prep
+        prep = await generate_interview_prep(
+            user_id=user_id,
+            company=app_data["company"],
+            role=app_data["role"],
+            jd_text=app_data["jd_text"],
+            supabase_client=sb,
+            score_data=score_data,
+        )
+
+        # Store in interview_preps table
+        sb.table("interview_preps").insert({
+            "application_id": application_id,
+            "user_id": user_id,
+            "company": app_data["company"],
+            "role": app_data["role"],
+            "company_research": [d.model_dump() for d in prep.company_research],
+            "round_breakdown": [r.model_dump() for r in prep.round_breakdown],
+            "star_stories": [s.model_dump() for s in prep.star_stories],
+            "talking_points": [t.model_dump() for t in prep.talking_points],
+            "questions_to_ask": [q.model_dump() for q in prep.questions_to_ask],
+        }).execute()
+
+        logger.info(
+            "interview_prep: done for application=%s — %d stories, %d questions",
+            application_id, len(prep.star_stories), len(prep.questions_to_ask),
+        )
+
+    except Exception as exc:
+        logger.exception("interview_prep: failed for application=%s — %s", application_id, exc)
+
+
+@app.post("/jobs/interview-prep", status_code=202)
+async def create_interview_prep(
+    req: InterviewPrepRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    verify_secret(authorization)
+    background_tasks.add_task(_run_interview_prep, req.application_id, req.user_id)
+    return {"status": "processing", "application_id": req.application_id}
+
+
+# ── Job Scanner endpoint ──────────────────────────────────────────────────
+# Zero-token ATS API scanner. Hits Greenhouse/Lever/Ashby/SmartRecruiters directly.
+# No LLM calls, no browser automation. Deduplicates across 3 sources.
+
+class ScanRequest(BaseModel):
+    user_id: str
+
+
+async def _run_scan(user_id: str) -> None:
+    """Background task: scan all active watchlist companies for new jobs."""
+    try:
+        from .pipeline.scanner import scan_all_companies
+
+        sb = create_supabase()
+        result = await scan_all_companies(user_id=user_id, supabase_client=sb)
+
+        logger.info(
+            "scan: user=%s — %d new jobs, %d dupes, %d errors, %dms",
+            user_id, result.new_jobs, result.duplicates_skipped,
+            len(result.errors), result.duration_ms,
+        )
+
+        if result.errors:
+            for err in result.errors[:5]:
+                logger.warning("scan error: %s", err)
+
+    except Exception as exc:
+        logger.exception("scan: failed for user=%s — %s", user_id, exc)
+
+
+@app.post("/jobs/scan", status_code=202)
+async def scan_jobs(
+    req: ScanRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    verify_secret(authorization)
+    background_tasks.add_task(_run_scan, req.user_id)
+    return {"status": "scanning", "user_id": req.user_id}

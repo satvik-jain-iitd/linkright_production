@@ -45,6 +45,45 @@ export async function POST(request: Request) {
     return Response.json({ error: "company and role are required" }, { status: 400 });
   }
 
+  // Dedup check (adopted from career-ops 3-source dedup):
+  // 1. Company+role pair normalization (case-insensitive)
+  // 2. JD URL exact match (if provided)
+  const normCompany = (company as string).trim().toLowerCase();
+  const normRole = (role as string).trim().toLowerCase();
+
+  const { data: existingByPair } = await supabase
+    .from("applications")
+    .select("id, company, role")
+    .eq("user_id", user.id)
+    .ilike("company", normCompany)
+    .ilike("role", normRole)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingByPair) {
+    return Response.json({
+      error: `Application for "${existingByPair.company} — ${existingByPair.role}" already exists`,
+      existing_id: existingByPair.id,
+    }, { status: 409 });
+  }
+
+  if (typeof jd_url === "string" && jd_url.trim()) {
+    const { data: existingByUrl } = await supabase
+      .from("applications")
+      .select("id, company, role")
+      .eq("user_id", user.id)
+      .eq("jd_url", jd_url.trim())
+      .limit(1)
+      .maybeSingle();
+
+    if (existingByUrl) {
+      return Response.json({
+        error: `An application with this JD URL already exists (${existingByUrl.company} — ${existingByUrl.role})`,
+        existing_id: existingByUrl.id,
+      }, { status: 409 });
+    }
+  }
+
   const row = {
     user_id: user.id,
     company: (company as string).trim(),
