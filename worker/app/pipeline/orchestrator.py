@@ -95,8 +95,8 @@ def _prepare_career_for_phase1(career_text: str, job_id: str) -> str:
     keeps only sections relevant to resume generation (roles, skills,
     education), and caps each section at 2500 chars.
     """
-    MAX_TOTAL = 20000
-    MAX_PER_SECTION = 2500
+    MAX_TOTAL = 50000   # PM decision C2: 50KB cap (was 20KB)
+    MAX_PER_SECTION = 4000
 
     # If short enough already, pass through
     if len(career_text) <= MAX_TOTAL:
@@ -916,7 +916,7 @@ async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm)
     The career_summary from Phase 1 is a 2-sentence narrative extracted by the LLM.
     This phase:
       1. Measures each summary sentence against the summary_line budget.
-      2. Sentences that are already in range [90%, 100%] are kept as-is.
+      2. Sentences that are already in range [95%, 100%] are kept as-is.
       3. Sentences that are TOO_SHORT or OVERFLOW are sent to a targeted LLM
          rewrite call (same pattern as phase_5 per-bullet synonym retry).
       4. Stores final HTML in ctx._summary_html for phase_8_assembly to inject.
@@ -1009,7 +1009,7 @@ async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm)
             user_prompt = (
                 f"Rewrite this career summary sentence to {action} it slightly.\n\n"
                 f"Current: {current_text}\n\n"
-                f"Width issue: {gap_desc} (current fill: {fill:.1f}%, target: 90-100%).\n\n"
+                f"Width issue: {gap_desc} (current fill: {fill:.1f}%, target: 95-100%).\n\n"
                 f"Rules:\n"
                 f"- Preserve factual content and professional tone\n"
                 f"- Use <b>word</b> tags for key terms/metrics if helpful\n"

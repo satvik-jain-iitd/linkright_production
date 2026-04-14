@@ -37,7 +37,7 @@ Examples of XYZ format:
 Return ONLY the bullet text (with <b> tags), no explanations or markdown."""
 
 
-REVISE_PROMPT = """The bullet you wrote is {status}. Current fill: {fill}% (target: 90-100%).
+REVISE_PROMPT = """The bullet you wrote is {status}. Current fill: {fill}% (target: 95-100%).
 {suggestions}
 
 Rewrite the bullet to be {direction}. Keep XYZ format and the same meaning.
@@ -54,7 +54,7 @@ def write_bullets(
 
     For each scored bullet:
     1. Claude writes an XYZ bullet
-    2. measure_width checks fill (target: 90-100%)
+    2. measure_width checks fill (target: 95-100%)
     3. If not PASS → suggest_synonyms → Claude revises → re-measure
     4. track_verbs registers the leading verb
     5. Max 3 revision attempts per bullet
