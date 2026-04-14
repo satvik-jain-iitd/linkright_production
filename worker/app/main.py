@@ -24,6 +24,14 @@ from .pipeline.orchestrator import phase_0_nuggets, run_pipeline
 
 app = FastAPI(title="LinkRight Sync Worker", version="0.1.0")
 
+
+@app.on_event("startup")
+async def _startup():
+    """Launch background scheduler if ENABLE_SCHEDULER is set."""
+    if os.getenv("ENABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
+        from .scheduler import start_scheduler
+        asyncio.create_task(start_scheduler())
+
 # Concurrency limiter — max 3 simultaneous pipelines
 _pipeline_semaphore = asyncio.Semaphore(3)
 

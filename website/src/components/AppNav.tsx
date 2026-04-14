@@ -26,6 +26,7 @@ const LOGGED_OUT_LINKS = [
 const LOGGED_IN_LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/dashboard/applications", label: "Applications" },
+  { href: "/dashboard/scout", label: "Scout" },
   { href: "/dashboard/career", label: "My Career" },
   { href: "/dashboard/nuggets", label: "Career Highlights" },
 ];

@@ -84,6 +84,14 @@ export function ApplicationCard({ app, score, onScore, onClick }: ApplicationCar
 
       {/* Meta row */}
       <div className="flex items-center gap-2 flex-wrap mt-2">
+        {app.tags.includes("scout") && (
+          <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600">
+            <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Scout
+          </span>
+        )}
         {app.excitement && <ExcitementStars rating={app.excitement} />}
         {app.deadline && <DeadlineCountdown deadline={app.deadline} />}
         {app.location && (
