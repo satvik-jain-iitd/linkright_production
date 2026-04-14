@@ -28,7 +28,7 @@ export function DiscoveryCard({ discovery, onStatusChange, onApply }: DiscoveryC
   const isActioned = discovery.status === "applied";
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-4 transition-colors hover:border-accent/20">
+    <div data-testid="discovery-card" className="rounded-xl border border-border bg-surface p-4 transition-colors hover:border-accent/20">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

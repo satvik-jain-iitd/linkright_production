@@ -39,7 +39,7 @@ export default function ScoutOverview() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="scout-overview">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Scout</h1>
@@ -63,7 +63,7 @@ export default function ScoutOverview() {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4" data-testid="scout-stats">
         <StatCard label="Total Discoveries" value={summary?.counts.total ?? 0} />
         <StatCard label="New" value={summary?.counts.new ?? 0} accent />
         <StatCard label="Saved" value={summary?.counts.saved ?? 0} />

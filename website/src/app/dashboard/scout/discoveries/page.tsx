@@ -71,7 +71,7 @@ export default function DiscoveriesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="discoveries-page">
       <div>
         <h1 className="text-xl font-bold text-foreground">Discoveries</h1>
         <p className="mt-1 text-sm text-muted">

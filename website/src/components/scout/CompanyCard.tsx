@@ -39,6 +39,7 @@ const INTERVAL_OPTIONS = [
 export function CompanyCard({ company, onDelete, onToggle, onIntervalChange }: CompanyCardProps) {
   return (
     <div
+      data-testid="company-card"
       className={`rounded-xl border p-4 transition-colors ${
         company.is_active
           ? "border-border bg-surface"

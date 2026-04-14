@@ -22,7 +22,7 @@ export function ScoutSubNav() {
   }, []);
 
   return (
-    <div className="border-b border-border bg-surface/50">
+    <div className="border-b border-border bg-surface/50" data-testid="scout-subnav">
       <div className="mx-auto flex max-w-7xl items-center gap-6 px-6">
         {SCOUT_TABS.map((tab) => {
           const active = tab.exact

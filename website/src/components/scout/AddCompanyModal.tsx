@@ -65,7 +65,7 @@ export function AddCompanyModal({ onClose, onAdded }: AddCompanyModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl">
+      <div data-testid="add-company-modal" className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 shadow-xl">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-foreground">Add Company</h2>
           <button onClick={onClose} className="text-muted hover:text-foreground">
