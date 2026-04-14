@@ -1,13 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { freshEmail, TEST_PASSWORD, TARGET_ROLE, RESUME_TEXT } from './fixtures/test-data';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LANDING PAGE — No login needed (these override storageState with fresh context)
+// LANDING PAGE — No login needed (shared unauth context)
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('Landing Page Navigation', () => {
+test.describe.serial('Landing Page Navigation', () => {
+  let context: BrowserContext;
+  let page: Page;
 
-  test('pricing page loads with Free and Pro tiers', async ({ page }) => {
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext(); // NO storageState
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
+
+  test('pricing page loads with Free and Pro tiers', async () => {
     await page.goto('/');
     await page.getByRole('navigation').getByRole('link', { name: 'Pricing' }).click();
     await expect(page).toHaveURL(/pricing/);
@@ -17,48 +28,49 @@ test.describe('Landing Page Navigation', () => {
     await expect(page.getByRole('link', { name: 'Start Free' })).toBeVisible();
   });
 
-  test('pricing page has feedback form below the fold', async ({ page }) => {
+  test('pricing page has feedback form below the fold', async () => {
     await page.goto('/pricing');
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await expect(page.getByText('Would you pay for a tool like Sync')).toBeVisible();
     await expect(page.getByText(/features matter/i)).toBeVisible();
   });
 
-  test('Start Free link on pricing page goes to auth', async ({ page }) => {
+  test('Start Free link on pricing page goes to auth', async () => {
     await page.goto('/pricing');
     await page.getByRole('link', { name: 'Start Free' }).click();
     await expect(page).toHaveURL(/auth/);
   });
 
-  test('Features link in nav navigates to features page', async ({ page }) => {
+  test('Features link in nav navigates to features page', async () => {
     await page.goto('/');
     await page.getByRole('navigation').getByRole('link', { name: 'Features' }).click();
     await expect(page).toHaveURL(/features/);
   });
 
-  // Signup UI test — uses fresh browser context (no auth state)
+  // Signup UI test — needs its own fresh context (legitimate exception:
+  // signup mutates auth state, cannot share with the unauth landing page context)
   test('signup flow creates account successfully', async ({ browser }) => {
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    const signupContext = await browser.newContext();
+    const signupPage = await signupContext.newPage();
     const signupEmail = freshEmail();
 
-    await page.goto('https://sync.linkright.in/auth');
-    await page.getByRole('button', { name: 'Sign up' }).click();
-    await page.getByPlaceholder('Email').fill(signupEmail);
-    await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Create account' }).click();
+    await signupPage.goto('https://sync.linkright.in/auth');
+    await signupPage.getByRole('button', { name: 'Sign up' }).click();
+    await signupPage.getByPlaceholder('Email').fill(signupEmail);
+    await signupPage.getByPlaceholder('Password').fill(TEST_PASSWORD);
+    await signupPage.getByRole('button', { name: 'Create account' }).click();
 
     // After signup: either "Check your email" appears or auto-redirect happens
-    const checkEmail = page.getByText('Check your email');
+    const checkEmail = signupPage.getByText('Check your email');
     const outcome = await Promise.race([
       checkEmail.waitFor({ state: 'visible', timeout: 15_000 }).then(() => 'check-email'),
-      page.waitForURL(/onboarding|dashboard/, { timeout: 15_000 }).then(() => 'redirected'),
+      signupPage.waitForURL(/onboarding|dashboard/, { timeout: 15_000 }).then(() => 'redirected'),
     ]).catch(() => 'timeout');
 
     // Either outcome is acceptable — signup completed
     expect(['check-email', 'redirected']).toContain(outcome);
 
-    await context.close();
+    await signupContext.close();
   });
 
 });
@@ -71,8 +83,6 @@ test.describe('Landing Page Navigation', () => {
 // a fresh page. Server doesn't persist client-side step progression.
 // Step 3+ tests must navigate through previous steps or skip.
 // ─────────────────────────────────────────────────────────────────────────────
-
-type Page = import('@playwright/test').Page;
 
 // Helper: navigate through step 1 → step 2
 async function navigatePastStep1(page: Page) {
@@ -133,10 +143,21 @@ async function navigateToStep3(page: Page) {
 
 
 test.describe.serial('Onboarding Journey', () => {
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext({ storageState: 'playwright/.auth/user.json' });
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
 
   // ── Step 1: Role Selection ────────────────────────────────────────────────
 
-  test('step 1 — select role and proceed', async ({ page }) => {
+  test('step 1 — select role and proceed', async () => {
     await page.goto('/onboarding');
     // Fresh user — should land on step 1 (role selection)
     await expect(page.getByText('Welcome to LinkRight')).toBeVisible({ timeout: 10_000 });
@@ -153,7 +174,7 @@ test.describe.serial('Onboarding Journey', () => {
   // Re-enable this test when a reliable PDF library is found.
   test.skip('step 2 — PDF upload parses resume successfully', async () => {});
 
-  test('step 2 — only paste option shown (no file upload button)', async ({ page }) => {
+  test('step 2 — only paste option shown (no file upload button)', async () => {
     await navigatePastStep1(page);
 
     // Paste button should be visible
@@ -162,7 +183,7 @@ test.describe.serial('Onboarding Journey', () => {
     await expect(page.getByRole('button', { name: 'Upload PDF / DOCX / TXT' })).not.toBeVisible();
   });
 
-  test('step 2 — resume text paste and auto-fill', async ({ page }) => {
+  test('step 2 — resume text paste and auto-fill', async () => {
     await navigatePastStep1(page);
 
     // Step 2 initially shows "Paste resume text" button — click to reveal textarea
@@ -176,7 +197,7 @@ test.describe.serial('Onboarding Journey', () => {
     await expect(page.getByText('Resume parsed')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('step 2 — save and continue advances to TruthEngine', async ({ page }) => {
+  test('step 2 — save and continue advances to TruthEngine', async () => {
     await navigatePastStep1(page);
 
     // Click "Paste resume text" to reveal textarea
@@ -206,7 +227,7 @@ test.describe.serial('Onboarding Journey', () => {
   // These tests navigate through step 1+2 to reach step 3, since server
   // doesn't persist client-side step progression across page reloads.
 
-  test('step 3 — session token is generated and copyable', async ({ page }) => {
+  test('step 3 — session token is generated and copyable', async () => {
     const state = await navigateToStep3(page);
     if (state === 'dashboard') {
       test.skip(true, 'Server redirected to dashboard — cannot reach step 3');
@@ -218,7 +239,7 @@ test.describe.serial('Onboarding Journey', () => {
     // Copy button should change to "Copied!" briefly
   });
 
-  test('step 3 — Interview Coach skill download is valid zip', async ({ page }) => {
+  test('step 3 — Interview Coach skill download is valid zip', async () => {
     const state = await navigateToStep3(page);
     if (state === 'dashboard') {
       test.skip(true, 'Server redirected to dashboard — cannot reach step 3');
@@ -238,7 +259,7 @@ test.describe.serial('Onboarding Journey', () => {
   // ── Atom Dispatch + Completion (require manual skill run) ────────────────
 
   // Progress counter shows running count without fake denominator
-  test('step 3 — atom dispatch shows running count', async ({ page }) => {
+  test('step 3 — atom dispatch shows running count', async () => {
     test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
     await page.goto('/onboarding');
     // During ingestion: "X career highlights saved" (no denominator — total varies per user)
@@ -246,7 +267,7 @@ test.describe.serial('Onboarding Journey', () => {
   });
 
   // Summary screen shows atoms collected or nugget count
-  test('step 4 — completion shows career data count', async ({ page }) => {
+  test('step 4 — completion shows career data count', async () => {
     test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
     await page.goto('/onboarding');
     await page.getByRole('button', { name: 'Continue →' }).click({ timeout: 90_000 });
@@ -261,7 +282,7 @@ test.describe.serial('Onboarding Journey', () => {
   });
 
   // Nav buttons on summary screen
-  test('step 4 — "Create Your First Resume" goes to /resume/new', async ({ page }) => {
+  test('step 4 — "Create Your First Resume" goes to /resume/new', async () => {
     test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
     await page.goto('/onboarding');
     await page.getByRole('button', { name: 'Continue →' }).click({ timeout: 90_000 });
@@ -269,7 +290,7 @@ test.describe.serial('Onboarding Journey', () => {
     await expect(page).toHaveURL(/resume\/new/, { timeout: 10_000 });
   });
 
-  test('step 4 — "Go to Dashboard" goes to /dashboard', async ({ page }) => {
+  test('step 4 — "Go to Dashboard" goes to /dashboard', async () => {
     test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
     await page.goto('/onboarding');
     await page.getByRole('button', { name: 'Continue →' }).click({ timeout: 90_000 });

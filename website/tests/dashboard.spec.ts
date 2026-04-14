@@ -1,13 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DASHBOARD PAGES — auth state loaded automatically from setup project
 // These tests verify that dashboard pages load without crashing
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('Dashboard', () => {
+test.describe.serial('Dashboard', () => {
+  let context: BrowserContext;
+  let page: Page;
 
-  test('dashboard home loads without error', async ({ page }) => {
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext({ storageState: 'playwright/.auth/user.json' });
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
+
+  test('dashboard home loads without error', async () => {
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
     // Should show either resume list or "Create first resume" CTA
@@ -25,7 +36,7 @@ test.describe('Dashboard', () => {
     expect(errors.filter(e => !e.includes('favicon'))).toHaveLength(0);
   });
 
-  test('career page loads without error', async ({ page }) => {
+  test('career page loads without error', async () => {
     await page.goto('/dashboard/career');
     await page.waitForLoadState('networkidle');
     const url = page.url();
@@ -36,7 +47,7 @@ test.describe('Dashboard', () => {
     await expect(page.getByRole('heading', { name: 'My Career' })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('nuggets page loads without error', async ({ page }) => {
+  test('nuggets page loads without error', async () => {
     await page.goto('/dashboard/nuggets');
     await page.waitForLoadState('networkidle');
     const url = page.url();
@@ -47,7 +58,7 @@ test.describe('Dashboard', () => {
     await expect(page.getByRole('heading', { name: 'Career Highlights' })).toBeVisible({ timeout: 10_000 });
   });
 
-  test('direct navigation to /dashboard from logged-in state', async ({ page }) => {
+  test('direct navigation to /dashboard from logged-in state', async () => {
     await page.goto('/dashboard');
     // Should NOT redirect to /auth (user is logged in via setup)
     await page.waitForLoadState('networkidle');

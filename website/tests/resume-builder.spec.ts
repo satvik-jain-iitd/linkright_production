@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { TEST_JD, TEST_COMPANY_DOMAIN } from './fixtures/test-data';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7,9 +7,20 @@ import { TEST_JD, TEST_COMPANY_DOMAIN } from './fixtures/test-data';
 // hasn't completed onboarding (no career data = can't generate resume).
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('Resume Builder', () => {
+test.describe.serial('Resume Builder', () => {
+  let context: BrowserContext;
+  let page: Page;
 
-  test('/resume/new loads the JD input step', async ({ page }) => {
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext({ storageState: 'playwright/.auth/user.json' });
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
+
+  test('/resume/new loads the JD input step', async () => {
     await page.goto('/resume/new');
     await page.waitForLoadState('networkidle');
 
@@ -25,7 +36,7 @@ test.describe('Resume Builder', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('JD paste extracts target role and company', async ({ page }) => {
+  test('JD paste extracts target role and company', async () => {
     await page.goto('/resume/new');
     await page.waitForLoadState('networkidle');
     const url = page.url();
@@ -45,7 +56,7 @@ test.describe('Resume Builder', () => {
     await expect(page.locator('body')).toBeVisible();
   });
 
-  test('empty JD shows validation or disabled state', async ({ page }) => {
+  test('empty JD shows validation or disabled state', async () => {
     await page.goto('/resume/new');
     await page.waitForLoadState('networkidle');
     const url = page.url();
@@ -68,7 +79,7 @@ test.describe('Resume Builder', () => {
     }
   });
 
-  test('brand color lookup works for known company', async ({ page }) => {
+  test('brand color lookup works for known company', async () => {
     // This test calls the brand colors API directly
     const response = await page.request.get(
       `/api/brand-colors/search?company=${TEST_COMPANY_DOMAIN}`,
@@ -77,7 +88,7 @@ test.describe('Resume Builder', () => {
     expect(response.status()).toBeLessThan(500);
   });
 
-  test('resume generation API rejects empty career text', async ({ page }) => {
+  test('resume generation API rejects empty career text', async () => {
     const response = await page.request.post('/api/resume/start', {
       data: {
         jd_text: TEST_JD,

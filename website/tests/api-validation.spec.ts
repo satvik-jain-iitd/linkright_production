@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API EDGE CASE VALIDATION
@@ -6,9 +6,20 @@ import { test, expect } from '@playwright/test';
 // Tests verify API contracts: correct shapes, error handling, auth gates.
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('API Validation', () => {
+test.describe.serial('API Validation — Authenticated', () => {
+  let context: BrowserContext;
+  let page: Page;
 
-  test('/api/onboarding/status returns correct shape', async ({ page }) => {
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext({ storageState: 'playwright/.auth/user.json' });
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
+
+  test('/api/onboarding/status returns correct shape', async () => {
     const response = await page.request.get('/api/onboarding/status');
     expect(response.status()).toBe(200);
 
@@ -21,7 +32,7 @@ test.describe('API Validation', () => {
     expect(typeof data.onboarding_complete).toBe('boolean');
   });
 
-  test('/api/resume/list returns array', async ({ page }) => {
+  test('/api/resume/list returns array', async () => {
     const response = await page.request.get('/api/resume/list');
     expect(response.status()).toBe(200);
 
@@ -29,35 +40,36 @@ test.describe('API Validation', () => {
     expect(data).toHaveProperty('jobs');
     expect(Array.isArray(data.jobs)).toBe(true);
   });
+});
+
+test.describe.serial('API Validation — Unauthenticated', () => {
+  let context: BrowserContext;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext(); // NO storageState
+    page = await context.newPage();
+  });
+
+  test.afterAll(async () => {
+    await context.close();
+  });
 
   // BUG P1: APIs don't enforce auth — return 200 even without cookies
   // These tests document the current (broken) behavior.
   // When auth middleware is fixed, flip the assertions to >= 400.
-  test('unauthenticated request to /api/onboarding/status — BUG: returns 200 instead of 401', async ({ browser }) => {
-    // Fresh context — no auth cookies
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
+  test('unauthenticated request to /api/onboarding/status — BUG: returns 200 instead of 401', async () => {
     const response = await page.request.get('https://sync.linkright.in/api/onboarding/status');
     // KNOWN BUG: should be >= 400, but API doesn't check auth
     // When fixed, change this to: expect(response.status()).toBeGreaterThanOrEqual(400);
     expect(response.ok()).toBe(true);
-
-    await context.close();
   });
 
   // BUG P1: APIs don't enforce auth — return 200 even without cookies
-  test('unauthenticated request to /api/resume/list — BUG: returns 200 instead of 401', async ({ browser }) => {
-    // Fresh context — no auth cookies
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
+  test('unauthenticated request to /api/resume/list — BUG: returns 200 instead of 401', async () => {
     const response = await page.request.get('https://sync.linkright.in/api/resume/list');
     // KNOWN BUG: should be >= 400, but API doesn't check auth
     // When fixed, change this to: expect(response.status()).toBeGreaterThanOrEqual(400);
     expect(response.ok()).toBe(true);
-
-    await context.close();
   });
-
 });
