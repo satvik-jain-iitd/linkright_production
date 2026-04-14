@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
 
@@ -146,11 +147,7 @@ async function persistBrandColors(
   const domain = extractDomain(colors.company_name);
   if (!domain) return;
 
-  const { createClient: createSupabaseClient } = await import("@supabase/supabase-js");
-  const adminClient = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const adminClient = createServiceClient();
 
   await adminClient.from("company_brand_colors").upsert(
     {

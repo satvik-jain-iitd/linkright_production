@@ -223,7 +223,7 @@ async def score_application(
         api_key=worker_config.GEMINI_API_KEY,
         model_id=worker_config.GEMINI_MODEL_ID,
     )
-    async with gemini_limiter:
+    async with gemini_limiter(user_id):
         response = await gemini.complete(
             system=SCORING_SYSTEM_PROMPT,
             user=user_prompt,

@@ -161,7 +161,7 @@ Write the cover letter body now. Remember: specific metrics, "I'm choosing you" 
         model_id=worker_config.GEMINI_MODEL_ID,
     )
 
-    async with gemini_limiter:
+    async with gemini_limiter(user_id):
         response = await gemini.complete(
             system=COVER_LETTER_SYSTEM,
             user=user_prompt,
@@ -186,7 +186,7 @@ Write the cover letter body now. Remember: specific metrics, "I'm choosing you" 
             "Replace any generic phrases with concrete, evidence-backed statements."
         )
 
-        async with gemini_limiter:
+        async with gemini_limiter(user_id):
             response = await gemini.complete(
                 system=COVER_LETTER_SYSTEM,
                 user=retry_prompt,

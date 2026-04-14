@@ -18,17 +18,14 @@
  * To update this proxy: edit this file only.
  */
 
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 
 const CUSTOM_GPT_SECRET = process.env.CUSTOM_GPT_SECRET!;
 const ORACLE_URL = process.env.ORACLE_BACKEND_URL!;
 const ORACLE_SECRET = process.env.ORACLE_BACKEND_SECRET!;
 
 function serviceClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return createServiceClient();
 }
 
 async function resolveAuth(

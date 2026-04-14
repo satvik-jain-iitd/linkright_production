@@ -21,6 +21,9 @@ from .config import SUPABASE_SERVICE_KEY, SUPABASE_URL, WORKER_SECRET, DEFAULT_A
 from .context import PipelineContext
 from .db import create_supabase, update_job
 from .pipeline.orchestrator import phase_0_nuggets, run_pipeline
+from .sentry_config import init_sentry
+
+init_sentry()
 
 app = FastAPI(title="LinkRight Sync Worker", version="0.1.0")
 

@@ -36,6 +36,7 @@ from ..tools.assemble_html import (
 from ..tools.score_bullets import resume_score_bullets, ScoreBulletsInput, CandidateBullet
 from ..qmd_search import hybrid_search as qmd_hybrid_search, fallback_fts_search
 from . import prompts
+from .prompts import escape_llm_input
 from ..langfuse_client import trace_generation, get_prompt
 from ..tools.nugget_extractor import extract_nuggets, Nugget
 from ..tools.nugget_embedder import embed_nuggets
@@ -637,7 +638,9 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     # early-life narrative to avoid 413 Payload Too Large on Groq.
     career_text_p1 = _prepare_career_for_phase1(ctx.career_text, ctx.job_id)
     user_msg = prompts.PHASE_1_2_USER.format(
-        jd_text=ctx.jd_text, career_text=career_text_p1, qa_context=qa_context
+        jd_text=escape_llm_input(ctx.jd_text),
+        career_text=escape_llm_input(career_text_p1),
+        qa_context=qa_context,
     )
 
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=1)
@@ -1118,7 +1121,7 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
             company_title=co.get("title", ""),
             company_dates=co.get("date_range", ""),
             company_team=co.get("team", ""),
-            company_chunks=company_context,
+            company_chunks=escape_llm_input(company_context),
             bullet_count=num_bullets,
         )
 
@@ -1179,7 +1182,7 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
                     company_title=co.get("title", ""),
                     company_dates=co.get("date_range", ""),
                     company_team=co.get("team", ""),
-                    company_chunks=company_context,
+                    company_chunks=escape_llm_input(company_context),
                     bullet_count=num_bullets,
                 )
                 resp_r = await _llm_call(ctx, llm, sys_r, usr_r, phase=4, temperature=0.4)
@@ -1642,7 +1645,7 @@ async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
     )
     user_msg = prompts.PHASE_4_BATCHED_USER.format(
         jd_keywords_compact=jd_keywords_compact,
-        companies_section=companies_section,
+        companies_section=escape_llm_input(companies_section),
     )
 
     resp = await _llm_call(ctx, llm, system_msg, user_msg, phase=4, temperature=0.4)

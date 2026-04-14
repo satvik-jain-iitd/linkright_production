@@ -10,7 +10,7 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { isDuplicateNugget } from "@/lib/nugget-dedup";
 import { z } from "zod";
@@ -89,10 +89,7 @@ function normalizeDate(raw: string | null | undefined): string | null {
 // ── Service client (bypasses RLS for embedding trigger) ─────────────────────
 
 function serviceSupabase() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return createServiceClient();
 }
 
 // ── Trigger async embedding via worker ──────────────────────────────────────

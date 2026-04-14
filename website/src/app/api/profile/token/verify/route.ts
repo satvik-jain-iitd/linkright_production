@@ -1,4 +1,4 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 /** Called by Custom GPT at session start to verify the user's session token.
@@ -13,10 +13,7 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
  */
 
 function serviceClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return createServiceClient();
 }
 
 export async function POST(request: Request) {

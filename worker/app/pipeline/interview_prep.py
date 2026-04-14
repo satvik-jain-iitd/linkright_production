@@ -217,7 +217,7 @@ async def generate_interview_prep(
         model_id=worker_config.GEMINI_MODEL_ID,
     )
 
-    async with gemini_limiter:
+    async with gemini_limiter(user_id):
         response = await gemini.complete(
             system=INTERVIEW_PREP_SYSTEM,
             user=user_prompt,

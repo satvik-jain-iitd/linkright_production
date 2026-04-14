@@ -1,13 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 
 // Use service role for the UPDATE (RLS blocks user-role updates on resume_jobs)
 // Auth check is still done via the user session client first.
 function serviceClient() {
-  return createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return createServiceClient();
 }
 
 export async function POST(request: Request) {

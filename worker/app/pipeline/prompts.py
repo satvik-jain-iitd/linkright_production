@@ -6,6 +6,50 @@ structured JSON that the orchestrator can parse and feed to tools.
 Optimized: Phase 1+2 merged (1 call), Phase 4 batched (1 call), Phase 5 batched (1 call) = 3 total.
 """
 
+import re as _re
+
+
+# ── LLM Input Sanitization ──────────────────────────────────────────────────
+# Defends against prompt injection via malicious JD or career text.
+# Strips XML-like control tags, common injection patterns, and wraps
+# the content in clear delimiters so the LLM treats it as data, not instructions.
+
+_XML_TAG_RE = _re.compile(
+    r"<\s*/?\s*(?:system|instruction|prompt|assistant|human|user|context|"
+    r"im_start|im_end|message|tool_call|function_call|endoftext)[^>]*>",
+    _re.IGNORECASE,
+)
+
+_INJECTION_PATTERNS = [
+    (_re.compile(r"ignore\s+(?:all\s+)?previous\s+instructions?", _re.IGNORECASE), "[FILTERED]"),
+    (_re.compile(r"ignore\s+(?:the\s+)?above", _re.IGNORECASE), "[FILTERED]"),
+    (_re.compile(r"disregard\s+(?:all\s+)?(?:previous|prior|above)\s+(?:instructions?|prompts?)", _re.IGNORECASE), "[FILTERED]"),
+    (_re.compile(r"^system\s*:", _re.IGNORECASE | _re.MULTILINE), "[SYS]:"),
+    (_re.compile(r"^ASSISTANT\s*:", _re.IGNORECASE | _re.MULTILINE), "[ASST]:"),
+    (_re.compile(r"^Human\s*:", _re.IGNORECASE | _re.MULTILINE), "[HMN]:"),
+    (_re.compile(r"^User\s*:", _re.IGNORECASE | _re.MULTILINE), "[USR]:"),
+    (_re.compile(r"\[\|(?:im_start|im_end|endoftext)\|\]", _re.IGNORECASE), ""),
+    (_re.compile(r"<\|(?:im_start|im_end|endoftext)\|>", _re.IGNORECASE), ""),
+]
+
+
+def escape_llm_input(text: str) -> str:
+    """Sanitize user-provided text before injecting into LLM prompts.
+
+    1. Strips XML-like control tags that could confuse the model.
+    2. Neutralizes common prompt-injection patterns.
+    3. Wraps the result in <user_provided_content> delimiters.
+    """
+    if not text:
+        return "<user_provided_content></user_provided_content>"
+
+    sanitized = _XML_TAG_RE.sub("", text)
+
+    for pattern, replacement in _INJECTION_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+
+    return f"<user_provided_content>\n{sanitized.strip()}\n</user_provided_content>"
+
 # ── Phase 1+2: Parse JD + Career Profile + Strategy + Brand Colors ──────
 
 PHASE_1_2_SYSTEM = """You are a resume optimization AI. Analyze the job description and candidate career profile, then pick an optimization strategy and brand colors.

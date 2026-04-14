@@ -1,4 +1,4 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { z } from "zod";
 
@@ -51,10 +51,7 @@ export async function POST(request: Request) {
   }
 
   // Use service-role client to look up token (no cookie-based auth for webhooks)
-  const supabase = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  const supabase = createServiceClient();
 
   // Find user by webhook_token
   const { data: settings, error: lookupError } = await supabase

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 function extractDomain(name: string): string {
@@ -50,17 +50,8 @@ export async function POST(request: Request) {
   }
 
   // Use service role for global cache writes (any auth'd user can contribute)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceKey) {
-    return Response.json(
-      { ok: false, error: "Brand color caching not configured" },
-      { status: 500 }
-    );
-  }
-
-  const adminClient = createSupabaseClient(supabaseUrl, serviceKey);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const adminClient = createServiceClient() as any;
 
   try {
     const { data, error } = await adminClient
