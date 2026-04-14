@@ -142,17 +142,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
   const searchRef = useRef<HTMLDivElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ZIP/CSS upload state
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // BrandFetch lookup state
-  const [domainQuery, setDomainQuery] = useState("");
-  const [brandFetchStatus, setBrandFetchStatus] = useState<string | null>(null);
-  const [brandFetchError, setBrandFetchError] = useState<string | null>(null);
-  const [brandFetching, setBrandFetching] = useState(false);
+  // (v4: ZIP upload + BrandFetch removed — manual color picker only)
 
   /* ─── Enrich state ────────────────────────────────────────────────────── */
 
@@ -261,89 +251,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
     setColors((prev) => ({ ...prev, [key]: null }));
   };
 
-  // ZIP/CSS file upload handler
-  const handleFileUpload = async (file: File) => {
-    setUploading(true);
-    setUploadStatus(null);
-    setUploadError(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const resp = await fetch("/api/brand-colors/extract", {
-        method: "POST",
-        body: formData,
-      });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error || "Upload failed");
-      }
-      const result = await resp.json();
-      applyColors({
-        brand_primary: result.brand_primary,
-        brand_secondary: result.brand_secondary,
-        brand_tertiary: result.brand_tertiary,
-        brand_quaternary: result.brand_quaternary,
-      });
-      if (result.colors_found > 0) {
-        setUploadStatus(`Found ${result.colors_found} color${result.colors_found === 1 ? "" : "s"} in file`);
-      } else {
-        setUploadStatus("Using defaults — no brand colors found in file");
-      }
-    } catch (e: unknown) {
-      setUploadError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileUpload(file);
-  };
-
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFileUpload(file);
-  };
-
-  // BrandFetch domain lookup
-  const handleBrandFetchLookup = async () => {
-    if (!domainQuery.trim()) return;
-    setBrandFetching(true);
-    setBrandFetchStatus(null);
-    setBrandFetchError(null);
-    const q = domainQuery.trim().includes(".") ? domainQuery.trim() : `${domainQuery.trim()}.com`;
-    try {
-      const resp = await fetch(
-        `/api/brand-colors/brandfetch?domain=${encodeURIComponent(q)}`
-      );
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error || "Lookup failed");
-      }
-      const result = await resp.json();
-      if (!result.colors) {
-        setBrandFetchError("Couldn't find colors for this domain. Try entering the full domain like 'company.com', or upload a CSS file instead.");
-        return;
-      }
-      setColors((prev) => ({
-        ...prev,
-        brand_primary: result.brand_primary,
-        brand_secondary: result.brand_secondary,
-      }));
-      setHexInputs((prev) => ({
-        ...prev,
-        brand_primary: result.brand_primary,
-        brand_secondary: result.brand_secondary,
-      }));
-      setBrandFetchStatus(`Colors from ${q}`);
-    } catch (e: unknown) {
-      setBrandFetchError(e instanceof Error ? e.message : "Lookup failed");
-    } finally {
-      setBrandFetching(false);
-    }
-  };
+  // (v4: file upload + BrandFetch handlers removed — manual color picker only)
 
   /* ─── Enrich effects ──────────────────────────────────────────────────── */
 
@@ -716,7 +624,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
         {/* Default palette label + color preview row */}
         <div className="mt-6">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
-            Default professional colors — upload brand assets below for an accurate match
+            Color palette — click swatches below to customize
           </p>
           <div className="flex gap-2">
             {colorList.map((c, i) => (
@@ -825,102 +733,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
           )}
         </div>
 
-        {/* ZIP / CSS file upload */}
-        <div className="mt-8">
-          <label htmlFor="brand-file-upload" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted">
-            Upload brand assets (CSS/HTML file)
-          </label>
-          <div
-            className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface px-6 py-6 text-center transition-colors hover:border-accent/40 hover:bg-background"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleFileDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? (
-              <div className="flex items-center gap-2 text-sm text-muted">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-                Extracting colors...
-              </div>
-            ) : (
-              <>
-                <svg
-                  className="h-6 w-6 text-muted"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                  />
-                </svg>
-                <p className="text-sm text-muted">
-                  Drop CSS/HTML file here or <span className="text-accent underline">click to browse</span>
-                </p>
-                <p className="text-xs text-muted/60">.css, .html, .txt, .zip accepted</p>
-              </>
-            )}
-          </div>
-          <input
-            id="brand-file-upload"
-            ref={fileInputRef}
-            type="file"
-            accept=".css,.html,.txt,.zip"
-            className="hidden"
-            onChange={handleFileInputChange}
-          />
-          {uploadStatus && (
-            <p className="mt-2 text-xs font-medium text-green-700">{uploadStatus}</p>
-          )}
-          {uploadError && (
-            <p className="mt-2 text-xs font-medium text-red-600">{uploadError}</p>
-          )}
-        </div>
-
-        {/* BrandFetch domain lookup */}
-        <div className="mt-6">
-          <label htmlFor="brandfetch-domain" className="mb-2 block text-xs font-semibold uppercase tracking-wide text-muted">
-            Look up brand colors
-          </label>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <input
-                id="brandfetch-domain"
-                type="text"
-                value={domainQuery}
-                onChange={(e) => setDomainQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleBrandFetchLookup()}
-                placeholder="e.g. stripe.com"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent/50 focus:outline-none"
-              />
-              <p className="mt-1 text-xs text-muted">Enter full domain (e.g. highlevel.com, stripe.com)</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleBrandFetchLookup}
-              disabled={brandFetching || !domainQuery.trim()}
-              aria-disabled={brandFetching || !domainQuery.trim()}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/80 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {brandFetching ? (
-                <span className="flex items-center gap-1.5">
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Looking up...
-                </span>
-              ) : (
-                "Look up"
-              )}
-            </button>
-          </div>
-          {brandFetchStatus && (
-            <p className="mt-2 text-xs font-medium text-green-700">{brandFetchStatus}</p>
-          )}
-          {brandFetchError && (
-            <p className="mt-2 text-xs font-medium text-red-600">{brandFetchError}</p>
-          )}
-        </div>
+        {/* v4: simplified — manual color picker only, no file upload or BrandFetch */}
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════ */}
