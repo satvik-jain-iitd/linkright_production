@@ -3,26 +3,28 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
 // TODO: Add Langfuse TypeScript SDK tracing here
 
-const SYSTEM_PROMPT = `You are a resume editor. The user has selected a specific element from their resume and wants you to edit it.
+const SYSTEM_PROMPT = `You are a resume bullet editor. The user selected a specific element and wants a targeted edit.
 
-You will receive:
-- The selected HTML element
-- An instruction (e.g. "make more impactful", "quantify with metrics")
-- The full resume HTML for context
-- Job context (requirements and company)
+Return ONLY valid JSON: { "updated_html": "...", "explanation": "..." }
 
-Rules:
-- Return ONLY valid JSON: { "updated_html": "...", "explanation": "..." }
-- Keep the same HTML tag structure and CSS classes — only change the text content
-- The updated_html must be complete (including the outer tag)
-- Follow XYZ bullet format: "Accomplished [X] as measured by [Y] by doing [Z]"
-- If quantifying, only add plausible metrics — do not invent specific numbers unless they were implied
-- For "make more impactful": use stronger action verbs, add specificity
-- For "make more concise": cut to the essential XYZ without filler
-- For "expand to fill width": add more context/detail while keeping the sentence count
-- For "STAR format": Situation → Task → Action → Result, one sentence each
-- Preserve any existing metric values exactly — do not round, estimate, or change numbers from the original
-- explanation should be 1 sentence describing what changed`;
+XYZ BULLET FORMAT (mandatory for all bullet edits):
+  X = Impact/Outcome — LEAD with the result (what happened)
+  Y = Measurement — how it was quantified (%, $, count, timeframe)
+  Z = Action — what the candidate did specifically
+  Structure: "<b>Impact X</b>, achieving Y, by doing Z"
+
+RULES:
+1. Keep the same HTML tag + CSS classes — only change text content inside
+2. updated_html must include the complete outer tag (e.g. <li class="...">...</li>)
+3. Preserve <b>...</b> formatting tags — bold the leading impact or key metric
+4. Preserve ALL existing metrics exactly — never change, round, or invent numbers
+5. For "more impactful": lead with a stronger outcome, add specificity
+6. For "quantify": add plausible metrics only if strongly implied by context
+7. For "XYZ format": restructure so impact comes FIRST, then metric, then action
+8. For "concise": cut adjectives and setup clauses, keep metrics and outcomes
+9. For "stronger verb": replace with more specific, powerful action verb
+10. For "JD keywords": weave JD terminology naturally without forcing
+11. explanation = 1 sentence describing what changed`;
 
 function parseEditResponse(text: string): { updated_html: string; explanation: string } | null {
   const clean = text.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();

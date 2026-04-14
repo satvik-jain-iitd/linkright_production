@@ -32,10 +32,9 @@ Return ONLY valid JSON — no markdown, no commentary:
   "voluntary": [{{"title": "", "detail": ""}}],
   "strategy": "METRIC_BOMBARDMENT|SKILL_MATCHING|LEADERSHIP_NARRATIVE|TRANSFORMATION_STORY|BALANCED",
   "strategy_reason": "1-sentence justification",
-  "theme_colors": {{
-    "brand_primary": "#hex", "brand_secondary": "#hex",
-    "brand_tertiary": "#hex", "brand_quaternary": "#hex"
-  }},
+  "requirements": [
+    {{"id": "r1", "text": "requirement phrase", "importance": "required|preferred"}}
+  ],
   "section_order": ["Professional Experience", "Awards & Recognitions", "Education", "Skills", "Interests"],
   "bullet_budget": {{
     "company_1_total": 6, "company_2_total": 4, "awards": 2, "voluntary": 2
@@ -57,7 +56,7 @@ Strategy definitions:
 
 Strategy rules:
 - Pick strategy that best matches JD emphasis
-- Use actual brand colors of the target company
+- requirements: extract 8-15 distinct JD requirements with id (r1, r2...) and importance
 - section_order: follow career level defaults, adjust for JD emphasis
 - bullet_budget: total ~12-15 bullets for one A4 page
 - Extract approximate dates from career context when available (years, date ranges)
@@ -233,7 +232,7 @@ RULES:
 1. NEVER change numbers, metrics, or percentages (e.g., "20+", "$9M", "85%", "1,500+")
 2. NEVER change words inside <b>...</b> tags — these are JD keywords
 3. NEVER change the first word (the leading action verb)
-4. Preserve the XYZ structure: [Accomplished X] [by doing Y] [resulting in Z]
+4. Preserve XYZ structure: [Impact X], [measured by Y], [through action Z]
 5. Preserve all <b> and </b> tags exactly as they appear
 6. One space = 0.516 CU (always, regardless of bold/regular)
 7. Keep the same professional tone and factual accuracy
