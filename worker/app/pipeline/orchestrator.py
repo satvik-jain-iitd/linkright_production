@@ -76,12 +76,13 @@ import re as _re
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
-# Keywords that signal a section contains professional experience or skills
+# Keywords that signal a section contains professional experience or skills.
+# v4: removed hardcoded company names (sprinklr, amex, etc.) — now generic.
 _PROF_KEYWORDS = {
     "experience", "work", "role", "manager", "engineer", "analyst",
     "consultant", "associate", "intern", "developer", "lead", "director",
-    "company", "startup", "sprinklr", "american express", "amex",
-    "contentstack", "navi", "skills", "tools", "education", "voluntary",
+    "company", "startup", "skills", "tools", "education", "voluntary",
+    "project", "product", "senior", "junior", "principal", "staff",
 }
 
 
@@ -172,10 +173,10 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
     await phase_3_5_stencil_draft(ctx, sb)
-    await phase_3_5a_professional_summary(ctx, sb, llm)
-    await phase_4a_verbose_bullets(ctx, sb, _gemini or llm)  # Gemini preferred: creative writing
+    await phase_4a_verbose_bullets(ctx, sb, _gemini or llm)  # Gemini preferred: XYZ creative writing
     await phase_4b_ranking(ctx, sb)
     await phase_4c_condense_bullets(ctx, sb, _oracle or llm)  # Oracle preferred: simple shortening
+    await phase_3_5a_professional_summary(ctx, sb, _oracle or llm)  # v4: AFTER bullets — synthesizes from written bullets
     await phase_5_width_opt(ctx, sb, llm)
     await phase_6_scoring(ctx, sb)
     await phase_7_validation(ctx, sb)
@@ -1098,8 +1099,16 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
             strategy_description=strategy_info["description"],
             career_level=ctx.career_level,
         )
+        # v4: build JD requirements list for covers_requirements mapping
+        jd_reqs = parsed.get("requirements", [])
+        jd_reqs_list = "\n".join(
+            f"  {r.get('id', f'r{i+1}')}: [{r.get('importance', 'required')}] {r.get('text', '')}"
+            for i, r in enumerate(jd_reqs)
+        ) if jd_reqs else "(No JD requirements available)"
+
         user_msg = prompts.PHASE_4A_VERBOSE_USER.format(
             jd_keywords_compact=jd_keywords_compact,
+            jd_requirements_list=jd_reqs_list,
             company_name=co_name,
             company_title=co.get("title", ""),
             company_dates=co.get("date_range", ""),
@@ -1328,6 +1337,10 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
                 "project_group": v.get("project_group", 0),
                 "text_html": c["text_html"],
                 "verb": c.get("verb", v.get("verb", "")),
+                # v4: carry forward verbose_context + xyz from Phase 4A for per-bullet width opt
+                "verbose_context": v.get("verbose_context", ""),
+                "xyz": v.get("xyz", {}),
+                "covers_requirements": v.get("covers_requirements", []),
             }
         else:
             # Fallback: use verbose text directly (condense missed this one)
@@ -1336,6 +1349,9 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
                 "project_group": v.get("project_group", 0),
                 "text_html": v["text_html"],
                 "verb": v.get("verb", ""),
+                "verbose_context": v.get("verbose_context", ""),
+                "xyz": v.get("xyz", {}),
+                "covers_requirements": v.get("covers_requirements", []),
             }
         all_bullets.append(bullet)
 
@@ -1360,6 +1376,9 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
                         "project_group": v.get("project_group", 0),
                         "text_html": c["text_html"],
                         "verb": c.get("verb", v.get("verb", "")),
+                        "verbose_context": v.get("verbose_context", ""),
+                        "xyz": v.get("xyz", {}),
+                        "covers_requirements": v.get("covers_requirements", []),
                     }
                 else:
                     bullet = {
@@ -1367,6 +1386,9 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
                         "project_group": v.get("project_group", 0),
                         "text_html": v["text_html"],
                         "verb": v.get("verb", ""),
+                        "verbose_context": v.get("verbose_context", ""),
+                        "xyz": v.get("xyz", {}),
+                        "covers_requirements": v.get("covers_requirements", []),
                     }
                 all_bullets_retry.append(bullet)
             if all_bullets_retry:

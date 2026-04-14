@@ -122,40 +122,58 @@ Write bullets for ALL companies above. ZERO verb repetition across all bullets."
 
 # ── Phase 4A: Verbose Bullet Paragraphs (one call PER COMPANY) ─────────
 
-PHASE_4A_VERBOSE_SYSTEM = """You are a resume achievement writer. Write detailed achievement paragraphs for ONE company.
+PHASE_4A_VERBOSE_SYSTEM = """You are a world-class resume writer using the XYZ format (Google style).
+
+For each career achievement, write ONE detailed paragraph in XYZ structure:
+  X = Impact/Outcome — LEAD with the result, not the action
+  Y = Measurement — how the impact was quantified (%, $, count, timeframe)
+  Z = Action — what the candidate specifically did
+
+The emphasis is on RESULTS FIRST, then measurement, then action.
+
 Return ONLY valid JSON:
 
 {{
   "paragraphs": [
     {{
       "project_group": 0,
-      "text_html": "<b>Bold metric lead</b> detailed achievement paragraph with full context",
-      "verb": "Led"
+      "text_html": "<b>Impact/outcome first</b>, achieving Y metric, by doing Z action with full detail",
+      "verb": "Secured",
+      "verbose_context": "Full 100-200 word paragraph capturing the complete story behind this bullet — company, role, timeframe, what happened, why it mattered, specific metrics, team dynamics. This context will be stored and used later for per-bullet width optimization.",
+      "xyz": {{
+        "x_impact": "The outcome or result achieved",
+        "y_measure": "How it was measured — specific numbers",
+        "z_action": "What the candidate did specifically"
+      }},
+      "covers_requirements": ["r1", "r3"]
     }}
   ]
 }}
 
 RULES:
 1. Each paragraph is 200-400 characters — a full, rich description of the achievement
-2. Every paragraph starts with <b>Bold text</b> — metric or key achievement first
-3. XYZ format: "<b>Accomplished X</b> as measured by Y by doing Z" — with FULL context
-4. ZERO verb repetition — every paragraph uses a unique past-tense action verb
+2. Every paragraph LEADS with the impact/outcome in <b>Bold</b> tags — NOT the action verb
+3. XYZ structure: "<b>Impact X</b>, measured by Y, through Z action"
+4. ZERO verb repetition across all paragraphs — unique past-tense verbs
 5. Bold JD keywords naturally with <b> tags throughout
 6. Quantify everything: %, $, team sizes, timelines, user counts
 7. Include specific details: tool names, methodologies, team dynamics, business impact
-8. Group paragraphs into project_groups (0, 1, 2...) — each group = related achievements
-9. Write EXACTLY {bullet_count} paragraphs for this company
+8. Group paragraphs into project_groups (0, 1, 2...) — related achievements
+9. Write EXACTLY {{bullet_count}} paragraphs for this company
 10. Do NOT worry about line width — these will be condensed later
-11. Verbs already used by prior companies: {used_verbs}. Do NOT reuse any of these.
-12. Every paragraph MUST include at least one metric (number, %, $, time) if one exists in the career context
-13. State the company name and role at least once per company block in the output
+11. Verbs already used by prior companies: {{used_verbs}}. Do NOT reuse.
+12. verbose_context MUST be 100-200 words — a complete, self-contained story
+13. covers_requirements: list which JD requirement IDs this bullet addresses
 
-Strategy: {strategy}
-Strategy emphasis: {strategy_description}
-Career level: {career_level}"""
+Strategy: {{strategy}}
+Strategy emphasis: {{strategy_description}}
+Career level: {{career_level}}"""
 
 PHASE_4A_VERBOSE_USER = """## JD Keywords
 {jd_keywords_compact}
+
+## JD Requirements (to reference in covers_requirements)
+{jd_requirements_list}
 
 ## Company: {company_name}
 Title: {company_title}
@@ -165,34 +183,33 @@ Team: {company_team}
 ## Relevant Career Context
 {company_chunks}
 
-Write {bullet_count} detailed achievement paragraphs for this company. ZERO verb repetition."""
+Write {bullet_count} XYZ achievement paragraphs for this company. Lead with IMPACT, not action. Include verbose_context for each. ZERO verb repetition."""
 
 
 # ── Phase 4C: Condense Verbose Paragraphs to Bullets (batched) ─────────
 
-PHASE_4C_CONDENSE_SYSTEM = """You are a resume bullet condenser. Compress detailed paragraphs into concise, punchy resume bullets.
+PHASE_4C_CONDENSE_SYSTEM = """You are a resume bullet condenser. Compress detailed XYZ paragraphs into concise, one-line resume bullets.
 Return ONLY valid JSON:
 
 {{
   "bullets": [
     {{
       "paragraph_index": 0,
-      "text_html": "<b>Bold metric lead</b> concise bullet",
-      "verb": "Led"
+      "text_html": "<b>Impact/outcome first</b>, metric, through action",
+      "verb": "Secured"
     }}
   ]
 }}
 
 RULES:
 1. Each bullet MUST be 95-110 rendered characters — one justified line on an A4 resume
-2. Preserve the leading <b>Bold text</b> and all <b> keyword tags exactly
-3. Preserve the leading action verb exactly — do NOT change it
+2. Preserve XYZ structure: impact/outcome FIRST, then measurement, then action
+3. Preserve the leading <b>Bold text</b> and all <b> keyword tags exactly
 4. Preserve all metrics, percentages, dollar amounts, team sizes exactly
-5. Preserve XYZ structure: compress by cutting filler words, not substance
-6. Every bullet must be a COMPLETE grammatical thought — never truncate mid-sentence
-7. Cut adjectives, adverbs, and setup clauses first. Keep metrics and outcomes.
-8. If a paragraph has multiple metrics, keep the strongest one
-9. Condense ALL {paragraph_count} paragraphs — one bullet per paragraph"""
+5. Every bullet must be a COMPLETE grammatical thought — never truncate mid-sentence
+6. Cut adjectives, adverbs, and setup clauses first. Keep metrics and outcomes.
+7. If a paragraph has multiple metrics, keep the strongest one
+8. Condense ALL {paragraph_count} paragraphs — one bullet per paragraph"""
 
 PHASE_4C_CONDENSE_USER = """## Paragraphs to Condense
 
@@ -272,15 +289,17 @@ PROFESSIONAL_SUMMARY_USER = """## Target Role: {target_role} at {target_company}
 ## JD Keywords: {jd_keywords}
 ## Career Level: {career_level}
 ## Top Companies: {companies}
-## Career Summary: {career_summary}
+## Written Resume Bullets (synthesize themes from these):
+{resume_bullets_text}
 
-Write a 2-3 sentence professional summary (150-250 chars) for this candidate targeting the role above.
+Write a 2-3 sentence professional summary (150-250 chars) that synthesizes the 2-3 strongest themes from the bullets above.
 Rules:
 - No "I" statements — write in implied first person
 - Lead with years of experience + domain
-- Include one quantified achievement
+- Include one quantified achievement FROM the bullets
 - Reference most relevant company/role
-- Mention 2-3 key skills matching JD keywords"""
+- Mention 2-3 key skills matching JD keywords
+- Summary must feel like a SYNTHESIS of the bullet content, not a generic intro"""
 
 
 # ── Phase 6: BRS Scoring (tool-only — no LLM) ──────────────────────────
