@@ -42,10 +42,10 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: 'https://sync.linkright.in',
+    baseURL: process.env.E2E_BASE_URL || 'https://sync.linkright.in',
 
-    // Headed so you can watch what's happening
-    headless: false,
+    // Headed locally so you can watch, headless in CI
+    headless: !!process.env.CI,
 
     // Screenshot + video only on failure — saves storage
     screenshot: 'only-on-failure',

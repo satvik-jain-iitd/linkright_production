@@ -30,10 +30,9 @@ test.describe.serial('Resume Builder', () => {
       test.skip(true, 'Redirected — user needs to complete onboarding first');
     }
 
-    // JD textarea or some form element should be visible
-    await expect(page.locator('body')).toBeVisible({ timeout: 10_000 });
-    // No crash — page loaded successfully
-    await page.waitForLoadState('networkidle');
+    // JD textarea or form input should be visible — proves the wizard rendered
+    const textarea = page.getByRole('textbox').first();
+    await expect(textarea).toBeVisible({ timeout: 10_000 });
   });
 
   test('JD paste extracts target role and company', async () => {
@@ -49,11 +48,10 @@ test.describe.serial('Resume Builder', () => {
     await expect(textarea).toBeVisible({ timeout: 10_000 });
     await textarea.fill(TEST_JD);
 
-    // After filling JD, target role / company may auto-extract
-    // Wait briefly for extraction
-    await page.waitForTimeout(2_000);
-    // This is a smoke test — just verify no crash
-    await expect(page.locator('body')).toBeVisible();
+    // After filling JD, wait for extraction signal (textarea value persists + page stays stable)
+    await expect(textarea).toHaveValue(TEST_JD, { timeout: 5_000 });
+    // Verify the page didn't crash — check that the form area is still interactive
+    await expect(page.getByRole('textbox').first()).toBeVisible();
   });
 
   test('empty JD shows validation or disabled state', async () => {
@@ -71,8 +69,9 @@ test.describe.serial('Resume Builder', () => {
     // Either button is disabled (correct) or clicking shows validation error (also correct)
     if (!isDisabled) {
       await nextButton.click();
-      // Should show some validation message, not crash
-      await expect(page.locator('body')).toBeVisible();
+      // Should show validation error or remain on same step — not navigate forward
+      const urlAfterClick = page.url();
+      expect(urlAfterClick).toContain('/resume/new');
     } else {
       // Button is disabled — this is the expected behavior
       expect(isDisabled).toBe(true);

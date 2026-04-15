@@ -19,6 +19,10 @@ test.describe.serial('Dashboard', () => {
   });
 
   test('dashboard home loads without error', async () => {
+    // Capture console errors from the moment page starts loading
+    const errors: string[] = [];
+    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
     // Should show either resume list or "Create first resume" CTA
@@ -28,11 +32,11 @@ test.describe.serial('Dashboard', () => {
       // Fresh user — onboarding not complete, this is expected
       test.skip(true, 'User has not completed onboarding — dashboard redirects to /onboarding');
     }
-    // Page loaded — check for any visible heading or content (no <main> tag on dashboard)
-    await expect(page.locator('body')).toBeVisible();
-    // Check for console errors
-    const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    // Verify meaningful content rendered — nav or heading, not just body
+    const hasNav = await page.getByRole('navigation').first().isVisible().catch(() => false);
+    const hasHeading = await page.getByRole('heading').first().isVisible().catch(() => false);
+    expect(hasNav || hasHeading).toBe(true);
+    // No JS errors (ignore favicon 404s)
     expect(errors.filter(e => !e.includes('favicon'))).toHaveLength(0);
   });
 

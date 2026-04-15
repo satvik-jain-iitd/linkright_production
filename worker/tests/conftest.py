@@ -75,6 +75,7 @@ class _QueryChain:
         self._filters: list[tuple] = []
         self._insert_payload: list[dict] | None = None
         self._update_payload: dict | None = None
+        self._delete_pending: bool = False
 
     # --- builder methods (return self for chaining) ---
 
@@ -91,6 +92,10 @@ class _QueryChain:
         self._update_payload = payload
         return self
 
+    def delete(self) -> "_QueryChain":
+        self._delete_pending = True
+        return self
+
     def eq(self, column: str, value) -> "_QueryChain":
         self._filters.append((column, value))
         return self
@@ -105,6 +110,14 @@ class _QueryChain:
 
     def execute(self):
         """Apply pending mutations and return a result object."""
+        if self._delete_pending:
+            matched = list(self._rows)
+            for col, val in self._filters:
+                matched = [r for r in matched if r.get(col) == val]
+            for row in matched:
+                self._rows.remove(row)
+            return _Result(matched)
+
         if self._insert_payload is not None:
             self._rows.extend(self._insert_payload)
             return _Result(list(self._insert_payload))
@@ -145,6 +158,9 @@ class FakeTable:
 
     def update(self, payload) -> _QueryChain:
         return _QueryChain(self.rows).update(payload)
+
+    def delete(self) -> _QueryChain:
+        return _QueryChain(self.rows).delete()
 
     def eq(self, column: str, value) -> _QueryChain:
         # Top-level .eq() — returns chain scoped to all rows
