@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { CompanyCard } from "@/components/scout/CompanyCard";
 import { AddCompanyModal } from "@/components/scout/AddCompanyModal";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const STARTER_COMPANIES = [
   { name: "Razorpay", slug: "razorpay", ats: "lever", region: "India" },
@@ -52,11 +53,14 @@ export default function WatchlistPage() {
 
   useEffect(() => { fetchWatchlist(); }, [fetchWatchlist]);
 
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/watchlist/${id}`, { method: "DELETE" });
     if (res.ok) {
       setCompanies((prev) => prev.filter((c) => c.id !== id));
     }
+    setDeleteTarget(null);
   };
 
   const handleToggle = async (id: string, isActive: boolean) => {
@@ -112,7 +116,7 @@ export default function WatchlistPage() {
             <CompanyCard
               key={company.id}
               company={company}
-              onDelete={() => handleDelete(company.id)}
+              onDelete={() => setDeleteTarget({ id: company.id, name: company.company_name })}
               onToggle={() => handleToggle(company.id, company.is_active)}
               onIntervalChange={handleIntervalChange}
             />
@@ -129,6 +133,15 @@ export default function WatchlistPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Remove from watchlist"
+        message={`Remove ${deleteTarget?.name ?? "this company"} from your watchlist? This will stop scanning for new jobs.`}
+        confirmLabel="Remove"
+        onConfirm={() => deleteTarget && handleDelete(deleteTarget.id)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

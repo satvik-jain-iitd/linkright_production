@@ -180,6 +180,7 @@ export function KanbanBoard() {
   const [loading, setLoading] = useState(true);
   const [activeApp, setActiveApp] = useState<Application | null>(null);
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const [dragError, setDragError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -278,12 +279,16 @@ export function KanbanBoard() {
         setApplications((prev) =>
           prev.map((a) => (a.id === active.id ? { ...a, status: activeApp.status } : a))
         );
+        setDragError("Failed to update status. Please try again.");
+        setTimeout(() => setDragError(null), 4000);
       }
     } catch {
       // Revert
       setApplications((prev) =>
         prev.map((a) => (a.id === active.id ? { ...a, status: activeApp.status } : a))
       );
+      setDragError("Network error. Please try again.");
+      setTimeout(() => setDragError(null), 4000);
     }
   }, [applications]);
 
@@ -332,6 +337,14 @@ export function KanbanBoard() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Error toast */}
+      {dragError && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>{dragError}</span>
+          <button onClick={() => setDragError(null)} className="ml-3 text-red-500 hover:text-red-700">&times;</button>
+        </div>
+      )}
+
       {/* Board header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-foreground">Applications</h1>
