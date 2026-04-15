@@ -1,6 +1,11 @@
 pre-push:
   parallel: true
   commands:
+    beads-sync:
+      run: |
+        if command -v bd >/dev/null 2>&1; then
+          BD_GIT_HOOK=1 bd hooks run pre-push "$@"
+        fi
     worker-tests:
       glob: "worker/**/*.py"
       run: cd worker && python -m pytest tests/ --cov=app/tools --cov-fail-under=50 -q 2>/dev/null || echo "⚠ Worker tests failed — fix before pushing"
