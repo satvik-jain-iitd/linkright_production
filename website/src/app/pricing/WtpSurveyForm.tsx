@@ -19,7 +19,7 @@ const FEATURE_OPTIONS = [
   "Anti-AI writing filter",
   "JD-based bullet scoring",
   "One-page guarantee",
-  "Application Q&A",
+  "Career interview + nugget extraction",
 ];
 
 interface WtpSurveyFormProps {
@@ -132,7 +132,7 @@ export function WtpSurveyForm({ isLoggedIn, userId, alreadySubmitted }: WtpSurve
           What would you pay?
         </h1>
         <p className="mt-4 text-muted">
-          You&apos;ve tried Sync. Now help us figure out pricing. Your honest answers shape what we build next.
+          You&apos;ve tried LinkRight. Now help us figure out pricing. Your honest answers shape what we build next.
         </p>
       </div>
 
@@ -141,7 +141,7 @@ export function WtpSurveyForm({ isLoggedIn, userId, alreadySubmitted }: WtpSurve
         {/* Q1: Would you pay? */}
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-            1. Would you pay for a tool like Sync?
+            1. Would you pay for a tool like LinkRight?
           </h2>
           <div className="mt-4 flex gap-3">
             {(["yes", "maybe", "no"] as const).map((option) => (

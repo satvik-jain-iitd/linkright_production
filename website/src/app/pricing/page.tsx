@@ -82,6 +82,10 @@ export default async function PricingPage() {
                   <span className="mt-0.5 text-accent">&#10003;</span>
                   Width optimization
                 </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-accent">&#10003;</span>
+                  Brand color matching
+                </li>
               </ul>
               <Link
                 href="/auth"
@@ -112,15 +116,11 @@ export default async function PricingPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-accent">&#10003;</span>
-                  Brand color matching
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
                   Priority generation
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-accent">&#10003;</span>
-                  Application Q&amp;A
+                  Advanced analytics
                 </li>
               </ul>
               <button
@@ -162,7 +162,7 @@ export default async function PricingPage() {
           <div className="flex items-center gap-8 text-sm text-muted">
             {// [PRICING-REDESIGN] Changed "Sync" to "Features"
             null}
-            <Link href="/features" className="transition-colors hover:text-foreground">
+            <Link href="/#features" className="transition-colors hover:text-foreground">
               Features
             </Link>
             <Link href="/pricing" className="transition-colors hover:text-foreground">
