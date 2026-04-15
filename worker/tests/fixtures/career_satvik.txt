@@ -1,0 +1,74 @@
+SATVIK JAIN
+Product Manager | FinTech & Risk | IIT Delhi
+satvik.jain@iitdalumni.com | LinkedIn: linkedin.com/in/satvikjain | New Delhi, India
+
+---
+
+PROFESSIONAL EXPERIENCE
+
+American Express — New Delhi, India
+Senior Associate Product Manager, Credit Risk & Recommendations (CRR) | July 2022 – Present
+
+American Express's Credit Risk & Recommendations team owns the ML-powered decisioning platform that governs credit line assignments, risk scoring, and proactive account management across 100M+ global accounts. As Senior Associate PM, I lead product strategy and execution for the core risk intelligence layer, collaborating with data science, engineering, compliance, and regional business partners.
+
+Key Achievements:
+
+• Led an 18-member cross-functional team (data scientists, backend engineers, compliance analysts, and business stakeholders) to redesign the risk scoring pipeline, reducing risk scoring errors from 18% to 2% — a 16-percentage-point improvement that directly reduced false positive declinations and improved cardholder experience across 40+ markets.
+
+• Drove the GenAI root-cause analyzer from 0 to 85% coverage across 100M+ accounts by defining the product vision, writing detailed PRDs, managing sprint cycles in JIRA under SAFe agile, and coordinating model deployment timelines with data engineering teams. This tool surfaces explainable AI outputs for credit analysts, cutting manual investigation time by ~60%.
+
+• Owned end-to-end delivery of the Dynamic Credit Line Adjustment (DCLA) feature — a real-time ML-based system that proactively increases or decreases credit limits. Shipped on schedule after 3 sprints, contributing to a 12% uplift in credit utilization revenue and a 9% reduction in delinquency rates for the US Consumer portfolio.
+
+• Partnered with the Compliance & Legal team to build an AI fairness audit framework, ensuring ECOA/FCRA compliance for all automated credit decisions. This framework was adopted as a company-wide standard across 4 product lines.
+
+• Defined and tracked product KPIs including decision latency (<200ms p99), model drift thresholds, coverage %, and decision override rates. Built SQL-based dashboards in Presto for weekly executive reporting, surfacing trends across 15+ risk segments.
+
+• Collaborated with stakeholders across 6 global markets to localize risk parameters and credit policies, navigating regulatory requirements in India, UK, Australia, and Canada while maintaining a single codebase.
+
+• Ran a structured A/B testing programme on credit bureau refresh cadences, discovering that biweekly refresh (vs monthly) reduced surprise delinquencies by 7% — recommendation was adopted globally.
+
+
+Sprinklr — New Delhi, India
+Product Management Intern | May 2021 – August 2021
+
+Sprinklr is an enterprise SaaS platform for unified customer experience management. During my internship on the Insights & Analytics product team, I worked on the social listening and sentiment analysis modules used by Fortune 500 brand teams.
+
+• Conducted 14 customer discovery interviews with marketing and CX teams at enterprise clients (including L'Oreal and Unilever), synthesizing findings into a prioritized feature backlog covering 3 core pain points: latency in sentiment refresh, lack of multilingual support, and poor drill-down UX for regional managers.
+
+• Shipped a competitor benchmarking widget improvement (added side-by-side share-of-voice visualization) that received a 4.7/5 CSAT rating in post-release feedback across 200+ enterprise users.
+
+---
+
+EDUCATION
+
+Indian Institute of Technology (IIT) Delhi
+B.Tech, Textile Technology (Minor: Management Studies) | 2018 – 2022
+CGPA: 8.4/10
+
+Relevant coursework: Statistics & Probability, Operations Research, Economics of Innovation, Technology Management
+
+---
+
+SKILLS
+
+Product Management: SAFe Agile, JIRA, Confluence, product roadmapping, OKR frameworks, user story writing, A/B testing, go-to-market strategy, stakeholder management, customer discovery interviews
+
+Data & Analytics: SQL (Presto, PostgreSQL), Python (pandas, numpy), data dashboards, cohort analysis, funnel analysis, experimentation design
+
+ML & AI: working knowledge of supervised/unsupervised ML pipelines, GenAI application development (LLM orchestration, RAG, prompt engineering), explainable AI, model evaluation
+
+Domain: Credit risk decisioning, FinTech regulation (ECOA, FCRA, PCI-DSS), SaaS product management, enterprise analytics
+
+---
+
+CERTIFICATIONS & ACHIEVEMENTS
+
+• SAFe 6.0 Certified Product Owner / Product Manager (2023)
+• Internal AmEx Hackathon Winner — "PromptRisk" GenAI credit risk explainer (2023)
+• Dean's List, IIT Delhi — 3 semesters
+
+---
+
+PROJECTS
+
+LinkRight (Side Project, 2024–Present): Building an AI-powered resume tailoring engine using FastAPI, Supabase (pgvector), and multi-provider LLM orchestration (Gemini, Groq, OpenRouter). Product handles resume parsing, semantic chunking, JD matching, and single-page HTML resume generation with tight width optimization.

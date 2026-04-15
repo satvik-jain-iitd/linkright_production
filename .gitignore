@@ -85,3 +85,6 @@ Projects/
 playwright_automation/
 .coverage
 .vercel
+
+# Beads issue tracker (local-only, synced via dolt)
+.beads/

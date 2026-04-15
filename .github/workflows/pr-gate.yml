@@ -1,0 +1,36 @@
+name: PR Gate — Production Merge
+
+on:
+  pull_request:
+    branches: [production]
+
+jobs:
+  enforce-review:
+    name: Require CI Pass + Review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PR is from dev branch
+        run: |
+          HEAD_REF="${{ github.head_ref }}"
+          if [[ "$HEAD_REF" != "dev" ]]; then
+            echo "::error::Production PRs must come from the dev branch. Got: $HEAD_REF"
+            exit 1
+          fi
+          echo "PR source branch verified: $HEAD_REF"
+
+      - name: Verify no non-runtime files
+        run: |
+          # These patterns should not exist in production
+          VIOLATIONS=""
+          for pattern in "docs/" "specs/" "CLAUDE.md" "AGENTS.md" "KNOWN_BUGS.md" ".beads/" ".claude/"; do
+            if [ -e "$pattern" ]; then
+              VIOLATIONS="$VIOLATIONS $pattern"
+            fi
+          done
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Non-runtime files detected:$VIOLATIONS — these must be excluded from production"
+            exit 1
+          fi
+          echo "Production branch is clean — runtime code only"

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "linkright-website",
+    "command": "npm run dev",
+    "cwd": "website",
+    "port": 3456
+  },
+  {
+    "name": "linkright-worker",
+    "command": "uvicorn app.main:app --reload --port 8000",
+    "cwd": "worker",
+    "port": 8000
+  }
+]

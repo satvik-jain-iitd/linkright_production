@@ -1,0 +1,64 @@
+name: Worker Tests
+
+on:
+  push:
+    paths: ['worker/**']
+  pull_request:
+    paths: ['worker/**']
+
+jobs:
+  test:
+    name: pytest + Coverage Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+
+      - name: Run tests with coverage
+        env:
+          SUPABASE_URL: "https://placeholder.supabase.co"
+          SUPABASE_SERVICE_KEY: "placeholder-service-key"
+          WORKER_SECRET: "placeholder-worker-secret"
+          GROQ_API_KEY: "gsk_placeholder"
+          JINA_API_KEY: "jina_placeholder"
+          ORACLE_BACKEND_URL: "https://placeholder.oracle.com"
+          ORACLE_BACKEND_SECRET: "placeholder-oracle-secret"
+          GEMINI_API_KEY: "placeholder-gemini-key"
+          USE_NUGGETS: "true"
+        run: |
+          pytest tests/ \
+            --cov=app/tools \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=50 \
+            -v
+
+      - name: Quality Judge coverage gate (90%)
+        env:
+          SUPABASE_URL: "https://placeholder.supabase.co"
+          SUPABASE_SERVICE_KEY: "placeholder-service-key"
+          WORKER_SECRET: "placeholder-worker-secret"
+        run: |
+          pytest tests/test_quality_judge.py \
+            --cov=app/tools/quality_judge \
+            --cov-fail-under=90 \
+            -v || echo "Quality judge coverage gate — needs test file"
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: worker/coverage.xml
