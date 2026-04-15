@@ -573,7 +573,7 @@ export function StepJobDetails({ data, update, next }: Props) {
               onClick={handleContinue}
               className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
-              Continue → Brand Colors
+              Continue → Customize
             </button>
           </div>
         </div>

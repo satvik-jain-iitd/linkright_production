@@ -307,15 +307,6 @@ function NuggetsCards({ nuggets, onDelete }: { nuggets: NuggetRow[]; onDelete: (
           {/* Edit / Delete buttons */}
           <div className="absolute top-3 right-3 flex items-center gap-1">
             <button
-              title="Edit"
-              className="rounded-md p-1.5 text-muted hover:bg-accent/10 hover:text-accent transition-colors"
-              onClick={() => {/* placeholder – edit handler */}}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-              </svg>
-            </button>
-            <button
               title="Delete"
               className="rounded-md p-1.5 text-muted hover:bg-red-100 hover:text-red-600 transition-colors"
               onClick={async () => {

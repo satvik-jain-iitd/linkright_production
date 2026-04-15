@@ -432,7 +432,7 @@ function StepCareerBasics({
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Jane Smith"
+              placeholder="Your Name"
               className={inputClass}
             />
           </div>
@@ -444,7 +444,7 @@ function StepCareerBasics({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="jane@example.com"
+              placeholder="you@example.com"
               className={inputClass}
             />
           </div>
@@ -456,7 +456,7 @@ function StepCareerBasics({
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+1 (555) 000-0000"
+              placeholder="+91 98765 43210"
               className={inputClass}
             />
           </div>
@@ -468,7 +468,7 @@ function StepCareerBasics({
               type="text"
               value={linkedin}
               onChange={(e) => setLinkedin(e.target.value)}
-              placeholder="https://linkedin.com/in/jane"
+              placeholder="https://linkedin.com/in/yourprofile"
               className={inputClass}
             />
           </div>
@@ -1068,12 +1068,20 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
-          <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h2 className="text-2xl font-bold text-foreground">You&apos;re ready!</h2>
+        {(stats?.nugget_count ?? 0) >= 1 && (
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary-100">
+            <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        )}
+        <h2 className="text-2xl font-bold text-foreground">
+          {(stats?.nugget_count ?? 0) >= 5
+            ? "You\u0027re ready!"
+            : (stats?.nugget_count ?? 0) >= 1
+              ? "Almost there!"
+              : "Let\u0027s add some experience first"}
+        </h2>
         {hasGraph && (
           <p className="mt-1 text-sm text-muted">
             {graphData.stats.achievements} achievements · {graphData.stats.experiences} companies · {graphData.stats.skills} skills
@@ -1184,7 +1192,7 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
 // ── Progress bar ──────────────────────────────────────────────────────────
 
 // [BYOK-REMOVED] const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
-const STEP_LABELS = ["Roles", "Profile", "TruthEngine", "Summary"];
+const STEP_LABELS = ["Roles", "Profile", "Experience", "Summary"];
 
 function ProgressBar({ step }: { step: Step }) {
   const totalSteps = 4;

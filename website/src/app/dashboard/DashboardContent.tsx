@@ -44,7 +44,7 @@ const friendlyError = (raw: string): string => {
   return "Something went wrong. Please try again.";
 };
 
-export function DashboardContent({ user }: { user: User }) {
+export function DashboardContent({ user, nuggetCount = 0 }: { user: User; nuggetCount?: number }) {
   // [NAV-REDESIGN] const router = useRouter();
   const [jobs, setJobs] = useState<ResumeJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,6 +183,21 @@ export function DashboardContent({ user }: { user: User }) {
           {/*   + Create Resume */}
           {/* </Link> */}
         </div>
+
+        {nuggetCount === 0 && (
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-medium text-amber-900">Complete your profile to unlock all features</p>
+            <p className="mt-1 text-sm text-amber-700">
+              Add your career experience to enable resume generation, JD matching, and job scoring.
+            </p>
+            <Link
+              href="/onboarding"
+              className="mt-3 inline-block rounded-full bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+            >
+              Complete onboarding
+            </Link>
+          </div>
+        )}
 
         {/* [DASHBOARD-CLEANUP] Feedback/pricing survey banner removed — revisit when pricing is finalized */}
         {/* <div className="mt-8 rounded-2xl border border-border bg-surface p-6 shadow-sm"> */}

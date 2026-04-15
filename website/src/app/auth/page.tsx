@@ -94,7 +94,7 @@ function AuthContent() {
             Get started
           </h1>
           <p className="mt-2 text-center text-sm text-muted">
-            Sign in to create your first resume
+            Sign in to continue
           </p>
 
           {/* Google sign-in */}
@@ -172,8 +172,10 @@ function AuthContent() {
 
           <div className="mt-6 text-center">
             <p className="text-xs text-muted">
-              By signing in, you agree to our Terms of Service and Privacy
-              Policy.
+              By signing in, you agree to our{" "}
+              <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
             </p>
           </div>
         </div>

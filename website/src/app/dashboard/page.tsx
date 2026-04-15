@@ -31,9 +31,5 @@ export default async function DashboardPage() {
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  if ((nuggetCount ?? 0) === 0) {
-    redirect("/onboarding");
-  }
-
-  return <DashboardContent user={user} />;
+  return <DashboardContent user={user} nuggetCount={nuggetCount ?? 0} />;
 }
