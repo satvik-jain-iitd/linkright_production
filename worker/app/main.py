@@ -245,7 +245,7 @@ async def _run_nugget_embed(user_id: str) -> None:
             .select("id, answer, tags")
             .eq("user_id", user_id)
             .is_("embedding", "null")
-            .overlaps("tags", ["source:truthengine", "source:onboarding"])
+            .overlaps("tags", ["source:truthengine", "source:onboarding", "source:skill_upload"])
             .execute()
         )
         rows = result.data or []
