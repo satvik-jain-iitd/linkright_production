@@ -32,10 +32,11 @@ test.describe.serial('Dashboard', () => {
       // Fresh user — onboarding not complete, this is expected
       test.skip(true, 'User has not completed onboarding — dashboard redirects to /onboarding');
     }
-    // Verify meaningful content rendered — nav or heading, not just body
-    const hasNav = await page.getByRole('navigation').first().isVisible().catch(() => false);
+    // Verify meaningful content rendered — app nav or resume section
+    const hasNav = await page.getByTestId('app-nav').isVisible().catch(() => false);
+    const hasResumeSection = await page.getByTestId('dashboard-resume-section').isVisible().catch(() => false);
     const hasHeading = await page.getByRole('heading').first().isVisible().catch(() => false);
-    expect(hasNav || hasHeading).toBe(true);
+    expect(hasNav || hasResumeSection || hasHeading).toBe(true);
     // No JS errors (ignore favicon 404s)
     expect(errors.filter(e => !e.includes('favicon'))).toHaveLength(0);
   });

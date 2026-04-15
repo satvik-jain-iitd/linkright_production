@@ -30,8 +30,8 @@ test.describe.serial('Resume Builder', () => {
       test.skip(true, 'Redirected — user needs to complete onboarding first');
     }
 
-    // JD textarea or form input should be visible — proves the wizard rendered
-    const textarea = page.getByRole('textbox').first();
+    // JD textarea should be visible — proves the wizard rendered
+    const textarea = page.getByTestId('resume-jd-textarea');
     await expect(textarea).toBeVisible({ timeout: 10_000 });
   });
 
@@ -43,15 +43,15 @@ test.describe.serial('Resume Builder', () => {
       test.skip(true, 'Redirected — user needs to complete onboarding first');
     }
 
-    // Find the first textarea on the page and fill it with JD
-    const textarea = page.getByRole('textbox').first();
+    // Find JD textarea by testid
+    const textarea = page.getByTestId('resume-jd-textarea');
     await expect(textarea).toBeVisible({ timeout: 10_000 });
     await textarea.fill(TEST_JD);
 
     // After filling JD, wait for extraction signal (textarea value persists + page stays stable)
     await expect(textarea).toHaveValue(TEST_JD, { timeout: 5_000 });
     // Verify the page didn't crash — check that the form area is still interactive
-    await expect(page.getByRole('textbox').first()).toBeVisible();
+    await expect(page.getByTestId('resume-jd-textarea')).toBeVisible();
   });
 
   test('empty JD shows validation or disabled state', async () => {
@@ -62,8 +62,8 @@ test.describe.serial('Resume Builder', () => {
       test.skip(true, 'Redirected — user needs to complete onboarding first');
     }
 
-    // Find the "Next" or "Continue" or "Analyze" button
-    const nextButton = page.getByRole('button', { name: /next|continue|analyze|build/i }).first();
+    // Find the next/analyze button by testid (falls back to role if testid not found)
+    const nextButton = page.getByTestId('resume-jd-next-btn').or(page.getByRole('button', { name: /next|continue|analyze|build/i }).first());
     const isDisabled = await nextButton.isDisabled().catch(() => true);
 
     // Either button is disabled (correct) or clicking shows validation error (also correct)

@@ -21,12 +21,12 @@ setup('create test user and authenticate', async ({ browser }) => {
   await page.goto('https://sync.linkright.in/auth');
 
   // Switch to signup mode (page defaults to signin)
-  await page.getByRole('button', { name: 'Sign up' }).click();
+  await page.getByTestId('auth-switch-signup').click();
 
   // Fill signup form
-  await page.getByPlaceholder('Email').fill(userEmail);
-  await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
-  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByTestId('auth-email-input').fill(userEmail);
+  await page.getByTestId('auth-password-input').fill(TEST_PASSWORD);
+  await page.getByTestId('auth-submit-btn').click();
 
   // After clicking "Create account", two things can happen:
   // 1. Supabase has email verification → shows "Check your email" message
@@ -40,17 +40,17 @@ setup('create test user and authenticate', async ({ browser }) => {
     // Auto-confirm enabled — already logged in
   } else if (outcome === 'check-email') {
     // Switch to signin mode
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await page.getByPlaceholder('Email').fill(userEmail);
-    await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Sign in with Email' }).click();
+    await page.getByTestId('auth-switch-signin').click();
+    await page.getByTestId('auth-email-input').fill(userEmail);
+    await page.getByTestId('auth-password-input').fill(TEST_PASSWORD);
+    await page.getByTestId('auth-submit-btn').click();
     await page.waitForURL(/onboarding|dashboard/, { timeout: 15_000 });
   } else {
     // Timeout — try signing in anyway
     await page.goto('https://sync.linkright.in/auth');
-    await page.getByPlaceholder('Email').fill(userEmail);
-    await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Sign in with Email' }).click();
+    await page.getByTestId('auth-email-input').fill(userEmail);
+    await page.getByTestId('auth-password-input').fill(TEST_PASSWORD);
+    await page.getByTestId('auth-submit-btn').click();
     await page.waitForURL(/onboarding|dashboard/, { timeout: 15_000 });
   }
 

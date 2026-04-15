@@ -52,6 +52,19 @@ After completing:
 - Website: `tsc --noEmit` + `npm run build` must pass before any PR
 - Fix what was asked. Don't refactor surrounding code. Don't add unrequested features.
 
+### data-testid Convention
+Every interactive element MUST have a `data-testid` attribute for E2E test stability.
+- **Naming**: `{page}-{component}-{element}` (e.g., `auth-email-input`, `onboarding-step1-heading`, `resume-jd-textarea`)
+- **Required on**: all form inputs, buttons, headings, error messages, navigation links
+- **E2E tests MUST use** `getByTestId()` — never `getByText()` or `getByRole()` for assertions that should survive copy changes
+
+### Test-Driven Development (TDD)
+- Every new function in `worker/app/tools/` → corresponding test in `worker/tests/`
+- Every new page or component with interactive elements → `data-testid` attributes
+- Every new API route → happy-path + error-path E2E test
+- Bug fixes → write a failing test FIRST, then fix the code, then verify test passes
+- PR checklist: "Are there tests?" is a blocking question — no merge without tests for new logic
+
 ### File Organization
 - No new docs if an existing one can be updated. Every doc has `Last Updated:` at top.
 - Specs live in `specs/`. One spec per feature/initiative — update in place.

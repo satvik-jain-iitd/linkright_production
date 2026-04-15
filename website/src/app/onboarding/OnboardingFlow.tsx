@@ -68,7 +68,7 @@ function StepWelcome({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">
+        <h1 className="text-3xl font-bold text-foreground" data-testid="onboarding-step1-heading">
           Welcome to LinkRight
         </h1>
         <p className="mt-2 text-muted">
@@ -83,6 +83,7 @@ function StepWelcome({
             <button
               key={role}
               onClick={() => toggle(role)}
+              data-testid={`onboarding-role-btn-${role.toLowerCase().replace(/\s+/g, "-")}`}
               className={`rounded-full px-4 py-2 text-sm font-medium border transition-colors ${
                 selected
                   ? "bg-primary-500 border-primary-500 text-white"
@@ -98,6 +99,7 @@ function StepWelcome({
       <button
         onClick={onNext}
         disabled={selectedRoles.length === 0}
+        data-testid="onboarding-step1-continue-btn"
         className="w-full rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         Get Started
@@ -326,7 +328,7 @@ function StepCareerBasics({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">
+        <h1 className="text-3xl font-bold text-foreground" data-testid="onboarding-step2-heading">
           Tell us about yourself
         </h1>
         <p className="mt-2 text-muted">
@@ -344,6 +346,7 @@ function StepCareerBasics({
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setUploadMode("paste")}
+              data-testid="onboarding-paste-resume-btn"
               className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
             >
               Paste resume text
@@ -396,6 +399,7 @@ function StepCareerBasics({
             value={resumePasteText}
             onChange={(e) => setResumePasteText(e.target.value)}
             placeholder="Paste your resume here — all sections, plain text…"
+            data-testid="onboarding-resume-paste-textarea"
             rows={8}
             className="w-full rounded-lg border border-primary-200 bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
@@ -405,6 +409,7 @@ function StepCareerBasics({
           <button
             onClick={handleParsePaste}
             disabled={!resumePasteText.trim() || parsing}
+            data-testid="onboarding-resume-autofill-btn"
             className="w-full rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {parsing ? "Parsing…" : "Auto-fill from resume"}
@@ -441,6 +446,7 @@ function StepCareerBasics({
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Your Name"
+              data-testid="onboarding-field-fullname"
               className={inputClass}
             />
           </div>
@@ -453,6 +459,7 @@ function StepCareerBasics({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              data-testid="onboarding-field-email"
               className={inputClass}
             />
           </div>
@@ -465,6 +472,7 @@ function StepCareerBasics({
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+91 98765 43210"
+              data-testid="onboarding-field-phone"
               className={inputClass}
             />
           </div>
@@ -477,6 +485,7 @@ function StepCareerBasics({
               value={linkedin}
               onChange={(e) => setLinkedin(e.target.value)}
               placeholder="https://linkedin.com/in/yourprofile"
+              data-testid="onboarding-field-linkedin"
               className={inputClass}
             />
           </div>
@@ -545,6 +554,7 @@ function StepCareerBasics({
             onChange={(e) => setSkillInput(e.target.value)}
             onKeyDown={handleSkillKeyDown}
             placeholder="Type a skill and press Enter or comma"
+            data-testid="onboarding-field-skills"
             className={inputClass}
           />
           {skills.length > 0 && (
@@ -576,6 +586,7 @@ function StepCareerBasics({
             value={certifications}
             onChange={(e) => setCertifications(e.target.value)}
             placeholder="One certification per line&#10;e.g. AWS Solutions Architect&#10;PMP Certified"
+            data-testid="onboarding-field-certifications"
             rows={3}
             className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
@@ -596,6 +607,7 @@ function StepCareerBasics({
         <button
           onClick={handleSave}
           disabled={saving || !fullName.trim()}
+          data-testid="onboarding-step2-save-btn"
           className="flex-1 rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {saving ? "Saving…" : "Save & Continue"}
@@ -914,7 +926,7 @@ function StepConversation({
   return (
     <div className="flex flex-col h-full space-y-4">
       <div>
-        <h1 className="text-3xl font-bold text-foreground">
+        <h1 className="text-3xl font-bold text-foreground" data-testid="onboarding-step3-heading">
           Let&apos;s capture your experience
         </h1>
         <p className="mt-2 text-muted">
@@ -1091,7 +1103,7 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
             </svg>
           </div>
         )}
-        <h2 className="text-2xl font-bold text-foreground">
+        <h2 className="text-2xl font-bold text-foreground" data-testid="onboarding-step4-heading">
           {(stats?.nugget_count ?? 0) >= 5
             ? "You\u0027re ready!"
             : (stats?.nugget_count ?? 0) >= 1

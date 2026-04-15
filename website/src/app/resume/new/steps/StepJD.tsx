@@ -23,6 +23,7 @@ export function StepJD({ data, update, next }: Props) {
         value={data.jd_text}
         onChange={(e) => update({ jd_text: e.target.value })}
         placeholder="Paste the complete job description here..."
+        data-testid="resume-jd-textarea"
         className="mt-6 w-full resize-none rounded-xl border border-border bg-surface p-4 text-sm text-foreground placeholder-muted transition-colors focus:border-accent/50 focus:outline-none"
         rows={14}
       />
@@ -34,6 +35,7 @@ export function StepJD({ data, update, next }: Props) {
         <button
           onClick={next}
           disabled={!valid}
+          data-testid="resume-jd-next-btn"
           className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next

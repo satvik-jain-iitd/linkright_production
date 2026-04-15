@@ -101,7 +101,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-foreground">
+        <h2 className="text-2xl font-bold text-foreground" data-testid="lifeos-heading">
           Career Story Collection
         </h2>
         <p className="mt-2 text-muted">
@@ -142,6 +142,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
         </p>
         <div
           className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-background px-6 py-8 text-center transition-colors hover:border-primary-400 hover:bg-surface"
+          data-testid="lifeos-upload-dropzone"
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
@@ -174,7 +175,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
 
         {/* Upload result */}
         {uploadResult && (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-1">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-1" data-testid="lifeos-upload-result">
             <p className="text-sm font-medium text-green-700">
               {uploadResult.inserted} nugget{uploadResult.inserted !== 1 ? "s" : ""} uploaded
               {uploadResult.duplicates > 0 && `, ${uploadResult.duplicates} duplicate${uploadResult.duplicates !== 1 ? "s" : ""} skipped`}
@@ -247,6 +248,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
           )}
           <button
             onClick={onDone}
+            data-testid="lifeos-skip-btn"
             className="text-sm text-muted hover:text-foreground transition-colors"
           >
             Skip for now &rarr;
@@ -256,6 +258,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
         {(embedDone || (uploadResult && uploadResult.inserted === 0)) && (
           <button
             onClick={onDone}
+            data-testid="lifeos-continue-btn"
             className="rounded-lg bg-primary-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
           >
             Continue →

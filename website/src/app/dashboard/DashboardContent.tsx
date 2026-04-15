@@ -218,15 +218,15 @@ export function DashboardContent({ user, nuggetCount = 0 }: { user: User; nugget
         {/* </div> */}
 
         {/* Resume list */}
-        <div className="mt-8">
-          <h2 className="text-lg font-semibold">Your resumes</h2>
+        <div className="mt-8" data-testid="dashboard-resume-section">
+          <h2 className="text-lg font-semibold" data-testid="dashboard-resume-heading">Your resumes</h2>
 
           {loading ? (
             <div className="mt-4 flex justify-center py-12">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
             </div>
           ) : jobs.length === 0 ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
+            <div data-testid="dashboard-empty-state" className="mt-4 rounded-2xl border border-dashed border-border bg-surface/50 p-12 text-center">
               <p className="font-medium">No resumes yet</p>
               <p className="mt-1 text-sm text-muted">
                 Create your first pixel-perfect resume in minutes.

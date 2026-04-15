@@ -233,7 +233,7 @@ export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jo
       }
 
       {/* Sidebar + Content layout */}
-      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-3.5rem)]">
+      <div className="flex flex-col lg:flex-row min-h-[calc(100vh-3.5rem)]" data-testid="resume-wizard-container">
         <VerticalStepper
           steps={stepDefs}
           currentStep={step}

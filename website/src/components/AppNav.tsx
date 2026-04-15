@@ -134,7 +134,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
 
   /* ---- App nav (logged-in dashboard pages) ---- */
   return (
-    <nav className="border-b border-border px-6 py-4">
+    <nav data-testid="app-nav" className="border-b border-border px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/dashboard" className="text-lg font-bold tracking-tight">
@@ -168,6 +168,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
         <div className="flex items-center gap-4">
           <Link
             href="/resume/new"
+            data-testid="nav-create-resume-btn"
             className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             + Create Resume

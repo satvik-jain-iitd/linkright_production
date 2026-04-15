@@ -20,7 +20,7 @@ export function VerticalStepper({ steps, currentStep, onStepClick }: VerticalSte
   return (
     <>
       {/* Desktop vertical sidebar */}
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-surface/50 px-6 py-8 lg:block">
+      <aside className="hidden w-60 shrink-0 border-r border-border bg-surface/50 px-6 py-8 lg:block" data-testid="resume-wizard-step-indicator">
         <nav>
           {steps.map((s, i) => {
             const isDone = i < currentStep;
@@ -115,7 +115,7 @@ export function VerticalStepper({ steps, currentStep, onStepClick }: VerticalSte
       </aside>
 
       {/* Mobile horizontal top bar */}
-      <div className="flex items-center justify-center gap-3 border-b border-border bg-surface/50 px-4 py-3 lg:hidden">
+      <div className="flex items-center justify-center gap-3 border-b border-border bg-surface/50 px-4 py-3 lg:hidden" data-testid="resume-wizard-step-indicator-mobile">
         {steps.map((s, i) => {
           const isDone = i < currentStep;
           const isActive = i === currentStep;
