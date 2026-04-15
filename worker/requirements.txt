@@ -6,3 +6,4 @@ supabase>=2.22.0
 beautifulsoup4==4.12.3
 langfuse>=2.0.0
 playwright>=1.40.0
+sentry-sdk[fastapi]>=2.0.0
