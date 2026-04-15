@@ -1,7 +1,0 @@
-AT&T — Senior Engineer (no dates). Yahan pe maine distributed systems build kiye — latency 200ms se ghatake 40ms ho gayi. Tech stack: Python/Go/Rust. Core achievement → reduced p99 tail latency by 80% using async queue redesign & backpressure tuning.
-
-Ernst & Young — Consultant (duration unknown). Maine client-facing dashboards banaye — "impact was significant" across 3 verticals. Used SQL & Tableau; stakeholder buy-in tricky tha kyunki data quality issues the. Delivered on time despite ambiguity.
-
-Special chars check: em-dash — works; curly quotes "quoted text" present; ampersand AT&T & Ernst & Young; unicode arrow → used above; forward/backward slashes Python/Go/Rust; percent sign 80%.
-
-No section headers. No explicit dates anywhere. Mixed language throughout — English aur Romanized Hindi dono hain. Company names with special characters throughout.
