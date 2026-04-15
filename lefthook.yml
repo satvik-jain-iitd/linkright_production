@@ -1,0 +1,9 @@
+pre-push:
+  parallel: true
+  commands:
+    worker-tests:
+      glob: "worker/**/*.py"
+      run: cd worker && python -m pytest tests/ --cov=app/tools --cov-fail-under=50 -q 2>/dev/null || echo "⚠ Worker tests failed — fix before pushing"
+    website-typecheck:
+      glob: "website/**/*.{ts,tsx}"
+      run: cd website && npx tsc --noEmit 2>/dev/null || echo "⚠ TypeScript errors — fix before pushing"

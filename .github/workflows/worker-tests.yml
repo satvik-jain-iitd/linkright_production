@@ -56,6 +56,9 @@ jobs:
             --cov-fail-under=90 \
             -v || echo "Quality judge coverage gate — needs test file"
 
+      - name: Coverage ratchet (never goes down)
+        run: python scripts/coverage_ratchet.py
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
