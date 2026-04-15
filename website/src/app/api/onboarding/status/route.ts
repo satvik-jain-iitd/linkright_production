@@ -73,5 +73,8 @@ export async function GET() {
     session_started,   // true once any atom was dispatched
     session_complete,  // true once session-close was called (interview finished)
     atoms_saved,
+    // User metadata for form pre-fill
+    user_name: user.user_metadata?.full_name || user.user_metadata?.name || "",
+    user_email: user.email || "",
   });
 }

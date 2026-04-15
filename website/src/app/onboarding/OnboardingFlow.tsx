@@ -115,18 +115,26 @@ function StepWelcome({
 function StepCareerBasics({
   onNext,
   onSkip,
-  // [BYOK-REMOVED] modelProvider,
-  // [BYOK-REMOVED] modelId,
-  // [BYOK-REMOVED] apiKey,
+  onBack,
 }: {
   onNext: () => void;
   onSkip: () => void;
-  // [BYOK-REMOVED] modelProvider: string;
-  // [BYOK-REMOVED] modelId: string;
-  // [BYOK-REMOVED] apiKey: string;
+  onBack?: () => void;
 }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+
+  // Pre-fill name and email from auth user metadata
+  useEffect(() => {
+    fetch("/api/onboarding/status")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.user_name && !fullName) setFullName(data.user_name);
+        if (data.user_email && !email) setEmail(data.user_email);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [phone, setPhone] = useState("");
   const [linkedin, setLinkedin] = useState("");
   const [education, setEducation] = useState<Education[]>([
@@ -577,6 +585,14 @@ function StepCareerBasics({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex gap-3 pb-8">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted hover:bg-surface-hover transition-colors"
+          >
+            &larr; Back
+          </button>
+        )}
         <button
           onClick={handleSave}
           disabled={saving || !fullName.trim()}
@@ -1194,23 +1210,34 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
 // [BYOK-REMOVED] const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
 const STEP_LABELS = ["Roles", "Profile", "Experience", "Summary"];
 
-function ProgressBar({ step }: { step: Step }) {
+function ProgressBar({ step, onStepClick }: { step: Step; onStepClick?: (s: Step) => void }) {
   const totalSteps = 4;
   const currentIndex = Math.min(step - 1, totalSteps - 1);
 
   return (
     <div className="mb-10">
       <div className="flex justify-between mb-2">
-        {STEP_LABELS.map((label, idx) => (
-          <span
-            key={label}
-            className={`text-xs font-medium ${
-              idx <= currentIndex ? "text-primary-600" : "text-muted"
-            }`}
-          >
-            {label}
-          </span>
-        ))}
+        {STEP_LABELS.map((label, idx) => {
+          const isCompleted = idx < currentIndex;
+          const isCurrent = idx === currentIndex;
+          return (
+            <button
+              key={label}
+              type="button"
+              disabled={!isCompleted}
+              onClick={() => isCompleted && onStepClick?.((idx + 1) as Step)}
+              className={`text-xs font-medium transition-colors ${
+                isCurrent
+                  ? "text-primary-600"
+                  : isCompleted
+                    ? "text-primary-600 hover:text-primary-800 cursor-pointer underline underline-offset-2"
+                    : "text-muted cursor-default"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
       <div className="h-1.5 w-full rounded-full bg-border">
         <div
@@ -1280,7 +1307,7 @@ export function OnboardingFlow() {
 
   return (
     <div>
-      {step <= 4 && <ProgressBar step={step} />}
+      {step <= 4 && <ProgressBar step={step} onStepClick={(s) => setStep(s)} />}
 
       {step === 1 && (
         <StepWelcome
@@ -1290,21 +1317,16 @@ export function OnboardingFlow() {
         />
       )}
 
-      {/* [BYOK-REMOVED] Step 2 was StepApiKey — removed */}
-
       {step === 2 && (
         <StepCareerBasics
           onNext={() => setStep(3)}
           onSkip={() => setStep(3)}
-          // [BYOK-REMOVED] modelProvider={modelProvider}
-          // [BYOK-REMOVED] modelId={modelId}
-          // [BYOK-REMOVED] apiKey={apiKey}
+          onBack={() => setStep(1)}
         />
       )}
 
       {step === 3 && (
-        // [LIFEOS] StepConversation replaced with StepLifeOS (Custom GPT career coaching session)
-        <StepLifeOS onDone={() => setStep(4)} />
+        <StepLifeOS onDone={() => setStep(4)} onBack={() => setStep(2)} />
       )}
 
       {step === 4 && <StepSummary onBack={() => setStep(3)} />}

@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 interface StepLifeOSProps {
   onDone: () => void;
+  onBack?: () => void;
 }
 
-export function StepLifeOS({ onDone }: StepLifeOSProps) {
+export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
   // Upload state
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{
@@ -235,12 +236,22 @@ export function StepLifeOS({ onDone }: StepLifeOSProps) {
 
       {/* Navigation */}
       <div className="flex items-center justify-between pt-2">
-        <button
-          onClick={onDone}
-          className="text-sm text-muted hover:text-foreground transition-colors"
-        >
-          Skip for now →
-        </button>
+        <div className="flex items-center gap-4">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="text-sm text-muted hover:text-foreground transition-colors"
+            >
+              &larr; Back
+            </button>
+          )}
+          <button
+            onClick={onDone}
+            className="text-sm text-muted hover:text-foreground transition-colors"
+          >
+            Skip for now &rarr;
+          </button>
+        </div>
 
         {(embedDone || (uploadResult && uploadResult.inserted === 0)) && (
           <button

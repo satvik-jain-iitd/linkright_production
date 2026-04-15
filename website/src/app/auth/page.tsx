@@ -144,8 +144,28 @@ function AuthContent() {
               className="w-full rounded-lg border border-border bg-background px-4 py-2.5 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
             />
 
+            {mode === "signin" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!email.trim()) { setAuthError("Enter your email first."); return; }
+                  setLoading(true);
+                  setAuthError(null);
+                  const supabase = createClient();
+                  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/auth/callback`,
+                  });
+                  setLoading(false);
+                  setAuthError(error ? error.message : "Password reset email sent. Check your inbox.");
+                }}
+                className="text-xs text-accent hover:underline"
+              >
+                Forgot your password?
+              </button>
+            )}
+
             {authError && (
-              <p className={`text-xs ${authError.startsWith("Check") ? "text-green-400" : "text-red-400"}`}>
+              <p className={`text-xs ${authError.startsWith("Check") || authError.startsWith("Password reset") ? "text-green-400" : "text-red-400"}`}>
                 {authError}
               </p>
             )}
