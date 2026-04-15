@@ -10,9 +10,10 @@
  *   const admin = createServiceClient();
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-let _cached: ReturnType<typeof createClient> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _cached: SupabaseClient<any> | null = null;
 
 export function createServiceClient() {
   if (_cached) return _cached;
@@ -26,6 +27,7 @@ export function createServiceClient() {
     );
   }
 
-  _cached = createClient(url, key);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _cached = createClient<any>(url, key);
   return _cached;
 }
