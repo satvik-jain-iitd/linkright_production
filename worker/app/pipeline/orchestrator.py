@@ -72,6 +72,15 @@ class _FallbackLLM(LLMProvider):
     async def validate_key(self) -> bool:
         return True
 
+
+def _get_groq_fallback_llm() -> "GroqProvider | None":
+    """70B Groq model as fallback for Gemini on heavy reasoning phases."""
+    from ..llm.groq import GroqProvider
+    api_key = os.environ.get("PLATFORM_GROQ_API_KEY") or os.environ.get("GROQ_API_KEY") or ""
+    if not api_key:
+        return None
+    return GroqProvider(api_key=api_key, model_id="llama-3.3-70b-versatile")
+
 USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
 
 # Oracle ARM local LLM — used for Phase 5 width rewriting + Phase 3.5a summary tweaking
@@ -198,7 +207,10 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     if ctx.career_text and hasattr(ctx, "_nuggets") and not ctx._nuggets:
         logger.warning("Phase 0 produced no nuggets — continuing with paragraph-chunk fallback")
 
-    gemini_with_fallback = _FallbackLLM(_gemini, llm) if _gemini else llm
+    # For heavy reasoning phases, fall back to 70B model (not the user's 8B default)
+    _groq_70b = _get_groq_fallback_llm()
+    heavy_fallback = _groq_70b or llm
+    gemini_with_fallback = _FallbackLLM(_gemini, heavy_fallback) if _gemini else heavy_fallback
     oracle_with_fallback = _FallbackLLM(_oracle, llm) if _oracle else llm
 
     await phase_1_parse_and_strategy(ctx, sb, gemini_with_fallback)  # Gemini preferred: heavy reasoning
