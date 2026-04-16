@@ -675,14 +675,17 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
         model=resp.model, system_prompt=system_msg, user_input=user_msg,
         output=resp.text, user_id=ctx.user_id,
     )
+    _DEFAULT_COLORS = {
+        "brand_primary": "#1a3a5c", "brand_secondary": "#2d6a9f",
+        "text_primary": "#1a1a1a", "text_secondary": "#4a4a4a",
+    }
     try:
         data = _parse_json(resp.text)
-        ctx.career_level = data["career_level"]
-        ctx.jd_keywords = data["jd_keywords"]
-        ctx.strategy = data["strategy"]
-        # Use user-confirmed colors from wizard if provided, else use LLM-extracted
-        ctx.theme_colors = ctx.override_theme_colors or data["theme_colors"]
-    except (json.JSONDecodeError, KeyError) as e:
+        ctx.career_level = data.get("career_level", "senior")
+        ctx.jd_keywords = data.get("jd_keywords", [])
+        ctx.strategy = data.get("strategy", "BALANCED")
+        ctx.theme_colors = ctx.override_theme_colors or data.get("theme_colors") or _DEFAULT_COLORS
+    except json.JSONDecodeError as e:
         raise ValueError(f"Phase 1+2: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
 
     ctx._parsed = data
