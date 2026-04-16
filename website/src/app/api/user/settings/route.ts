@@ -27,7 +27,6 @@ export async function GET() {
     .from("career_chunks")
     .select("chunk_text")
     .eq("user_id", user.id)
-    .neq("is_active", false)  // exclude soft-deleted chunks (future-proof for versioning)
     .order("chunk_index", { ascending: true });
 
   let career_text = chunks?.map((c: { chunk_text: string }) => c.chunk_text).join("\n\n") || "";
