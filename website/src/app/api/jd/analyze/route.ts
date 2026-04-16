@@ -150,29 +150,34 @@ async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
   const apiKey = process.env.ORACLE_BACKEND_SECRET ?? "";
   if (texts.length === 0) return [];
 
-  try {
-    const resp = await fetch(ORACLE_EMBED_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({ texts }),
-      signal: AbortSignal.timeout(30_000),
-    });
+  // Oracle /lifeos/embed is single-text only — embed sequentially
+  const results: (number[] | null)[] = [];
+  for (const text of texts) {
+    try {
+      const resp = await fetch(ORACLE_EMBED_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(15_000),
+      });
 
-    if (!resp.ok) {
-      console.warn("[jd/analyze] Oracle embed failed:", resp.status);
-      return texts.map(() => null);
+      if (!resp.ok) {
+        console.warn("[jd/analyze] Oracle embed failed:", resp.status);
+        results.push(null);
+        continue;
+      }
+
+      const data = await resp.json() as { embedding: number[] };
+      results.push(Array.isArray(data?.embedding) && data.embedding.length > 0 ? data.embedding : null);
+    } catch (err) {
+      console.warn("[jd/analyze] Oracle embed error:", err);
+      results.push(null);
     }
-
-    const data = await resp.json() as { embeddings: number[][] };
-    if (!Array.isArray(data?.embeddings)) return texts.map(() => null);
-    return data.embeddings.map((e) => (Array.isArray(e) && e.length > 0 ? e : null));
-  } catch (err) {
-    console.warn("[jd/analyze] Oracle embed error:", err);
-    return texts.map(() => null);
   }
+  return results;
 }
 
 // ── Per-role scoring (core innovation) ───────────────────────────────────────
