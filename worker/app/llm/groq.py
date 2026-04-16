@@ -22,7 +22,7 @@ class GroqProvider(LLMProvider):
                         {"role": "user", "content": user},
                     ],
                     "temperature": temperature,
-                    "max_tokens": 8192,
+                    "max_tokens": 6000,
                 },
             )
             resp.raise_for_status()
