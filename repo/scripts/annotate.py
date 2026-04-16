@@ -1,11 +1,11 @@
 """
 CODEBASE BOOK BUILDER
 Reads code one function at a time, explains in Romanized Hindi,
-appends to specs/CODEBASE_BOOK.md. Uses local LM Studio — zero Claude tokens.
+appends to output file. Uses local LM Studio — zero Claude tokens.
 
-Setup:
-    1. LM Studio kholo → Local Server → Start Server
-    2. deepseek-r1-distill-qwen-1.5b load karo
+Config: repo/scripts/annotate.config.json
+  - Set your stack's file extensions there
+  - Set model name, skip dirs, output path
 
 Usage:
     python repo/scripts/annotate.py              # full codebase
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import re
 import sys
 import time
@@ -24,17 +25,25 @@ from pathlib import Path
 
 import requests
 
-LMSTUDIO_URL = "http://localhost:1234/v1"
-MODEL = "deepseek-r1-distill-qwen-1.5b"
-CODEBASE_BOOK = Path("specs/CODEBASE_BOOK.md")
-SKIP_DIRS = {"node_modules", ".next", "__pycache__", ".git", "dist", "build"}
-CODE_PATTERNS = [
-    "repo/website/**/*.ts",
-    "repo/website/**/*.tsx",
-    "repo/worker/**/*.py",
-    "repo/oracle-backend/**/*.py",
-]
+# ── Load config ───────────────────────────────────────────────────────────────
 
+CONFIG_PATH = Path(__file__).parent / "annotate.config.json"
+
+def load_config() -> dict:
+    if not CONFIG_PATH.exists():
+        print(f"Config nahi mili: {CONFIG_PATH}")
+        print("annotate.config.json banao — example repo/scripts/annotate.config.json mein hai.")
+        sys.exit(1)
+    return json.loads(CONFIG_PATH.read_text())
+
+CONFIG = load_config()
+LMSTUDIO_URL = CONFIG["lmstudio_url"]
+MODEL = CONFIG["model"]
+SKIP_DIRS = set(CONFIG["skip_dirs"])
+EXTENSIONS = set(CONFIG["extensions"])
+CODEBASE_BOOK = Path(CONFIG["output_file"])
+
+# ── Server check ──────────────────────────────────────────────────────────────
 
 def check_server() -> bool:
     try:
@@ -43,6 +52,7 @@ def check_server() -> bool:
     except Exception:
         return False
 
+# ── Code parsing ──────────────────────────────────────────────────────────────
 
 def extract_python_functions(source: str) -> list[dict]:
     snippets = []
@@ -85,6 +95,15 @@ def extract_ts_functions(source: str) -> list[dict]:
     return snippets
 
 
+def extract_snippets(file_path: Path, source: str) -> list[dict]:
+    if file_path.suffix == ".py":
+        return extract_python_functions(source)
+    elif file_path.suffix in (".ts", ".tsx"):
+        return extract_ts_functions(source)
+    return []
+
+# ── LLM call ──────────────────────────────────────────────────────────────────
+
 def annotate(file_path: str, snippet: dict) -> str:
     prompt = f"""Explain this code in simple Romanized Hindi for a non-technical person.
 Line by line — one explanation per code line. No jargon without explaining it.
@@ -112,6 +131,7 @@ Only write the explanation:"""
     except Exception as e:
         return f"[Error: {e}]"
 
+# ── Book writer ────────────────────────────────────────────────────────────────
 
 def already_done(name: str, path: str) -> bool:
     if not CODEBASE_BOOK.exists():
@@ -133,29 +153,33 @@ def append_to_book(file_path: str, snippet: dict, explanation: str) -> None:
     with open(CODEBASE_BOOK, "a") as f:
         f.write(entry)
 
+# ── File discovery ────────────────────────────────────────────────────────────
 
 def get_files(single: str | None) -> list[Path]:
     if single:
         return [Path(single)]
     files = []
-    for pattern in CODE_PATTERNS:
-        for f in Path(".").glob(pattern):
+    for f in Path(".").rglob("*"):
+        if f.is_file() and f.suffix in EXTENSIONS:
             if not any(s in f.parts for s in SKIP_DIRS):
                 files.append(f)
     return sorted(files)
 
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", help="Single file to annotate")
-    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--check", action="store_true", help="Server check only")
     args = parser.parse_args()
 
     if not check_server():
-        print("LM Studio server nahi chal raha. Local Server tab mein Start karo.")
+        print("LM Studio server nahi chal raha.")
+        print("LM Studio kholo → Local Server tab → Start Server")
         sys.exit(1)
 
     print(f"Server ready. Model: {MODEL}")
+    print(f"Extensions: {EXTENSIONS}")
     if args.check:
         return
 
@@ -165,11 +189,7 @@ def main() -> None:
 
     for file_path in files:
         source = file_path.read_text(errors="ignore")
-        snippets = (
-            extract_python_functions(source)
-            if file_path.suffix == ".py"
-            else extract_ts_functions(source)
-        )
+        snippets = extract_snippets(file_path, source)
         if not snippets:
             continue
 

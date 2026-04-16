@@ -46,10 +46,10 @@ Break:   read full error → search_memories("<symptom>") → chub get <library>
 ## Codebase Book
 All code explanations live in specs/CODEBASE_BOOK.md — one file, readable like a book.
 Never add inline comments to code files. Never touch existing code for annotation.
-Local model (Llama 3.2 1B via Ollama) builds this incrementally:
-- Feed ONE function or snippet at a time — never a full file
-- Call gitnexus impact + context first, then annotate
-- Append only, never overwrite
+Local model (LM Studio) builds this via scripts/annotate.py:
+- Config in scripts/annotate.config.json — set extensions for your stack
+- Processes ONE function at a time, appends only, never overwrites
+- Run: python repo/scripts/annotate.py > /tmp/annotate.log 2>&1 &
 
 ## Tool commands
 Full commands → tools/<name>.md

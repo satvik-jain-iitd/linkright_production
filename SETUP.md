@@ -29,23 +29,29 @@ Clone this template and follow these steps to start a new project.
 
 ## Codebase Book (annotation setup)
 
-10. Install Python dependency:
+10. Fill in `repo/scripts/annotate.config.json`:
+    - `extensions` — your stack's file types e.g. `[".py", ".ts", ".tsx"]`
+    - `model` — exact model name as shown in LM Studio
+    - `skip_dirs` — folders to ignore
+    - `output_file` — where CODEBASE_BOOK lives (default: `specs/CODEBASE_BOOK.md`)
+
+11. Install Python dependency:
     ```bash
     pip install requests
     ```
-11. Open LM Studio → Local Server tab → Start Server
-12. Check model availability:
+
+12. Open LM Studio → Local Server tab → Load your model → Start Server
+
+13. Check setup:
     ```bash
     python repo/scripts/annotate.py --check
     ```
-    Script automatically picks best available model (prefers deepseek-r1 > qwen2.5 > smollm2).
-    No new models needed if any of these are already downloaded.
 
-13. Run annotation in background (parallel to coding):
+14. Run annotation in background (parallel to coding):
     ```bash
     python repo/scripts/annotate.py > /tmp/annotate.log 2>&1 &
+    tail -f /tmp/annotate.log
     ```
-    Progress: `tail -f /tmp/annotate.log`
     Output: `specs/CODEBASE_BOOK.md` (append-only, never overwrites)
 
 ## Notes
