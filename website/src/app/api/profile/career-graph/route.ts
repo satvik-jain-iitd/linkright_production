@@ -187,6 +187,7 @@ export async function GET() {
     for (const tag of nugget.tags ?? []) {
       const normalizedTag = tag.trim();
       if (!normalizedTag) continue;
+      if (normalizedTag.startsWith("source:")) continue; // metadata tag, not a real skill
       skillCounts.set(normalizedTag, (skillCounts.get(normalizedTag) ?? 0) + 1);
       if (!skillIds.has(normalizedTag)) {
         const skillId = `skill:${skillIds.size}`;

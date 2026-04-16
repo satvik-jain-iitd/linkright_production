@@ -5,7 +5,7 @@
  *
  * Flow:
  *   1. Groq 8B extracts JD requirements
- *   2. Oracle nomic-embed-text embeds each requirement (768-dim)
+ *   2. Jina jina-embeddings-v3 embeds each requirement (768-dim, same space as nuggets)
  *   3. For each company/role: find best nugget per requirement (cosine)
  *   4. Rank roles → primary / secondary / tertiary
  *   5. Identify gaps (uncovered requirements)
@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
 import { cosineSimilarity } from "@/lib/jd-matcher";
+import { jinaEmbed } from "@/lib/jina-embed";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,33 +127,14 @@ function parseRequirements(text: string): JDRequirement[] {
     }));
 }
 
-// ── Oracle embedding ─────────────────────────────────────────────────────────
+// ── Jina embedding (same model as nuggets — jina-embeddings-v3, 768-dim) ─────
 
-async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
-  const oracleUrl = process.env.ORACLE_BACKEND_URL ?? "";
-  const oracleSecret = process.env.ORACLE_BACKEND_SECRET ?? "";
-  if (!oracleUrl) return texts.map(() => null);
-
-  const results: (number[] | null)[] = [];
-  for (const text of texts) {
-    try {
-      const resp = await fetch(`${oracleUrl.replace(/\/$/, "")}/lifeos/embed`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${oracleSecret}`,
-        },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!resp.ok) { results.push(null); continue; }
-      const data = (await resp.json()) as { embedding?: number[] };
-      results.push(Array.isArray(data.embedding) ? data.embedding : null);
-    } catch {
-      results.push(null);
-    }
-  }
-  return results;
+async function jinaEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
+  const apiKey = process.env.JINA_API_KEY ?? "";
+  if (!apiKey || texts.length === 0) return texts.map(() => null);
+  const embeddings = await jinaEmbed(texts, apiKey);
+  if (!embeddings) return texts.map(() => null);
+  return embeddings;
 }
 
 // ── Per-role scoring (core innovation) ───────────────────────────────────────
@@ -319,11 +301,11 @@ export async function POST(request: Request) {
   // ── Step 2: Embed requirements (Oracle nomic-embed-text) ───────────────
 
   const reqTexts = requirements.map((r) => r.text);
-  const reqEmbeddings = await oracleEmbedBatch(reqTexts);
+  const reqEmbeddings = await jinaEmbedBatch(reqTexts);
 
   const embeddedCount = reqEmbeddings.filter((e) => e !== null).length;
   if (embeddedCount === 0) {
-    console.warn("[jd/analyze] No embeddings generated — Oracle may be down. Proceeding without semantic scoring.");
+    console.warn("[jd/analyze] No embeddings generated — Jina key missing or error. Proceeding without semantic scoring.");
   }
 
   // ── Step 3: Fetch user's nuggets (with embeddings) + work_history ──────
