@@ -42,7 +42,7 @@ function AuthContent() {
     const supabase = createClient();
 
     if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
@@ -50,6 +50,8 @@ function AuthContent() {
       if (error) {
         setAuthError(error.message);
         setLoading(false);
+      } else if (data.session) {
+        router.push("/dashboard");
       } else {
         setAuthError("Check your email to confirm your account.");
         setLoading(false);
