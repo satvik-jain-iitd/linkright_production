@@ -31,7 +31,8 @@ export async function jinaEmbed(
       body: JSON.stringify({
         model: JINA_MODEL,
         input: texts,
-        dimensions: 768, // match stored nugget embedding dimensions
+        dimensions: 768,    // match stored nugget embedding dimensions
+        task: "text-matching", // must match task used by nugget_embedder.py
       }),
       signal: AbortSignal.timeout(20_000),
     });
