@@ -148,7 +148,7 @@ function ReadinessSection({
         {entries.map(([section, { total, ready, pct }]) => (
           <div key={section}>
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-foreground">{section}</span>
+              <span className="font-medium text-foreground">{sectionLabel(section)}</span>
               <span className="text-xs text-muted">
                 {ready}/{total} ({pct}%)
               </span>

@@ -34,9 +34,21 @@ interface NuggetRow {
   role: string | null;
   nugget_text: string;
   answer: string;
-  embedding: number[] | null;
+  embedding: number[] | string | null; // Supabase returns pgvector as string "[v1,v2,...]"
   importance: string;
   event_date: string | null;
+}
+
+function parseEmbedding(emb: number[] | string | null): number[] | null {
+  if (!emb) return null;
+  if (Array.isArray(emb)) return emb.length > 0 ? emb : null;
+  if (typeof emb === "string") {
+    try {
+      const parsed = JSON.parse(emb);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
+    } catch { return null; }
+  }
+  return null;
 }
 
 interface WorkHistoryRow {
@@ -186,10 +198,10 @@ function scoreRolesAgainstRequirements(
     const covers: string[] = [];
     const cosineScores: number[] = [];
 
-    // Filter nuggets with embeddings for this role
-    const roleNuggets = roleData.nuggets.filter(
-      (n) => Array.isArray(n.embedding) && n.embedding.length > 0
-    );
+    // Filter nuggets with embeddings for this role (parse string→array if needed)
+    const roleNuggets = roleData.nuggets
+      .map((n) => ({ ...n, _emb: parseEmbedding(n.embedding) }))
+      .filter((n) => n._emb !== null);
 
     for (let i = 0; i < requirements.length; i++) {
       const req = requirements[i];
@@ -200,7 +212,7 @@ function scoreRolesAgainstRequirements(
       let bestNugget: NuggetRow | null = null;
 
       for (const n of roleNuggets) {
-        const sim = cosineSimilarity(reqEmb, n.embedding!);
+        const sim = cosineSimilarity(reqEmb, n._emb!);
         if (sim > bestCosine) {
           bestCosine = sim;
           bestNugget = n;
