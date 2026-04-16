@@ -279,8 +279,13 @@ const SECTION_LABEL_MAP: Record<string, string> = {
   work_experience: "Work Experience",
   education: "Education",
   project: "Project",
+  independent_project: "Independent Project",
+  volunteer: "Volunteer",
+  volunteer_work: "Volunteer",
   award: "Award",
+  certification: "Certification",
   skill: "Skill",
+  publication: "Publication",
   unknown: "Uncategorized",
 };
 

@@ -9,6 +9,7 @@ interface DiscoveryCardProps {
     job_url: string;
     description_snippet: string | null;
     auto_score_grade: string | null;
+    liveness_status?: string;
     status: "new" | "saved" | "dismissed" | "applied";
     discovered_at: string;
   };
@@ -57,6 +58,11 @@ export function DiscoveryCard({ discovery, onStatusChange, onApply }: DiscoveryC
             {discovery.status === "applied" && (
               <span className="flex-shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">
                 Applied
+              </span>
+            )}
+            {discovery.liveness_status && discovery.liveness_status !== "active" && (
+              <span className="flex-shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
+                Closed
               </span>
             )}
           </div>

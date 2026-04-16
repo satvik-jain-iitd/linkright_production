@@ -15,8 +15,8 @@ interface ApplicationCardProps {
 function ExcitementStars({ rating }: { rating: number }) {
   return (
     <span className="text-xs" aria-label={`Excitement: ${rating}/5`}>
-      {"*".repeat(rating)}
-      <span className="text-gray-300">{"*".repeat(5 - rating)}</span>
+      {"★".repeat(rating)}
+      <span className="text-gray-300">{"★".repeat(5 - rating)}</span>
     </span>
   );
 }
