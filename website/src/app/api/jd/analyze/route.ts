@@ -147,7 +147,7 @@ const ORACLE_EMBED_URL = process.env.ORACLE_BACKEND_URL
   : "http://80.225.198.184:8000/lifeos/embed";
 
 async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
-  const apiKey = process.env.ORACLE_API_KEY ?? "";
+  const apiKey = process.env.ORACLE_BACKEND_SECRET ?? "";
   if (texts.length === 0) return [];
 
   try {
