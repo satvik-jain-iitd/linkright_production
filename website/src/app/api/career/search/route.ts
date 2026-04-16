@@ -73,7 +73,6 @@ export async function POST(request: Request) {
       .from("career_chunks")
       .select("chunk_text, chunk_index")
       .eq("user_id", user.id)
-      .neq("is_active", false)  // exclude soft-deleted chunks
       .textSearch("chunk_text", prefixQuery, { config: "english" })
       .limit(5);
 
@@ -88,7 +87,6 @@ export async function POST(request: Request) {
         .from("career_chunks")
         .select("chunk_text, chunk_index")
         .eq("user_id", user.id)
-        .neq("is_active", false)  // exclude soft-deleted chunks
         .textSearch("chunk_text", exactQuery, { config: "english" })
         .limit(5);
 

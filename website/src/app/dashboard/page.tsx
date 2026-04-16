@@ -12,24 +12,20 @@ export default async function DashboardPage() {
     redirect("/auth");
   }
 
-  // Onboarding gate: redirect if user hasn't completed setup
-  // [BYOK-REMOVED] const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
-  // [BYOK-REMOVED]   supabase
-  // [BYOK-REMOVED]     .from("user_api_keys")
-  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
-  // [BYOK-REMOVED]     .eq("user_id", user.id)
-  // [BYOK-REMOVED]     .eq("is_active", true),
-  // [BYOK-REMOVED]   supabase
-  // [BYOK-REMOVED]     .from("career_chunks")
-  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
-  // [BYOK-REMOVED]     .eq("user_id", user.id),
-  // [BYOK-REMOVED] ]);
-  // Gate on career_nuggets (created during onboarding) rather than career_chunks
-  // (career_chunks require the async worker to run — nuggets are immediate)
-  const { count: nuggetCount } = await supabase
-    .from("career_nuggets")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id);
+  const [{ count: nuggetCount }, { count: chunkCount }] = await Promise.all([
+    supabase
+      .from("career_nuggets")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    supabase
+      .from("career_chunks")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+  ]);
+
+  if ((nuggetCount ?? 0) === 0 && (chunkCount ?? 0) === 0) {
+    redirect("/onboarding");
+  }
 
   return <DashboardContent user={user} nuggetCount={nuggetCount ?? 0} />;
 }

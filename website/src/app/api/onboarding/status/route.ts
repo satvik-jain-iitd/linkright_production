@@ -67,7 +67,7 @@ export async function GET() {
   return Response.json({
     has_api_key,
     has_career_data,
-    onboarding_complete: has_api_key && has_career_data,
+    onboarding_complete: has_career_data,
     confidence,
     // Step detection fields
     session_started,   // true once any atom was dispatched
