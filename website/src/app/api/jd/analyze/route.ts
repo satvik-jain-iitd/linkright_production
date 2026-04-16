@@ -5,7 +5,7 @@
  *
  * Flow:
  *   1. Groq 8B extracts JD requirements
- *   2. Jina jina-embeddings-v3 embeds each requirement (768-dim, same space as nuggets)
+ *   2. Oracle nomic-embed-text embeds each requirement (same model as stored nuggets)
  *   3. For each company/role: find best nugget per requirement (cosine)
  *   4. Rank roles → primary / secondary / tertiary
  *   5. Identify gaps (uncovered requirements)
@@ -17,7 +17,6 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
 import { cosineSimilarity } from "@/lib/jd-matcher";
-import { jinaEmbed } from "@/lib/jina-embed";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -139,14 +138,41 @@ function parseRequirements(text: string): JDRequirement[] {
     }));
 }
 
-// ── Jina embedding (same model as nuggets — jina-embeddings-v3, 768-dim) ─────
+// ── Oracle nomic-embed-text (same model as stored nugget embeddings) ──────────
+// Nuggets are embedded by nugget_embedder.py via Oracle /lifeos/embed endpoint.
+// Must use the same model here or cosine similarity scores are meaningless.
 
-async function jinaEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
-  const apiKey = process.env.JINA_API_KEY ?? "";
-  if (!apiKey || texts.length === 0) return texts.map(() => null);
-  const embeddings = await jinaEmbed(texts, apiKey);
-  if (!embeddings) return texts.map(() => null);
-  return embeddings;
+const ORACLE_EMBED_URL = process.env.ORACLE_BACKEND_URL
+  ? `${process.env.ORACLE_BACKEND_URL}/lifeos/embed`
+  : "http://80.225.198.184:8000/lifeos/embed";
+
+async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
+  const apiKey = process.env.ORACLE_API_KEY ?? "";
+  if (texts.length === 0) return [];
+
+  try {
+    const resp = await fetch(ORACLE_EMBED_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({ texts }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!resp.ok) {
+      console.warn("[jd/analyze] Oracle embed failed:", resp.status);
+      return texts.map(() => null);
+    }
+
+    const data = await resp.json() as { embeddings: number[][] };
+    if (!Array.isArray(data?.embeddings)) return texts.map(() => null);
+    return data.embeddings.map((e) => (Array.isArray(e) && e.length > 0 ? e : null));
+  } catch (err) {
+    console.warn("[jd/analyze] Oracle embed error:", err);
+    return texts.map(() => null);
+  }
 }
 
 // ── Per-role scoring (core innovation) ───────────────────────────────────────
@@ -313,11 +339,11 @@ export async function POST(request: Request) {
   // ── Step 2: Embed requirements (Oracle nomic-embed-text) ───────────────
 
   const reqTexts = requirements.map((r) => r.text);
-  const reqEmbeddings = await jinaEmbedBatch(reqTexts);
+  const reqEmbeddings = await oracleEmbedBatch(reqTexts);
 
   const embeddedCount = reqEmbeddings.filter((e) => e !== null).length;
   if (embeddedCount === 0) {
-    console.warn("[jd/analyze] No embeddings generated — Jina key missing or error. Proceeding without semantic scoring.");
+    console.warn("[jd/analyze] No embeddings generated — Oracle backend unreachable. Proceeding without semantic scoring.");
   }
 
   // ── Step 3: Fetch user's nuggets (with embeddings) + work_history ──────
