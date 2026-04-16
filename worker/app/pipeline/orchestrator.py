@@ -45,8 +45,32 @@ from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
 from ..key_manager import KeyManager
 from ..llm.oracle import OracleProvider
 from ..llm.gemini import GeminiProvider
+from ..llm.base import LLMProvider
 from .. import config as worker_config
 import os
+
+
+class _FallbackLLM(LLMProvider):
+    """Wraps a primary LLM and silently falls back to secondary on any error."""
+
+    def __init__(self, primary: LLMProvider, fallback: LLMProvider):
+        self._primary = primary
+        self._fallback = fallback
+        # Satisfy ABC — not used for routing
+        super().__init__(api_key="", model_id="fallback")
+
+    async def complete(self, system: str, user: str, temperature: float = 0.3) -> LLMResponse:
+        try:
+            return await self._primary.complete(system, user, temperature)
+        except Exception as exc:
+            logger.warning(
+                "Primary LLM %s failed (%s) — falling back to %s",
+                type(self._primary).__name__, exc, type(self._fallback).__name__,
+            )
+            return await self._fallback.complete(system, user, temperature)
+
+    async def validate_key(self) -> bool:
+        return True
 
 USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
 
@@ -174,14 +198,17 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     if ctx.career_text and hasattr(ctx, "_nuggets") and not ctx._nuggets:
         logger.warning("Phase 0 produced no nuggets — continuing with paragraph-chunk fallback")
 
-    await phase_1_parse_and_strategy(ctx, sb, _gemini or llm)  # Gemini preferred: heavy reasoning
+    gemini_with_fallback = _FallbackLLM(_gemini, llm) if _gemini else llm
+    oracle_with_fallback = _FallbackLLM(_oracle, llm) if _oracle else llm
+
+    await phase_1_parse_and_strategy(ctx, sb, gemini_with_fallback)  # Gemini preferred: heavy reasoning
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
     await phase_3_5_stencil_draft(ctx, sb)
-    await phase_4a_verbose_bullets(ctx, sb, _gemini or llm)  # Gemini preferred: XYZ creative writing
+    await phase_4a_verbose_bullets(ctx, sb, gemini_with_fallback)  # Gemini preferred: XYZ creative writing
     await phase_4b_ranking(ctx, sb)
-    await phase_4c_condense_bullets(ctx, sb, _oracle or llm)  # Oracle preferred: simple shortening
-    await phase_3_5a_professional_summary(ctx, sb, _oracle or llm)  # v4: AFTER bullets — synthesizes from written bullets
+    await phase_4c_condense_bullets(ctx, sb, oracle_with_fallback)  # Oracle preferred: simple shortening
+    await phase_3_5a_professional_summary(ctx, sb, oracle_with_fallback)  # v4: AFTER bullets — synthesizes from written bullets
     await phase_5_width_opt(ctx, sb, llm)
     await phase_6_scoring(ctx, sb)
     await phase_7_validation(ctx, sb)
