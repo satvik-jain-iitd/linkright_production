@@ -27,6 +27,27 @@ Clone this template and follow these steps to start a new project.
 - [ ] repo/CLAUDE.md Project Setup section is filled in for this project
 - [ ] mem0 API key in settings.json is for this project only
 
+## Codebase Book (annotation setup)
+
+10. Install Python dependency:
+    ```bash
+    pip install requests
+    ```
+11. Open LM Studio → Local Server tab → Start Server
+12. Check model availability:
+    ```bash
+    python repo/scripts/annotate.py --check
+    ```
+    Script automatically picks best available model (prefers deepseek-r1 > qwen2.5 > smollm2).
+    No new models needed if any of these are already downloaded.
+
+13. Run annotation in background (parallel to coding):
+    ```bash
+    python repo/scripts/annotate.py > /tmp/annotate.log 2>&1 &
+    ```
+    Progress: `tail -f /tmp/annotate.log`
+    Output: `specs/CODEBASE_BOOK.md` (append-only, never overwrites)
+
 ## Notes
 
 - ~/.claude/CLAUDE.md and ~/.claude/settings.json are machine-level files — not in this repo
