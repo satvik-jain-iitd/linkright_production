@@ -10,7 +10,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
   "phone": "string or empty",
   "linkedin": "URL or empty",
   "education": [
-    {"institution": "string", "degree": "string", "year": "string"}
+    {"institution": "string", "degree": "string", "year": "4-digit graduation year only, e.g. 2021"}
   ],
   "skills": ["skill1", "skill2"],
   "certifications": ["cert1", "cert2"],
@@ -18,7 +18,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
 }
 
 Rules:
-- education: include all degrees/institutions found
+- education: include all degrees/institutions found. year must be the 4-digit graduation year as a string (e.g. "2021"); strip leading phrases like "Class of", "Batch of", "Graduated"
 - skills: list individual skill strings, max 30
 - certifications: list individual certifications, max 10
 - career_text: extract ONLY the work experience/employment history as plain text — not education or skills

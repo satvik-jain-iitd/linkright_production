@@ -7,6 +7,7 @@ import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
 import { StepLifeOS } from "./StepLifeOS";
 import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
 import { CareerGraph, type CytoElement } from "@/components/CareerGraph";
+import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -281,7 +282,7 @@ function StepCareerBasics({
       .map((c) => `- ${c.trim()}`)
       .join("\n");
 
-    const careerText = [
+    const profileSummary = [
       fullName && `Name: ${fullName}`,
       email && `Email: ${email}`,
       phone && `Phone: ${phone}`,
@@ -293,19 +294,33 @@ function StepCareerBasics({
       .filter(Boolean)
       .join("\n");
 
-    try {
-      const res = await fetch("/api/user/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ career_text: careerText }),
-      });
+    const careerText = resumePasteText.trim()
+      ? `${profileSummary}\n\n${resumePasteText.trim()}`
+      : profileSummary;
 
-      if (res.ok) {
-        onNext();
-      } else {
-        const data = await res.json();
-        setError(data.error ?? "Failed to save. Please try again.");
+    try {
+      const supabase = createBrowserSupabase();
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: { full_name: fullName.trim() },
+      });
+      if (metaError) {
+        console.warn("[onboarding] full_name metadata update failed:", metaError.message);
       }
+
+      if (careerText.trim().length >= 200) {
+        const uploadRes = await fetch("/api/career/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ career_text: careerText }),
+        });
+        if (!uploadRes.ok) {
+          const data = await uploadRes.json().catch(() => ({}));
+          setError(data.error ?? "Failed to save career details. Please try again.");
+          return;
+        }
+      }
+
+      onNext();
     } catch {
       setError("Network error. Please try again.");
     } finally {
