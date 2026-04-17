@@ -149,6 +149,7 @@ async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None
             user_id=user_id,
             jd_text=jd_text,
             supabase_client=sb,
+            discovery=discovery,
         )
     except Exception as exc:
         logger.warning(
