@@ -34,7 +34,10 @@ RECENCY_WINDOW_DAYS = 14         # how far back discoveries count for ranking
 SCORE_FRESHNESS_HOURS = 24       # re-score a job_discovery if its score is older than this
 DAILY_RESUME_CAP = 20            # per user
 TOP_K = 20                       # size of the daily top list (we store up to 50 for overflow)
-MAX_SCORES_PER_USER_PER_RUN = 30 # cap Gemini calls per user per cron run (keeps RPD budget predictable)
+# With 5-min cron cadence (288 runs/day) we cap per-user per-run at 10 so no
+# single user monopolises a run's Gemini budget. Un-scored discoveries roll
+# over to the next run, finishing within ~1 hour for typical inflow.
+MAX_SCORES_PER_USER_PER_RUN = 10
 
 # recency decay: score multiplier by days-old
 #   0 days: 1.00, 3 days: 0.85, 7 days: 0.65, 14 days: 0.35
