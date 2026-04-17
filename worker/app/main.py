@@ -670,3 +670,56 @@ async def scan_jobs(
     verify_secret(authorization)
     background_tasks.add_task(_run_scan, req.user_id, req.callback_url)
     return {"status": "scanning", "user_id": req.user_id}
+
+
+# ── Recommender cron ─────────────────────────────────────────────────────
+# Invoked every 30 min by Vercel cron (or any scheduler) to batch-score
+# fresh discoveries + recompute each user's top-20 + queue resumes.
+# Auth: WORKER_SECRET bearer token.
+
+async def _run_recommender_all_users():
+    """Background task: full recompute for every user with an active watchlist."""
+    try:
+        from .pipeline.recommender import recompute_top_20_for_all_users
+        from .llm.rate_governor import set_supabase as _wire_governor_sb
+        from supabase import create_client
+
+        sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        _wire_governor_sb(sb)  # persist RPD counts across recompute passes
+        results = await recompute_top_20_for_all_users(sb)
+        logger.info(
+            "recommender cron: done, users=%d total_queued=%d",
+            len(results), sum(r.get("queued", 0) for r in results),
+        )
+    except Exception as exc:
+        logger.exception("recommender cron: failed — %s", exc)
+
+
+class RecommenderCronRequest(BaseModel):
+    user_id: str | None = None  # if set, recompute only this user; else all
+
+
+@app.post("/cron/recompute-top-20", status_code=202)
+async def cron_recompute_top_20(
+    req: RecommenderCronRequest,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    """Trigger the top-20 recomputation (async). Hit every 30 min by cron."""
+    verify_secret(authorization)
+    if req.user_id:
+        async def _one():
+            try:
+                from .pipeline.recommender import recompute_top_20_for_user
+                from .llm.rate_governor import set_supabase as _wire_governor_sb
+                from supabase import create_client
+                sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+                _wire_governor_sb(sb)
+                await recompute_top_20_for_user(sb, req.user_id)
+            except Exception as exc:
+                logger.exception("recommender: single-user failed — %s", exc)
+        background_tasks.add_task(_one)
+        return {"status": "scheduled", "user_id": req.user_id}
+
+    background_tasks.add_task(_run_recommender_all_users)
+    return {"status": "scheduled", "scope": "all_users"}
