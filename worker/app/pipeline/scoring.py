@@ -17,9 +17,11 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from ..llm.gemini import GeminiProvider
+from ..llm.groq import GroqProvider
 from ..llm.rate_limiter import gemini_limiter
 from ..tools.hybrid_retrieval import hybrid_retrieve, NuggetResult
 from .. import config as worker_config
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -218,21 +220,51 @@ async def score_application(
     # 2. Build prompt
     user_prompt = build_scoring_prompt(nuggets, jd_text, career_graph)
 
-    # 3. Call Gemini Flash with rate limiting (quality-sensitive structured output)
-    gemini = GeminiProvider(
-        api_key=worker_config.GEMINI_API_KEY,
-        model_id=worker_config.GEMINI_MODEL_ID,
-    )
-    async with gemini_limiter(user_id):
-        response = await gemini.complete(
+    # 3. Call Gemini Flash; on quota/auth/5xx failures fall back to Groq 70B.
+    #    Same chain as orchestrator's _FallbackLLM but inline to avoid cross-module
+    #    coupling. Gemini's 1500/day free-tier RPD dries up fast with 20 users × 20
+    #    scoring calls, so Groq must actually get called — not just configured.
+    response = None
+    gemini_key = worker_config.GEMINI_API_KEY
+    if gemini_key:
+        gemini = GeminiProvider(
+            api_key=gemini_key,
+            model_id=worker_config.GEMINI_MODEL_ID,
+        )
+        try:
+            async with gemini_limiter(user_id):
+                response = await gemini.complete(
+                    system=SCORING_SYSTEM_PROMPT,
+                    user=user_prompt,
+                    temperature=0.2,
+                )
+            logger.info(
+                f"Scoring: Gemini ok in {time.time()-started:.1f}s "
+                f"({response.input_tokens} in, {response.output_tokens} out)"
+            )
+        except Exception as exc:
+            logger.warning(
+                "Scoring: Gemini failed (%s) — falling back to Groq 70B", exc
+            )
+            response = None
+
+    if response is None:
+        groq_key = (
+            os.environ.get("PLATFORM_GROQ_API_KEY")
+            or os.environ.get("GROQ_API_KEY", "")
+        )
+        if not groq_key:
+            raise RuntimeError("Scoring: Gemini failed and no Groq key configured for fallback")
+        groq = GroqProvider(api_key=groq_key, model_id="llama-3.3-70b-versatile")
+        response = await groq.complete(
             system=SCORING_SYSTEM_PROMPT,
             user=user_prompt,
-            temperature=0.2,  # low temperature for consistent scoring
+            temperature=0.2,
         )
-    logger.info(
-        f"Scoring: Gemini call done in {time.time()-started:.1f}s "
-        f"({response.input_tokens} in, {response.output_tokens} out)"
-    )
+        logger.info(
+            f"Scoring: Groq 70B fallback ok in {time.time()-started:.1f}s "
+            f"({response.input_tokens} in, {response.output_tokens} out)"
+        )
 
     # 4. Parse JSON response
     raw_text = response.text.strip()
