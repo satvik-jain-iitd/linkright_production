@@ -30,10 +30,18 @@ app = FastAPI(title="LinkRight Sync Worker", version="0.1.0")
 
 @app.on_event("startup")
 async def _startup():
-    """Launch background scheduler if ENABLE_SCHEDULER is set."""
+    """Launch background scheduler + queue poller if their flags are set."""
     if os.getenv("ENABLE_SCHEDULER", "").lower() in ("1", "true", "yes"):
         from .scheduler import start_scheduler
         asyncio.create_task(start_scheduler())
+    # Queue poller: picks up resume_jobs rows with status='queued' (e.g.,
+    # ones auto-inserted by the recommender cron). Default OFF — opt in
+    # with ENABLE_QUEUE_POLLER=1 in Render env. Only ONE worker instance
+    # should hold the lock at a time (enforced via worker_state row).
+    if os.getenv("ENABLE_QUEUE_POLLER", "").lower() in ("1", "true", "yes"):
+        from .queue_poller import queue_poller_loop
+        asyncio.create_task(queue_poller_loop())
+        logger.info("queue_poller: enabled at startup")
 
 # Concurrency limiter — max 3 simultaneous pipelines
 _pipeline_semaphore = asyncio.Semaphore(3)
