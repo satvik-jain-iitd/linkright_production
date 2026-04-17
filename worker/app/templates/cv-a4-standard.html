@@ -97,6 +97,21 @@
             border-bottom: 1px solid var(--ui-divider-color);
             padding: 1.5mm 0;
         }
+        /* Collapse empty contact-info so it doesn't leave a blank border band
+           when Phase 8 couldn't populate any contact fields. */
+        .contact-info:empty { display: none; }
+
+        /* PROFESSIONAL SUMMARY slot — sits between .header and the first section.
+           Kept outside .header-top so it doesn't squeeze between name/role flex items. */
+        .professional-summary {
+            margin-top: 2mm;
+            margin-bottom: var(--section-spacing);
+            font-size: var(--font-size-body);
+            line-height: var(--line-height-standard);
+            color: var(--ui-text-primary-color);
+        }
+        .professional-summary:empty { display: none; }
+        .professional-summary .summary-line { display: block; margin-bottom: 1mm; }
 
         /* SECTION STYLING */
         .section { margin-bottom: var(--section-spacing); }
@@ -180,6 +195,9 @@
             <span><b>Portfolio:</b> <!-- PLACEHOLDER --></span>
         </div>
     </div>
+    <!-- Dedicated slot for the professional summary. Phase 8 assembly replaces
+         this comment's following empty div's contents (or leaves empty if no summary). -->
+    <div class="professional-summary"><!-- PLACEHOLDER: Professional Summary (injected by Phase 3.5a) --></div>
 
     <!--
         1. PROFESSIONAL EXPERIENCE

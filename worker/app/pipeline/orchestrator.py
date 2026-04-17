@@ -2394,7 +2394,15 @@ def _build_experience_html(bullets: list, companies: list) -> str:
 
 
 def _build_education_html(education: list) -> str:
-    """Build Education section from structured education data."""
+    """Build Education section from structured education data.
+
+    Fixes:
+    - GPA/CGPA is labelled (bare "6.43" → "CGPA: 6.43") so readers know what
+      the number is.
+    - Highlights use .text-line (natural) not .edge-to-edge-line (justified),
+      since short standalone lines like "GATE 2022 score: 65/100" look bad
+      with full justification's word-spacing gaps.
+    """
     html_parts = [
         '<div class="section-title">Education<div class="section-divider"></div></div>'
     ]
@@ -2402,8 +2410,17 @@ def _build_education_html(education: list) -> str:
         institution = edu.get("institution", "")
         degree = edu.get("degree", "")
         year = edu.get("year", "")
-        gpa = edu.get("gpa", "")
+        gpa = str(edu.get("gpa", "") or "").strip()
         highlights = edu.get("highlights", "")
+
+        # Label a bare GPA number (e.g. "6.43", "8.9/10", "3.8/4.0").
+        # Skip relabelling if the string already contains GPA/CGPA/%.
+        if gpa:
+            gpa_lower = gpa.lower()
+            if not any(tok in gpa_lower for tok in ("cgpa", "gpa", "%", "score")):
+                # Heuristic: CGPA scale in India is /10 (common values 6.0-10.0);
+                # US GPA is /4.0 (0.0-4.0). We don't know which, so just prefix "CGPA:".
+                gpa = f"CGPA: {gpa}"
 
         html_parts.append('<div class="entry">')
         html_parts.append(
@@ -2414,11 +2431,11 @@ def _build_education_html(education: list) -> str:
                 f'<div class="entry-subhead"><span>{degree}</span><span>{gpa}</span></div>'
             )
         if highlights:
-            # Split highlights on newlines or · separator into multiple edge-to-edge lines
+            # Split highlights on newlines or · separator into multiple natural lines
             lines = [h.strip() for h in highlights.replace(" · ", "\n").split("\n") if h.strip()]
             for line in lines:
                 html_parts.append(
-                    f'<span class="edge-to-edge-line">{line}</span>'
+                    f'<span class="text-line">{line}</span>'
                 )
         html_parts.append("</div>")
 
@@ -2605,24 +2622,36 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
 
     final_html: str = assemble_result.get("final_html", "")
 
-    # Inject professional summary below the header div (if phase_3_5a produced one)
+    # Inject professional summary into the dedicated .professional-summary slot
+    # (added to template alongside .header — outside .header-top so it doesn't
+    # collide with name/role flex layout). Phase 3.5a produces ctx._summary_html.
     if ctx._summary_html:
         import re as _inject_re
-        # Find the closing </div> of the header block and inject summary after it
-        header_close_pattern = r'(</div>\s*)(<!--)'
-        # More reliable: find the header div and its closing tag
-        header_div_match = _inject_re.search(
-            r'(<div[^>]*class="[^"]*header[^"]*"[^>]*>.*?</div>)',
-            final_html,
+        # Replace the empty slot div's content. Tolerate both the placeholder
+        # comment form (fresh template) and an already-populated form (regen).
+        slot_re = _inject_re.compile(
+            r'(<div[^>]*class="[^"]*professional-summary[^"]*"[^>]*>)(.*?)(</div>)',
             flags=_inject_re.DOTALL | _inject_re.IGNORECASE,
         )
-        if header_div_match:
-            insert_pos = header_div_match.end()
-            summary_block = f'\n<div class="professional-summary">\n{ctx._summary_html}\n</div>'
-            final_html = final_html[:insert_pos] + summary_block + final_html[insert_pos:]
-            logger.info(f"[Phase 8] Professional summary injected ({len(ctx._summary_html)} chars)")
+        if slot_re.search(final_html):
+            final_html = slot_re.sub(
+                lambda m: f'{m.group(1)}\n{ctx._summary_html}\n{m.group(3)}',
+                final_html,
+                count=1,
+            )
+            logger.info(f"[Phase 8] Professional summary injected into slot ({len(ctx._summary_html)} chars)")
         else:
-            logger.warning("[Phase 8] Could not find header div to inject summary — summary skipped")
+            # Template missing the slot — fall back: insert before the first .section.
+            first_section_m = _inject_re.search(
+                r'<div[^>]*class="[^"]*section[^"]*"', final_html,
+            )
+            if first_section_m:
+                insert_pos = first_section_m.start()
+                summary_block = f'<div class="professional-summary">\n{ctx._summary_html}\n</div>\n'
+                final_html = final_html[:insert_pos] + summary_block + final_html[insert_pos:]
+                logger.warning("[Phase 8] .professional-summary slot missing; inserted before first .section")
+            else:
+                logger.warning("[Phase 8] Could not find summary slot or first section — summary skipped")
 
     ctx.output_html = final_html
     ctx.stats["assembly_warnings"] = assemble_result.get("warnings", [])
