@@ -37,7 +37,47 @@ if not os.environ.get("SUPABASE_URL") and os.environ.get("NEXT_PUBLIC_SUPABASE_U
 from supabase import create_client  # noqa: E402
 
 from app.llm import get_provider  # noqa: E402
+from app.llm.base import LLMProvider, LLMResponse  # noqa: E402
+from app.llm.gemini import GeminiProvider  # noqa: E402
 from app.llm.oracle import OracleProvider  # noqa: E402
+
+
+class RotatingGeminiProvider(LLMProvider):
+    """Wraps N Gemini keys, rotates on 429. Effective rate = N × 15 RPM."""
+
+    def __init__(self, api_keys: list[str], model_id: str = "gemini-2.0-flash"):
+        super().__init__(api_key=api_keys[0], model_id=model_id)
+        self._providers = [GeminiProvider(api_key=k, model_id=model_id) for k in api_keys]
+        self._idx = 0
+
+    async def complete(self, system: str, user: str, temperature: float = 0.3) -> LLMResponse:
+        import httpx
+        errors = []
+        # Try each key once; if all 429, fall through and let exception propagate
+        for _ in range(len(self._providers)):
+            provider = self._providers[self._idx]
+            try:
+                return await provider.complete(system, user, temperature)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    errors.append(f"key[{self._idx}]: 429")
+                    self._idx = (self._idx + 1) % len(self._providers)
+                    continue
+                raise
+            except RuntimeError as exc:
+                # GeminiProvider raises this after internal retry exhaustion
+                if "rate limit" in str(exc).lower():
+                    errors.append(f"key[{self._idx}]: exhausted")
+                    self._idx = (self._idx + 1) % len(self._providers)
+                    continue
+                raise
+        raise RuntimeError(f"All {len(self._providers)} Gemini keys rate-limited: {errors}")
+
+    async def validate_key(self) -> bool:
+        for p in self._providers:
+            if await p.validate_key():
+                return True
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -115,12 +155,25 @@ def read_only_sb_guard(live_sb, monkeypatch):
 
 @pytest.fixture(scope="session")
 def llm_primary():
-    """Phase 4a LLM. Groq 70B — matches current production fallback path
-    (Gemini has been rate-limited; Groq 70B is the effective primary)."""
-    api_key = os.environ.get("PLATFORM_GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        pytest.skip("PLATFORM_GROQ_API_KEY missing in .env.local")
-    return get_provider("groq", api_key, "llama-3.3-70b-versatile")
+    """Phase 4a LLM. Prefer Gemini (production primary) with key rotation;
+    fall back to Groq 70B if no Gemini keys present.
+
+    Gemini has stricter free-tier RPM (15/key) than Groq (30 RPM) but produces
+    better instruction-following. 3 rotated keys → effective 45 RPM.
+    """
+    keys = [
+        os.environ[k] for k in ("GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3")
+        if os.environ.get(k)
+    ]
+    if not keys and os.environ.get("GEMINI_API_KEY"):
+        keys = [os.environ["GEMINI_API_KEY"]]
+    if keys:
+        model = os.environ.get("GEMINI_MODEL_ID", "gemini-2.0-flash")
+        return RotatingGeminiProvider(api_keys=keys, model_id=model)
+    groq_key = os.environ.get("PLATFORM_GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+    if groq_key:
+        return get_provider("groq", groq_key, "llama-3.3-70b-versatile")
+    pytest.skip("Neither GEMINI_API_KEY nor PLATFORM_GROQ_API_KEY found in .env.local")
 
 
 @pytest.fixture(scope="session")
