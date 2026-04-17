@@ -761,3 +761,30 @@ async def cron_scan_global(
     verify_secret(authorization)
     background_tasks.add_task(_run_global_scan)
     return {"status": "scheduled", "scope": "global_pool"}
+
+
+# ── JD fetcher cron ─────────────────────────────────────────────────────
+# Scanner returns title+url only; this cron backfills jd_text by fetching
+# each discovery's URL and extracting the page's main text content. Runs
+# every 10 min, processes a batch of 50 discoveries per tick.
+
+async def _run_jd_fetcher():
+    try:
+        from .pipeline.jd_fetcher import fetch_missing_jds
+        from supabase import create_client
+        sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        stats = await fetch_missing_jds(sb, batch_size=50)
+        logger.info("jd_fetcher cron: %s", stats)
+    except Exception as exc:
+        logger.exception("jd_fetcher cron failed: %s", exc)
+
+
+@app.post("/cron/fetch-jds", status_code=202)
+async def cron_fetch_jds(
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    """Fetch JD text for discoveries that don't have it yet (batched)."""
+    verify_secret(authorization)
+    background_tasks.add_task(_run_jd_fetcher)
+    return {"status": "scheduled", "scope": "jd_fetcher"}
