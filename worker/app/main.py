@@ -731,3 +731,33 @@ async def cron_recompute_top_20(
 
     background_tasks.add_task(_run_recommender_all_users)
     return {"status": "scheduled", "scope": "all_users"}
+
+
+# ── Global scanner cron ─────────────────────────────────────────────────
+# Invoked every N min (tiered cadence honored per-company) by Vercel cron.
+# Scans all active companies_global rows whose cadence interval has elapsed.
+
+async def _run_global_scan():
+    try:
+        from .pipeline.scanner_global import scan_all_global_companies
+        from supabase import create_client
+        sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        result = await scan_all_global_companies(sb)
+        logger.info(
+            "global scan cron: total=%d scanned=%d skipped=%d new=%d errors=%d",
+            result.total_companies, result.scanned, result.skipped_fresh,
+            result.new_jobs, len(result.errors),
+        )
+    except Exception as exc:
+        logger.exception("global scan cron failed: %s", exc)
+
+
+@app.post("/cron/scan-global", status_code=202)
+async def cron_scan_global(
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(None),
+):
+    """Trigger the global companies_global scanner (async)."""
+    verify_secret(authorization)
+    background_tasks.add_task(_run_global_scan)
+    return {"status": "scheduled", "scope": "global_pool"}
