@@ -437,7 +437,10 @@ async def recompute_top_20_for_user(sb, user_id: str) -> dict[str, Any]:
 
     scored_n = await score_fresh_discoveries_for_user(sb, user_id)
     ranked = compute_and_store_top_20(sb, user_id)
-    queued = queue_resumes_for_top_20(sb, user_id)
+    # Auto-queue disabled 2026-04-17: new product flow is manual-only.
+    # User picks per-job from browse screen OR multi-selects up to 10 (Phase F).
+    # queue_resumes_for_top_20 retained for explicit callers but not invoked here.
+    queued = 0
     notified = notify_new_top_matches(sb, user_id, ranked, previous_ids)
 
     summary = {
