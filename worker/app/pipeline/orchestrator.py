@@ -51,7 +51,22 @@ import os
 
 
 class _FallbackLLM(LLMProvider):
-    """Wraps a primary LLM and silently falls back to secondary on any error."""
+    """Wraps a primary LLM and silently falls back to secondary on error.
+
+    Governor-aware: before dispatching to primary, asks the rate_governor
+    whether primary has capacity. If primary is rate-limited (RPM or RPD
+    exhausted for the current minute/day), routes directly to fallback
+    without wasting the call. On primary exception, still falls back.
+    """
+
+    # Mapping from LLMProvider class name to rate_governor "kind" key.
+    # Unknown providers get no governor check (pass-through).
+    _KIND_BY_CLASS = {
+        "GeminiProvider": "gemini",
+        "GroqProvider": "groq",
+        "OracleProvider": "oracle",
+        "OpenRouterProvider": "openrouter",
+    }
 
     def __init__(self, primary: LLMProvider, fallback: LLMProvider):
         self._primary = primary
@@ -59,7 +74,33 @@ class _FallbackLLM(LLMProvider):
         # Satisfy ABC — not used for routing
         super().__init__(api_key="", model_id="fallback")
 
+    def _governor_kind(self, p: LLMProvider) -> str | None:
+        return self._KIND_BY_CLASS.get(type(p).__name__)
+
     async def complete(self, system: str, user: str, temperature: float = 0.3) -> LLMResponse:
+        from ..llm.rate_governor import get_governor
+
+        governor = get_governor()
+        pri_kind = self._governor_kind(self._primary)
+        # Best-effort: ask governor if primary has capacity. Oracle is effectively
+        # unlimited (homelab). If primary has a token, use it; if governor says
+        # "rate-limited this minute," skip straight to fallback.
+        try:
+            if pri_kind and pri_kind != "oracle":
+                pri_key = getattr(self._primary, "api_key", "") or getattr(self._primary, "secret", "")
+                if pri_key:
+                    if not await governor.has_capacity(pri_kind, pri_key):
+                        logger.info(
+                            "FallbackLLM: primary %s at RPM/RPD limit — using fallback %s",
+                            type(self._primary).__name__, type(self._fallback).__name__,
+                        )
+                        return await self._fallback.complete(system, user, temperature)
+                    # Consume a token up front (consume even if primary errors;
+                    # safer to over-count than to under-rate-limit)
+                    await governor.acquire(pri_kind, pri_key, max_wait=5.0)
+        except Exception as gov_exc:
+            logger.debug("FallbackLLM: governor check failed (%s), continuing", gov_exc)
+
         try:
             return await self._primary.complete(system, user, temperature)
         except Exception as exc:
@@ -67,6 +108,15 @@ class _FallbackLLM(LLMProvider):
                 "Primary LLM %s failed (%s) — falling back to %s",
                 type(self._primary).__name__, exc, type(self._fallback).__name__,
             )
+            # On 429 from primary, record error for circuit breaker
+            try:
+                from ..llm.router import record_provider_error
+                if pri_kind and pri_kind != "oracle":
+                    pri_key = getattr(self._primary, "api_key", "")
+                    if pri_key:
+                        record_provider_error(pri_kind, pri_key)
+            except Exception:
+                pass
             return await self._fallback.complete(system, user, temperature)
 
     async def validate_key(self) -> bool:
@@ -186,6 +236,14 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     _gemini = _get_gemini_llm()   # Gemini Flash for heavy reasoning phases
     _oracle = _get_oracle_llm()   # Oracle 1B for simple rewriting phases
 
+    # Wire rate governor for this job — persists per-provider daily counts
+    # so we stop dispatching calls once a key's RPD is exhausted.
+    try:
+        from ..llm.rate_governor import set_supabase as _wire_governor_sb
+        _wire_governor_sb(sb)
+    except Exception as _gov_init_exc:
+        logger.warning("rate_governor setup skipped: %s", _gov_init_exc)
+
     if _gemini:
         logger.info("run_pipeline: Gemini Flash available (%s)", worker_config.GEMINI_MODEL_ID)
     if _oracle:
@@ -210,18 +268,25 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     # For heavy reasoning phases, fall back to 70B model (not the user's 8B default)
     _groq_70b = _get_groq_fallback_llm()
     heavy_fallback = _groq_70b or llm
-    gemini_with_fallback = _FallbackLLM(_gemini, heavy_fallback) if _gemini else heavy_fallback
-    oracle_with_fallback = _FallbackLLM(_oracle, llm) if _oracle else llm
 
-    await phase_1_parse_and_strategy(ctx, sb, gemini_with_fallback)  # Gemini preferred: heavy reasoning
+    # Quality-first LLM chains (2026-04-17). Goal: 20 high-quality resumes per
+    # user per day. Oracle 1B demoted from Phase 4c/3.5a because its JSON output
+    # was unreliable (empirically shown in prior test runs). Groq 70B is the new
+    # default for condensing + summary cleanup.
+    gemini_with_fallback = _FallbackLLM(_gemini, heavy_fallback) if _gemini else heavy_fallback
+    quality_with_fallback = _FallbackLLM(heavy_fallback, _gemini) if _gemini else heavy_fallback
+    # Keep oracle_with_fallback for Phase 5 (width rewriting) — Oracle OK there
+    oracle_with_fallback = _FallbackLLM(_oracle, heavy_fallback) if _oracle else heavy_fallback
+
+    await phase_1_parse_and_strategy(ctx, sb, gemini_with_fallback)      # quality-critical JSON parsing
     await phase_2_5_vector_retrieval(ctx, sb)
     await phase_3_page_fit(ctx, sb)
     await phase_3_5_stencil_draft(ctx, sb)
-    await phase_4a_verbose_bullets(ctx, sb, gemini_with_fallback)  # Gemini preferred: XYZ creative writing
+    await phase_4a_verbose_bullets(ctx, sb, gemini_with_fallback)        # quality-critical XYZ writing
     await phase_4b_ranking(ctx, sb)
-    await phase_4c_condense_bullets(ctx, sb, oracle_with_fallback)  # Oracle preferred: simple shortening
-    await phase_3_5a_professional_summary(ctx, sb, oracle_with_fallback)  # v4: AFTER bullets — synthesizes from written bullets
-    await phase_5_width_opt(ctx, sb, llm)
+    await phase_4c_condense_bullets(ctx, sb, quality_with_fallback)      # quality-critical condensing (was Oracle)
+    await phase_3_5a_professional_summary(ctx, sb, quality_with_fallback)  # quality-critical summary (was Oracle)
+    await phase_5_width_opt(ctx, sb, oracle_with_fallback)               # Oracle OK for width tweaks if enabled
     await phase_6_scoring(ctx, sb)
     await phase_7_validation(ctx, sb)
     await phase_8_assembly(ctx, sb, llm)

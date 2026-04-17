@@ -8,7 +8,10 @@ import httpx
 from .base import LLMProvider, LLMResponse
 
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-_RETRY_DELAYS = [10, 30, 60]  # seconds to wait after 429 before retrying
+# Fail-fast: no internal retries. The rate_governor + router at the OUTER layer
+# handles rotation and backoff proactively. Compounded internal retries were the
+# root cause of 20-minute test-harness hangs on 2026-04-17.
+_RETRY_DELAYS: list[int] = []
 
 
 class GeminiProvider(LLMProvider):
@@ -27,7 +30,7 @@ class GeminiProvider(LLMProvider):
                     },
                 )
                 if resp.status_code == 429 and attempt < len(_RETRY_DELAYS):
-                    continue  # retry after delay
+                    continue  # retry after delay (currently disabled)
                 resp.raise_for_status()
                 data = resp.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
