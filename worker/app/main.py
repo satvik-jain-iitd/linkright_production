@@ -43,6 +43,15 @@ async def _startup():
         asyncio.create_task(queue_poller_loop())
         logger.info("queue_poller: enabled at startup")
 
+    # Internal scheduler: runs recompute-top-20 (5m), scan-global (15m),
+    # fetch-jds (10m) directly inside the worker. Replaces Vercel Cron for
+    # sub-daily cadences (Hobby plan blocks them). Default ON; disable via
+    # ENABLE_INTERNAL_SCHEDULER=0 if you want to use external crons instead.
+    if os.getenv("ENABLE_INTERNAL_SCHEDULER", "1").lower() in ("1", "true", "yes"):
+        from .internal_scheduler import start_internal_scheduler
+        asyncio.create_task(start_internal_scheduler())
+        logger.info("internal_scheduler: enabled at startup")
+
 # Concurrency limiter — max 3 simultaneous pipelines
 _pipeline_semaphore = asyncio.Semaphore(3)
 
