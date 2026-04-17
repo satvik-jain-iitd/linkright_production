@@ -25,7 +25,11 @@ _GROQ_MODEL = os.environ.get("NUGGET_LLM_MODEL", "llama-3.3-70b-versatile")
 _GROQ_BASE_URL = os.environ.get("NUGGET_LLM_BASE_URL", "https://api.groq.com/openai/v1")
 
 # Rate-limit / retry config
-_BATCH_SLEEP = 30          # seconds between Groq batch calls
+# Inter-batch sleep was 30s — which made a 14K-char resume spend ~2 min just
+# on sleeps. Since 2026-04-17 the rate_governor proactively manages Groq's
+# 30 RPM budget, so the inter-batch sleep here is redundant. 5s is kept as
+# defensive padding. Extraction now completes in ~1.5 min for a typical resume.
+_BATCH_SLEEP = 5           # seconds between Groq batch calls
 _RETRY_BACKOFFS = [60, 120, 240, 300]  # seconds on 429
 
 _SYSTEM_PROMPT = """\
