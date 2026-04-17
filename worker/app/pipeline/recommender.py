@@ -53,8 +53,26 @@ def _today_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _user_has_watchlist(sb, user_id: str) -> bool:
-    """Only rank users who actually have an active watchlist — skip idle accounts."""
+def _user_is_active(sb, user_id: str) -> bool:
+    """True if user has preferences set OR has a watchlist (legacy) — i.e.
+    they've completed onboarding enough that we should bother ranking for them.
+
+    Pre-2026-04-17 we required an active company_watchlist. The new global-pool
+    architecture means users don't need watchlists; they just need a user_preferences
+    row (or a resume upload). Fall back to watchlist check for back-compat.
+    """
+    # Primary: user_preferences row exists
+    pref = (
+        sb.table("user_preferences")
+        .select("user_id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if pref:
+        return True
+
+    # Legacy fallback
     r = (
         sb.table("company_watchlist")
         .select("id", count="exact")
@@ -66,18 +84,30 @@ def _user_has_watchlist(sb, user_id: str) -> bool:
     return bool(r.count and r.count > 0)
 
 
+# Kept for backward compat — some callsites still import this name
+_user_has_watchlist = _user_is_active
+
+
 def _fetch_candidate_discoveries(sb, user_id: str) -> list[dict]:
-    """Fresh + live discoveries for this user from last RECENCY_WINDOW_DAYS."""
+    """Fresh + live discoveries for this user from last RECENCY_WINDOW_DAYS.
+
+    Includes BOTH:
+      - per-user discoveries (legacy watchlist path, user_id = this user)
+      - global discoveries (user_id IS NULL, scanned by scanner_global)
+
+    Global discoveries are shared across users — we just haven't scored them
+    for THIS user yet. The .or_() covers both cases in one query.
+    """
     since = (datetime.now(timezone.utc) - timedelta(days=RECENCY_WINDOW_DAYS)).isoformat()
     r = (
         sb.table("job_discoveries")
-        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,jd_text")
-        .eq("user_id", user_id)
+        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,jd_text,company_slug,user_id")
+        .or_(f"user_id.eq.{user_id},user_id.is.null")
         .gte("discovered_at", since)
         .in_("liveness_status", ["active", "unknown"])
         .in_("status", ["new", "saved"])
         .order("discovered_at", desc=True)
-        .limit(200)   # sanity cap
+        .limit(500)   # wider cap now that global pool is shared across users
         .execute()
     )
     return r.data or []
@@ -189,9 +219,10 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
         return []
 
     ids = [s["job_discovery_id"] for s in scores]
+    # Load BOTH per-user discoveries AND global ones (user_id IS NULL)
     discoveries = (
         sb.table("job_discoveries")
-        .select("id,title,company_name,job_url,discovered_at,liveness_status,status")
+        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,user_id")
         .in_("id", ids)
         .gte("discovered_at", since)
         .eq("liveness_status", "active")          # strict: only confirmed-live
