@@ -54,9 +54,15 @@ class NuggetResult:
 async def _embed_query(api_key: str, text: str) -> Optional[list[float]]:
     """Embed query text using Jina AI jina-embeddings-v3.
 
-    Returns the 768-dim vector or None on any failure.
+    Returns the 768-dim vector or None on any failure. Logs the exact reason
+    (empty key / empty text / HTTP error code) so we can debug deployment
+    issues without needing to poke the API by hand.
     """
-    if not api_key or not text.strip():
+    if not api_key:
+        logger.warning("hybrid_retrieval: JINA_API_KEY is empty")
+        return None
+    if not text.strip():
+        logger.warning("hybrid_retrieval: query text is empty (len=%d)", len(text or ""))
         return None
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -70,10 +76,18 @@ async def _embed_query(api_key: str, text: str) -> Optional[list[float]]:
                     "task": "text-matching",
                 },
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                logger.warning(
+                    "hybrid_retrieval: Jina %d — %s (text_len=%d, key_prefix=%s)",
+                    resp.status_code, resp.text[:120], len(text), api_key[:8],
+                )
+                return None
             return resp.json()["data"][0]["embedding"]
+    except httpx.TimeoutException:
+        logger.warning("hybrid_retrieval: Jina timeout after 30s (text_len=%d)", len(text))
+        return None
     except Exception as exc:
-        logger.warning("hybrid_retrieval: query embedding failed — %s", exc)
+        logger.warning("hybrid_retrieval: Jina call failed — %s (text_len=%d)", exc, len(text))
         return None
 
 

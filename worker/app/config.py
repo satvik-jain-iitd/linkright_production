@@ -18,9 +18,15 @@ DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "llama-3.1-8b-instant")
 # Render env may use PLATFORM_GROQ_API_KEY (matches Vercel convention) — check both
 DEFAULT_API_KEY = os.getenv("PLATFORM_GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
 
-# Gemini Flash — used for heavy reasoning phases (Phase 1+2 JD parse, Phase 4a bullets)
-# Falls back to default Groq/user provider if not configured
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Gemini Flash — used for heavy reasoning phases (Phase 1+2 JD parse, Phase 4a bullets).
+# Falls back through rotation keys (_1/_2/_3) when the singular GEMINI_API_KEY is
+# absent, so setting only the numbered rotation keys on Render still works.
+GEMINI_API_KEY = (
+    os.getenv("GEMINI_API_KEY", "")
+    or os.getenv("GEMINI_API_KEY_1", "")
+    or os.getenv("GEMINI_API_KEY_2", "")
+    or os.getenv("GEMINI_API_KEY_3", "")
+)
 GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash")
 
 # Oracle ARM — local LLM endpoint for Phase 5 width rewriting
