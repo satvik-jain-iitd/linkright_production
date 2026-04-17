@@ -167,7 +167,13 @@ async def score_fresh_discoveries_for_user(sb, user_id: str) -> int:
 
 
 def _load_all_scored(sb, user_id: str) -> list[dict]:
-    """Join job_discoveries + job_scores for ranking input."""
+    """Join job_discoveries + job_scores for ranking input.
+
+    Critical filter: ONLY 'active' liveness (not 'unknown') can surface in
+    top-20. A discovery marked 'unknown' either hasn't been liveness-checked
+    yet or had a transient error — both cases: don't show to user until a
+    future pass confirms it's live.
+    """
     since = (datetime.now(timezone.utc) - timedelta(days=RECENCY_WINDOW_DAYS)).isoformat()
     scores = (
         sb.table("job_scores")
@@ -185,7 +191,7 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
         .select("id,title,company_name,job_url,discovered_at,liveness_status,status")
         .in_("id", ids)
         .gte("discovered_at", since)
-        .in_("liveness_status", ["active", "unknown"])
+        .eq("liveness_status", "active")          # strict: only confirmed-live
         .in_("status", ["new", "saved"])
         .execute()
     ).data or []
@@ -372,7 +378,7 @@ def notify_new_top_matches(sb, user_id: str, new_rows: list[dict], previous_ids:
 # ────────────────────────────────────────────────────────────────────────────
 
 async def recompute_top_20_for_user(sb, user_id: str) -> dict[str, Any]:
-    """Full per-user recompute: score → rank → queue → notify. Idempotent."""
+    """Full per-user recompute: liveness → score → rank → queue → notify. Idempotent."""
     if not _user_has_watchlist(sb, user_id):
         return {"user_id": user_id, "skipped": "no_active_watchlist"}
 
@@ -386,6 +392,14 @@ async def recompute_top_20_for_user(sb, user_id: str) -> dict[str, Any]:
     ).data or []
     previous_ids = {p["job_discovery_id"] for p in previous}
 
+    # Step 1: liveness check — mark expired URLs so they're filtered out before scoring
+    liveness = {}
+    try:
+        from .liveness import check_discoveries_liveness
+        liveness = await check_discoveries_liveness(sb, user_id, batch_size=50)
+    except Exception as exc:
+        logger.warning("recommender: liveness check failed for user=%s: %s", user_id, exc)
+
     scored_n = await score_fresh_discoveries_for_user(sb, user_id)
     ranked = compute_and_store_top_20(sb, user_id)
     queued = queue_resumes_for_top_20(sb, user_id)
@@ -393,6 +407,7 @@ async def recompute_top_20_for_user(sb, user_id: str) -> dict[str, Any]:
 
     summary = {
         "user_id": user_id,
+        "liveness": liveness,
         "scored": scored_n,
         "ranked": len(ranked),
         "queued": queued,
