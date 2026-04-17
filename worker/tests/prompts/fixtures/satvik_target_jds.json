@@ -1,0 +1,80 @@
+[
+  {
+    "id": "google_pm_ai_gaming",
+    "title": "Product Manager, AI Gaming, Google Play",
+    "company": "Google",
+    "keywords": [
+      "product management",
+      "gaming",
+      "AI",
+      "consumer products",
+      "platform strategy",
+      "mobile games",
+      "cross-functional leadership",
+      "growth metrics",
+      "user research",
+      "Google Play"
+    ],
+    "requirements": [
+      "5+ years of product management experience with consumer-facing products",
+      "Experience shipping AI or machine learning features at scale",
+      "Track record in gaming, entertainment, or media categories",
+      "Strong analytical skills — SQL, experimentation, metrics",
+      "Cross-functional leadership across engineering, design, and research",
+      "Excellent written and verbal communication"
+    ],
+    "notes": "Real JD from LinkedIn source. Satvik applied."
+  },
+  {
+    "id": "credo_ai_enterprise",
+    "title": "Product Manager, Enterprise Platform",
+    "company": "Credo AI",
+    "keywords": [
+      "enterprise platform",
+      "SSO",
+      "SCIM provisioning",
+      "RBAC",
+      "multi-tenancy",
+      "AI governance",
+      "compliance",
+      "B2B SaaS",
+      "platform infrastructure",
+      "audit logs"
+    ],
+    "requirements": [
+      "Experience building B2B SaaS platform infrastructure",
+      "Familiarity with enterprise identity — SSO, SCIM, RBAC",
+      "Multi-tenant architecture and data isolation knowledge",
+      "Has shipped admin/IT tooling (audit logs, permissions, reports)",
+      "Collaborates across engineering, design, security",
+      "AI governance, risk, or compliance domain exposure"
+    ],
+    "notes": "Real JD from testing/jd.md. Tests non-gaming, non-consumer scope — stress-tests retrieval breadth."
+  },
+  {
+    "id": "generic_senior_pm",
+    "title": "Senior Product Manager",
+    "company": "Tech Startup",
+    "keywords": [
+      "product strategy",
+      "roadmap",
+      "cross-functional",
+      "data-driven",
+      "user research",
+      "metrics",
+      "stakeholder management",
+      "execution",
+      "agile",
+      "growth"
+    ],
+    "requirements": [
+      "4-6 years product management experience",
+      "Owns product strategy and roadmap end-to-end",
+      "Strong analytical and data-driven decision-making",
+      "Customer discovery and user research experience",
+      "Worked with engineering and design in agile environment",
+      "Has scaled a product or feature from 0 to 1"
+    ],
+    "notes": "Generic baseline. Retrieval should return broadly relevant nuggets for this."
+  }
+]

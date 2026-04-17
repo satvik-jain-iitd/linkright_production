@@ -85,3 +85,8 @@ Projects/
 playwright_automation/
 .coverage
 .vercel
+
+# Test prompt harness — local-only env and reports
+worker/tests/prompts/.env.local
+worker/tests/prompts/reports/
+worker/tests/prompts/fixtures/satvik_career_text.txt

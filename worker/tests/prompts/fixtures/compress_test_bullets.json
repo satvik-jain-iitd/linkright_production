@@ -1,0 +1,38 @@
+[
+  {
+    "id": "amex_speed_to_market",
+    "bullet_html": "<b>Reduced speed-to-market by 70%</b>, from 10 days to 3 days, by leading an 18-member scrum team across 10 consecutive zero-spillover PIs at American Express, delivering 60+ features without any direct supervision or management oversight.",
+    "current_chars": 238,
+    "verbose_context": "At American Express (2024-2025), Satvik led an 18-member scrum team (12 Rule Configuration + 6 Rule Execution) across 10 sprints without any manager or direct supervision. Delivered 4 consecutive zero-spillover PIs, 60+ features. Reduced speed-to-market from 10 days to 3 days (~70% reduction). Operated as Senior Associate Product Manager despite only 3 years of experience."
+  },
+  {
+    "id": "amex_ai_adoption",
+    "bullet_html": "<b>Achieved 80% AI-assisted story drafting adoption</b>, measured by sprint-planning user stories drafted via AI tools, by driving ChatGPT Enterprise rollout across the team and demoing Shipquick to VPs.",
+    "current_chars": 200,
+    "verbose_context": "At American Express (2025), Satvik drove ChatGPT Enterprise adoption within his team, achieving 80% AI-assisted story drafting for sprint planning and backlog management. Also built Shipquick (agentic AI document builder) and demoed it to VPs, which led to a stretch role on the Negative News and Adverse Media team."
+  },
+  {
+    "id": "sprinklr_use_case_hub",
+    "bullet_html": "<b>Grew Use Case Hub adoption from 35% to 85%</b> across 1,500+ SME SaaS clients at Sprinklr, by prioritizing 10 use cases across 3 MVPs using product adoption data and building a 'Listen, Learn, Act' framework as core architecture.",
+    "current_chars": 231,
+    "verbose_context": "At Sprinklr (2024) as Senior Product Analyst, Satvik grew Use Case Hub adoption from 35% to 85% across 1,500+ SME SaaS clients (<$1M spend). Prioritized 10 use cases across 3 MVPs using product adoption data. Built 'Listen, Learn, and Act' framework as core architecture. Eliminated 7-day manual configuration effort."
+  },
+  {
+    "id": "sprinklr_walmart",
+    "bullet_html": "<b>Delivered $1.2M TCV pipeline contribution</b> from a $9M+ Q4 FY24 Walmart Spark Driver Support engagement, by analyzing 100K+ contact center calls with unsupervised ML clustering and designing a custom L1/L2/L3 issue taxonomy.",
+    "current_chars": 222,
+    "verbose_context": "At Sprinklr (2024) as Senior Implementation Consultant, Satvik built a GenAI root-cause product for Walmart Spark Driver Support. Analyzed 100K+ contact center calls using unsupervised ML clustering and correlation detection. Designed custom L1/L2/L3 issue taxonomy. Built unified data architecture. Contributed $1.2M TCV to the $9M+ Q4 FY24 pipeline."
+  },
+  {
+    "id": "amex_brd_decomp",
+    "bullet_html": "<b>Decomposed 21 BRD requirements into 6 core capabilities</b> (Scoring Engine Configuration, Asset Manager, Sandbox Environment, Reporting, Audit Trail, Rule Execution), designing a drag-and-drop rule builder that unified CRR framework architecture at American Express.",
+    "current_chars": 264,
+    "verbose_context": "At American Express (Nov-Dec 2024), Satvik decomposed 21 BRD requirements (12.1-12.21 covering CRR Framework, Configurability, Audit Trail, Sandbox, AI/ML Guidelines, etc.) into 6 core capabilities: Scoring Engine Configuration (drag-and-drop rule builder), Asset Manager, Sandbox Environment, Reporting, Audit Trail, Rule Execution."
+  },
+  {
+    "id": "amex_ux_research",
+    "bullet_html": "<b>Drove 20+ UX research sessions with compliance analysts</b> across 6 regions, designing 3 new capability UIs end-to-end — Asset Manager, Advanced Rule Configurations, and Sandbox Versioning.",
+    "current_chars": 192,
+    "verbose_context": "At American Express (2024-2025), Satvik drove 20+ UX research sessions with compliance analysts and managers across 6 regions. Designed 3 new capability UIs end-to-end: Asset Manager (centralized reference list management), Advanced Rule Configurations (drag-and-drop rule builder), and Sandbox Versioning."
+  }
+]
