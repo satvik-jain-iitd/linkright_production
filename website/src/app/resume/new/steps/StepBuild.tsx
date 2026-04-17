@@ -35,12 +35,44 @@ const PHASE_LABELS: Record<string, string> = {
   done: "Done!",
 };
 
+function extractBullets(htmlStr: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const doc = new DOMParser().parseFromString(htmlStr, "text/html");
+    return Array.from(doc.querySelectorAll("li"))
+      .map((li) => li.textContent?.trim() || "")
+      .filter((b) => b.length > 8);
+  } catch {
+    return [];
+  }
+}
+
+function BulletItem({ text }: { text: string }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(true), 40);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div
+      className={`flex gap-2 text-sm text-foreground transition-all duration-300 ${
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+      }`}
+    >
+      <span className="mt-0.5 shrink-0 text-accent">•</span>
+      <span>{text}</span>
+    </div>
+  );
+}
+
 export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: Props) {
   const [phase, setPhase] = useState("queued");
   const [progress, setProgress] = useState(0);
   const [draftHtml, setDraftHtml] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [streamedBullets, setStreamedBullets] = useState<string[]>([]);
+  const seenBullets = useRef<Set<string>>(new Set());
   const started = useRef(false);
   const subStepsRef = useRef<SubStep[]>([]);
 
@@ -139,6 +171,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
             model_id: data.model_id,
             api_key: data.api_key,
             qa_answers: data.qa_answers || [],
+            section_order: data.section_order || [],
             override_theme_colors: data.brand_colors || null,
             target_role: data.target_role || "", // [PSA5-ayd.1.1.2]
             target_company: data.target_company || "", // [PSA5-ayd.1.1.2]
@@ -231,6 +264,19 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
     return () => { cleanupFn?.(); };
   }, []);
 
+  // Stream new bullets in with stagger when draftHtml updates
+  useEffect(() => {
+    if (!draftHtml) return;
+    const bullets = extractBullets(draftHtml);
+    const newOnes = bullets.filter((b) => !seenBullets.current.has(b));
+    newOnes.forEach((bullet, i) => {
+      seenBullets.current.add(bullet);
+      setTimeout(() => {
+        setStreamedBullets((prev) => [...prev, bullet]);
+      }, i * 120);
+    });
+  }, [draftHtml]);
+
   const phaseLabel = PHASE_LABELS[phase] || phase;
 
   const isAlreadyGenerating = error?.toLowerCase().includes("already have a resume");
@@ -305,13 +351,24 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
         />
       </div>
 
-      {/* Resume preview iframe */}
-      {draftHtml ? (
+      {/* Preview: streaming bullets during build, full iframe when done */}
+      {phase === "done" && draftHtml ? (
         <iframe
           srcDoc={draftHtml}
           className="h-[700px] w-full rounded-lg border border-border bg-white shadow-sm"
           title="Resume Preview"
         />
+      ) : streamedBullets.length > 0 ? (
+        <div className="h-[700px] overflow-y-auto rounded-lg border border-border bg-surface p-6">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted">
+            Writing bullets live...
+          </p>
+          <div className="space-y-2.5">
+            {streamedBullets.map((bullet, i) => (
+              <BulletItem key={i} text={bullet} />
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="flex h-[700px] items-center justify-center rounded-lg border border-border bg-surface">
           <div className="text-center">

@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   // [BYOK-REMOVED] api_key destructured but no longer required from client
-  const { jd_text, career_text, model_provider, model_id, /* api_key, */ template_id, qa_answers, override_theme_colors, target_role, target_company } = body; // [PSA5-ayd.1.1.3]
+  const { jd_text, career_text, model_provider, model_id, /* api_key, */ template_id, qa_answers, override_theme_colors, target_role, target_company, section_order } = body; // [PSA5-ayd.1.1.3]
 
   // [BYOK-REMOVED] api_key removed from required fields — server provides the key
   // if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
@@ -213,6 +213,7 @@ export async function POST(request: Request) {
         api_key: resolved_api_key,
         template_id: template_id || "cv-a4-standard",
         qa_answers: qa_answers || [],
+        section_order: section_order || [],
         // Sanitize: worker Pydantic model requires str for all 4 color fields — no nulls allowed
         override_theme_colors: override_theme_colors ? {
           brand_primary: override_theme_colors.brand_primary,

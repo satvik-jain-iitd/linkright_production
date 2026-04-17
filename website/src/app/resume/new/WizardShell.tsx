@@ -11,6 +11,7 @@ import { StepJobDetails } from "./steps/StepJobDetails";
 // import { StepBrandColors } from "./steps/StepBrandColors";
 // import { StepEnrich } from "./steps/StepEnrich";
 import { StepCustomize } from "./steps/StepCustomize";
+import { StepLayout } from "./steps/StepLayout";
 import { StepBuild } from "./steps/StepBuild";
 import { StepReview } from "./steps/StepReview";
 import type { JDAnalysisResult } from "./steps/StepJobDetails";
@@ -32,6 +33,7 @@ export interface WizardData {
     brand_quaternary: string | null;
   } | null;
   jd_analysis: JDAnalysisResult | null;
+  section_order?: string[];
 }
 
 interface SubStep {
@@ -42,6 +44,7 @@ interface SubStep {
 const STEP_LABELS = [
   "Job Details",     // [WIZARD-STREAMLINE] includes JD Analysis inline
   "Customize",       // [WIZARD-STREAMLINE] Brand Colors + Enrich merged
+  "Layout",
   "Build",
   "Review",
 ];
@@ -80,15 +83,15 @@ function loadSaved(): { step: number; data: WizardData } | null {
 export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jobId?: string; retryJdText?: string }) { // [PSA5-ayd.2.1.3]
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
-  // [WIZARD-STREAMLINE] 4 steps: JobDetails=0, Customize=1, Build=2, Review=3
-  // If jobId param present, go straight to Review (step 3)
+  // 5 steps: JobDetails=0, Customize=1, Layout=2, Build=3, Review=4
+  // If jobId param present, go straight to Review (step 4)
   // If saved job_id and was on Build/Review, resume there
   const initialStep = jobId
-    ? 3
+    ? 4
     : saved?.data?.job_id
-      ? saved.step >= 2
+      ? saved.step >= 3
         ? saved.step
-        : 2
+        : 3
       : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
@@ -105,10 +108,9 @@ export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jo
   useEffect(() => {
     if (!jobId) return;
     // Already loaded this job in session — just jump to review
-    // [WIZARD-STREAMLINE] Review is now step 3 (4 steps total)
     const current = loadSaved();
     if (current?.data?.job_id === jobId) {
-      setStep(3);
+      setStep(4);
       return;
     }
     async function restoreJob() {
@@ -124,7 +126,7 @@ export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jo
         model_id: job.model_id || prev.model_id,
         target_company: job.target_company || "",
       }));
-      setStep(3);
+      setStep(4);
     }
     restoreJob();
   }, [jobId]);
@@ -203,14 +205,13 @@ export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jo
   };
 
   // Build step definitions for VerticalStepper
-  // [WIZARD-STREAMLINE] Build is step 2 in 4-step wizard
   const stepDefs = STEP_LABELS.map((label, i) => ({
     label,
-    subSteps: i === 2 ? buildSubSteps : undefined,
+    subSteps: i === 3 ? buildSubSteps : undefined,
   }));
 
-  // [WIZARD-STREAMLINE] Review is step 3 (last step) — gets full-width layout
-  const isReview = step === 3;
+  // Review is step 4 (last step) — gets full-width layout
+  const isReview = step === 4;
 
   return (
     <>
@@ -249,8 +250,10 @@ export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jo
             {step === 1 && (
               <StepCustomize data={data} update={update} next={next} back={back} />
             )}
-            {/* [WIZARD-STREAMLINE] StepBrandColors + StepEnrich replaced by StepCustomize above */}
             {step === 2 && (
+              <StepLayout data={data} update={update} next={next} back={back} />
+            )}
+            {step === 3 && (
               <StepBuild
                 key={retryKey}
                 data={data}
@@ -261,7 +264,7 @@ export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jo
                 onSubSteps={setBuildSubSteps}
               />
             )}
-            {step === 3 && <StepReview data={data} onNewResume={reset} />}
+            {step === 4 && <StepReview data={data} onNewResume={reset} />}
           </div>
         </main>
       </div>

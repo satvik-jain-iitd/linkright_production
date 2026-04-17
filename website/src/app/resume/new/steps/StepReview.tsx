@@ -109,6 +109,14 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
   // [PSA5-8y3.2.2.1] Download dropdown state
   const [downloadOpen, setDownloadOpen] = useState(false);
 
+  // GitHub Pages hosting state
+  const [githubOpen, setGithubOpen] = useState(false);
+  const [githubPat, setGithubPat] = useState("");
+  const [githubRepoName, setGithubRepoName] = useState("");
+  const [githubLoading, setGithubLoading] = useState(false);
+  const [githubResult, setGithubResult] = useState<{ repo_url: string; page_url: string | null; warning?: string } | null>(null);
+  const [githubError, setGithubError] = useState<string | null>(null);
+
   // Template lock state
   const [lockedSections, setLockedSections] = useState<string[]>([]);
   const [savedTemplate, setSavedTemplate] = useState(false);
@@ -330,6 +338,34 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
     }
   };
 
+  const hostOnGithub = async () => {
+    if (!html || !githubPat.trim()) return;
+    setGithubLoading(true);
+    setGithubError(null);
+    try {
+      const resp = await fetch("/api/resume/github-host", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          html,
+          pat: githubPat.trim(),
+          repo_name: githubRepoName.trim() || undefined,
+        }),
+      });
+      const result = await resp.json();
+      if (!resp.ok) {
+        setGithubError(result.error || "Failed to host on GitHub");
+      } else {
+        setGithubResult(result);
+        setGithubPat(""); // clear PAT from memory
+      }
+    } catch {
+      setGithubError("Network error — please try again");
+    } finally {
+      setGithubLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -367,6 +403,12 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
             + New Resume
           </button>
           {/* [PSA5-8y3.2.2.1] old Download HTML + Print/Save PDF buttons replaced by dropdown below */}
+          <button
+            onClick={() => { setGithubOpen(true); setGithubResult(null); setGithubError(null); }}
+            className="rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:text-foreground"
+          >
+            Host on GitHub
+          </button>
           {/* [PSA5-8y3.2.2.1] Single download dropdown */}
           <div className="relative">
             <button
@@ -733,6 +775,140 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
           </div>
         </div>
       </div>
+
+      {/* GitHub Pages hosting modal */}
+      {githubOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">Host on GitHub Pages</h3>
+                <p className="mt-1 text-sm text-muted">
+                  Publish your resume as a live webpage for free.
+                </p>
+              </div>
+              <button
+                onClick={() => setGithubOpen(false)}
+                className="ml-4 text-muted hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+
+            {githubResult ? (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                  <p className="text-sm font-semibold text-green-700">Published!</p>
+                  {githubResult.warning && (
+                    <p className="mt-1 text-xs text-amber-700">{githubResult.warning}</p>
+                  )}
+                  {githubResult.page_url && (
+                    <div className="mt-3">
+                      <p className="text-xs text-muted">Your resume URL (live in ~1 min):</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <code className="flex-1 truncate rounded bg-white px-2 py-1 text-xs text-green-800">
+                          {githubResult.page_url}
+                        </code>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(githubResult.page_url!)}
+                          className="shrink-0 rounded-lg bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <a
+                    href={githubResult.repo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block text-xs text-green-700 underline"
+                  >
+                    View repository →
+                  </a>
+                </div>
+                <button
+                  onClick={() => setGithubOpen(false)}
+                  className="w-full rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white hover:bg-cta-hover"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-muted mb-1">
+                    GitHub Personal Access Token
+                  </label>
+                  <input
+                    type="password"
+                    value={githubPat}
+                    onChange={(e) => setGithubPat(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxx"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:border-accent/50 focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-muted">
+                    Need one?{" "}
+                    <a
+                      href="https://github.com/settings/tokens/new?scopes=repo&description=LinkRight+Resume+Hosting"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent underline"
+                    >
+                      Create PAT
+                    </a>{" "}
+                    with <code className="rounded bg-surface-hover px-1">repo</code> scope.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted mb-1">
+                    Repo name (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={githubRepoName}
+                    onChange={(e) => setGithubRepoName(e.target.value)}
+                    placeholder="my-resume"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:border-accent/50 focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-muted">
+                    Leave blank to auto-generate a name.
+                  </p>
+                </div>
+
+                {githubError && (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {githubError}
+                  </p>
+                )}
+
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => setGithubOpen(false)}
+                    className="flex-1 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium text-muted hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={hostOnGithub}
+                    disabled={githubLoading || !githubPat.trim()}
+                    className="flex-1 rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {githubLoading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Publishing...
+                      </span>
+                    ) : (
+                      "Publish"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Save as Template */}
       <div className="rounded-xl border border-border bg-surface p-5">
