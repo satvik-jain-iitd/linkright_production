@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import httpx
 
 from .base import LLMProvider, LLMResponse
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.groq.com/openai/v1"
 
@@ -22,30 +27,45 @@ class GroqProvider(LLMProvider):
 
     async def complete(self, system: str, user: str, temperature: float = 0.3) -> LLMResponse:
         max_tokens = self._MAX_TOKENS_BY_MODEL.get(self.model_id, self._DEFAULT_MAX_TOKENS)
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                f"{BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model_id,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            choice = data["choices"][0]["message"]["content"]
-            usage = data.get("usage", {})
-            return LLMResponse(
-                text=choice,
-                input_tokens=usage.get("prompt_tokens", 0),
-                output_tokens=usage.get("completion_tokens", 0),
-                model=data.get("model", self.model_id),
-            )
+        for attempt in range(4):
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(
+                    f"{BASE_URL}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json={
+                        "model": self.model_id,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user},
+                        ],
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                    },
+                )
+                if resp.status_code == 413:
+                    # TPM limit exhausted — wait for next minute window and retry
+                    wait = 65 * (attempt + 1)
+                    logger.warning(
+                        "Groq 413 TPM limit on %s — waiting %ds (attempt %d/4)",
+                        self.model_id, wait, attempt + 1,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+                choice = data["choices"][0]["message"]["content"]
+                usage = data.get("usage", {})
+                return LLMResponse(
+                    text=choice,
+                    input_tokens=usage.get("prompt_tokens", 0),
+                    output_tokens=usage.get("completion_tokens", 0),
+                    model=data.get("model", self.model_id),
+                )
+        raise httpx.HTTPStatusError(
+            "Groq 413 TPM limit persisted after 4 retries",
+            request=resp.request,
+            response=resp,
+        )
 
     async def validate_key(self) -> bool:
         try:
