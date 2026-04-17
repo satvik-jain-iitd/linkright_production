@@ -42,12 +42,12 @@ class GroqProvider(LLMProvider):
                         "max_tokens": max_tokens,
                     },
                 )
-                if resp.status_code == 413:
-                    # TPM limit exhausted — wait for next minute window and retry
+                if resp.status_code in (413, 429):
+                    # 413 = TPM exhausted, 429 = RPM exhausted — both reset after ~60s
                     wait = 65 * (attempt + 1)
                     logger.warning(
-                        "Groq 413 TPM limit on %s — waiting %ds (attempt %d/4)",
-                        self.model_id, wait, attempt + 1,
+                        "Groq %d rate limit on %s — waiting %ds (attempt %d/4)",
+                        resp.status_code, self.model_id, wait, attempt + 1,
                     )
                     await asyncio.sleep(wait)
                     continue
@@ -62,7 +62,7 @@ class GroqProvider(LLMProvider):
                     model=data.get("model", self.model_id),
                 )
         raise httpx.HTTPStatusError(
-            "Groq 413 TPM limit persisted after 4 retries",
+            f"Groq rate limit persisted after 4 retries on {self.model_id}",
             request=resp.request,
             response=resp,
         )
