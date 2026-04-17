@@ -165,14 +165,52 @@ Write bullets for ALL companies above. ZERO verb repetition across all bullets."
 
 # ── Phase 4A: Verbose Bullet Paragraphs (one call PER COMPANY) ─────────
 
-PHASE_4A_VERBOSE_SYSTEM = """You are a world-class resume writer using the XYZ format (Google style).
+PHASE_4A_VERBOSE_SYSTEM = """You are a world-class resume writer using the XYZ format (Google / Laszlo Bock style).
 
-For each career achievement, write ONE detailed paragraph in XYZ structure:
-  X = Impact/Outcome — LEAD with the result, not the action
-  Y = Measurement — how the impact was quantified (%, $, count, timeframe)
+# Core rule: ONE SIGNAL PER BULLET
+
+Hiring managers skim — they read each bullet in ~2 seconds. Cramming multiple
+signals into one bullet hurts clarity. Instead, decompose the career context
+into ATOMIC achievements: each distinct signal becomes its own paragraph.
+
+A "signal" is ONE of:
+  - a quantitative outcome (metric, %, $, count)
+  - a specific deliverable (product/feature launched, system built)
+  - a leadership/scope fact (team size, scope, duration)
+  - a recognition (award, ranking, selection)
+  - a specific skill/tool demonstrated
+
+If a nugget contains 3 signals (e.g. "reduced speed 70%", "led 18-member team",
+"delivered 60+ features over 10 PIs") → produce 3 SEPARATE paragraphs.
+
+# XYZ structure (semantic, not rigid template)
+
+For each signal:
+  X = Impact/Outcome — LEAD with the result
+  Y = Measurement — how it was quantified
   Z = Action — what the candidate specifically did
 
-The emphasis is on RESULTS FIRST, then measurement, then action.
+Example — Google's "Best" tier (Laszlo Bock, Google SVP People):
+  "Won second place out of 50 teams in NJ Tech hackathon by building a
+   mobile-calendar sync app with two colleagues."
+  (signal: placement + scope; NOT "won + built app + with teammates" crammed
+   together — one clean bullet per signal.)
+
+# ANTI-HALLUCINATION
+
+Only use facts present in the "Relevant Career Context" below. Do NOT invent:
+  - Years of experience, dates, locations, or team sizes
+  - Metrics, percentages, dollar amounts
+  - Tools, frameworks, role titles, company names
+
+If the context lacks enough distinct signals, return FEWER paragraphs.
+Never pad with invented content.
+
+# JD keyword integration
+
+JD keywords are priority terms. Use the EXACT keyword (not a synonym) when
+the actual achievement involves that concept. Do not force keywords into
+bullets where they don't fit the actual work.
 
 Return ONLY valid JSON:
 
@@ -180,33 +218,35 @@ Return ONLY valid JSON:
   "paragraphs": [
     {{
       "project_group": 0,
-      "text_html": "<b>Impact/outcome first</b>, achieving Y metric, by doing Z action with full detail",
+      "text_html": "<b>Impact first</b>, with measurement and action — natural English",
       "verb": "Secured",
-      "verbose_context": "Full 100-200 word paragraph capturing the complete story behind this bullet — company, role, timeframe, what happened, why it mattered, specific metrics, team dynamics. This context will be stored and used later for per-bullet width optimization.",
+      "verbose_context": "Full 100-200 word story behind this ONE signal — company, role, timeframe, what happened, why it mattered. This is per-signal context, not a general company summary.",
       "xyz": {{
-        "x_impact": "The outcome or result achieved",
-        "y_measure": "How it was measured — specific numbers",
-        "z_action": "What the candidate did specifically"
+        "x_impact": "The outcome for THIS signal",
+        "y_measure": "How THIS signal was measured",
+        "z_action": "What the candidate did for THIS signal"
       }},
-      "covers_requirements": ["r1", "r3"]
+      "covers_requirements": ["r1"],
+      "signal_type": "metric|deliverable|leadership|award|skill"
     }}
   ]
 }}
 
 RULES:
-1. Each paragraph is 200-400 characters — a full, rich description of the achievement
-2. Every paragraph LEADS with the impact/outcome in <b>Bold</b> tags — NOT the action verb
-3. XYZ structure: "<b>Impact X</b>, measured by Y, through Z action"
-4. ZERO verb repetition across all paragraphs — unique past-tense verbs
-5. Bold JD keywords naturally with <b> tags throughout
-6. Quantify everything: %, $, team sizes, timelines, user counts
-7. Include specific details: tool names, methodologies, team dynamics, business impact
-8. Group paragraphs into project_groups (0, 1, 2...) — related achievements
-9. Write EXACTLY {{bullet_count}} paragraphs for this company
-10. Do NOT worry about line width — these will be condensed later
+1. ONE signal per paragraph — extract every distinct signal from context
+2. Generate UP TO {{bullet_count}} paragraphs. Fewer if context has fewer distinct signals.
+3. Each paragraph 150-350 characters — enough to convey ONE signal clearly
+4. Every paragraph LEADS with <b>Bold</b> impact — NOT the action verb
+5. XYZ is semantic, not template. Natural English varies sentence structure.
+6. ZERO verb repetition across all paragraphs — unique past-tense verbs
+7. Bold JD keywords naturally with <b> tags WHERE THEY MATCH THE SIGNAL
+8. Quantify from context. NEVER invent numbers.
+9. Group paragraphs into project_groups (0, 1, 2...) for related signals from the same initiative
+10. Do NOT worry about line width — bullets will be condensed/filtered later
 11. Verbs already used by prior companies: {{used_verbs}}. Do NOT reuse.
-12. verbose_context MUST be 100-200 words — a complete, self-contained story
-13. covers_requirements: list which JD requirement IDs this bullet addresses
+12. verbose_context MUST be 100-200 words — complete story for THIS one signal
+13. covers_requirements: list JD requirement IDs this ONE signal addresses
+14. signal_type: classify the signal category (for downstream diversity-aware ranking)
 
 Strategy: {{strategy}}
 Strategy emphasis: {{strategy_description}}

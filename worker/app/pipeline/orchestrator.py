@@ -1181,10 +1181,18 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
     all_verbose = []
     used_verbs_so_far = []
 
+    # PER-COMPANY GENERATION CAP — we now extract ALL distinct signals from
+    # context (1 signal = 1 paragraph), then globally rank and trim at Phase 4b
+    # to the final bullet_budget. So Phase 4a's cap is an UPPER BOUND, not an
+    # exact target. 15 per company is generous but not infinite.
+    _SIGNAL_EXTRACTION_CAP = 15
+
     for idx, ck in enumerate(company_keys):
         co = companies[idx] if idx < len(companies) else {}
         co_name = co.get("name", f"Company {idx + 1}")
-        num_bullets = budget.get(ck, 4)
+        # Let the model generate up to the cap; budget value is IGNORED here
+        # because it was computed for the old fixed-count mode.
+        num_bullets = _SIGNAL_EXTRACTION_CAP
 
         await _progress(ctx, sb, 4, f"Writing paragraphs — {co_name}", 40 + idx * 5)
 
@@ -1341,7 +1349,16 @@ def _update_draft_with_verbose(ctx: PipelineContext, verbose_bullets: list, comp
 # ── Phase 4B: Rank Verbose Bullets by BRS (no LLM) ──────────────────────
 
 async def phase_4b_ranking(ctx: PipelineContext, sb: Client):
-    """Score and rank verbose bullets by BRS. Trim to budget."""
+    """Score verbose bullets by BRS, rank GLOBALLY across companies, then trim
+    to fit on one page.
+
+    Pipeline shift (2026-04-17): Phase 4a now extracts 1-signal-per-bullet up
+    to 15 per company. Phase 4b owns the 'which bullets make the cut' decision:
+    global ranking by BRS, then trim to the total-bullet budget determined by
+    Phase 1+2's per-company budget numbers (summed across companies, preserving
+    the original page-fit intent). Recency is honoured by keeping companies in
+    reverse-chronological order when scores tie.
+    """
     t0 = time.time()
     await _progress(ctx, sb, 4, "Ranking by relevance", 57)
 
@@ -1364,26 +1381,66 @@ async def phase_4b_ranking(ctx: PipelineContext, sb: Client):
         ))
     )
 
-    # Sort by BRS within each company, keep all (trimming is optional)
     scored = score_result.get("scored_bullets", [])
     brs_map = {s["project_id"]: s["brs"] for s in scored}
-
     for i, b in enumerate(ctx._verbose_bullets):
         b["brs"] = brs_map.get(f"verbose_{i}", 0)
 
-    # Sort within each company by BRS descending
+    # Compute total page-fit budget: sum of per-company budgets from Phase 1+2.
+    # This preserves the original "one page" target that budgets were derived for.
+    budget = ctx._bullet_budget or {}
+    total_budget = sum(
+        v for k, v in budget.items()
+        if k.startswith("company_") and k.endswith("_total") and isinstance(v, (int, float))
+    )
+    if total_budget <= 0:
+        # Defensive default — typical one-page A4 resume holds ~12 bullets
+        total_budget = 12
+
+    # Soft per-company floor to maintain recency narrative: recent companies
+    # should have AT LEAST 2 bullets (unless their pool has fewer). Apply by
+    # pre-selecting the top-2 from each company before global ranking fills the rest.
     from collections import defaultdict
-    by_company = defaultdict(list)
+    by_company: "defaultdict[int, list[dict]]" = defaultdict(list)
     for b in ctx._verbose_bullets:
         by_company[b["company_index"]].append(b)
 
-    ranked = []
-    for idx in sorted(by_company.keys()):
-        company_bullets = sorted(by_company[idx], key=lambda x: x.get("brs", 0), reverse=True)
-        ranked.extend(company_bullets)
+    for idx in by_company:
+        by_company[idx].sort(key=lambda x: x.get("brs", 0), reverse=True)
 
-    ctx._ranked_verbose_bullets = ranked
+    selected: list[dict] = []
+    # Step 1: per-company floor — top-2 from each (or all if <2 available)
+    _PER_COMPANY_FLOOR = 2
+    for idx in sorted(by_company.keys()):
+        floor_slice = by_company[idx][:_PER_COMPANY_FLOOR]
+        selected.extend(floor_slice)
+
+    # Step 2: fill remaining budget globally by BRS, skipping already-selected
+    selected_ids = {id(b) for b in selected}
+    remainder: list[dict] = []
+    for bs in by_company.values():
+        for b in bs:
+            if id(b) not in selected_ids:
+                remainder.append(b)
+    remainder.sort(key=lambda x: x.get("brs", 0), reverse=True)
+
+    remaining = max(0, total_budget - len(selected))
+    selected.extend(remainder[:remaining])
+
+    # Step 3: sort final output by (company_index asc, brs desc) so bullets
+    # appear grouped by company but the best bullets within each are first
+    selected.sort(key=lambda x: (x.get("company_index", 99), -x.get("brs", 0)))
+
+    ctx._ranked_verbose_bullets = selected
+    ctx.stats["phase_4b_generated_total"] = len(ctx._verbose_bullets)
+    ctx.stats["phase_4b_kept"] = len(selected)
+    ctx.stats["phase_4b_budget"] = total_budget
+
     ctx._phase_timings["phase_4b"] = int((time.time() - t0) * 1000)
+    logger.info(
+        "[Phase 4b] Ranked globally — generated=%d kept=%d budget=%d",
+        len(ctx._verbose_bullets), len(selected), total_budget,
+    )
     await _progress(ctx, sb, 4, "Bullets ranked", 58)
 
 
