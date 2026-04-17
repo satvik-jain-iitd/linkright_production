@@ -242,6 +242,54 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
 
 
+def _fill_contact_from_text(contact: dict, career_text: str) -> dict:
+    """Fallback: regex-extract missing contact fields from career_text.
+
+    Upstream parse-resume saves full_name/email/phone/linkedin but the data
+    isn't passed into the worker today (no user_profile table). Until that
+    lands, derive contact info from the career_text itself. Only fills
+    EMPTY fields — won't overwrite anything the LLM already parsed.
+    """
+    import re as _cre
+    contact = dict(contact or {})
+
+    if not contact.get("email"):
+        m = _cre.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", career_text)
+        if m:
+            contact["email"] = m.group(0)
+
+    if not contact.get("phone"):
+        # Any "+optional-country-code digits/spaces/dashes" run with 10-14 total digits.
+        # Reject pure numeric metrics ("$1.2M", "100K") by requiring at least one space,
+        # hyphen, dot, or leading '+' — real phone numbers are formatted.
+        phone_re = _cre.compile(r"(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]){1,3}\d{3,5}")
+        for m in phone_re.finditer(career_text):
+            s = m.group(0).strip()
+            digits = _cre.sub(r"\D", "", s)
+            if 10 <= len(digits) <= 14 and any(c in s for c in "+- ."):
+                contact["phone"] = s
+                break
+
+    if not contact.get("linkedin"):
+        m = _cre.search(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_\-/.%]+", career_text, _cre.IGNORECASE)
+        if m:
+            url = m.group(0)
+            if not url.startswith("http"):
+                url = "https://" + url
+            contact["linkedin"] = url.rstrip("/").rstrip(".,")
+
+    if not contact.get("portfolio"):
+        # Prefer portfolio/personal site mentions explicitly labelled, else skip
+        m = _cre.search(r"(?i)(?:portfolio|website)[:\s]+((?:https?://)?[A-Za-z0-9.\-]+\.[A-Za-z]{2,}[^\s,)]*)", career_text)
+        if m:
+            url = m.group(1)
+            if not url.startswith("http"):
+                url = "https://" + url
+            contact["portfolio"] = url
+
+    return contact
+
+
 def _save_checkpoint(ctx: PipelineContext, sb: Client, phase_name: str, status: str = "completed") -> None:
     """Persist phase checkpoint to resume_jobs.stats after each phase.
 
@@ -914,6 +962,7 @@ async def phase_3_5_stencil_draft(ctx: PipelineContext, sb: Client):
 
     # Assemble stencil HTML
     contact = parsed.get("contact_info", {})
+    contact = _fill_contact_from_text(contact, ctx.career_text or "")
     colors = ctx.theme_colors or {}
     theme = ThemeColors(
         brand_primary=colors.get("brand_primary", "#4285F4"),
@@ -2584,6 +2633,10 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
 
     # Build tool inputs
     contact = parsed.get("contact_info", {})
+    # Regex-fallback for any missing fields (LLM often returns empties when the
+    # career_text layout doesn't look like a resume header). Pulls from the
+    # actual career_text so we never invent contact info.
+    contact = _fill_contact_from_text(contact, ctx.career_text or "")
     colors = ctx.theme_colors or {}
 
     theme = ThemeColors(
