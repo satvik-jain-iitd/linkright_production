@@ -753,12 +753,16 @@ async def phase_2_5_vector_retrieval(ctx: PipelineContext, sb: Client):
             co_name = co.get("name", "") if isinstance(co, dict) else str(co)
             query = f"{co_name} {' '.join(keyword_strs[:5])}"
 
+            # similarity_threshold=0.55: drop vector matches that aren't semantically
+            # close. Anti-hallucination — empty retrieval > fake retrieval. Only
+            # affects vector tier once the match_career_nuggets RPC is in place.
             results, method = await hybrid_retrieve(
                 sb=sb,
                 user_id=ctx.user_id,
                 query=query,
                 company=co_name,
                 limit=8,
+                similarity_threshold=0.55,
             )
             all_results.extend(results)
             logger.info(f"[Phase 2.5] {co_name}: {len(results)} nuggets via {method}")
