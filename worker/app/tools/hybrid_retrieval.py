@@ -133,7 +133,23 @@ def _bm25_query(sb, user_id: str, query: str, company: Optional[str], limit: int
     q = sb.table("career_nuggets").select("*").eq("user_id", user_id)
     if company:
         q = q.eq("company", company)
-    result = q.text_search("answer", query).limit(limit).execute()
+    # NOTE: .text_search() must be the LAST chained call before .execute() in
+    # supabase-py >= 2.10 — it returns SyncQueryRequestBuilder which has no
+    # .limit(). Apply .limit() BEFORE .text_search() instead.
+    #
+    # Transform space-separated keywords into an explicit OR tsquery, then
+    # use default (to_tsquery) mode — plain/phrase/web_search all treat
+    # spaces as AND which is too restrictive for JD keyword queries.
+    # Example: "product management gaming" → "'product' | 'management' | 'gaming'"
+    tokens = [t.strip().replace("'", "''") for t in query.split() if t.strip()]
+    if not tokens:
+        return []
+    tsq = " | ".join(f"'{t}'" for t in tokens)
+    result = (
+        q.limit(limit)
+        .text_search("answer", tsq)
+        .execute()
+    )
     return result.data or []
 
 
@@ -217,12 +233,18 @@ def _fts_fallback(sb, user_id: str, query: str, limit: int) -> list[dict]:
     """Legacy fallback: FTS on the old career_chunks table, returning rows
     normalised to a career_nuggets-like shape so downstream code is uniform.
     """
+    # .limit() must come BEFORE .text_search() (see note in _bm25_query).
+    # Same OR-tokenization as _bm25_query to avoid AND-of-all-terms over-restriction.
+    tokens = [t.strip().replace("'", "''") for t in query.split() if t.strip()]
+    if not tokens:
+        return []
+    tsq = " | ".join(f"'{t}'" for t in tokens)
     result = (
         sb.table("career_chunks")
         .select("*")
         .eq("user_id", user_id)
-        .text_search("search_vector", query)
         .limit(limit)
+        .text_search("search_vector", tsq)
         .execute()
     )
     rows = result.data or []
