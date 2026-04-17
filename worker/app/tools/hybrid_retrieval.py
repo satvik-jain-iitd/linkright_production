@@ -160,10 +160,11 @@ async def _vector_query(
     company: Optional[str],
     limit: int,
     jina_api_key: str,
+    similarity_threshold: float = 0.0,
 ) -> list[dict]:
     """Vector similarity search via Supabase RPC match_career_nuggets.
 
-    Embeds the query with Gemini first. If embedding fails or RPC is
+    Embeds the query with Jina first. If embedding fails or RPC is
     unavailable, raises so the caller can fall back to BM25-only.
 
     Expected RPC signature (SQL function must exist in Supabase):
@@ -172,7 +173,12 @@ async def _vector_query(
             match_user_id   uuid,
             match_company   text  DEFAULT NULL,
             match_count     int   DEFAULT 20
-        ) returns setof career_nuggets
+        ) returns rows including a `similarity` column (1 - cosine distance)
+
+    Args:
+        similarity_threshold: drop rows with similarity below this (0.0 = keep all).
+            Anti-hallucination: if JD has no semantically-close nugget, return empty
+            so Phase 4a skips the bullet instead of writing a fabricated one.
     """
     query_embedding = await _embed_query(jina_api_key, query)
     if query_embedding is None:
@@ -187,7 +193,10 @@ async def _vector_query(
         params["match_company"] = company
 
     result = sb.rpc("match_career_nuggets", params).execute()
-    return result.data or []
+    rows = result.data or []
+    if similarity_threshold > 0.0:
+        rows = [r for r in rows if r.get("similarity", 0.0) >= similarity_threshold]
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -201,10 +210,14 @@ async def _hybrid_search(
     company: Optional[str],
     limit: int,
     jina_api_key: str,
+    similarity_threshold: float = 0.0,
 ) -> list[dict]:
     """Run BM25 + vector for a single (user_id, company, query) scope and fuse."""
     bm25 = _bm25_query(sb, user_id, query, company, limit * 2)
-    vector = await _vector_query(sb, user_id, query, company, limit * 2, jina_api_key)
+    vector = await _vector_query(
+        sb, user_id, query, company, limit * 2, jina_api_key,
+        similarity_threshold=similarity_threshold,
+    )
     fused = _fuse_results(bm25, vector)
     _apply_importance_boost(fused)
     return fused
@@ -319,6 +332,7 @@ async def hybrid_retrieve(
     query: str,
     company: Optional[str] = None,
     limit: int = 8,
+    similarity_threshold: float = 0.0,
 ) -> tuple[list[NuggetResult], str]:
     """Retrieve the top-k most relevant career nuggets using hybrid search.
 
@@ -336,6 +350,9 @@ async def hybrid_retrieve(
         query:   Natural-language query derived from JD keywords.
         company: Optional company name to scope the primary search pass.
         limit:   Maximum number of NuggetResult objects to return.
+        similarity_threshold: drop vector results with cosine similarity below this
+            (0.0 disables, sensible production value 0.55-0.65). Protects Phase 4a
+            from being fed irrelevant context that it will hallucinate around.
 
     Returns:
         Tuple of (ranked NuggetResult list, retrieval_method_used string).
@@ -345,13 +362,15 @@ async def hybrid_retrieve(
     # ── Tier 1: Full hybrid (BM25 + vector) ──────────────────────────────────
     try:
         company_fused = await _hybrid_search(
-            sb, user_id, query, company, limit, jina_api_key
+            sb, user_id, query, company, limit, jina_api_key,
+            similarity_threshold=similarity_threshold,
         )
         # Unscoped pass: transferable skills (resume_relevance filter done post-hoc
         # because Supabase JS client doesn't support gte in RPC params easily;
         # we filter here after fetching, keeping only resume_relevance >= 0.5)
         unscoped_fused_raw = await _hybrid_search(
-            sb, user_id, query, None, limit, jina_api_key
+            sb, user_id, query, None, limit, jina_api_key,
+            similarity_threshold=similarity_threshold,
         )
         unscoped_fused = [
             item for item in unscoped_fused_raw
