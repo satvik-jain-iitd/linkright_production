@@ -54,7 +54,7 @@ test.describe.serial('Landing Page Navigation', () => {
     const signupPage = await signupContext.newPage();
     const signupEmail = freshEmail();
 
-    await signupPage.goto('https://sync.linkright.in/auth');
+    await signupPage.goto('/auth');
     await signupPage.getByRole('button', { name: 'Sign up' }).click();
     await signupPage.getByPlaceholder('Email').fill(signupEmail);
     await signupPage.getByPlaceholder('Password').fill(TEST_PASSWORD);

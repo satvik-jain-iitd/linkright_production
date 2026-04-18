@@ -42,7 +42,8 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: 'https://sync.linkright.in',
+    // Override with PLAYWRIGHT_BASE_URL env var to target Vercel preview / localhost / staging.
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'https://sync.linkright.in',
 
     // Headed so you can watch what's happening
     headless: false,

@@ -18,7 +18,7 @@ setup('create test user and authenticate', async ({ browser }) => {
   const page = await context.newPage();
 
   // Navigate to auth page
-  await page.goto('https://sync.linkright.in/auth');
+  await page.goto('/auth');
 
   // Switch to signup mode (page defaults to signin)
   await page.getByRole('button', { name: 'Sign up' }).click();
@@ -47,7 +47,7 @@ setup('create test user and authenticate', async ({ browser }) => {
     await page.waitForURL(/onboarding|dashboard/, { timeout: 15_000 });
   } else {
     // Timeout — try signing in anyway
-    await page.goto('https://sync.linkright.in/auth');
+    await page.goto('/auth');
     await page.getByPlaceholder('Email').fill(userEmail);
     await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
     await page.getByRole('button', { name: 'Sign in with Email' }).click();

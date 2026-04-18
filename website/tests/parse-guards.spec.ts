@@ -1,0 +1,68 @@
+import { test, expect } from '@playwright/test';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F-06 — Signup email preserved on resume auto-fill (applyParsed no longer overwrites email)
+// F-07 — LinkedIn/email/phone hallucination guards in /api/onboarding/parse-resume
+// ─────────────────────────────────────────────────────────────────────────────
+
+test.describe('Parse-resume hallucination guards (F-06, F-07)', () => {
+  test.use({ storageState: 'playwright/.auth/user.json' });
+
+  test('LinkedIn field stays empty when source has only a name (no URL)', async ({ page }) => {
+    const response = await page.request.post('/api/onboarding/parse-resume', {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        text:
+          'Jane Smith\nPRODUCT MANAGER\nPhone: +91-9999999999\nLinkedIn: Jane Smith\n\nProfessional Experience\nAcme Corp 2022 – Present\nProduct Manager\n• Shipped 3 major features',
+      },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    // LinkedIn URL must NOT be fabricated from just the name "Jane Smith".
+    // Allowed: empty string OR a URL that literally appears in source (which there isn't here).
+    expect(body.parsed.linkedin === '' || body.parsed.linkedin === undefined).toBeTruthy();
+  });
+
+  test('LinkedIn URL preserved when literally present in source', async ({ page }) => {
+    const response = await page.request.post('/api/onboarding/parse-resume', {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        text:
+          'John Doe\nSWE at Google\nhttps://www.linkedin.com/in/johndoe\n\nExperience\nGoogle 2020 – Present\n• Built stuff',
+      },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.parsed.linkedin).toMatch(/linkedin\.com\/in\/johndoe/i);
+  });
+
+  test('Email not fabricated when absent from source', async ({ page }) => {
+    const response = await page.request.post('/api/onboarding/parse-resume', {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        text: 'Priya Shah\nData Analyst\n5 years experience at several companies.',
+      },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    // Email must be empty — source has no email literal
+    expect(body.parsed.email === '' || body.parsed.email === undefined).toBeTruthy();
+  });
+
+  test('Email preserved when literally present in source', async ({ page }) => {
+    const response = await page.request.post('/api/onboarding/parse-resume', {
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        text: 'Arjun Verma\nProduct Manager\narjun.verma@example.com\n+91-9123456789\n\nExperience\nTest Co 2023 – Present',
+      },
+    });
+
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.parsed.email?.toLowerCase()).toContain('arjun.verma@example.com');
+    expect(body.parsed.phone).toContain('9123456789');
+  });
+});
