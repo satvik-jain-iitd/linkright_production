@@ -78,7 +78,7 @@ Return ONLY a valid JSON object in this exact shape (no markdown, no commentary)
       ]
     }
   ],
-  "career_summary_first_person": "First-person narration of the career, drawn STRICTLY from the source text below. One paragraph PER ROLE, separated by \\n\\n. Each paragraph opens with 'At {that role's actual company},' or 'Before that at {company},' or 'Earlier at {company},'. Use ONLY the companies, projects, metrics, and facts present in the source — do not copy any names or details from this instruction. 3-6 sentences per role for rich bullet lists, 2-3 sentences for thin ones. First person ('I ...') throughout. Must be non-empty if the source has at least one role."
+  "career_summary_first_person": "First-person narration built ONLY from the resume text. One paragraph PER role, separated by \\n\\n. Start each paragraph with the real company name from the source: 'At {company},' for the most recent, 'Before that at {company},' for older. 3-6 sentences per role. First person throughout. If the source has one thin role, return one short 2-sentence paragraph."
 }
 
 Rules:
