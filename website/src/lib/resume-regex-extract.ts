@@ -164,20 +164,53 @@ function pickDegree(line: string): string {
 }
 
 function extractSkills(text: string): string[] {
-  const lower = text.toLowerCase();
   const hits = new Set<string>();
+
+  // Strategy 1 — seed match (strong signal for tech/PM stacks we know).
+  const lower = text.toLowerCase();
   for (const seed of SKILL_SEEDS) {
     const needle = seed.endsWith(".js") || seed.includes("+") ? seed : `\\b${seed}\\b`;
     try {
       const re = new RegExp(needle, "i");
-      if (re.test(lower)) {
-        // Title-case it back.
-        hits.add(prettyCase(seed));
-      }
+      if (re.test(lower)) hits.add(prettyCase(seed));
     } catch {
       // Bad regex — skip.
     }
   }
+
+  // Strategy 2 — section-header capture. Works for non-tech resumes where
+  // seed matching finds nothing ("Customer service, MS Excel" on a support
+  // resume). Looks for a SKILLS / COMPETENCIES / CORE header and parses
+  // comma/semicolon/· separated items that follow.
+  const headerRe =
+    /(?:^|\n)\s*(?:skills|core competencies|competencies|technical skills|tools|expertise)\s*[:\n]/i;
+  const m = text.match(headerRe);
+  if (m && m.index != null) {
+    const start = m.index + m[0].length;
+    // Stop at next ALL-CAPS-ish header, blank-line gap, or 500 chars.
+    const tailSlice = text.slice(start, start + 500);
+    const stopIdx = tailSlice.search(/\n\s*\n|\n[A-Z][A-Z ]{3,}\s*(?:\n|:|$)/);
+    const chunk = stopIdx > 0 ? tailSlice.slice(0, stopIdx) : tailSlice;
+    const items = chunk
+      .replace(/[•\-\u2022]/g, ",")
+      .split(/[,;·|]/)
+      .map((s) => s.trim())
+      .filter(
+        (s) =>
+          s.length >= 2 &&
+          s.length <= 60 &&
+          !/^skills?:?$/i.test(s) &&
+          /[a-z]/i.test(s),
+      );
+    for (const item of items) {
+      // Title-case words that are fully lowercase, leave acronyms.
+      const normalised = /^[a-z\s]+$/i.test(item)
+        ? item.replace(/\b\w/g, (c) => c.toUpperCase())
+        : item;
+      hits.add(normalised.trim());
+    }
+  }
+
   return Array.from(hits).slice(0, 30);
 }
 

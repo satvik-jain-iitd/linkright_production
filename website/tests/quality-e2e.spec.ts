@@ -63,7 +63,7 @@ test.describe('Design system — new design reflects per spec', () => {
 
   test('Pricing (/pricing) — Free ₹0 + Pro ₹499 Recommended', async ({ page }) => {
     await page.goto('/pricing');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(
+    await expect(page.getByRole('heading', { level: 1 }).first()).toContainText(
       /start free/i,
     );
     await expect(page.getByText(/₹0/).first()).toBeVisible();
