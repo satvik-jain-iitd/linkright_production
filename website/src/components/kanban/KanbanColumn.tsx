@@ -24,12 +24,15 @@ export function KanbanColumnComponent({
 
   return (
     <div className="flex flex-col w-64 min-w-[256px] shrink-0">
-      {/* Column header */}
-      <div className={`flex items-center justify-between px-3 py-2 rounded-t-lg border-t-2 ${column.color} bg-background`}>
-        <h3 className="text-sm font-medium text-foreground">{column.label}</h3>
-        <span className="inline-flex items-center justify-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-          {applications.length}
-        </span>
+      {/* Column header — pillar dot + label + count, per design S14. */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ background: column.dot }}
+          aria-hidden
+        />
+        <h3 className="text-sm font-semibold text-foreground">{column.label}</h3>
+        <span className="text-xs text-muted">{applications.length}</span>
       </div>
 
       {/* Drop zone */}

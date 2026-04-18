@@ -44,15 +44,18 @@ export interface KanbanColumn {
   label: string;
   statuses: string[];
   color: string;
+  /** Hex used for the pillar dot in the column header. Aligns with design
+   *  system zone colours (gray/purple/teal/gold/pink/coral). */
+  dot: string;
 }
 
 export const KANBAN_COLUMNS: KanbanColumn[] = [
-  { id: "wishlist", label: "Wishlist", statuses: ["not_started"], color: "border-gray-300" },
-  { id: "drafting", label: "Drafting", statuses: ["resume_draft"], color: "border-blue-300" },
-  { id: "applied", label: "Applied", statuses: ["applied"], color: "border-indigo-300" },
-  { id: "interviewing", label: "Interviewing", statuses: ["screening", "interview"], color: "border-purple-300" },
-  { id: "offer", label: "Offer", statuses: ["offer"], color: "border-green-300" },
-  { id: "closed", label: "Closed", statuses: ["accepted", "rejected", "withdrawn"], color: "border-gray-400" },
+  { id: "wishlist", label: "Wishlist", statuses: ["not_started"], color: "border-gray-300", dot: "#718096" },
+  { id: "drafting", label: "Drafting", statuses: ["resume_draft"], color: "border-purple-300", dot: "#8B5CF6" },
+  { id: "applied", label: "Applied", statuses: ["applied"], color: "border-primary-300", dot: "#0FBEAF" },
+  { id: "interviewing", label: "Interviewing", statuses: ["screening", "interview"], color: "border-gold-300", dot: "#E5B80B" },
+  { id: "offer", label: "Offer", statuses: ["offer"], color: "border-pink-300", dot: "#F05A79" },
+  { id: "closed", label: "Closed", statuses: ["accepted", "rejected", "withdrawn"], color: "border-orange-300", dot: "#B3341C" },
 ];
 
 export function getColumnForStatus(status: string): string {
