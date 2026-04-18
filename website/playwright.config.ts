@@ -7,11 +7,18 @@ dotenv.config({ path: '.env.local' });
 export default defineConfig({
   testDir: './tests',
 
-  // 90s per test — resume generation + atom dispatch takes time
-  timeout: 90_000,
+  // 120s per test — resume generation + atom dispatch + slow LLM calls.
+  timeout: 120_000,
 
-  // No retries — we want real failures, not flaky passes
-  retries: 0,
+  // Up to 2 retries for transient LLM / rate-limit failures. The
+  // parseResumeWithRetry helper handles 429/422/5xx at the request level,
+  // but network blips outside the helper are still worth retrying.
+  retries: 2,
+
+  // Cap parallelism at 2 workers to avoid hammering Groq's free-tier rate
+  // limit during the full suite run (was 4 → intermittent 429s on parse-resume).
+  // Local dev can still override via --workers=N CLI flag.
+  workers: process.env.CI ? 2 : 2,
 
   // HTML report opens only when something fails
   reporter: [['html', { open: 'on-failure' }]],

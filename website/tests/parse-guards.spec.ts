@@ -1,32 +1,22 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { RESUME_TEXT } from './fixtures/test-data';
+import { parseResumeWithRetry } from './fixtures/parse-retry';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // F-06 — Signup email preserved on resume auto-fill (applyParsed no longer overwrites email)
 // F-07 — LinkedIn/email/phone hallucination guards in /api/onboarding/parse-resume
 //
 // NOTE: /api/onboarding/parse-resume makes an LLM call (Groq llama-3.3-70b).
-// The model occasionally returns non-JSON for very-short synthetic inputs, and
-// the free tier can rate-limit a burst of parallel tests. Both surface as
-// HTTP 422 / 429. `postWithRetry` below retries once after 3s to smooth that
-// out; each assertion is still STRICT about content when the parse succeeds.
+// With 4 parallel workers hitting parse-resume the free tier can rate-limit,
+// and the model occasionally returns non-JSON for thin inputs. Both surface
+// as 422/429/5xx. `parseResumeWithRetry` (fixtures/parse-retry.ts) handles
+// this with exponential backoff; assertions remain STRICT on content.
+//
+// Serial mode inside this file: the 4 parse-resume calls here happen one at
+// a time, further reducing pressure on the Groq free tier.
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function postWithRetry(request: APIRequestContext, text: string) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await request.post('/api/onboarding/parse-resume', {
-      headers: { 'Content-Type': 'application/json' },
-      data: { text },
-    });
-    if (res.ok()) return res;
-    if (attempt === 0) await new Promise((r) => setTimeout(r, 3000));
-  }
-  // Final attempt (returned above if ok). If still not ok, let the assertion fail with context.
-  return request.post('/api/onboarding/parse-resume', {
-    headers: { 'Content-Type': 'application/json' },
-    data: { text },
-  });
-}
+test.describe.configure({ mode: 'serial' });
 
 // A mid-length realistic resume that reliably parses. Used for tests where we
 // only care about the content of one or two fields — the rest of the
@@ -70,7 +60,7 @@ test.describe('Parse-resume hallucination guards (F-06, F-07)', () => {
   test.use({ storageState: 'playwright/.auth/user.json' });
 
   test('LinkedIn field stays empty when source has only a name (no URL)', async ({ request }) => {
-    const response = await postWithRetry(request, RESUME_JANE);
+    const response = await parseResumeWithRetry(request, { text: RESUME_JANE });
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
     // "LinkedIn: Jane Smith" with no URL must NOT be turned into a fake URL.
@@ -78,7 +68,7 @@ test.describe('Parse-resume hallucination guards (F-06, F-07)', () => {
   });
 
   test('LinkedIn URL preserved when literally present in source', async ({ request }) => {
-    const response = await postWithRetry(request, RESUME_JOHN);
+    const response = await parseResumeWithRetry(request, { text: RESUME_JOHN });
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
     expect(body.parsed.linkedin).toMatch(/linkedin\.com\/in\/johndoe/i);
@@ -86,14 +76,14 @@ test.describe('Parse-resume hallucination guards (F-06, F-07)', () => {
 
   test('Email not fabricated when absent from source', async ({ request }) => {
     // RESUME_JANE has no email line — must parse to empty/missing email.
-    const response = await postWithRetry(request, RESUME_JANE);
+    const response = await parseResumeWithRetry(request, { text: RESUME_JANE });
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
     expect(body.parsed.email === '' || body.parsed.email == null).toBeTruthy();
   });
 
   test('Email + phone preserved when literally present in source', async ({ request }) => {
-    const response = await postWithRetry(request, RESUME_TEXT);
+    const response = await parseResumeWithRetry(request, { text: RESUME_TEXT });
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
     expect(body.parsed.email?.toLowerCase()).toContain('satvik.jain@iitdalumni.com');

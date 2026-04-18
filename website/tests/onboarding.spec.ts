@@ -191,7 +191,9 @@ test.describe.serial('Onboarding Journey', () => {
     await page.getByRole('button', { name: 'Auto-fill from resume' }).click();
 
     // Check success banner: "Resume parsed — fields pre-filled below."
-    await expect(page.getByText('Resume parsed')).toBeVisible({ timeout: 15_000 });
+    // Generous timeout: Groq LLM call + any free-tier queueing can legitimately
+    // take 10-30s end-to-end. We only fail if nothing responds within 60s.
+    await expect(page.getByText('Resume parsed')).toBeVisible({ timeout: 60_000 });
   });
 
   test('step 2 — save and continue advances to TruthEngine', async () => {
