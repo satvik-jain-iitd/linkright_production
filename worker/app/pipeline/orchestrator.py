@@ -265,9 +265,12 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     if ctx.career_text and hasattr(ctx, "_nuggets") and not ctx._nuggets:
         logger.warning("Phase 0 produced no nuggets — continuing with paragraph-chunk fallback")
 
-    # For heavy reasoning phases, fall back to 70B model (not the user's 8B default)
+    # For heavy reasoning phases, prefer 70B — but when 70B is rate-limited
+    # (429) the whole pipeline used to hang until the 300s kill-switch fired.
+    # Wrap 70B in its own 2-tier fallback so it degrades to the user's default
+    # (8B) instead of retry-looping forever.
     _groq_70b = _get_groq_fallback_llm()
-    heavy_fallback = _groq_70b or llm
+    heavy_fallback = _FallbackLLM(_groq_70b, llm) if _groq_70b else llm
 
     # Quality-first LLM chains (2026-04-17). Goal: 20 high-quality resumes per
     # user per day. Oracle 1B demoted from Phase 4c/3.5a because its JSON output
