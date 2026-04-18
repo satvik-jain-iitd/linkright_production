@@ -19,16 +19,28 @@ export default function ScoutOverview() {
 
   useEffect(() => { fetchSummary(); }, []);
 
+  const [cooldown, setCooldown] = useState<string | null>(null);
+
   const triggerScan = async () => {
     setScanning(true);
     setError(null);
+    setCooldown(null);
     try {
       const res = await fetch("/api/scan", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error);
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 429) {
+        // F-21: the server already auto-scans when a new company is added
+        // to the watchlist. If the user hits "Scan Now" within the 5-min
+        // cooldown window, don't bark at them with an error — tell them a
+        // scan is already running.
+        setCooldown(
+          typeof data.error === "string" && /\d+\s*min/i.test(data.error)
+            ? data.error
+            : "A scan is already running — results usually appear within 5 minutes.",
+        );
+      } else if (!res.ok) {
+        setError(data.error ?? "Scan failed — please try again.");
       } else {
-        // Refresh summary after a short delay for results to populate
         setTimeout(fetchSummary, 5000);
       }
     } catch {
@@ -55,6 +67,13 @@ export default function ScoutOverview() {
           {scanning ? "Scanning..." : "Scan Now"}
         </button>
       </div>
+
+      {cooldown && !error && (
+        <div className="flex items-center gap-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-700">
+          <span className="inline-flex h-3 w-3 flex-shrink-0 animate-pulse rounded-full bg-accent" />
+          {cooldown}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

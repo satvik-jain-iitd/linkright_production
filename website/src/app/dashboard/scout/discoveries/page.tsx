@@ -3,6 +3,23 @@
 import { useEffect, useState, useCallback } from "react";
 import { DiscoveryCard } from "@/components/scout/DiscoveryCard";
 
+/** Format a timestamp as a compact relative string — "2 min ago", "3 hours ago",
+ *  "yesterday", else absolute date. Kept inline (no new dep) because we only
+ *  use it on this page. */
+function formatRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (isNaN(ms) || ms < 0) return new Date(iso).toLocaleString();
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 interface Discovery {
   id: string;
   title: string;
@@ -30,6 +47,7 @@ export default function DiscoveriesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("");
+  const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
 
   const fetchDiscoveries = useCallback(async (status: string) => {
     setLoading(true);
@@ -46,7 +64,17 @@ export default function DiscoveriesPage() {
     setLoading(false);
   }, []);
 
+  // F-24: show users when the last scan ran + how many results came in.
+  const fetchScanMeta = useCallback(async () => {
+    const res = await fetch("/api/scan");
+    if (res.ok) {
+      const data = await res.json();
+      setLastScannedAt(data.last_scanned_at ?? null);
+    }
+  }, []);
+
   useEffect(() => { fetchDiscoveries(activeTab); }, [activeTab, fetchDiscoveries]);
+  useEffect(() => { fetchScanMeta(); }, [fetchScanMeta]);
 
   const handleStatusChange = async (id: string, newStatus: "saved" | "dismissed" | "new") => {
     const res = await fetch(`/api/discoveries/${id}/status`, {
@@ -76,6 +104,11 @@ export default function DiscoveriesPage() {
         <h1 className="text-xl font-bold text-foreground">Discoveries</h1>
         <p className="mt-1 text-sm text-muted">
           {total} job{total !== 1 ? "s" : ""} discovered from your watchlist
+          {lastScannedAt && (
+            <span className="ml-2 text-xs">
+              · Last scan: {formatRelative(lastScannedAt)}
+            </span>
+          )}
         </p>
       </div>
 
