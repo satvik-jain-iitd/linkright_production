@@ -206,6 +206,7 @@ async def health():
         "service": "linkright-sync-worker",
         "active_jobs": 3 - _pipeline_semaphore._value,
         "max_concurrent": 3,
+        "build": "phase1-fallback-fix-0b21d95",
     }
 
 
