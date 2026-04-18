@@ -71,7 +71,7 @@ Return ONLY a valid JSON object in this exact shape (no markdown, no commentary)
       ]
     }
   ],
-  "career_summary_first_person": "Detailed first-person narration of the ENTIRE career — NOT a short summary. 3-6 paragraphs separated by \\n\\n. Write ONE paragraph PER ROLE (most recent first), each 3-6 sentences long. Each paragraph starts with the company: 'At American Express, I led...' or 'Before that at Sprinklr, I was responsible for...'. Within each paragraph: describe the biggest projects, the problem, the approach, and the outcome with numbers when present. Use 'I' throughout — never third person. No invention — every claim must be traceable to the source text."
+  "career_summary_first_person": "First-person narration of the career. ALWAYS non-empty as long as there is any role to describe. One paragraph PER ROLE (most recent first), separated by \\n\\n. 3-6 sentences per paragraph when the role has enough content; a single 2-3 sentence paragraph is fine for a junior/thin role. Each paragraph starts with the company: 'At American Express, I led...' or 'Before that at Sprinklr, I was responsible for...'. Describe projects, problem, approach, and outcome with numbers when present. Use 'I' throughout — never third person. No invention — every claim must be traceable to the source."
 }
 
 Rules:
@@ -80,7 +80,7 @@ Rules:
 - career_text: ONLY the work-experience section as plain text (not education / skills / contact).
 - experiences: extract every job/role found. bullets = exact bullet text, max 8 per role.
 - experiences[].projects: 1-4 distinct projects per role ONLY when the resume describes them. Each project needs a one-liner + 2-3 key_achievements (outcome-led). No projects? Return empty array — NEVER invent.
-- career_summary_first_person: first person only, one paragraph per role separated by blank lines (\\n\\n), 3-6 sentences each. No inventions. Empty string if the text is too thin.
+- career_summary_first_person: first person only ("I ..."), one paragraph per role, separated by \\n\\n. 3-6 sentences per paragraph. If the resume is thin (one short role, few bullets), still write ONE honest paragraph of whatever can be said — never return an empty string. Length adapts to content: a 3-bullet customer-support role gets one shorter paragraph; a 4-job senior career gets 4-6 paragraphs. No inventions.
 - If a field is not found, use empty string or empty array.
 - Return valid JSON only, no code blocks.`;
 
