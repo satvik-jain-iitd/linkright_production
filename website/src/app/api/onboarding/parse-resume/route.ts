@@ -7,12 +7,19 @@ function serviceSupabase() {
   return createServiceClient();
 }
 
+interface ParsedProject {
+  title?: string;
+  one_liner?: string;
+  key_achievements?: string[];
+}
+
 interface ParsedExperience {
   company: string;
   role: string;
   start_date?: string;
   end_date?: string;
   bullets?: string[];
+  projects?: ParsedProject[];
 }
 
 /** Upsert work experiences into user_work_history. Fire-and-forget safe. */
@@ -71,7 +78,7 @@ Return ONLY a valid JSON object in this exact shape (no markdown, no commentary)
       ]
     }
   ],
-  "career_summary_first_person": "First-person narration of the career. MUST use DOUBLE NEWLINES (\\n\\n) between paragraphs — one paragraph PER ROLE. Always non-empty if any role exists. Example format (literal \\n\\n between paragraphs):\\n\\n'At American Express, I led a 12-person team redesigning the returns flow. 18% conversion lift, 22% fewer support tickets.\\n\\nBefore that at Sprinklr, I was PM for enterprise AI moderation. Built the real-time policy engine that cut moderator overhead by 34%.\\n\\nEarlier at <role>, I <specifics>.'\\n\\nRules: 3-6 sentences per paragraph for rich roles, 2-3 for thin junior roles. Each paragraph starts with 'At {company}', 'Before that at {company}', 'Earlier at {company}', 'Previously at {company}', or 'Most recently at {company}'. Use 'I' throughout, never third person. No invention, every claim traceable to source."
+  "career_summary_first_person": "First-person narration of the career, drawn STRICTLY from the source text below. One paragraph PER ROLE, separated by \\n\\n. Each paragraph opens with 'At {that role's actual company},' or 'Before that at {company},' or 'Earlier at {company},'. Use ONLY the companies, projects, metrics, and facts present in the source — do not copy any names or details from this instruction. 3-6 sentences per role for rich bullet lists, 2-3 sentences for thin ones. First person ('I ...') throughout. Must be non-empty if the source has at least one role."
 }
 
 Rules:
@@ -199,6 +206,10 @@ export async function POST(request: Request) {
     // regex returned empty for a field (rare for contact, common for
     // non-standard resumes).
     const rawNarration = (llmParsed.career_summary_first_person ?? "") as string;
+    const experiences = (llmParsed.experiences ?? []) as ParsedExperience[];
+    const narration =
+      normaliseNarrationParagraphs(rawNarration) ||
+      synthNarrationFromExperiences(experiences);
     const parsed: Record<string, unknown> = {
       full_name: regex.full_name || (llmParsed as Record<string, unknown>).full_name || "",
       email: regex.email,
@@ -208,16 +219,15 @@ export async function POST(request: Request) {
       skills: regex.skills.length > 0 ? regex.skills : llmParsed.skills ?? [],
       certifications: llmParsed.certifications ?? [],
       career_text: llmParsed.career_text ?? "",
-      experiences: llmParsed.experiences ?? [],
-      career_summary_first_person: normaliseNarrationParagraphs(rawNarration),
+      experiences,
+      career_summary_first_person: narration,
     };
 
     // ── Save structured work experiences to DB (fire-and-forget) ──────────
     // Stored in user_work_history — separate from career_nuggets (no embeddings).
     // Used by resume builder as structured backbone for companies + bullet points.
-    const experiences = Array.isArray(parsed.experiences) ? parsed.experiences : [];
     if (experiences.length > 0) {
-      saveWorkHistory(user.id, experiences as ParsedExperience[]).catch((err) =>
+      saveWorkHistory(user.id, experiences).catch((err) =>
         console.error("[parse-resume] saveWorkHistory failed:", err)
       );
     }
@@ -230,6 +240,41 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+// Last-resort narration: if the LLM returns empty or the experiences
+// array has data but no prose, synthesise a plain first-person paragraph
+// per role straight from the extracted structured data. Never empty if
+// there is any experience row.
+function synthNarrationFromExperiences(exps: ParsedExperience[]): string {
+  if (!exps || exps.length === 0) return "";
+  const paragraphs: string[] = [];
+  exps.forEach((e, i) => {
+    const lead =
+      i === 0
+        ? `At ${e.company},`
+        : i === 1
+          ? `Before that at ${e.company},`
+          : `Earlier at ${e.company},`;
+    const roleLabel = e.role ? `I worked as ${e.role}.` : "";
+    const bulletLines = (e.bullets ?? [])
+      .slice(0, 3)
+      .map((b) => b.replace(/^[-•\d.\s]+/, "").trim())
+      .filter(Boolean);
+    const bulletText = bulletLines
+      .map((b) => (b.startsWith("I ") ? b : `I ${b[0]?.toLowerCase()}${b.slice(1)}`))
+      .join(" ");
+    const projectLines = (e.projects ?? [])
+      .slice(0, 2)
+      .map((p) =>
+        [p.one_liner, ...(p.key_achievements ?? [])].filter(Boolean).join(". "),
+      )
+      .filter(Boolean)
+      .join(" ");
+    const body = [roleLabel, bulletText, projectLines].filter(Boolean).join(" ").trim();
+    if (body) paragraphs.push(`${lead} ${body}`);
+  });
+  return paragraphs.join("\n\n");
 }
 
 // The LLM is inconsistent about emitting \n\n between role paragraphs —

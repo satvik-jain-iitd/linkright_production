@@ -168,9 +168,11 @@ function extractEducationLines(text: string): RegexExtract["education"] {
 }
 
 function pickInstitution(line: string): string {
-  // Grab the phrase containing the institution token up to a delimiter.
+  // Capture the name up to the institution token AND any continuation
+  // ("of Technology Delhi" / "at Mumbai"). Stops at comma or delimiter.
+  // "Indian Institute of Technology Delhi" → full phrase, not just "Indian Institute".
   const m = line.match(
-    /([A-Z][A-Za-z&,.\- ]*?(University|Institute|College|School of [A-Za-z ]+|Polytechnic|IIT[^\s,]*|IIM[^\s,]*|NIT[^\s,]*|BITS[^\s,]*))/,
+    /([A-Z][A-Za-z&,.\- ]*?(?:University|Institute|College|School|Polytechnic|IIT|IIM|NIT|BITS)(?:\s+of\s+[A-Z][A-Za-z ]+?)?(?:\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)?)(?=\s*[,\-–·|]|\s+\d{4}|$)/,
   );
   return m?.[1]?.trim() ?? "";
 }
