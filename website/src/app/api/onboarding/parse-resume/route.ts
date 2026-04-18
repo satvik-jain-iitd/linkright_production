@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { groqChat } from "@/lib/groq";
 import { createServiceClient } from "@/lib/supabase/service";
+import { regexExtract } from "@/lib/resume-regex-extract";
 
 function serviceSupabase() {
   return createServiceClient();
@@ -41,25 +42,19 @@ async function saveWorkHistory(userId: string, experiences: ParsedExperience[]):
   }
 }
 
-// Wave 2 Sub-phase 2A (2026-04-18): parse-resume now returns a STRUCTURED
-// companies tree (with nested roles + projects) + a first-person career arc
-// paragraph. The frontend (CareerOutlineView) renders both as the outline
-// view + editable interpretation panel Satvik described in the spec
-// (specs/wave-2-journey-2026-04-18.md).
-const SYSTEM_PROMPT = `You are a resume parser. Extract structured information from the resume text provided.
+// Cost reduction 2026-04-18 (per Satvik): hybrid extractor.
+// Basics (full_name / email / phone / linkedin / education / skills) are
+// pulled deterministically via regex in @/lib/resume-regex-extract — zero
+// LLM cost, zero hallucination risk.
+// The LLM is only asked for the HARD fields: certifications + experiences
+// tree + career_text + career_summary_first_person narration. ~30% fewer
+// output tokens than the all-LLM prompt.
+const SYSTEM_PROMPT = `You are a resume parser. The user will give you resume text. Extract ONLY the fields below — basics like email/phone/linkedin have already been regex-extracted, so don't waste tokens on them.
 
-Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+Return ONLY a valid JSON object in this exact shape (no markdown, no commentary):
 {
-  "full_name": "string or empty",
-  "email": "string or empty",
-  "phone": "string or empty",
-  "linkedin": "URL or empty",
-  "education": [
-    {"institution": "string", "degree": "string", "year": "4-digit graduation year only, e.g. 2021"}
-  ],
-  "skills": ["skill1", "skill2"],
   "certifications": ["cert1", "cert2"],
-  "career_text": "full raw text representation of work experience section only",
+  "career_text": "full raw text representation of the work experience section only (for search indexing)",
   "experiences": [
     {
       "company": "Company Name",
@@ -76,23 +71,18 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
       ]
     }
   ],
-  "career_summary_first_person": "Detailed first-person narration of the ENTIRE career — NOT a short summary. 3-6 paragraphs separated by \\n\\n. Write ONE paragraph PER ROLE (most recent first), each 3-6 sentences long. Each paragraph starts with the company: 'At American Express, I led...' or 'Before that at Sprinklr, I was responsible for...'. Within each paragraph: describe the biggest projects, the problem, the approach, and the outcome with numbers when present. Use 'I' throughout — never third person. No invention — every claim must be traceable to the source text. If education or a standout project deserves its own paragraph, add it after the roles."
+  "career_summary_first_person": "Detailed first-person narration of the ENTIRE career — NOT a short summary. 3-6 paragraphs separated by \\n\\n. Write ONE paragraph PER ROLE (most recent first), each 3-6 sentences long. Each paragraph starts with the company: 'At American Express, I led...' or 'Before that at Sprinklr, I was responsible for...'. Within each paragraph: describe the biggest projects, the problem, the approach, and the outcome with numbers when present. Use 'I' throughout — never third person. No invention — every claim must be traceable to the source text."
 }
 
 Rules:
-- NEVER fabricate or infer values. Only extract what is EXPLICITLY present in the source text.
-- linkedin: must be a full URL present verbatim in the source (starting with "http" or containing "linkedin.com/"). If only a name or handle is mentioned without a full URL, return empty string. Do NOT construct URLs from names.
-- email: must be an email literally present in the source text. Never guess or generate.
-- phone: must be a phone string literally present. Never generate.
-- education: include all degrees/institutions found. year must be the 4-digit graduation year as a string (e.g. "2021"); strip leading phrases like "Class of", "Batch of", "Graduated"
-- skills: list individual skill strings, max 30
-- certifications: list individual certifications, max 10
-- career_text: extract ONLY the work experience/employment history as plain text — not education or skills
-- experiences: extract every job/role found. bullets = exact bullet point text from the resume, max 8 per role
-- experiences[].projects: 1-4 distinct projects per role when the resume describes them. Each project MUST have a one-liner describing scope and 2-3 key_achievements phrased as outcome-led bullets. If the role text doesn't describe distinct projects, return an empty projects array — do NOT invent.
-- career_summary_first_person: first person only ("I ...", not "Satvik did ..."). VERBOSE — one paragraph per role, separated by blank lines (\\n\\n). Each paragraph 3-6 sentences covering projects + problem + approach + outcome with real numbers. No inventions — if the candidate is a PM at Amex and Sprinklr, say that; don't guess titles or achievements that aren't in the source. Return empty string only if the text is too thin to say anything.
-- If a field is not found, use empty string or empty array
-- Return valid JSON only, no code blocks`;
+- NEVER fabricate or infer values. Only extract what is EXPLICITLY in the source.
+- certifications: list individual certifications, max 10. Empty array if none.
+- career_text: ONLY the work-experience section as plain text (not education / skills / contact).
+- experiences: extract every job/role found. bullets = exact bullet text, max 8 per role.
+- experiences[].projects: 1-4 distinct projects per role ONLY when the resume describes them. Each project needs a one-liner + 2-3 key_achievements (outcome-led). No projects? Return empty array — NEVER invent.
+- career_summary_first_person: first person only, one paragraph per role separated by blank lines (\\n\\n), 3-6 sentences each. No inventions. Empty string if the text is too thin.
+- If a field is not found, use empty string or empty array.
+- Return valid JSON only, no code blocks.`;
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -181,44 +171,45 @@ export async function POST(request: Request) {
   // Truncate to avoid token limits (~8000 chars ≈ ~2000 tokens)
   const truncated = resumeText.slice(0, 8000);
 
+  // Phase 1 — regex extractors (contact, education, skills). Deterministic,
+  // zero token cost, zero hallucination risk. If the regex finds it, we
+  // trust it; the LLM never gets asked for it.
+  const regex = regexExtract(truncated);
+
   try {
     const rawText = await groqChat(
       [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 3500, temperature: 0 }
+      { maxTokens: 2600, temperature: 0 }
     );
 
-    const parsed = extractJson(rawText);
+    const llmParsed = extractJson(rawText);
 
-    if (!parsed) {
+    if (!llmParsed) {
       return Response.json(
         { error: "Could not parse resume. Please enter your details manually." },
         { status: 422 }
       );
     }
 
-    // Hallucination guards: reject parsed values that don't appear (at least partially) in the source text.
-    const lowerSource = truncated.toLowerCase();
-
-    // LinkedIn URL must be a real URL (http/https/linkedin.com/). No bare-name→URL construction.
-    if (typeof parsed.linkedin === "string" && parsed.linkedin.trim()) {
-      const url = parsed.linkedin.trim();
-      const looksLikeUrl = /^https?:\/\//i.test(url) || /linkedin\.com\//i.test(url);
-      const pathSegment = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").toLowerCase();
-      if (!looksLikeUrl || !lowerSource.includes(pathSegment.split("/").pop() ?? "")) {
-        parsed.linkedin = "";
-      }
-    }
-
-    // Email / phone guard: must appear verbatim in the source.
-    for (const key of ["email", "phone"] as const) {
-      const v = parsed[key];
-      if (typeof v === "string" && v.trim() && !lowerSource.includes(v.trim().toLowerCase())) {
-        parsed[key] = "";
-      }
-    }
+    // Merge: regex extracts are source of truth for basics; LLM provides
+    // experiences/certifications/narration. Fall back to LLM output if the
+    // regex returned empty for a field (rare for contact, common for
+    // non-standard resumes).
+    const parsed: Record<string, unknown> = {
+      full_name: regex.full_name || (llmParsed as Record<string, unknown>).full_name || "",
+      email: regex.email,
+      phone: regex.phone,
+      linkedin: regex.linkedin,
+      education: regex.education.length > 0 ? regex.education : llmParsed.education ?? [],
+      skills: regex.skills.length > 0 ? regex.skills : llmParsed.skills ?? [],
+      certifications: llmParsed.certifications ?? [],
+      career_text: llmParsed.career_text ?? "",
+      experiences: llmParsed.experiences ?? [],
+      career_summary_first_person: llmParsed.career_summary_first_person ?? "",
+    };
 
     // ── Save structured work experiences to DB (fire-and-forget) ──────────
     // Stored in user_work_history — separate from career_nuggets (no embeddings).

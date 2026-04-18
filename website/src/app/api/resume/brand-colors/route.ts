@@ -1,25 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { groqChat } from "@/lib/groq";
 
-const BRAND_COLORS_PROMPT = `You are a brand identity expert. Given a company name and job description, return the company's official brand colors as a JSON object.
+// Cost reduction 2026-04-18 (per Satvik): remove LLM fallback for brand
+// colours. Source of truth:
+//   1. `company_brand_colors` DB table (admin-managed)
+//   2. Brandfetch API (if key set) — deterministic lookup, no LLM
+//   3. Neutral defaults — admin will enrich the DB for target companies
+// No Groq/LLM calls on this endpoint.
 
-Return ONLY valid JSON — no markdown, no commentary:
-{
-  "brand_primary": "#hex",
-  "brand_secondary": "#hex",
-  "brand_tertiary": "#hex",
-  "brand_quaternary": "#hex",
-  "company_name": "official name"
-}
-
-Rules:
-- Use the company's real, well-known brand colors (e.g. Uber = #000000 primary)
-- If unsure of exact hex, use the closest well-known brand colors
-- All 4 colors must be distinct and work together visually
-- brand_primary should be the most recognizable brand color
-- Colors must pass WCAG AA contrast on white background when used as text`;
+const DEFAULT_BRAND = {
+  brand_primary: "#1B2A4A",
+  brand_secondary: "#93702B",
+  brand_tertiary: null as string | null,
+  brand_quaternary: null as string | null,
+};
 
 function extractDomain(name: string): string {
   const trimmed = name.trim();
@@ -52,7 +47,7 @@ async function fetchFromBrandfetch(companyName: string): Promise<string[] | null
 
     const data = await resp.json();
     const colors: string[] = ((data.colors ?? []) as { type: string; hex: string }[])
-      .sort((a, b) => (a.type === "primary" ? -1 : 1))
+      .sort((a) => (a.type === "primary" ? -1 : 1))
       .map((c) => c.hex)
       .filter(Boolean)
       .slice(0, 4);
@@ -77,13 +72,19 @@ export async function POST(request: Request) {
     return rateLimitResponse("brand colors");
   }
 
-  const { company_name, jd_text } = await request.json();
+  const { company_name } = await request.json();
 
   if (!company_name) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // Try Brandfetch first — accurate, no token cost
+  // 1. DB lookup (admin-managed source of truth)
+  const cached = await lookupCachedBrandColors(company_name);
+  if (cached) {
+    return Response.json({ ...cached, company_name, source: "cache" });
+  }
+
+  // 2. Brandfetch (deterministic external lookup, free tier)
   const bfColors = await fetchFromBrandfetch(company_name);
   if (bfColors) {
     const result = {
@@ -93,45 +94,50 @@ export async function POST(request: Request) {
       brand_quaternary: bfColors[3] ?? null,
       company_name,
     };
-    // Persist to cache (fire-and-forget)
     persistBrandColors(result, "brandfetch").catch(() => {});
-    return Response.json(result);
+    return Response.json({ ...result, source: "brandfetch" });
   }
 
-  // Fallback: LLM-based color extraction
-  const userMsg = `Company: ${company_name}\n\nJob Description (first 500 chars):\n${(jd_text || "").slice(0, 500)}`;
+  // 3. Neutral defaults — admin will enrich the company_brand_colors row.
+  return Response.json({
+    ...DEFAULT_BRAND,
+    company_name,
+    source: "default",
+    admin_todo: true,
+  });
+}
 
-  try {
-    const text = await groqChat(
-      [
-        { role: "system", content: BRAND_COLORS_PROMPT },
-        { role: "user", content: userMsg },
-      ],
-      { maxTokens: 200, temperature: 0.1 }
-    );
+async function lookupCachedBrandColors(companyName: string): Promise<{
+  brand_primary: string;
+  brand_secondary: string;
+  brand_tertiary: string | null;
+  brand_quaternary: string | null;
+} | null> {
+  const sb = createServiceClient();
+  const domain = extractDomain(companyName);
 
-    const jsonText = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-    const colors = JSON.parse(jsonText);
+  // Try domain first (stable), then case-insensitive name as fallback.
+  const attempts: Array<{ col: string; val: string }> = [];
+  if (domain) attempts.push({ col: "domain", val: domain });
+  attempts.push({ col: "company_name", val: companyName.trim() });
 
-    const llmResult = {
-      brand_primary: colors.brand_primary || "#1B2A4A",
-      brand_secondary: colors.brand_secondary || "#93702b",
-      brand_tertiary: colors.brand_tertiary || null,
-      brand_quaternary: colors.brand_quaternary || null,
-      company_name: colors.company_name || company_name,
-    };
-    // Persist to cache (fire-and-forget)
-    persistBrandColors(llmResult, "llm_extracted").catch(() => {});
-    return Response.json(llmResult);
-  } catch {
-    return Response.json({
-      brand_primary: "#1B2A4A",
-      brand_secondary: "#93702b",
-      brand_tertiary: null,
-      brand_quaternary: null,
-      company_name,
-    });
+  for (const { col, val } of attempts) {
+    const { data } = await sb
+      .from("company_brand_colors")
+      .select("primary_color, secondary_color, tertiary_color, quaternary_color")
+      .ilike(col, val)
+      .limit(1)
+      .maybeSingle();
+    if (data?.primary_color) {
+      return {
+        brand_primary: data.primary_color,
+        brand_secondary: data.secondary_color,
+        brand_tertiary: data.tertiary_color ?? null,
+        brand_quaternary: data.quaternary_color ?? null,
+      };
+    }
   }
+  return null;
 }
 
 async function persistBrandColors(
