@@ -52,11 +52,12 @@ interface CytoEdge {
 
 interface GraphStats {
   achievements: number;
-  experiences: number;
+  experiences: number;          // # of (company, role) stints — kept for back-compat
+  distinct_companies: number;   // F-12: the number we actually want to show in the UI
   skills: number;
   decisions: number;
   characters: number;
-  companies: { name: string; role: string; count: number }[];
+  companies: { name: string; role: string; count: number; roles?: string[] }[];
   topSkills: { name: string; count: number }[];
 }
 
@@ -81,7 +82,14 @@ export async function GET() {
   }
 
   if (!nuggets || nuggets.length === 0) {
-    return Response.json({ elements: [], stats: { achievements: 0, experiences: 0, skills: 0, decisions: 0, characters: 0, companies: [], topSkills: [] } });
+    return Response.json({
+      elements: [],
+      stats: {
+        achievements: 0, experiences: 0, distinct_companies: 0,
+        skills: 0, decisions: 0, characters: 0,
+        companies: [], topSkills: [],
+      },
+    });
   }
 
   const nodes: CytoNode[] = [];
@@ -223,11 +231,29 @@ export async function GET() {
     }
   }
 
-  // Build stats
-  const companies = Array.from(experienceIds.entries())
-    .map(([key, expId]) => {
-      const [company, role] = key.split("::");
-      return { name: company, role, count: expCounts.get(expId) ?? 0 };
+  // Build stats — F-12: dedupe by distinct company name so Sprinklr (3 roles)
+  // counts once, not thrice. Keep per-(company,role) `experiences` for
+  // downstream code that needs stint granularity; the UI uses
+  // `distinct_companies` + `companies[]` (role-aggregated).
+  const perCompany = new Map<string, { roles: Set<string>; count: number }>();
+  for (const [key, expId] of experienceIds.entries()) {
+    const [company, role] = key.split("::");
+    if (!perCompany.has(company)) {
+      perCompany.set(company, { roles: new Set(), count: 0 });
+    }
+    const entry = perCompany.get(company)!;
+    if (role) entry.roles.add(role);
+    entry.count += expCounts.get(expId) ?? 0;
+  }
+  const companies = Array.from(perCompany.entries())
+    .map(([name, { roles, count }]) => {
+      const rolesArr = Array.from(roles);
+      return {
+        name,
+        role: rolesArr[0] ?? "",
+        count,
+        roles: rolesArr.length > 1 ? rolesArr : undefined,
+      };
     })
     .sort((a, b) => b.count - a.count);
 
@@ -242,7 +268,8 @@ export async function GET() {
 
   const stats: GraphStats = {
     achievements: achievementCount,
-    experiences: experienceIds.size,
+    experiences: experienceIds.size,       // # of (company, role) stints
+    distinct_companies: perCompany.size,   // F-12: the user-facing "companies" count
     skills: skillIds.size,
     decisions: decisionCount,
     characters: characterCount,

@@ -1113,7 +1113,7 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
         </h2>
         {hasGraph && (
           <p className="mt-1 text-sm text-muted">
-            {graphData.stats.achievements} achievements · {graphData.stats.experiences} companies · {graphData.stats.skills} skills
+            {graphData.stats.achievements} achievements · {(graphData.stats as { distinct_companies?: number; experiences: number }).distinct_companies ?? graphData.stats.experiences} companies · {graphData.stats.skills} skills
           </p>
         )}
         {onBack && (
