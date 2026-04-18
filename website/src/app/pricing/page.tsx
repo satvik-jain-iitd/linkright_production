@@ -3,12 +3,50 @@ import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/AppNav";
 import { WtpSurveyForm } from "./WtpSurveyForm";
 
+// Wave 2 / Screen 02 — Pricing.
+// Design handoff: specs/design-handoff-2026-04-18/ → screens-enter.jsx Screen02.
+
+const PLANS = [
+  {
+    name: "Free",
+    price: "₹0",
+    sub: "Forever free",
+    features: [
+      "3 tailored resumes / month",
+      "Profile that learns from every resume",
+      "Top 20 role matches refreshed daily",
+      "Basic interview drills",
+    ],
+    cta: "Start free",
+    ctaHref: "/auth?mode=signup",
+    variant: "ghost" as const,
+  },
+  {
+    name: "Pro",
+    price: "₹499",
+    sub: "per month",
+    badge: "Recommended",
+    features: [
+      "Everything in Free",
+      "Unlimited tailored resumes",
+      "Full application kit: cover letter, LinkedIn DM, recruiter email, portfolio",
+      "Interview coach with multi-persona roundtable",
+      "Brand-colour matching on every PDF",
+      "LinkedIn broadcast — draft, schedule, track",
+    ],
+    cta: "Upgrade to Pro",
+    ctaHref: "/auth?mode=signup",
+    variant: "cta" as const,
+  },
+];
+
 export default async function PricingPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const isLoggedIn = !!user;
 
-  // Check if this user already submitted the survey
   let alreadySubmitted = false;
   if (user) {
     const { data } = await supabase
@@ -21,128 +59,85 @@ export default async function PricingPage() {
 
   return (
     <div className="min-h-screen">
-      {/* [PRICING-REDESIGN] Replaced inline nav with AppNav */}
       <AppNav user={user} variant="landing" />
-      {// [PRICING-REDESIGN] Old inline nav removed — was:
-      // <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
-      //   <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-      //     <Link href="/" className="text-lg font-bold tracking-tight">
-      //       Link<span className="text-accent">Right</span>
-      //     </Link>
-      //     <div className="flex items-center gap-8 text-sm text-muted">
-      //       <Link href="/#features" className="hidden transition-colors hover:text-foreground sm:block">
-      //         Features
-      //       </Link>
-      //       <Link
-      //         href={isLoggedIn ? "/dashboard" : "/auth"}
-      //         className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-      //       >
-      //         {isLoggedIn ? "\u2190 Dashboard" : "Get Started"}
-      //       </Link>
-      //     </div>
-      //   </div>
-      // </nav>
-      null}
 
-      <main className="px-6 pt-32 pb-24">
-        {/* ---- Pricing Tiers ---- */}
-        <section className="mx-auto max-w-4xl text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
+      <main className="px-6 pt-20 pb-24">
+        <section className="mx-auto max-w-[1080px] text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-accent">
             Pricing
           </p>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Simple, transparent pricing
+          <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
+            Start free. Upgrade when you ship.
           </h1>
           <p className="mt-4 text-muted">
-            Start free, upgrade when you need more power.
+            One plan handles the whole hunt. No seat fees. No upsells mid-flow.
           </p>
 
-          <div className="mt-12 grid gap-8 sm:grid-cols-2">
-            {/* Free Tier */}
-            <div className="rounded-2xl border border-border bg-surface p-8 text-left">
-              <h2 className="text-lg font-semibold">Free</h2>
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-4xl font-bold tracking-tight">&#8377;0</span>
-                <span className="text-sm text-muted">/forever</span>
-              </div>
-              <ul className="mt-8 space-y-3 text-sm text-muted">
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  1 resume
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  Basic template
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  JD analysis
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  Width optimization
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  Brand color matching
-                </li>
-              </ul>
-              <Link
-                href="/auth"
-                className="mt-8 block w-full rounded-full border border-accent bg-transparent py-3 text-center text-sm font-semibold text-accent transition-colors hover:bg-accent/10"
+          <div className="mt-14 grid gap-6 text-left md:grid-cols-2">
+            {PLANS.map((p) => (
+              <div
+                key={p.name}
+                className="relative rounded-2xl border bg-surface p-8 shadow-sm"
+                style={{
+                  borderColor:
+                    p.variant === "cta" ? "var(--color-accent)" : "var(--color-border)",
+                  boxShadow:
+                    p.variant === "cta"
+                      ? "0 12px 32px rgba(15,190,175,0.12)"
+                      : undefined,
+                }}
               >
-                Start Free
-              </Link>
-            </div>
-
-            {/* Pro Tier */}
-            <div className="relative rounded-2xl border-2 border-accent bg-surface p-8 text-left ring-1 ring-accent/20">
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-0.5 text-xs font-semibold text-white">
-                Coming Soon
-              </span>
-              <h2 className="text-lg font-semibold">Pro</h2>
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-4xl font-bold tracking-tight">&#8377;299</span>
-                <span className="text-sm text-muted">/mo</span>
+                {p.badge && (
+                  <span className="absolute right-6 top-6 rounded-full bg-accent/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                    {p.badge}
+                  </span>
+                )}
+                <h2 className="text-lg font-bold tracking-tight">{p.name}</h2>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-5xl font-bold tracking-tight">
+                    {p.price}
+                  </span>
+                  <span className="text-sm text-muted">{p.sub}</span>
+                </div>
+                <div className="mt-6 border-t border-border pt-5">
+                  {p.features.map((f) => (
+                    <div
+                      key={f}
+                      className="mb-3 flex items-start gap-2.5 text-sm text-foreground"
+                    >
+                      <span className="mt-0.5 text-accent">✓</span>
+                      <span>{f}</span>
+                    </div>
+                  ))}
+                </div>
+                <Link
+                  href={p.ctaHref}
+                  className={
+                    p.variant === "cta"
+                      ? "mt-6 block w-full rounded-full bg-cta py-3 text-center text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+                      : "mt-6 block w-full rounded-full border border-border bg-white py-3 text-center text-sm font-semibold text-foreground transition hover:border-accent"
+                  }
+                >
+                  {p.cta}
+                </Link>
               </div>
-              <ul className="mt-8 space-y-3 text-sm text-muted">
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  Unlimited resumes
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  All templates
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  Priority generation
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-accent">&#10003;</span>
-                  Advanced analytics
-                </li>
-              </ul>
-              <button
-                disabled
-                className="mt-8 block w-full cursor-not-allowed rounded-full bg-cta/40 py-3 text-center text-sm font-semibold text-white"
-              >
-                Coming Soon
-              </button>
-            </div>
+            ))}
           </div>
+
+          <p className="mt-10 text-xs text-muted">
+            Broadcast is in early access · Comes to Pro in May 2026
+          </p>
         </section>
 
-        {/* ---- Section divider ---- */}
-        <div className="mx-auto my-20 flex max-w-4xl items-center gap-4">
+        {/* Keep WTP survey below — informs final pricing for GA launch. */}
+        <div className="mx-auto my-20 flex max-w-[1080px] items-center gap-4">
           <div className="h-px flex-1 bg-border" />
-          <span className="text-xs font-medium uppercase tracking-widest text-muted">
+          <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
             Help us shape pricing
           </span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
-        {/* ---- WTP Survey ---- */}
         <WtpSurveyForm
           isLoggedIn={isLoggedIn}
           userId={user?.id ?? null}
@@ -150,26 +145,20 @@ export default async function PricingPage() {
         />
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border px-6 py-12">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
-          <div>
-            <span className="text-lg font-bold tracking-tight">
-              Link<span className="text-accent">Right</span>
-            </span>
-            <p className="mt-1 text-sm text-muted">AI-powered career tools</p>
-          </div>
-          <div className="flex items-center gap-8 text-sm text-muted">
-            {// [PRICING-REDESIGN] Changed "Sync" to "Features"
-            null}
-            <Link href="/#features" className="transition-colors hover:text-foreground">
-              Features
+      <footer className="border-t border-border px-6 py-10">
+        <div className="mx-auto flex max-w-[1080px] flex-col items-center justify-between gap-4 text-sm text-muted sm:flex-row">
+          <span className="text-base font-bold tracking-tight text-foreground">
+            Link<span className="text-accent">Right</span>
+          </span>
+          <div className="flex gap-6">
+            <Link href="/" className="transition hover:text-foreground">
+              Home
             </Link>
-            <Link href="/pricing" className="transition-colors hover:text-foreground">
-              Pricing
+            <Link href="/privacy" className="transition hover:text-foreground">
+              Privacy
             </Link>
           </div>
-          <p className="text-sm text-muted">Made in India</p>
+          <span>Made in India 🇮🇳</span>
         </div>
       </footer>
     </div>

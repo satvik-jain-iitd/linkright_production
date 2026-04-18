@@ -2,271 +2,189 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/AppNav";
 
-// [NAV-REDESIGN] function Navbar({ isLoggedIn }: { isLoggedIn: boolean }) {
-// [NAV-REDESIGN]   const ctaHref = isLoggedIn ? "/dashboard" : "/auth";
-// [NAV-REDESIGN]   const ctaLabel = isLoggedIn ? "Dashboard" : "Get Started";
-// [NAV-REDESIGN]
-// [NAV-REDESIGN]   return (
-// [NAV-REDESIGN]     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
-// [NAV-REDESIGN]       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-// [NAV-REDESIGN]         <Link href="/" className="text-lg font-bold tracking-tight">
-// [NAV-REDESIGN]           Link<span className="text-accent">Right</span>
-// [NAV-REDESIGN]         </Link>
-// [NAV-REDESIGN]         <div className="hidden items-center gap-8 text-sm text-muted sm:flex">
-// [NAV-REDESIGN]           <Link href="#features" className="transition-colors hover:text-foreground">
-// [NAV-REDESIGN]             Features
-// [NAV-REDESIGN]           </Link>
-// [NAV-REDESIGN]           <Link href="/pricing" className="transition-colors hover:text-foreground">
-// [NAV-REDESIGN]             Pricing
-// [NAV-REDESIGN]           </Link>
-// [NAV-REDESIGN]           <Link
-// [NAV-REDESIGN]             href={ctaHref}
-// [NAV-REDESIGN]             className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
-// [NAV-REDESIGN]           >
-// [NAV-REDESIGN]             {ctaLabel}
-// [NAV-REDESIGN]           </Link>
-// [NAV-REDESIGN]         </div>
-// [NAV-REDESIGN]         <Link
-// [NAV-REDESIGN]           href={ctaHref}
-// [NAV-REDESIGN]           className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white sm:hidden"
-// [NAV-REDESIGN]         >
-// [NAV-REDESIGN]           {ctaLabel}
-// [NAV-REDESIGN]         </Link>
-// [NAV-REDESIGN]       </div>
-// [NAV-REDESIGN]     </nav>
-// [NAV-REDESIGN]   );
-// [NAV-REDESIGN] }
+// Wave 2 / Screen 01 — Landing.
+// Design handoff: specs/design-handoff-2026-04-18/ → screens-enter.jsx Screen01.
+// Rewrite: concise, problem-led, don't undersell. Internal terms (memory layer,
+// atoms, nuggets, Discover/Find/Outreach) stay OUT of user-facing copy per
+// specs/wave-2-design-brief-2026-04-18.md Part 1 jargon rule.
 
 function Hero() {
   return (
-    <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 pt-16">
-      {/* Signature teal radial wash — design system */}
+    <section className="relative overflow-hidden px-6 pt-24 pb-20 text-center">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(15,190,175,0.08)_0%,_transparent_70%)]" />
-
-      <div className="relative z-10 mx-auto max-w-3xl text-center">
-        <p className="mb-4 text-sm font-medium uppercase tracking-[0.12em] text-accent">
-          career navigation os
+      <div className="relative z-10 mx-auto max-w-3xl">
+        <p className="mb-5 text-xs font-medium uppercase tracking-[0.14em] text-accent">
+          Career OS · built for India · PM · SWE · DA
         </p>
-
-        <h1 className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
-          Find the job. Reach out.<br />
-          Prepare. Land it.<br />
-          <span className="text-accent">One memory.</span>
+        <h1 className="text-4xl font-bold leading-[1.04] tracking-tight text-foreground sm:text-5xl md:text-[60px]">
+          Job hunting,<br />
+          but your profile gets{" "}
+          <span className="text-accent">sharper</span> every week.
         </h1>
-
-        <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted sm:text-xl">
-          LinkRight is a career OS with a memory layer at the core. Five jobs — find, rank,
-          reach out, prepare, broadcast — all powered by a story of you that grows every day you show up.
+        <p className="mx-auto mt-7 max-w-xl text-base leading-relaxed text-muted sm:text-lg">
+          Upload your resume once. LinkRight builds a profile that learns what
+          you&apos;re good at — then makes every application, every post, every
+          interview prep sharper.
         </p>
-
-        <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3 text-left">
-          <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
-            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
-            <span><span className="text-accent font-medium">5 artefacts</span> per application — resume, cover letter, LinkedIn DM, recruiter email, portfolio</span>
-          </p>
-          <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
-            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
-            <span>Memory layer <span className="text-accent font-medium">sharpens daily</span> from your wins, failures, and outcomes</span>
-          </p>
-          <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
-            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
-            <span>Ship-quality resume in <span className="text-accent font-medium">90 seconds</span>, no filler, no AI slop</span>
-          </p>
-        </div>
-
-        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+        <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/auth?mode=signup"
-            className="rounded-full bg-cta px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl hover:shadow-cta/30"
+            className="inline-flex items-center gap-2 rounded-full bg-cta px-7 py-3.5 text-base font-semibold text-white shadow-cta transition hover:bg-cta-hover"
           >
-            Start for Free
+            Start for free
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+              />
+            </svg>
           </Link>
           <a
             href="#how-it-works"
-            className="rounded-full border border-border px-8 py-3.5 text-base font-medium text-foreground/70 transition-colors hover:border-accent hover:text-accent"
+            className="rounded-full border border-border bg-white px-7 py-3.5 text-base font-medium text-foreground transition hover:border-accent"
           >
             See how it works
           </a>
         </div>
-
-        <p className="mt-6 text-sm text-muted">
-          First resume free. No credit card required.
+        <p className="mt-5 text-xs text-muted">
+          First resume free · No credit card · Takes 90 seconds
         </p>
       </div>
     </section>
   );
 }
 
-// Five pillars — the product's real shape. Each card = one "job" that LinkRight does.
-// Colour assignments follow the design system zone rules (teal primary, gold achievement,
-// purple AI, pink human/relational, sage interview).
-const features = [
+const PROOF_TILES = [
   {
-    title: "Find",
-    kicker: "Jobs, everywhere.",
-    description:
-      "Scout scans LinkedIn, Greenhouse, Lever, company careers pages. Daily + on-demand. One inbox for every relevant role — not a feed of 200.",
-    tint: "bg-accent/10 text-accent",
+    accent: "purple",
+    title: "A profile that remembers you",
+    body: "Every achievement, every project, every learning. It grows with you.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-      </svg>
+      <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
     ),
   },
   {
-    title: "Rank",
-    kicker: "Against your story.",
-    description:
-      "Every JD scored semantically against your memory layer + preferences. The top 20 today are the ones worth your time — gaps flagged honestly.",
-    tint: "bg-gold-500/10 text-gold-700",
+    accent: "teal",
+    title: "Honest match scores",
+    body: "Top 20 roles for you today. If it's 62%, we say 62% — and the 3 gaps.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-      </svg>
+      <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
     ),
   },
   {
-    title: "Reach out",
-    kicker: "5 artefacts per job.",
-    description:
-      "For every application: tailored resume, cover letter, LinkedIn DM, recruiter email, portfolio site — all drawn from the same memory layer.",
-    tint: "bg-secondary-500/10 text-secondary-700",
+    accent: "coral",
+    title: "One click, five artefacts",
+    body: "Resume, cover letter, LinkedIn DM, recruiter email, portfolio — tailored.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-      </svg>
+      <path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
     ),
   },
   {
-    title: "Prepare",
-    kicker: "Interview & weak spots.",
-    description:
-      "Memory knows what you don't know. Personalised drills per role — telephonic, technical, product sense, case. A quiet room to practise.",
-    tint: "bg-sage-100 text-sage-700",
+    accent: "pink",
+    title: "Posts in your voice",
+    body: "Drafted from your real wins and diary — not ChatGPT slop.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
-      </svg>
-    ),
-  },
-  {
-    title: "Broadcast",
-    kicker: "Brand visibility.",
-    description:
-      "Daily diary becomes weekly LinkedIn posts in your voice — from what you shipped, not thought-leadership slop. Authentic presence at scale.",
-    tint: "bg-pink-500/10 text-pink-700",
-    soon: true,
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 0 8.835-2.535m0 0A23.74 23.74 0 0 0 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
-      </svg>
+      <path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.164 2.27.294 3.423.39 1.1.092 1.907 1.056 1.907 2.16v4.773l3.423-3.423a1.125 1.125 0 01.8-.33 48.31 48.31 0 005.58-.498c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
     ),
   },
 ];
 
-function Features() {
-  return (
-    <section id="features" className="border-t border-border px-6 py-24">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-16 text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-[0.12em] text-accent">
-            Five pillars
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Five jobs. One memory loop.
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-muted">
-            Each step feeds the memory layer — recruiter replies, failed answers, shipped work.
-            The product gets sharper every time you use it.
-          </p>
-        </div>
+const TILE_TINT: Record<string, string> = {
+  purple: "bg-purple-500/10 text-purple-700",
+  teal: "bg-accent/10 text-accent",
+  coral: "bg-cta/10 text-cta",
+  pink: "bg-pink-500/10 text-pink-700",
+};
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => (
+function ProofTiles() {
+  return (
+    <section className="px-6 pb-24">
+      <div className="mx-auto grid max-w-[1080px] gap-5 md:grid-cols-2 lg:grid-cols-4">
+        {PROOF_TILES.map((t) => (
+          <div
+            key={t.title}
+            className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
+          >
             <div
-              key={f.title}
-              className="group relative rounded-2xl border border-border bg-surface p-6 shadow-sm transition-all hover:border-accent/30 hover:shadow-md"
+              className={`flex h-10 w-10 items-center justify-center rounded-lg ${TILE_TINT[t.accent]}`}
             >
-              {f.soon && (
-                <span className="absolute right-4 top-4 rounded-full bg-gold-500/10 px-2.5 py-0.5 text-xs font-medium text-gold-700">
-                  Soon
-                </span>
-              )}
-              <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg ${f.tint}`}>
-                {f.icon}
-              </div>
-              <h3 className="mb-1 text-lg font-semibold">{f.title}</h3>
-              <p className="mb-3 text-sm font-medium text-foreground/80">{f.kicker}</p>
-              <p className="text-sm leading-relaxed text-muted">
-                {f.description}
-              </p>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                viewBox="0 0 24 24"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {t.icon}
+              </svg>
             </div>
-          ))}
-        </div>
+            <h3 className="mt-3.5 text-[15px] font-semibold tracking-tight">
+              {t.title}
+            </h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+              {t.body}
+            </p>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
-// Honest 4-step flow — matches the actual onboarding + builder journey.
-// (The old "3 steps" claim was the biggest brand/truth gap per the SIGNAL audit.)
-const steps = [
+const STEPS = [
   {
-    number: "01",
-    title: "Sign up in 2 min",
-    description:
-      "Email + password. No credit card. Fresh account, fresh memory layer.",
+    n: "01",
+    title: "Drop your resume",
+    body: "We parse it, show you what we understood, and start your profile.",
   },
   {
-    number: "02",
-    title: "Upload or chat",
-    description:
-      "PDF, DOCX, or paste text. Memory layer builds from your work, wins, and story.",
+    n: "02",
+    title: "Pick a role",
+    body:
+      "Honest match scores. We tell you why it's a fit and where the gaps are.",
   },
   {
-    number: "03",
-    title: "Pick your target",
-    description:
-      "Paste a JD or let Scout suggest. We show the gaps — no 100%-fake-match theatre.",
-  },
-  {
-    number: "04",
-    title: "Apply-pack in 90s",
-    description:
-      "Tailored resume + cover letter + LinkedIn DM + recruiter email. Download or host on GitHub Pages.",
+    n: "03",
+    title: "Ship the application",
+    body:
+      "Resume, cover letter, LinkedIn DM, recruiter email — all tailored.",
   },
 ];
 
 function HowItWorks() {
   return (
-    <section id="how-it-works" className="border-t border-border px-6 py-24">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-16 text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-[0.12em] text-accent">
-            How it works
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Four steps. Honest flow.
-          </h2>
-          <p className="mx-auto mt-4 max-w-lg text-muted">
-            No &ldquo;paste JD and download&rdquo; sleight of hand. This is the real path from signup to apply-pack.
-          </p>
-        </div>
-
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map((s, i) => (
-            <div key={s.number} className="relative text-center">
-              <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-lg font-bold text-accent">
-                {s.number}
+    <section
+      id="how-it-works"
+      className="border-t border-border bg-surface px-6 py-24"
+    >
+      <div className="mx-auto max-w-[1000px] text-center">
+        <p className="text-xs font-medium uppercase tracking-[0.14em] text-accent">
+          How it works
+        </p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+          Three steps. One daily ritual.
+        </h2>
+        <div className="mt-12 flex flex-col items-stretch justify-center gap-4 sm:flex-row sm:items-start">
+          {STEPS.map((s, i, arr) => (
+            <div key={s.n} className="flex flex-1 flex-col items-center text-center sm:px-3">
+              <div className="relative flex items-center justify-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-[14px] font-bold text-white">
+                  {s.n}
+                </div>
               </div>
-              <h3 className="mb-3 text-lg font-semibold">{s.title}</h3>
-              <p className="text-sm leading-relaxed text-muted">
-                {s.description}
-              </p>
-              {i < steps.length - 1 && (
-                <span className="pointer-events-none absolute right-0 top-7 hidden translate-x-1/2 text-accent/40 lg:block" aria-hidden="true">
-                  &rarr;
-                </span>
+              <h3 className="mt-3.5 text-base font-semibold">{s.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">{s.body}</p>
+              {i < arr.length - 1 && (
+                <span className="mt-4 hidden text-muted sm:block">&rarr;</span>
               )}
             </div>
           ))}
@@ -276,82 +194,35 @@ function HowItWorks() {
   );
 }
 
-function Pricing() {
+function FinalCta() {
   return (
-    <section id="pricing" className="border-t border-border px-6 py-24">
-      <div className="mx-auto max-w-6xl">
-        <div className="text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
-            Pricing
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Start free, upgrade when you need more
-          </h2>
-          <p className="mx-auto mt-4 max-w-md text-muted">
-            Your first resume is free. Pro plans from &#8377;299/mo.
-          </p>
-          <Link
-            href="/pricing"
-            className="mt-8 inline-block rounded-full bg-cta px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl hover:shadow-cta/30"
+    <section className="border-t border-border px-6 py-20 text-center">
+      <div className="mx-auto max-w-xl">
+        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          Ready in 90 seconds.
+        </h2>
+        <p className="mt-3 text-sm text-muted">
+          Upload once. Ship applications for weeks.
+        </p>
+        <Link
+          href="/auth?mode=signup"
+          className="mt-7 inline-flex items-center gap-2 rounded-full bg-cta px-7 py-3.5 text-base font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+        >
+          Start for free
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
           >
-            See Plans
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const stats = [
-  { value: "14", label: "tailored bullets vs. 8 industry average" },
-  { value: "95-100%", label: "line fill rate (industry: ~70%)" },
-  { value: "33", label: "quality rules enforced per resume" },
-  { value: "0", label: "AI words detected by GPTZero" },
-];
-
-function SocialProof() {
-  return (
-    <section className="border-t border-border px-6 py-24">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-16 text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
-            Why trust us
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Built by someone who ships
-          </h2>
-        </div>
-
-        <div className="mb-12 grid gap-6 sm:grid-cols-2">
-          <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
-            <p className="text-lg font-medium leading-relaxed">
-              Built by a Product Manager at American Express
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              Enterprise product experience. Understands what hiring managers look for.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
-            <p className="text-lg font-medium leading-relaxed">
-              Tested across 36+ enterprise implementations at Sprinklr
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              Battle-tested methodology, not a weekend hack.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className="rounded-2xl border border-border bg-surface p-6 text-center shadow-sm"
-            >
-              <div className="text-3xl font-bold text-accent">{s.value}</div>
-              <div className="mt-1 text-sm text-muted">{s.label}</div>
-            </div>
-          ))}
-        </div>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+            />
+          </svg>
+        </Link>
       </div>
     </section>
   );
@@ -359,25 +230,23 @@ function SocialProof() {
 
 function Footer() {
   return (
-    <footer className="border-t border-border px-6 py-12">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 sm:flex-row">
-        <div>
-          <span className="text-lg font-bold tracking-tight">
-            Link<span className="text-accent">Right</span>
-          </span>
-          <p className="mt-1 text-sm text-muted">AI-powered career tools</p>
-        </div>
-        <div className="flex items-center gap-8 text-sm text-muted">
-          <Link href="/#features" className="transition-colors hover:text-foreground">
-            Features
-          </Link>
-          <Link href="/pricing" className="transition-colors hover:text-foreground">
+    <footer className="border-t border-border px-6 py-10">
+      <div className="mx-auto flex max-w-[1080px] flex-col items-center justify-between gap-4 text-sm text-muted sm:flex-row">
+        <span className="text-base font-bold tracking-tight text-foreground">
+          Link<span className="text-accent">Right</span>
+        </span>
+        <div className="flex gap-6">
+          <Link href="/pricing" className="transition hover:text-foreground">
             Pricing
           </Link>
+          <Link href="#how-it-works" className="transition hover:text-foreground">
+            How it works
+          </Link>
+          <Link href="/privacy" className="transition hover:text-foreground">
+            Privacy
+          </Link>
         </div>
-        <p className="text-sm text-muted">
-          Made in India 🇮🇳
-        </p>
+        <span>Made in India 🇮🇳</span>
       </div>
     </footer>
   );
@@ -385,33 +254,32 @@ function Footer() {
 
 export default async function Home() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isLoggedIn = !!user;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   return (
     <>
       <AppNav user={user ?? null} variant="landing" />
-      {/* [PSA5-382.3.1.1] Returning user dashboard banner */}
       {user && (
-        <div className="fixed top-16 left-0 right-0 z-40 border-b border-accent/20 bg-accent/5 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-2.5">
+        <div className="border-b border-accent/20 bg-accent/5">
+          <div className="mx-auto flex max-w-[1080px] items-center justify-between px-6 py-2.5">
             <p className="text-sm text-foreground/80">
-              Welcome back! You have an active account.
+              Welcome back — pick up where you left off.
             </p>
             <Link
               href="/dashboard"
-              className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent/90"
+              className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-accent-hover"
             >
-              Go to Dashboard →
+              Go to dashboard →
             </Link>
           </div>
         </div>
       )}
       <Hero />
-      <Features />
+      <ProofTiles />
       <HowItWorks />
-      <Pricing />
-      <SocialProof />
+      <FinalCta />
       <Footer />
     </>
   );
