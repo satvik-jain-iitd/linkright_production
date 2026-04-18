@@ -1403,10 +1403,15 @@ function ProgressBar({ step, onStepClick }: { step: Step; onStepClick?: (s: Step
 const ROLES_KEY = "lr_selected_roles";
 
 export function OnboardingFlow() {
-  const [step, setStep] = useState<Step | null>(null); // null = loading
+  // v2 design: first screen post-signup is upload (step 2 = StepCareerBasics),
+  // NOT role selection. Step 1 (StepWelcome) is deprecated and skipped for
+  // fresh users. Roles can be picked later on the preferences screen.
+  const [step, setStep] = useState<Step>(2);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
 
-  // On mount: restore target roles from localStorage + detect step from Supabase
+  // Restore target roles from localStorage + optionally advance past
+  // upload if the user already has career data. Status fetch is
+  // non-blocking — UI renders step 2 (upload) immediately, no spinner.
   useEffect(() => {
     const saved = localStorage.getItem(ROLES_KEY);
     if (saved) {
@@ -1414,25 +1419,19 @@ export function OnboardingFlow() {
     }
 
     fetch("/api/onboarding/status")
-      .then((r) => r.json())
-      .then((data: {
-        has_career_data?: boolean;
-        session_started?: boolean;
-        session_complete?: boolean;
-      }) => {
-        if (data.session_complete || data.session_started) {
-          // Interview done or in progress → jump to summary or skill step
-          setStep(data.session_complete ? 4 : 3);
-        } else if (data.has_career_data) {
-          // Career basics saved → skip to interview step
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        if (data.session_complete) {
+          setStep(4);
+        } else if (data.session_started) {
           setStep(3);
-        } else {
-          // Fresh user: start from step 1 (roles) or step 2 if roles already picked
-          const hasSavedRoles = !!saved && JSON.parse(saved).length > 0;
-          setStep(hasSavedRoles ? 2 : 1);
+        } else if (data.has_career_data) {
+          setStep(3);
         }
+        // else: stay on step 2 (upload)
       })
-      .catch(() => setStep(1)); // fallback: show step 1
+      .catch(() => { /* keep step 2 */ });
   }, []);
 
   const handleRolesChange = (roles: string[]) => {
@@ -1445,14 +1444,6 @@ export function OnboardingFlow() {
       body: JSON.stringify({ target_roles: roles }),
     }).catch(() => { /* silent — localStorage has the data */ });
   };
-
-  if (step === null) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 rounded-full border-2 border-primary-500 border-t-transparent animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div>
