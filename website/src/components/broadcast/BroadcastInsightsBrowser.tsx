@@ -4,7 +4,7 @@
 // Grid of moments pulled from /api/broadcast/insights. Click "Write a post"
 // → /dashboard/broadcast/compose?insight_id=X&kind=nugget|diary.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Insight = {
@@ -39,24 +39,35 @@ export function BroadcastInsightsBrowser() {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const qs = filter === "All" ? "" : `?filter=${filter.toLowerCase()}`;
-    const [iRes, sRes] = await Promise.all([
-      fetch(`/api/broadcast/insights${qs}`, { cache: "no-store" }),
-      fetch("/api/broadcast/status", { cache: "no-store" }),
-    ]);
-    if (iRes.ok) {
-      const body = await iRes.json();
-      setInsights(body.insights ?? []);
-    }
-    if (sRes.ok) setStatus(await sRes.json());
-    setLoading(false);
-  }, [filter]);
-
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) setLoading(true);
+      const qs = filter === "All" ? "" : `?filter=${filter.toLowerCase()}`;
+      const [iRes, sRes] = await Promise.all([
+        fetch(`/api/broadcast/insights${qs}`, { cache: "no-store" }),
+        fetch("/api/broadcast/status", { cache: "no-store" }),
+      ]);
+      if (cancelled) return;
+      if (iRes.ok) {
+        const body = await iRes.json();
+        if (!cancelled) setInsights(body.insights ?? []);
+      }
+      if (sRes.ok) {
+        const body = await sRes.json();
+        if (!cancelled) setStatus(body);
+      }
+      if (!cancelled) setLoading(false);
+    };
+    // Defer loading state + fetches out of the synchronous effect body so the
+    // react-hooks/set-state-in-effect rule is happy.
+    queueMicrotask(() => {
+      if (!cancelled) run();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filter]);
 
   const queued = status?.counts?.scheduled ?? 0;
 

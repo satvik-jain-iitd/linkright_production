@@ -108,13 +108,6 @@ export function ProfileView({
 
   const totalHighlights = stats?.total_extracted ?? 0;
   const companyCount = 0; // Derived elsewhere; not exposed in status yet.
-  const weeksActive = Math.max(
-    0,
-    Math.round(
-      // Placeholder: integrate when auth.users.created_at available.
-      0,
-    ),
-  );
 
   return (
     <div className="mx-auto max-w-[1000px] px-6 py-10 space-y-5">

@@ -5,17 +5,36 @@ import { WizardShell } from "./WizardShell";
 export default async function NewResumePage({
   searchParams,
 }: {
-  searchParams: Promise<{ job?: string; retry_jd?: string }>;
+  searchParams: Promise<{ job?: string; retry_jd?: string; job_id?: string; discovery_id?: string }>;
 }) {
-  const { job, retry_jd } = await searchParams;
+  const { job, retry_jd, job_id, discovery_id } = await searchParams;
   // [PSA5-ayd.2.1.3] Decode retry_jd param to pre-fill JD textarea on retry
-  const retryJdText = retry_jd ? decodeURIComponent(retry_jd as string) : undefined;
+  let retryJdText = retry_jd ? decodeURIComponent(retry_jd as string) : undefined;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/auth");
+
+  // S08 → S09 handoff: Find Roles passes either ?job_id= or ?discovery_id=
+  // referring to a job_discoveries row. We pull its JD + title so the user
+  // skips pasting a JD when they came from Scout.
+  const discoveryTarget = discovery_id || (job_id && job_id.length > 20 ? job_id : undefined);
+  if (discoveryTarget && !retryJdText) {
+    const { data: disc } = await supabase
+      .from("job_discoveries")
+      .select("title, company_name, jd_text")
+      .eq("id", discoveryTarget)
+      .maybeSingle();
+    if (disc?.jd_text) {
+      const header =
+        disc.title && disc.company_name
+          ? `Role: ${disc.title}\nCompany: ${disc.company_name}\n\n`
+          : "";
+      retryJdText = `${header}${disc.jd_text}`;
+    }
+  }
 
   // Onboarding gate: redirect if user hasn't completed setup
   // [BYOK-REMOVED] const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([

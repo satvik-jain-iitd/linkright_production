@@ -3,7 +3,7 @@
 // Wave 2 / S18 — Schedule + tracker.
 // Tabs: Scheduled | Posted | Drafts. Analytics rail on the right.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Post = {
@@ -43,26 +43,34 @@ export function BroadcastScheduleTracker() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await fetch(`/api/broadcast/posts?status=${tab}`, {
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const body = await res.json();
-      setPosts(body.posts ?? []);
-    }
-    setLoading(false);
-  }, [tab]);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    const run = async () => {
+      if (!cancelled) setLoading(true);
+      const res = await fetch(`/api/broadcast/posts?status=${tab}`, {
+        cache: "no-store",
+      });
+      if (cancelled) return;
+      if (res.ok) {
+        const body = await res.json();
+        if (!cancelled) setPosts(body.posts ?? []);
+      }
+      if (!cancelled) setLoading(false);
+    };
+    queueMicrotask(() => {
+      if (!cancelled) run();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, reloadTick]);
 
   const deletePost = async (id: string) => {
     if (!confirm("Delete this post?")) return;
     const res = await fetch(`/api/broadcast/posts/${id}`, { method: "DELETE" });
-    if (res.ok) load();
+    if (res.ok) setReloadTick((x) => x + 1);
   };
 
   const counts = useMemo(() => {
@@ -73,10 +81,12 @@ export function BroadcastScheduleTracker() {
     return totals;
   }, [posts]);
 
-  // Aggregate engagement from posted list
+  // Aggregate engagement from posted list. `nowMs` is frozen at mount —
+  // component re-mounts on navigation, which is often enough for "last 30 days".
+  const [nowMs] = useState(() => Date.now());
   const posted30 = useMemo(() => {
     if (tab !== "posted") return { impressions: 0, likes: 0, comments: 0 };
-    const cutoff = Date.now() - 30 * 86400 * 1000;
+    const cutoff = nowMs - 30 * 86400 * 1000;
     return posts.reduce(
       (acc, p) => {
         if (p.posted_at && new Date(p.posted_at).getTime() >= cutoff) {
@@ -88,7 +98,7 @@ export function BroadcastScheduleTracker() {
       },
       { impressions: 0, likes: 0, comments: 0 },
     );
-  }, [posts, tab]);
+  }, [posts, tab, nowMs]);
 
   return (
     <div>
