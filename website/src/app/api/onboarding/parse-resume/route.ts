@@ -189,7 +189,10 @@ export async function POST(request: Request) {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 2600, temperature: 0 }
+      // Bumped 2600 → 4000: richer resumes (4-5 roles × projects × narration)
+      // hit the old ceiling and the LLM returned truncated JSON, failing
+      // extractJson and bubbling to a 422 the retry helper couldn't recover.
+      { maxTokens: 4000, temperature: 0 }
     );
 
     const llmParsed = extractJson(rawText);
