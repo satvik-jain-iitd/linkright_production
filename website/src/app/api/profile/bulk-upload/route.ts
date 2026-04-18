@@ -142,7 +142,7 @@ export async function POST(request: Request) {
             importance: "P1",
             factuality: "fact",
             temporality: "past",
-            duration: "sustained",
+            duration: "point_in_time",
             leadership_signal: "none",
             tags: ["bulk_upload", ...arr(h.tags)],
           });
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
             importance: "P2",
             factuality: "fact",
             temporality: "past",
-            duration: "sustained",
+            duration: "point_in_time",
             leadership_signal: "none",
             tags: ["bulk_upload"],
           });
@@ -213,7 +213,7 @@ export async function POST(request: Request) {
       role: null,
       resume_relevance: 0.6,
       importance: "P3",
-      factuality: "opinion",
+      factuality: "fact",
       temporality: "present",
       duration: "point_in_time",
       leadership_signal: "none",
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
       importance: "P3",
       factuality: "fact",
       temporality: "present",
-      duration: "sustained",
+      duration: "point_in_time",
       leadership_signal: "none",
       tags: ["bulk_upload", "skill"],
     });
@@ -257,7 +257,7 @@ export async function POST(request: Request) {
       importance: "P3",
       factuality: "fact",
       temporality: "past",
-      duration: "sustained",
+      duration: "point_in_time",
       leadership_signal: "none",
       tags: ["bulk_upload", "certification"],
     });

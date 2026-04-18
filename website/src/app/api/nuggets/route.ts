@@ -102,7 +102,7 @@ export async function POST(request: Request) {
     importance: "P1",
     factuality: "fact",
     temporality: "past",
-    duration: "sustained",
+    duration: "point_in_time",
     leadership_signal: "none",
     tags: Array.isArray(body.tags)
       ? ["user_added", ...body.tags.filter((t) => typeof t === "string")]
