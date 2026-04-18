@@ -22,6 +22,12 @@ export async function GET() {
     headers: { Authorization: `Bearer ${WORKER_SECRET}` },
     cache: "no-store",
   });
-  const body = await res.json().catch(() => ({ raw: await res.text() }));
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = { raw: text };
+  }
   return Response.json({ http: res.status, body }, { status: 200 });
 }
