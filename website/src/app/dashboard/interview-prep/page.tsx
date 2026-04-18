@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/AppNav";
 
@@ -84,10 +83,9 @@ export default async function InterviewPrepHub() {
 
         <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {DRILLS.map((d) => (
-            <Link
+            <div
               key={d.key}
-              href={`/dashboard/interview-prep/${d.key}`}
-              className="group rounded-2xl p-5 transition"
+              className="group rounded-2xl p-5 opacity-90"
               style={{
                 background: "#F3F6EA",
                 border: "1px solid rgba(107,131,70,0.2)",
@@ -137,13 +135,12 @@ export default async function InterviewPrepHub() {
                   Tailored to you
                 </span>
                 <span
-                  className="text-xs font-semibold transition group-hover:translate-x-0.5"
-                  style={{ color: "#4A5D32" }}
+                  className="rounded-full bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700"
                 >
-                  Start →
+                  Coming soon
                 </span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
 
