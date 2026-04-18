@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "LinkRight — Apply with Memory",
+  "short_name": "LinkRight",
+  "version": "0.1.0",
+  "description": "Tailored resume, cover letter, LinkedIn DM, recruiter email — all from your memory layer. One click on any job page.",
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "LinkRight",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
+  },
+
+  "icons": {
+    "16": "assets/icon-16.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
+
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+
+  "permissions": ["activeTab", "storage", "scripting"],
+
+  "host_permissions": [
+    "https://sync.linkright.in/*",
+    "https://*.linkright.in/*",
+    "https://www.linkedin.com/jobs/*",
+    "https://*.greenhouse.io/*",
+    "https://boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.workable.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://www.amazon.jobs/*",
+    "https://amazon.jobs/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/view/*",
+        "https://boards.greenhouse.io/*/jobs/*",
+        "https://*.greenhouse.io/*/jobs/*",
+        "https://jobs.lever.co/*/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.workable.com/*/jobs/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://www.amazon.jobs/*/jobs/*",
+        "https://amazon.jobs/*/jobs/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

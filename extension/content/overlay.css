@@ -1,0 +1,4 @@
+/* Intentionally minimal — all overlay styles live inside the content-script
+   Shadow DOM (see content.js). This file exists only so the manifest can
+   reference a CSS entry without bundling overhead; extend here only for
+   host-page-reaching styles (rare — Shadow DOM isolation is preferred). */

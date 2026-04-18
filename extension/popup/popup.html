@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LinkRight</title>
+    <style>
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 16px;
+        font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #1A202C;
+        background: #FAFBFC;
+      }
+      h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 8px; }
+      h1 span { color: #0FBEAF; }
+      p { font-size: 13px; line-height: 1.5; color: #718096; margin: 0 0 12px; }
+      .btn {
+        display: block; width: 100%; padding: 10px 14px; border-radius: 9999px;
+        font-size: 13px; font-weight: 600; text-align: center; border: 1px solid transparent;
+        cursor: pointer; margin-bottom: 8px;
+      }
+      .btn-primary { background: #FF5733; color: white; box-shadow: 0 8px 24px rgba(255,87,51,0.20); }
+      .btn-primary:hover { background: #E04425; }
+      .btn-secondary { background: transparent; color: #1A202C; border-color: #E2E8F0; }
+      .btn-secondary:hover { border-color: #0FBEAF; color: #0FBEAF; }
+      .muted { color: #718096; font-size: 12px; }
+      .card { background: white; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+      .brand { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+      .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+      .dot-green { background: #0FBEAF; }
+      .dot-grey { background: #CBD5E0; }
+    </style>
+  </head>
+  <body>
+    <div class="brand">
+      <h1>Link<span>Right</span></h1>
+    </div>
+    <div id="view"></div>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LinkRight — Connected</title>
+    <style>
+      body {
+        width: 360px; margin: 0; padding: 24px;
+        font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+        color: #1A202C; background: #FAFBFC; text-align: center;
+      }
+      .check { width: 56px; height: 56px; border-radius: 50%; background: rgba(15,190,175,0.12); color: #0C9A8E;
+               display: inline-flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 12px; }
+      h1 { font-size: 18px; margin: 0 0 8px; letter-spacing: -0.02em; }
+      h1 span { color: #0FBEAF; }
+      p { font-size: 13px; color: #718096; line-height: 1.5; margin: 0 0 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="check">✓</div>
+    <h1>Link<span>Right</span> connected</h1>
+    <p>You can close this tab. The extension is ready to use on any job page — LinkedIn, Greenhouse, Lever, Ashby, Workable, Workday, Amazon Jobs.</p>
+    <script>
+      // The URL carries ?token=... &ttl_ms=... from /extension/connect after OAuth.
+      const p = new URLSearchParams(location.search);
+      const token = p.get("token");
+      const ttl = Number(p.get("ttl_ms")) || 30 * 24 * 60 * 60 * 1000;
+      if (token) {
+        chrome.runtime.sendMessage({ type: "lr:set-token", token, ttl_ms: ttl }, () => {});
+      }
+      // Close in 3s so user can read confirmation.
+      setTimeout(() => window.close(), 3000);
+    </script>
+  </body>
+</html>
