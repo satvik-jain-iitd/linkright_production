@@ -24,6 +24,17 @@ import {
 import { ScoreBreakdown } from "@/components/ScoreBreakdown";
 import { CoverLetterView } from "@/components/CoverLetterView";
 import { InterviewPrepView } from "@/components/InterviewPrepView";
+import { OutcomeModal } from "./OutcomeModal";
+
+type OutcomeKind = "interview" | "offer" | "rejected" | "ghosted";
+const OUTCOME_BY_COLUMN: Record<string, OutcomeKind | null> = {
+  wishlist: null,
+  drafting: null,
+  applied: null,
+  interviewing: "interview",
+  offer: "offer",
+  closed: "rejected",
+};
 
 function AddApplicationForm({ onCreated, onCancel }: { onCreated: (app: Application) => void; onCancel: () => void }) {
   const [company, setCompany] = useState("");
@@ -181,6 +192,12 @@ export function KanbanBoard() {
   const [activeApp, setActiveApp] = useState<Application | null>(null);
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [dragError, setDragError] = useState<string | null>(null);
+  const [outcomePrompt, setOutcomePrompt] = useState<{
+    applicationId: string;
+    company: string;
+    role: string;
+    outcome: OutcomeKind;
+  } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -281,6 +298,17 @@ export function KanbanBoard() {
         );
         setDragError("Failed to update status. Please try again.");
         setTimeout(() => setDragError(null), 4000);
+      } else {
+        // Success — prompt for an outcome note if the target column deserves one.
+        const outcomeKind = OUTCOME_BY_COLUMN[targetColumnId] ?? null;
+        if (outcomeKind) {
+          setOutcomePrompt({
+            applicationId: active.id as string,
+            company: activeApp.company ?? "",
+            role: activeApp.role ?? "",
+            outcome: outcomeKind,
+          });
+        }
       }
     } catch {
       // Revert
@@ -531,6 +559,17 @@ export function KanbanBoard() {
           <p className="text-lg font-medium text-foreground mb-1">No applications yet</p>
           <p className="text-sm text-muted mb-4">Add your first job application to start tracking</p>
         </div>
+      )}
+
+      {/* Outcome capture modal — opens on status drop to Interview / Offer / Closed. */}
+      {outcomePrompt && (
+        <OutcomeModal
+          applicationId={outcomePrompt.applicationId}
+          company={outcomePrompt.company}
+          role={outcomePrompt.role}
+          outcome={outcomePrompt.outcome}
+          onClose={() => setOutcomePrompt(null)}
+        />
       )}
     </div>
   );
