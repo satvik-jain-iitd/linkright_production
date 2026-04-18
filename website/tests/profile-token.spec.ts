@@ -7,7 +7,10 @@ import { test, expect } from '@playwright/test';
 
 const TOKEN_RE = /LR-[A-F0-9]{8,}/;
 
-test.describe('Profile & Oracle token (F-32)', () => {
+// SKIP-DEPRECATED-2026-04-18: Session token UI was removed in Wave 2 S20.
+// Oracle/Claude Code integration is deferred; /dashboard/profile no longer
+// surfaces a session token. Re-enable + rewrite if the token UX returns.
+test.describe.skip('Profile & Oracle token (F-32)', () => {
   test.use({ storageState: 'playwright/.auth/user.json' });
 
   test('profile page renders with Account + Session token + How-to-use sections', async ({ page }) => {

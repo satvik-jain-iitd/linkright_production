@@ -24,8 +24,8 @@ setup('create test user and authenticate', async ({ browser }) => {
   await page.getByRole('button', { name: 'Sign up' }).click();
 
   // Fill signup form
-  await page.getByPlaceholder('Email').fill(userEmail);
-  await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
+  await page.locator('input[type="email"]').fill(userEmail);
+  await page.locator('input[type="password"]').fill(TEST_PASSWORD);
   await page.getByRole('button', { name: 'Create account' }).click();
 
   // After clicking "Create account", two things can happen:
@@ -43,14 +43,14 @@ setup('create test user and authenticate', async ({ browser }) => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await page.getByPlaceholder('Email').fill(userEmail);
     await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Sign in with Email' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await page.waitForURL(/onboarding|dashboard/, { timeout: 15_000 });
   } else {
     // Timeout — try signing in anyway
     await page.goto('/auth');
     await page.getByPlaceholder('Email').fill(userEmail);
     await page.getByPlaceholder('Password').fill(TEST_PASSWORD);
-    await page.getByRole('button', { name: 'Sign in with Email' }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await page.waitForURL(/onboarding|dashboard/, { timeout: 15_000 });
   }
 
