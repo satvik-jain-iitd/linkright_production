@@ -136,7 +136,33 @@ async def process_job(req: JobRequest):
 
         logger.info(f"Job {req.job_id}: starting pipeline ({model_provider}/{model_id})")
         update_job(sb, req.job_id, status="processing", current_phase="starting", phase_number=0)
-        await run_pipeline(ctx, sb)
+
+        # Heartbeat: touch updated_at every 5s so the frontend can detect a
+        # stuck pipeline even when no phase-progress update is fired (e.g.
+        # during a long LLM call). Cancelled in `finally`.
+        async def _heartbeat():
+            while True:
+                try:
+                    from datetime import datetime, timezone
+                    sb.table("resume_jobs").update({
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }).eq("id", req.job_id).execute()
+                except Exception:
+                    pass
+                await asyncio.sleep(5)
+
+        hb_task = asyncio.create_task(_heartbeat())
+        try:
+            # Pipeline-level timeout: 300s is 3.3× our observed p95 (~90s) —
+            # generous enough for cold LLM starts yet bounds user wait time.
+            await asyncio.wait_for(run_pipeline(ctx, sb), timeout=300)
+        finally:
+            hb_task.cancel()
+            try:
+                await hb_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
         duration = int((time.time() - started) * 1000)
         logger.info(f"Job {req.job_id}: completed in {duration}ms")
         update_job(
@@ -147,6 +173,15 @@ async def process_job(req: JobRequest):
             progress_pct=100,
             output_html=ctx.output_html,
             stats=ctx.stats,
+            duration_ms=duration,
+        )
+    except asyncio.TimeoutError:
+        duration = int((time.time() - started) * 1000)
+        logger.error(f"Job {req.job_id}: TIMED OUT after {duration}ms (5min cap)")
+        update_job(
+            sb, req.job_id,
+            status="failed",
+            error_message="Pipeline exceeded 5-minute time limit. Please try again — this usually resolves on retry. If it persists, contact support.",
             duration_ms=duration,
         )
     except Exception as e:
