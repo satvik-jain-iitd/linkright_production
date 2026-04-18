@@ -23,7 +23,7 @@ export function KanbanColumnComponent({
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   return (
-    <div className="flex flex-col w-64 min-w-[256px] shrink-0">
+    <div className="flex flex-col w-56 min-w-[224px] shrink-0">
       {/* Column header — pillar dot + label + count, per design S14. */}
       <div className="flex items-center gap-2 px-3 py-2">
         <span
