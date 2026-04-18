@@ -236,11 +236,19 @@ test.describe('Authenticated — profile setup + update', () => {
         answer: 'Updated body with more detail about the E2E test coverage.',
       },
     });
-    expect(patchRes.ok()).toBeTruthy();
+    if (!patchRes.ok()) {
+      throw new Error(
+        `PATCH /api/nuggets/${nugget.id} failed ${patchRes.status()}: ${await patchRes.text()}`,
+      );
+    }
 
     // Delete (cleanup)
     const delRes = await request.delete(`/api/nuggets/${nugget.id}`);
-    expect(delRes.ok()).toBeTruthy();
+    if (!delRes.ok()) {
+      throw new Error(
+        `DELETE /api/nuggets/${nugget.id} failed ${delRes.status()}: ${await delRes.text()}`,
+      );
+    }
   });
 
   test('Bulk upload template download + parse', async ({ request }) => {
@@ -263,7 +271,11 @@ test.describe('Authenticated — profile setup + update', () => {
       headers: { 'Content-Type': 'application/json' },
       data: BULK_UPLOAD_SAMPLE,
     });
-    expect(uploadRes.ok()).toBeTruthy();
+    if (!uploadRes.ok()) {
+      throw new Error(
+        `POST /api/profile/bulk-upload failed ${uploadRes.status()}: ${await uploadRes.text()}`,
+      );
+    }
     const uploadBody = await uploadRes.json();
     expect(uploadBody.added).toBeGreaterThan(0);
 

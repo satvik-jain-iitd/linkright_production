@@ -207,7 +207,7 @@ export async function POST(request: Request) {
       question: "",
       alt_questions: [],
       answer: take,
-      primary_layer: "C",
+      primary_layer: "B",
       section_type: "takes",
       company: null,
       role: null,

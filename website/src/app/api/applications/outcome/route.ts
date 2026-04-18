@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     question: `What happened with the ${app.company ?? ""} ${app.role ?? ""} application?`,
     alt_questions: [],
     answer: note,
-    primary_layer: "C",
+    primary_layer: "B",
     section_type: "application_outcome",
     company: app.company ?? null,
     role: app.role ?? null,

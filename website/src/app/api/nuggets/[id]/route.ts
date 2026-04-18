@@ -45,8 +45,9 @@ export async function PATCH(
   }
 
   // Edits invalidate the embedding — clear it so the re-embed worker picks it up.
+  // (career_nuggets doesn't have an updated_at column; embedding reset is
+  // the signal the re-embed worker watches for.)
   patch.embedding = null;
-  patch.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from("career_nuggets")
