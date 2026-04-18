@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { AppNav } from "@/components/AppNav";
 import { ProfileView } from "./ProfileView";
 
 export default async function ProfilePage() {
@@ -13,5 +14,10 @@ export default async function ProfilePage() {
   }
 
   const fullName = (user.user_metadata?.full_name as string) ?? undefined;
-  return <ProfileView email={user.email ?? ""} fullName={fullName} />;
+  return (
+    <div className="min-h-screen">
+      <AppNav user={user} />
+      <ProfileView email={user.email ?? ""} fullName={fullName} />
+    </div>
+  );
 }

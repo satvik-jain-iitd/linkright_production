@@ -1,70 +1,87 @@
-// Onboarding screen 2 — preferences.
-// Runs AFTER resume upload (screen 1) and BEFORE the job browse view (screen 3).
-// Nugget extraction + embedding runs in the background while user fills this.
+// Wave 2 / Screen 07 — Preferences.
+// Design handoff: specs/design-handoff-v2-2026-04-18 → screens-build.jsx Screen07.
+// Chip-based multi-select for target roles, location, cities, company stage.
+// Notice period + compensation range (no work authorisation per v2 audit).
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 type Prefs = {
   location_preference: string;
   preferred_locations: string[];
   preferred_stages: string[];
-  preferred_tier_flags: string[];
-  industries_target: string[];
-  industries_background: string[];
-  visa_status: string;
   target_roles: string[];
   min_comp_usd: number | null;
+  max_comp_usd: number | null;
+  notice_period_days: number | null;
 };
 
 const EMPTY: Prefs = {
   location_preference: "any",
   preferred_locations: [],
   preferred_stages: [],
-  preferred_tier_flags: [],
-  industries_target: [],
-  industries_background: [],
-  visa_status: "unknown",
   target_roles: [],
   min_comp_usd: null,
+  max_comp_usd: null,
+  notice_period_days: null,
 };
 
-// Chip options — kept in sync with companies_global constraints
-const STAGES = [
-  "seed",
-  "series_a",
-  "series_b",
-  "series_c",
-  "series_d_plus",
-  "public",
-  "bootstrapped",
+const STEPS = [
+  { n: 1, label: "Resume", state: "done" as const },
+  { n: 2, label: "Profile", state: "done" as const },
+  { n: 3, label: "Preferences", state: "active" as const },
+  { n: 4, label: "First match", state: "todo" as const },
 ];
-const TIER_FLAGS = [
-  "faang",
-  "yc_backed",
-  "unicorn",
-  "public_tier1",
-  "proven_founders",
+
+const LOCATION_OPTIONS = [
+  { v: "remote_only", label: "Remote" },
+  { v: "hybrid_ok", label: "Hybrid" },
+  { v: "onsite_ok", label: "Onsite" },
+  { v: "any", label: "Any" },
 ];
-const INDUSTRIES = [
-  "fintech",
-  "payments",
-  "b2b_saas",
-  "consumer",
-  "ecommerce",
-  "marketplace",
-  "ai",
-  "llm",
-  "developer_tools",
-  "healthtech",
-  "edtech",
-  "hrtech",
-  "productivity",
-  "mobility",
-  "travel",
-  "crypto",
+
+const CITY_SUGGESTIONS = [
+  "Bangalore",
+  "Delhi NCR",
+  "Mumbai",
+  "Pune",
+  "Hyderabad",
+  "Chennai",
+  "Remote-India",
+];
+
+const STAGE_OPTIONS = [
+  { v: "seed", label: "Seed" },
+  { v: "series_a", label: "Series A" },
+  { v: "series_b", label: "Series B" },
+  { v: "series_c", label: "Series C" },
+  { v: "series_d_plus", label: "Series D+" },
+  { v: "public", label: "Public" },
+  { v: "bootstrapped", label: "Bootstrapped" },
+];
+
+const NOTICE_PERIOD_OPTIONS = [
+  { v: 0, label: "Immediate" },
+  { v: 15, label: "15 days" },
+  { v: 30, label: "30 days" },
+  { v: 60, label: "60 days" },
+  { v: 90, label: "90 days" },
+];
+
+const SUGGESTED_ROLES = [
+  "Senior Product Manager",
+  "Principal Product Manager",
+  "Group Product Manager",
+  "Product Lead",
+  "Director of Product",
+  "Software Engineer",
+  "Senior Software Engineer",
+  "Staff Engineer",
+  "Data Analyst",
+  "Data Scientist",
+  "Engineering Manager",
 ];
 
 export default function PreferencesPage() {
@@ -72,50 +89,62 @@ export default function PreferencesPage() {
   const [prefs, setPrefs] = useState<Prefs>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [targetRolesInput, setTargetRolesInput] = useState("");
-  const [locationsInput, setLocationsInput] = useState("");
+  const [roleInput, setRoleInput] = useState("");
+  const [cityInput, setCityInput] = useState("");
 
   useEffect(() => {
     (async () => {
       const r = await fetch("/api/preferences");
       const body = await r.json();
       if (r.ok && body.preferences) {
-        const p = body.preferences;
-        setPrefs({ ...EMPTY, ...p });
-        setTargetRolesInput((p.target_roles ?? []).join(", "));
-        setLocationsInput((p.preferred_locations ?? []).join(", "));
+        setPrefs({ ...EMPTY, ...body.preferences });
       }
       setLoading(false);
     })();
   }, []);
 
-  function toggle(arrayKey: keyof Prefs, value: string) {
+  function toggleArrayItem(key: "preferred_stages" | "preferred_locations" | "target_roles", value: string) {
     setPrefs((p) => {
-      const current = (p[arrayKey] as string[]) ?? [];
+      const current = p[key] ?? [];
       const next = current.includes(value)
         ? current.filter((x) => x !== value)
         : [...current, value];
-      return { ...p, [arrayKey]: next };
+      return { ...p, [key]: next };
     });
   }
 
+  function addRole(value: string) {
+    const clean = value.trim();
+    if (!clean) return;
+    setPrefs((p) =>
+      p.target_roles.includes(clean)
+        ? p
+        : { ...p, target_roles: [...p.target_roles, clean] },
+    );
+    setRoleInput("");
+  }
+
+  function addCity(value: string) {
+    const clean = value.trim();
+    if (!clean) return;
+    setPrefs((p) =>
+      p.preferred_locations.includes(clean)
+        ? p
+        : { ...p, preferred_locations: [...p.preferred_locations, clean] },
+    );
+    setCityInput("");
+  }
+
   async function save(proceedToBrowse: boolean) {
+    if (proceedToBrowse && prefs.target_roles.length === 0) {
+      alert("Pick at least one target role so Scout knows what to find.");
+      return;
+    }
     setSaving(true);
-    const payload = {
-      ...prefs,
-      target_roles: targetRolesInput
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      preferred_locations: locationsInput
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    };
     const r = await fetch("/api/preferences", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(prefs),
     });
     setSaving(false);
     if (!r.ok) {
@@ -126,163 +155,293 @@ export default function PreferencesPage() {
     if (proceedToBrowse) router.push("/onboarding/find");
   }
 
+  const roleSuggestions = useMemo(
+    () =>
+      SUGGESTED_ROLES.filter((r) => !prefs.target_roles.includes(r)).slice(0, 5),
+    [prefs.target_roles],
+  );
+
   if (loading) {
     return (
-      <div className="p-8 max-w-3xl mx-auto">
-        <p className="text-sm text-muted-foreground">Loading your preferences...</p>
-      </div>
+      <main className="mx-auto max-w-[820px] px-6 py-10">
+        <p className="text-sm text-muted">Loading your preferences…</p>
+      </main>
     );
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-2">What are you looking for?</h1>
-      <p className="text-sm text-muted-foreground mb-8">
-        We're processing your resume in the background. While we do, tell us what matters to you.
-      </p>
-
-      {/* Target roles */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Target roles</label>
-        <input
-          type="text"
-          placeholder="Product Manager, Senior PM, Staff PM"
-          value={targetRolesInput}
-          onChange={(e) => setTargetRolesInput(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-border bg-background"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Comma-separated</p>
-      </section>
-
-      {/* Location */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Location preference</label>
-        <div className="flex gap-2 flex-wrap">
-          {(["remote_only", "hybrid_ok", "onsite_ok", "any"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setPrefs({ ...prefs, location_preference: v })}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                prefs.location_preference === v
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border"
-              }`}
-            >
-              {v.replace("_", " ")}
-            </button>
+    <main className="mx-auto max-w-[820px] px-6 py-10 space-y-6">
+      {/* Step indicator */}
+      <div className="flex items-center justify-between border-b border-border pb-5">
+        <div className="flex items-center gap-2 text-xs">
+          {STEPS.map((s, i) => (
+            <span key={s.n} className="flex items-center gap-2">
+              <span
+                className={
+                  s.state === "active"
+                    ? "rounded-full bg-accent px-3 py-1.5 font-semibold text-white"
+                    : s.state === "done"
+                      ? "rounded-full bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
+                      : "rounded-full border border-border bg-white px-3 py-1.5 font-medium text-muted"
+                }
+              >
+                {s.n} {s.state === "done" ? `${s.label} ✓` : s.label}
+              </span>
+              {i < STEPS.length - 1 && <span className="h-px w-4 bg-border" />}
+            </span>
           ))}
         </div>
-        <input
-          type="text"
-          placeholder="Bangalore, SF, Remote"
-          value={locationsInput}
-          onChange={(e) => setLocationsInput(e.target.value)}
-          className="w-full px-3 py-2 mt-3 rounded-lg border border-border bg-background"
-        />
-        <p className="text-xs text-muted-foreground mt-1">Specific cities/regions (comma-separated)</p>
-      </section>
-
-      {/* Work authorisation removed per v2 design audit — not a reliable
-          filter for most Indian candidates and adds friction. Defaults to
-          "unknown" on submit and the scout ranker simply ignores it. */}
-
-      {/* Stage */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Preferred company stages</label>
-        <div className="flex gap-2 flex-wrap">
-          {STAGES.map((s) => (
-            <button
-              key={s}
-              onClick={() => toggle("preferred_stages", s)}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                prefs.preferred_stages.includes(s)
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border"
-              }`}
-            >
-              {s.replace(/_/g, " ")}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Tier flags */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Company type emphasis</label>
-        <div className="flex gap-2 flex-wrap">
-          {TIER_FLAGS.map((f) => (
-            <button
-              key={f}
-              onClick={() => toggle("preferred_tier_flags", f)}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                prefs.preferred_tier_flags.includes(f)
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border"
-              }`}
-            >
-              {f.replace(/_/g, " ")}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Industries target */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Industries you want to work in</label>
-        <div className="flex gap-2 flex-wrap">
-          {INDUSTRIES.map((i) => (
-            <button
-              key={i}
-              onClick={() => toggle("industries_target", i)}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                prefs.industries_target.includes(i)
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border"
-              }`}
-            >
-              {i.replace(/_/g, " ")}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Industries background */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Industries from your past experience</label>
-        <div className="flex gap-2 flex-wrap">
-          {INDUSTRIES.map((i) => (
-            <button
-              key={i + "-bg"}
-              onClick={() => toggle("industries_background", i)}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                prefs.industries_background.includes(i)
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border"
-              }`}
-            >
-              {i.replace(/_/g, " ")}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Actions */}
-      <div className="flex gap-3 mt-8">
         <button
-          onClick={() => save(false)}
-          disabled={saving}
-          className="px-4 py-2 rounded-lg border border-border"
+          type="button"
+          onClick={() => router.push("/onboarding/find")}
+          className="text-xs text-muted transition hover:text-foreground"
         >
-          {saving ? "Saving..." : "Save"}
-        </button>
-        <button
-          onClick={() => save(true)}
-          disabled={saving}
-          className="px-6 py-2 rounded-lg bg-primary text-primary-foreground"
-        >
-          {saving ? "Saving..." : "Save & browse jobs →"}
+          I&apos;ll decide later →
         </button>
       </div>
-    </div>
+
+      <div>
+        <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
+          One minute, then we show you roles.
+        </p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+          What kind of role are you actually looking for?
+        </h1>
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-6">
+        {/* Target roles */}
+        <div>
+          <label className="text-sm font-semibold text-foreground">
+            Target roles <span className="text-cta">*</span>
+          </label>
+          <p className="mt-0.5 text-xs text-muted">
+            Multi-select. We&apos;ll match against all of them.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {prefs.target_roles.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => toggleArrayItem("target_roles", r)}
+                className="inline-flex items-center gap-1 rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+              >
+                {r} <span className="text-primary-500">✕</span>
+              </button>
+            ))}
+            <input
+              value={roleInput}
+              onChange={(e) => setRoleInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addRole(roleInput);
+                }
+              }}
+              placeholder="Type a role, press Enter"
+              className="min-w-[180px] rounded-full border border-border bg-white px-3 py-1 text-xs focus:border-accent focus:outline-none"
+            />
+          </div>
+          {roleSuggestions.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {roleSuggestions.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => addRole(r)}
+                  className="rounded-full border border-border bg-white px-2.5 py-1 text-[11px] text-muted transition hover:border-accent hover:text-accent"
+                >
+                  + {r}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          {/* Location preference */}
+          <div>
+            <label className="text-sm font-semibold text-foreground">
+              Location preference
+            </label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {LOCATION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setPrefs({ ...prefs, location_preference: opt.v })}
+                  className={
+                    prefs.location_preference === opt.v
+                      ? "rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                      : "rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-foreground transition hover:border-accent"
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Cities */}
+          <div>
+            <label className="text-sm font-semibold text-foreground">Cities</label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {prefs.preferred_locations.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => toggleArrayItem("preferred_locations", c)}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                >
+                  {c} <span className="text-primary-500">✕</span>
+                </button>
+              ))}
+              <input
+                value={cityInput}
+                onChange={(e) => setCityInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addCity(cityInput);
+                  }
+                }}
+                placeholder="e.g. Bangalore"
+                className="min-w-[120px] rounded-full border border-border bg-white px-3 py-1 text-xs focus:border-accent focus:outline-none"
+              />
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {CITY_SUGGESTIONS.filter(
+                (c) => !prefs.preferred_locations.includes(c),
+              )
+                .slice(0, 5)
+                .map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => addCity(c)}
+                    className="rounded-full border border-border bg-white px-2 py-0.5 text-[11px] text-muted transition hover:border-accent hover:text-accent"
+                  >
+                    + {c}
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          {/* Company stage */}
+          <div>
+            <label className="text-sm font-semibold text-foreground">
+              Company stage
+            </label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {STAGE_OPTIONS.map((s) => (
+                <button
+                  key={s.v}
+                  type="button"
+                  onClick={() => toggleArrayItem("preferred_stages", s.v)}
+                  className={
+                    prefs.preferred_stages.includes(s.v)
+                      ? "rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                      : "rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-foreground transition hover:border-accent"
+                  }
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Notice period */}
+          <div>
+            <label className="text-sm font-semibold text-foreground">
+              Notice period
+            </label>
+            <select
+              value={prefs.notice_period_days ?? ""}
+              onChange={(e) =>
+                setPrefs({
+                  ...prefs,
+                  notice_period_days: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              className="mt-2 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            >
+              <option value="">Select…</option>
+              {NOTICE_PERIOD_OPTIONS.map((opt) => (
+                <option key={opt.v} value={opt.v}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Compensation */}
+        <div>
+          <label className="text-sm font-semibold text-foreground">
+            Compensation target
+          </label>
+          <p className="mt-0.5 text-xs text-muted">
+            Annual CTC · ₹ lakhs · Hidden from recruiters.
+          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <input
+              type="number"
+              placeholder="45"
+              value={prefs.min_comp_usd ?? ""}
+              onChange={(e) =>
+                setPrefs({
+                  ...prefs,
+                  min_comp_usd: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+            <span className="text-muted">to</span>
+            <input
+              type="number"
+              placeholder="70"
+              value={prefs.max_comp_usd ?? ""}
+              onChange={(e) =>
+                setPrefs({
+                  ...prefs,
+                  max_comp_usd: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => router.push("/onboarding/profile")}
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent"
+        >
+          ← Back
+        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => save(false)}
+            disabled={saving}
+            className="rounded-full border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => save(true)}
+            disabled={saving}
+            className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Find roles →"}
+          </button>
+        </div>
+      </div>
+    </main>
   );
 }
