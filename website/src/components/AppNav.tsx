@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { useState, useRef, useEffect } from "react";
+import { NotificationsDrawer } from "./NotificationsDrawer";
 
 /* ---------- Types ---------- */
 
@@ -46,6 +47,8 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [scoutBadge, setScoutBadge] = useState(0);
+  const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
+  const [notifUnread, setNotifUnread] = useState(0);
 
   // Fetch new discovery count for Scout badge
   useEffect(() => {
@@ -53,6 +56,11 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
       fetch("/api/discoveries?status=new&limit=1")
         .then((r) => r.json())
         .then((d) => setScoutBadge(d.total ?? 0))
+        .catch(() => {});
+      // Unread notifications count (cheap — body not fetched until drawer opens).
+      fetch("/api/notifications?unread=1&limit=1")
+        .then((r) => r.json())
+        .then((d) => setNotifUnread(d.unread_count ?? d.total ?? 0))
         .catch(() => {});
     }
   }, [user, variant]);
@@ -166,6 +174,31 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          {user && (
+            <button
+              type="button"
+              onClick={() => setNotifDrawerOpen(true)}
+              aria-label="Open notifications"
+              className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-surface hover:text-foreground"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
+                />
+              </svg>
+              {notifUnread > 0 && (
+                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-background bg-cta" />
+              )}
+            </button>
+          )}
           <Link
             href="/resume/new"
             className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
@@ -211,7 +244,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                     onClick={() => setDropdownOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm text-muted transition-colors hover:bg-background hover:text-foreground"
                   >
-                    Profile & token
+                    Your profile
                   </Link>
                   <button
                     onClick={handleSignOut}
@@ -225,6 +258,13 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
           )}
         </div>
       </div>
+      {user && (
+        <NotificationsDrawer
+          open={notifDrawerOpen}
+          onClose={() => setNotifDrawerOpen(false)}
+          onUnreadChange={setNotifUnread}
+        />
+      )}
     </nav>
   );
 }

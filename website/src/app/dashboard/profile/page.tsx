@@ -12,5 +12,6 @@ export default async function ProfilePage() {
     redirect("/auth");
   }
 
-  return <ProfileView email={user.email ?? ""} />;
+  const fullName = (user.user_metadata?.full_name as string) ?? undefined;
+  return <ProfileView email={user.email ?? ""} fullName={fullName} />;
 }
