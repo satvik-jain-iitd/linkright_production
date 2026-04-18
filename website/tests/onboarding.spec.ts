@@ -127,7 +127,7 @@ async function navigateToStep3(page: Page) {
     await page.getByRole('button', { name: 'Auto-fill from resume' }).click();
 
     // Parse may fail due to LLM rate limits — handle gracefully
-    const parsed = await page.getByText('Resume parsed').waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false);
+    const parsed = await page.getByText('Resume parsed').waitFor({ state: 'visible', timeout: 60_000 }).then(() => true).catch(() => false);
     if (!parsed) {
       // Auto-fill failed — manually fill required Full Name field so Save works
       const nameInput = page.getByPlaceholder('Jane Smith');
@@ -212,7 +212,7 @@ test.describe.serial('Onboarding Journey', () => {
     if (isTextAreaVisible) {
       await textarea.fill(RESUME_TEXT);
       await page.getByRole('button', { name: 'Auto-fill from resume' }).click();
-      await expect(page.getByText('Resume parsed')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Resume parsed')).toBeVisible({ timeout: 60_000 });
     }
 
     // "Save & Continue" requires at least Full Name to be filled (auto-fill should handle this)
