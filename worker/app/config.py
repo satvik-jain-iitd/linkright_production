@@ -14,7 +14,7 @@ USE_NUGGETS = os.getenv("USE_NUGGETS", "false").lower() == "true"
 
 # Default LLM configuration (BYOK fallback — server-side key for zero-config)
 DEFAULT_MODEL_PROVIDER = os.getenv("DEFAULT_MODEL_PROVIDER", "groq")
-DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "llama-3.1-8b-instant")
+DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "llama-3.3-70b-versatile")
 # Render env may use PLATFORM_GROQ_API_KEY (matches Vercel convention) — check both
 DEFAULT_API_KEY = os.getenv("PLATFORM_GROQ_API_KEY", "") or os.getenv("GROQ_API_KEY", "")
 

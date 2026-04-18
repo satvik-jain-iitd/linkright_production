@@ -86,8 +86,8 @@ _PHASE_ROUTES: dict[str, list[tuple[str, str]]] = {
     "phase_4a":     [("gemini", "gemini-2.0-flash"), ("groq", "llama-3.3-70b-versatile")],
     # Condense: needs to preserve metrics/keywords exactly — 70B is safer than Oracle 1B
     "phase_4c":     [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.0-flash")],
-    # Width optimization: Phase 5 is disabled in practice; Oracle fine if re-enabled
-    "phase_5":      [("oracle", "llama3.2:1b"), ("groq", "llama-3.1-8b-instant")],
+    # Bullet optimization: 70B primary (was Oracle 1B + 8B fallback — caused hangs when Oracle offline)
+    "phase_5":      [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.0-flash")],
     # Default fallback
     "default":      [("gemini", "gemini-2.0-flash"), ("groq", "llama-3.3-70b-versatile")],
 }

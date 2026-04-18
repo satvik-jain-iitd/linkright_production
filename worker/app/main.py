@@ -64,7 +64,7 @@ class JobRequest(BaseModel):
     jd_text: str
     career_text: str
     model_provider: str = "groq"  # openrouter | groq | gemini
-    model_id: str = "llama-3.1-8b-instant"
+    model_id: str = "llama-3.3-70b-versatile"
     api_key: str = ""    # [BYOK-REMOVED] now optional — server falls back to DEFAULT_API_KEY
     template_id: str = "cv-a4-standard"
     qa_answers: list[dict] = []  # [{question, answer}]

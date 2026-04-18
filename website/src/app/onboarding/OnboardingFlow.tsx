@@ -153,13 +153,14 @@ function StepCareerBasics({
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState(false);
-  // [PDF-REMOVED] const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const applyParsed = (data: Record<string, unknown>) => {
-    if (typeof data.full_name === "string" && data.full_name) setFullName(data.full_name);
-    if (typeof data.email === "string" && data.email) setEmail(data.email);
-    if (typeof data.phone === "string" && data.phone) setPhone(data.phone);
-    if (typeof data.linkedin === "string" && data.linkedin) setLinkedin(data.linkedin);
+    if (typeof data.full_name === "string" && data.full_name && !fullName) setFullName(data.full_name);
+    // Never overwrite email — the signup email is the account-of-record.
+    // If parsed resume contains a different email it stays as part of the resume content only.
+    if (typeof data.phone === "string" && data.phone && !phone) setPhone(data.phone);
+    if (typeof data.linkedin === "string" && data.linkedin && !linkedin) setLinkedin(data.linkedin);
     if (Array.isArray(data.education) && data.education.length > 0) {
       const edu = (data.education as Array<{ institution?: string; degree?: string; year?: string }>).map((e) => ({
         institution: e.institution ?? "",
@@ -206,36 +207,35 @@ function StepCareerBasics({
     }
   };
 
-  // [PDF-REMOVED] PDF/DOCX file upload disabled — pdf-parse unreliable in production.
-  // Keep paste-only flow. Re-enable when a reliable PDF library is found.
-  // const handleParseFile = async (file: File) => {
-  //   if (file.size > 500 * 1024) {
-  //     setParseError("File too large (max 500 KB). Please paste your resume text instead.");
-  //     setUploadMode("paste");
-  //     return;
-  //   }
-  //   setParsing(true);
-  //   setParseError("");
-  //   try {
-  //     const formData = new FormData();
-  //     formData.append("file", file);
-  //     const res = await fetch("/api/onboarding/parse-resume", {
-  //       method: "POST",
-  //       body: formData,
-  //     });
-  //     const data = await res.json();
-  //     if (res.ok && data.parsed) {
-  //       applyParsed(data.parsed);
-  //     } else {
-  //       setParseError(data.error ?? "Could not parse file. Please paste your resume text instead.");
-  //       setUploadMode("paste");
-  //     }
-  //   } catch {
-  //     setParseError("Network error. Please try again.");
-  //   } finally {
-  //     setParsing(false);
-  //   }
-  // };
+  // PDF/DOCX file upload re-enabled via `unpdf` (replaces unreliable pdf-parse).
+  const handleParseFile = async (file: File) => {
+    if (file.size > 2 * 1024 * 1024) {
+      setParseError("File too large (max 2 MB). Please paste your resume text instead.");
+      setUploadMode("paste");
+      return;
+    }
+    setParsing(true);
+    setParseError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/onboarding/parse-resume", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.parsed) {
+        applyParsed(data.parsed);
+      } else {
+        setParseError(data.error ?? "Could not parse file. Please paste your resume text instead.");
+        setUploadMode("paste");
+      }
+    } catch {
+      setParseError("Network error. Please try again.");
+    } finally {
+      setParsing(false);
+    }
+  };
 
   const addEducation = () => {
     setEducation([...education, { institution: "", degree: "", year: "" }]);
@@ -358,17 +358,16 @@ function StepCareerBasics({
           </p>
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => fileInputRef.current?.click()}
+              className="rounded-lg border border-accent/30 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 transition-colors"
+            >
+              Upload PDF / DOCX / TXT
+            </button>
+            <button
               onClick={() => setUploadMode("paste")}
               className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
             >
               Paste resume text
-            </button>
-            {/* [PDF-REMOVED] File upload disabled — pdf-parse unreliable in production.
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
-            >
-              Upload PDF / DOCX / TXT
             </button>
             <input
               ref={fileInputRef}
@@ -381,7 +380,6 @@ function StepCareerBasics({
                 e.target.value = "";
               }}
             />
-            */}
           </div>
           {parsing && (
             <p className="text-sm text-primary-600 animate-pulse">

@@ -49,6 +49,41 @@
   --color-gold-800: #705905;
   --color-gold-900: #463803;
 
+  /* Pink — warm accent (Scout, human/relational surfaces) */
+  --color-pink-50: #FFF0F3;
+  --color-pink-100: #FFD6DE;
+  --color-pink-200: #FFADBD;
+  --color-pink-300: #FF839B;
+  --color-pink-500: #F05A79;
+  --color-pink-700: #B13355;
+
+  /* Skin / Peach — warm neutral for onboarding welcome, testimonials, soft empty states */
+  --color-skin-50: #FDF6F0;
+  --color-skin-100: #F8E6D4;
+  --color-skin-200: #F1CDAA;
+  --color-skin-300: #E9B382;
+  --color-skin-500: #D48B56;
+
+  /* Sage — Interview zone ("quiet-room" palette) */
+  --color-sage-50: #F3F6EA;
+  --color-sage-100: #E4EBD0;
+  --color-sage-200: #C9D4A8;
+  --color-sage-300: #AABA85;
+  --color-sage-400: #8FA572;
+  --color-sage-500: #6B8346;
+  --color-sage-700: #4A5D32;
+  --color-sage-900: #2E3B1E;
+
+  /* Deep brand teal (wordmark color from full-logo lockup) */
+  --color-brand-teal: #1F5F6B;
+
+  /* Dark theme tokens (for future dark-mode toggle) */
+  --color-background-dark: #0E1620;
+  --color-surface-dark: #151F2B;
+  --color-foreground-dark: #EEF5F2;
+  --color-muted-dark: #8FA3B1;
+  --color-border-dark: #253140;
+
   /* Semantic tokens (light theme) */
   --color-background: #FAFBFC;
   --color-foreground: #1A202C;
@@ -64,6 +99,13 @@
   --color-cta-hover: #E04425;
 
   --font-sans: var(--font-inter);
+
+  /* Shadows (soft, subtle — colored only on coral CTA) */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow-cta: 0 8px 24px rgba(255, 87, 51, 0.20);
+  --shadow-cta-hover: 0 12px 32px rgba(255, 87, 51, 0.30);
 }
 
 body {

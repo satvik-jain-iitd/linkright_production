@@ -67,6 +67,10 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
 }
 
 Rules:
+- NEVER fabricate or infer values. Only extract what is EXPLICITLY present in the source text.
+- linkedin: must be a full URL present verbatim in the source (starting with "http" or containing "linkedin.com/"). If only a name or handle is mentioned without a full URL, return empty string. Do NOT construct URLs from names.
+- email: must be an email literally present in the source text. Never guess or generate.
+- phone: must be a phone string literally present. Never generate.
 - education: include all degrees/institutions found. year must be the 4-digit graduation year as a string (e.g. "2021"); strip leading phrases like "Class of", "Batch of", "Graduated"
 - skills: list individual skill strings, max 30
 - certifications: list individual certifications, max 10
@@ -108,16 +112,14 @@ export async function POST(request: Request) {
       const buffer = Buffer.from(await file.arrayBuffer());
 
       if (name.endsWith(".pdf")) {
-        // PDF extraction — pdf-parse v2 uses a class-based API
+        // PDF extraction via unpdf — ESM-native, Edge-runtime-safe, no native deps.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { PDFParse } = (await import("pdf-parse")) as any;
-          const parser = new PDFParse({ data: new Uint8Array(buffer) });
-          const result = await parser.getText({ pageJoiner: "\n" });
-          resumeText = result.text;
-          await parser.destroy();
+          const { extractText, getDocumentProxy } = await import("unpdf");
+          const pdf = await getDocumentProxy(new Uint8Array(buffer));
+          const { text } = await extractText(pdf, { mergePages: true });
+          resumeText = Array.isArray(text) ? text.join("\n") : text;
         } catch (e) {
-          console.error("pdf-parse error:", e);
+          console.error("unpdf error:", e);
           return Response.json(
             { error: "Could not read this PDF. Try copy-pasting your resume text instead." },
             { status: 422 }
@@ -180,6 +182,27 @@ export async function POST(request: Request) {
         { error: "Could not parse resume. Please enter your details manually." },
         { status: 422 }
       );
+    }
+
+    // Hallucination guards: reject parsed values that don't appear (at least partially) in the source text.
+    const lowerSource = truncated.toLowerCase();
+
+    // LinkedIn URL must be a real URL (http/https/linkedin.com/). No bare-name→URL construction.
+    if (typeof parsed.linkedin === "string" && parsed.linkedin.trim()) {
+      const url = parsed.linkedin.trim();
+      const looksLikeUrl = /^https?:\/\//i.test(url) || /linkedin\.com\//i.test(url);
+      const pathSegment = url.replace(/^https?:\/\//i, "").replace(/^www\./i, "").toLowerCase();
+      if (!looksLikeUrl || !lowerSource.includes(pathSegment.split("/").pop() ?? "")) {
+        parsed.linkedin = "";
+      }
+    }
+
+    // Email / phone guard: must appear verbatim in the source.
+    for (const key of ["email", "phone"] as const) {
+      const v = parsed[key];
+      if (typeof v === "string" && v.trim() && !lowerSource.includes(v.trim().toLowerCase())) {
+        parsed[key] = "";
+      }
     }
 
     // ── Save structured work experiences to DB (fire-and-forget) ──────────

@@ -54,7 +54,7 @@ const STORAGE_KEY = "linkright_wizard_v9";
 
 // [BYOK-REMOVED] Hardcoded provider/model — no user selection
 const model_provider = "groq";
-const model_id = "llama-3.1-8b-instant";
+const model_id = "llama-3.3-70b-versatile";
 
 const EMPTY_DATA: WizardData = {
   jd_text: "",

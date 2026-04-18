@@ -15,12 +15,10 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/onboarding/preferences", label: "Profile", icon: "👤", matchPrefix: "/onboarding" },
+  { href: "/onboarding/preferences", label: "Preferences", icon: "👤", matchPrefix: "/onboarding" },
   { href: "/dashboard/jobs", label: "Jobs", icon: "🔍", matchPrefix: "/dashboard/jobs" },
-  { href: "/customize", label: "Custom Apps", icon: "📄", matchPrefix: "/customize" },
   { href: "/dashboard/applications", label: "Tracking", icon: "📊", matchPrefix: "/dashboard/applications" },
   { href: "/dashboard/scout", label: "Scout", icon: "📣", matchPrefix: "/dashboard/scout" },
-  { href: "/dashboard/settings", label: "Settings", icon: "⚙️", matchPrefix: "/dashboard/settings" },
 ];
 
 const STORAGE_KEY = "linkright_sidebar_collapsed";
@@ -90,13 +88,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="px-3 py-3 text-xs text-muted-foreground border-t border-border">
-          {!collapsed && (
-            <Link href="/admin/companies" className="hover:underline">
-              Admin
-            </Link>
-          )}
-        </div>
       </aside>
 
       {/* Main content */}

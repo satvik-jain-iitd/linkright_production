@@ -206,6 +206,13 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                     </p>
                     <p className="text-xs text-muted truncate">{user.email}</p>
                   </div>
+                  <Link
+                    href="/dashboard/profile"
+                    onClick={() => setDropdownOpen(false)}
+                    className="block w-full px-4 py-2.5 text-left text-sm text-muted transition-colors hover:bg-background hover:text-foreground"
+                  >
+                    Profile & token
+                  </Link>
                   <button
                     onClick={handleSignOut}
                     className="w-full px-4 py-2.5 text-left text-sm text-muted transition-colors hover:bg-background hover:text-foreground rounded-b-xl"
