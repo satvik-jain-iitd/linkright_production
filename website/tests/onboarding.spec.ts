@@ -196,7 +196,11 @@ test.describe.serial('Onboarding Journey', () => {
     await expect(page.getByText('Resume parsed')).toBeVisible({ timeout: 60_000 });
   });
 
-  test('step 2 — save and continue advances to TruthEngine', async () => {
+  // SKIP-PENDING-WAVE-2 (2026-04-18): Wave 2 replaces "TruthEngine"/Career Story
+  // Collection with StepJobPreferences. Keeping the test body as a spec of
+  // what we HAD; delete once StepJobPreferences ships + onboarding-v2.spec.ts
+  // covers the new handoff. See specs/test-suite-audit-2026-04-18.md.
+  test.skip('step 2 — save and continue advances to TruthEngine', async () => {
     await navigatePastStep1(page);
 
     // Click "Paste resume text" to reveal textarea
@@ -226,7 +230,10 @@ test.describe.serial('Onboarding Journey', () => {
   // These tests navigate through step 1+2 to reach step 3, since server
   // doesn't persist client-side step progression across page reloads.
 
-  test('step 3 — session token is generated and copyable', async () => {
+  // SKIP-PENDING-WAVE-2 (2026-04-18): session-token generation moves OUT of
+  // onboarding in Wave 2. The /dashboard/profile token UI is still covered
+  // by profile-token.spec.ts. See specs/test-suite-audit-2026-04-18.md.
+  test.skip('step 3 — session token is generated and copyable', async () => {
     const state = await navigateToStep3(page);
     if (state === 'dashboard') {
       test.skip(true, 'Server redirected to dashboard — cannot reach step 3');
@@ -238,7 +245,11 @@ test.describe.serial('Onboarding Journey', () => {
     // Copy button should change to "Copied!" briefly
   });
 
-  test('step 3 — Interview Coach skill download is valid zip', async () => {
+  // SKIP-PENDING-WAVE-2 (2026-04-18): the Claude Code `/interview-coach` skill
+  // is removed from onboarding. Replaced by an in-product voice interview
+  // (Wave 4 / Track B4) covered by voice-interview.spec.ts (stub).
+  // See specs/test-suite-audit-2026-04-18.md.
+  test.skip('step 3 — Interview Coach skill download is valid zip', async () => {
     const state = await navigateToStep3(page);
     if (state === 'dashboard') {
       test.skip(true, 'Server redirected to dashboard — cannot reach step 3');
@@ -252,22 +263,23 @@ test.describe.serial('Onboarding Journey', () => {
     expect(download.suggestedFilename()).toMatch(/\.zip$/);
   });
 
-  // [PDF-REMOVED] Skill dispatch test — cannot be tested via Playwright
+  // SKIP-PENDING-WAVE-2 (2026-04-18): skill-dispatch path gone — Wave 2
+  // replaces with in-product capture. See specs/test-suite-audit-2026-04-18.md.
   test.skip('skill uses pre-written dispatch code', async () => {});
 
   // ── Atom Dispatch + Completion (require manual skill run) ────────────────
 
-  // Progress counter shows running count without fake denominator
-  test('step 3 — atom dispatch shows running count', async () => {
-    test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
+  // SKIP-PENDING-WAVE-2 (2026-04-18): atom-dispatch progress counter is
+  // onboarding-screen-only, and that screen is being replaced by
+  // StepJobListings. See specs/test-suite-audit-2026-04-18.md.
+  test.skip('step 3 — atom dispatch shows running count', async () => {
     await page.goto('/onboarding');
-    // During ingestion: "X career highlights saved" (no denominator — total varies per user)
     await expect(page.getByText(/\d+ career highlight/)).toBeVisible({ timeout: 60_000 });
   });
 
-  // Summary screen shows atoms collected or nugget count
-  test('step 4 — completion shows career data count', async () => {
-    test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
+  // SKIP-PENDING-WAVE-2 (2026-04-18): old summary screen with "career highlights
+  // collected" count is replaced by StepJobListings. See audit doc.
+  test.skip('step 4 — completion shows career data count', async () => {
     await page.goto('/onboarding');
     await page.getByRole('button', { name: 'Continue →' }).click({ timeout: 90_000 });
     // Should show either "X career highlights collected" (atoms fallback) or confidence score
@@ -280,17 +292,19 @@ test.describe.serial('Onboarding Journey', () => {
     expect(['atoms', 'confidence']).toContain(outcome);
   });
 
-  // Nav buttons on summary screen
-  test('step 4 — "Create Your First Resume" goes to /resume/new', async () => {
-    test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
+  // SKIP-PENDING-WAVE-2 (2026-04-18): both CTAs ("Create Your First Resume"
+  // and "Go to Dashboard") live on the old summary screen which is replaced
+  // by StepJobListings with a per-job "Start Custom Application" CTA.
+  // See specs/test-suite-audit-2026-04-18.md.
+  test.skip('step 4 — "Create Your First Resume" goes to /resume/new', async () => {
     await page.goto('/onboarding');
     await page.getByRole('button', { name: 'Continue →' }).click({ timeout: 90_000 });
     await page.getByRole('link', { name: 'Create Your First Resume' }).click();
     await expect(page).toHaveURL(/resume\/new/, { timeout: 10_000 });
   });
 
-  test('step 4 — "Go to Dashboard" goes to /dashboard', async () => {
-    test.skip(!process.env.RUN_MANUAL_TESTS, 'Requires Claude Code skill running manually — set RUN_MANUAL_TESTS=1 to enable');
+  // SKIP-PENDING-WAVE-2 (2026-04-18): same — summary screen CTA is removed.
+  test.skip('step 4 — "Go to Dashboard" goes to /dashboard', async () => {
     await page.goto('/onboarding');
     await page.getByRole('button', { name: 'Continue →' }).click({ timeout: 90_000 });
     await page.getByRole('link', { name: 'Go to Dashboard' }).click();

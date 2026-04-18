@@ -58,6 +58,33 @@ PLAYWRIGHT_BASE_URL=https://staging.linkright.in npm run test:e2e
 
 Reason: regressions are the fastest way to lose 10 paying users' trust. Catching them with tests costs 5 min; catching them with a bug report costs 5 hours.
 
+## Test-suite philosophy
+
+Four non-negotiable rules (audit doc: `specs/test-suite-audit-2026-04-18.md`).
+
+1. **Test against where the product is going, not where it was.** A test that asserts the presence of a UI element about to be deleted is test debt. Check every failing test against the current-wave plan before patching it.
+2. **When a feature is being sunset, skip, don't delete.** Wrap the legacy test body in `test.skip()` with a standardised comment:
+   ```ts
+   // SKIP-PENDING-WAVE-N (YYYY-MM-DD): <one-line reason>.
+   // See specs/test-suite-audit-YYYY-MM-DD.md.
+   test.skip('old-feature test name', async () => { ... });
+   ```
+   The skip is a breadcrumb — the body documents what we had, the comment says why we stopped, the audit doc says when to delete.
+3. **Write new-feature specs BEFORE the feature ships.** TDD-lite. Even if every test is `test.skip()` with an assertion outline, it locks intent. See `onboarding-v2.spec.ts` and `voice-interview.spec.ts` for the pattern.
+4. **Never soften an assertion just to make a red bar green.** Ask first: is the assertion still true for where the product is going? If yes, the code is the bug. If no, skip the test.
+
+## Current legacy-skip inventory (delete when the named wave ships)
+
+| File | Test | Deletes when |
+|---|---|---|
+| onboarding.spec.ts | step 2 — Save & Continue → TruthEngine | Wave 2 StepJobPreferences ships |
+| onboarding.spec.ts | step 3 — session token in onboarding | Wave 2 (token moves to /profile, already covered by profile-token.spec.ts) |
+| onboarding.spec.ts | step 3 — Interview Coach skill zip | Wave 2 + Wave 4 (replaced by voice-interview.spec.ts) |
+| onboarding.spec.ts | skill uses pre-written dispatch code | Same as above |
+| onboarding.spec.ts | step 3 — atom dispatch running count | Wave 2 |
+| onboarding.spec.ts | step 4 — career data count | Wave 2 (summary screen replaced by StepJobListings) |
+| onboarding.spec.ts | step 4 — "Create Your First Resume" / "Go to Dashboard" | Wave 2 (CTAs replaced by "Start Custom Application") |
+
 ## Fixtures
 
 - `fixtures/resume.pdf` — a real resume used by PDF-upload tests.
