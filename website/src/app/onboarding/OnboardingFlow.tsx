@@ -342,8 +342,10 @@ function StepCareerBasics({
   };
 
   const handleSave = async () => {
-    if (!fullName.trim()) {
-      setError("Full name is required.");
+    // v2: full name no longer required — parsing pulls it from the resume;
+    // user can edit from /dashboard/profile later if it's wrong.
+    if (!parsed || !outline || outline.experiences.length === 0) {
+      setError("Upload or paste a resume first, then continue.");
       return;
     }
     setSaving(true);
@@ -457,34 +459,39 @@ function StepCareerBasics({
   const inputClass =
     "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500";
 
+  // v2 design: Step 2 is the Screen 04 upload+outline UX. No more manual
+  // fields — CareerOutlineView shows everything extractable from the resume.
+  // If the parser missed something, the user edits it inline in the outline.
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">
-          Tell us about yourself
-        </h1>
-        <p className="mt-2 text-muted">
-          These basics help us generate more accurate resumes. All fields except
-          name are optional.
-        </p>
-      </div>
-
-      {/* Resume upload shortcut */}
-      {!parsed && uploadMode === "none" && (
-        <div className="rounded-xl border border-dashed border-border bg-surface p-5 space-y-3">
-          <p className="text-sm font-medium text-foreground">
-            Have an existing resume? Auto-fill this form.
+    <div className="space-y-6 max-w-[1200px] mx-auto">
+      {!parsed && (
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
+            Step 1 · this is the only required input
           </p>
-          <div className="flex flex-wrap gap-2">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+            Drop your resume.
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            PDF, DOCX, or paste the text. We read it, build your profile, and
+            route you to matching roles.
+          </p>
+        </div>
+      )}
+
+      {/* Upload surface — shown until parsed */}
+      {!parsed && uploadMode === "none" && (
+        <div className="rounded-2xl border-2 border-dashed border-border bg-surface p-10 text-center">
+          <div className="flex flex-wrap justify-center gap-3">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-lg border border-accent/30 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 transition-colors"
+              className="rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
             >
               Upload PDF / DOCX / TXT
             </button>
             <button
               onClick={() => setUploadMode("paste")}
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-hover transition-colors"
+              className="rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground transition hover:border-accent"
             >
               Paste resume text
             </button>
@@ -501,20 +508,20 @@ function StepCareerBasics({
             />
           </div>
           {parsing && (
-            <p className="text-sm text-primary-600 animate-pulse">
+            <p className="mt-4 text-sm text-accent animate-pulse">
               Parsing your resume…
             </p>
           )}
           {parseError && (
-            <p className="text-sm text-red-600">{parseError}</p>
+            <p className="mt-4 text-sm text-red-600">{parseError}</p>
           )}
         </div>
       )}
 
-      {uploadMode === "paste" && (
-        <div className="rounded-xl border border-primary-200 bg-primary-50 p-5 space-y-3">
+      {uploadMode === "paste" && !parsed && (
+        <div className="rounded-2xl border border-accent/30 bg-accent/5 p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-primary-700">
+            <p className="text-sm font-semibold text-accent">
               Paste your resume text
             </p>
             <button
@@ -527,9 +534,9 @@ function StepCareerBasics({
           <textarea
             value={resumePasteText}
             onChange={(e) => setResumePasteText(e.target.value)}
-            placeholder="Paste your resume here — all sections, plain text…"
-            rows={8}
-            className="w-full rounded-lg border border-primary-200 bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="Paste every section — plain text, as much as you have."
+            rows={12}
+            className="w-full rounded-lg border border-border bg-white px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-y focus:outline-none focus:ring-2 focus:ring-accent"
           />
           {parseError && (
             <p className="text-sm text-red-600">{parseError}</p>
@@ -537,33 +544,14 @@ function StepCareerBasics({
           <button
             onClick={handleParsePaste}
             disabled={!resumePasteText.trim() || parsing}
-            className="w-full rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full rounded-full bg-cta px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {parsing ? "Parsing…" : "Auto-fill from resume"}
+            {parsing ? "Parsing…" : "Parse resume →"}
           </button>
         </div>
       )}
 
-      {parsed && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
-          <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            Resume parsed — review the outline + first-person summary, edit anything that looks wrong.
-          </div>
-          <button
-            onClick={() => { setParsed(false); setUploadMode("none"); setParseError(""); setOutline(null); }}
-            className="shrink-0 text-xs text-green-600 underline hover:text-green-800 transition-colors"
-          >
-            Change resume
-          </button>
-        </div>
-      )}
-
-      {/* Wave 2 Sub-phase 2A — structured outline + first-person interpretation.
-          Shown when we have a parsed outline; the flat-field form below remains
-          for manual entry OR when the parser emitted thin data. */}
+      {/* Parsed outline + first-person narration (CareerOutlineView) */}
       {parsed && outline && outline.experiences.length > 0 && (
         <CareerOutlineView
           data={outline}
@@ -573,184 +561,30 @@ function StepCareerBasics({
         />
       )}
 
-      <div className="space-y-4">
-        {/* Basic info */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-foreground">
-              Full Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Your Name"
-              className={inputClass}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-foreground">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className={inputClass}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-foreground">
-              Phone
-            </label>
-            <input
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91 98765 43210"
-              className={inputClass}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-foreground">
-              LinkedIn URL
-            </label>
-            <input
-              type="text"
-              value={linkedin}
-              onChange={(e) => setLinkedin(e.target.value)}
-              placeholder="https://linkedin.com/in/yourprofile"
-              className={inputClass}
-            />
-          </div>
-        </div>
-
-        {/* Education */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-foreground">
-            Education
-          </label>
-          {education.map((edu, idx) => (
-            <div key={idx} className="flex gap-2 items-start">
-              <input
-                type="text"
-                value={edu.institution}
-                onChange={(e) =>
-                  updateEducation(idx, "institution", e.target.value)
-                }
-                placeholder="Institution"
-                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <input
-                type="text"
-                value={edu.degree}
-                onChange={(e) =>
-                  updateEducation(idx, "degree", e.target.value)
-                }
-                placeholder="Degree"
-                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <input
-                type="text"
-                value={edu.year}
-                onChange={(e) => updateEducation(idx, "year", e.target.value)}
-                placeholder="Year"
-                className="w-32 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              {education.length > 1 && (
-                <button
-                  onClick={() => removeEducation(idx)}
-                  className="mt-1 text-muted hover:text-red-500 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            onClick={addEducation}
-            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-          >
-            + Add Education
-          </button>
-        </div>
-
-        {/* Skills */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-foreground">
-            Skills
-          </label>
-          <input
-            type="text"
-            value={skillInput}
-            onChange={(e) => setSkillInput(e.target.value)}
-            onKeyDown={handleSkillKeyDown}
-            placeholder="Type a skill and press Enter or comma"
-            className={inputClass}
-          />
-          {skills.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-1">
-              {skills.map((skill) => (
-                <span
-                  key={skill}
-                  className="flex items-center gap-1 rounded-full bg-primary-100 text-primary-700 px-3 py-1 text-xs font-medium"
-                >
-                  {skill}
-                  <button
-                    onClick={() => removeSkill(skill)}
-                    className="hover:text-primary-900 transition-colors"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Certifications */}
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-foreground">
-            Certifications
-          </label>
-          <textarea
-            value={certifications}
-            onChange={(e) => setCertifications(e.target.value)}
-            placeholder="One certification per line&#10;e.g. AWS Solutions Architect&#10;PMP Certified"
-            rows={3}
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </div>
-      </div>
-
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="flex gap-3 pb-8">
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted hover:bg-surface-hover transition-colors"
-          >
-            &larr; Back
-          </button>
-        )}
-        <button
-          onClick={handleSave}
-          disabled={saving || !fullName.trim()}
-          className="flex-1 rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {saving ? "Saving…" : "Save & Continue"}
-        </button>
-        <button
-          onClick={onSkip}
-          className="rounded-xl border border-border px-6 py-3 text-base font-medium text-muted hover:bg-surface-hover transition-colors"
-        >
-          I&apos;ll add this later
-        </button>
-      </div>
+      {parsed && (
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
+          <p className="text-xs text-muted">
+            We&apos;ll keep processing in the background. You can continue now.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save and continue →"}
+            </button>
+            <button
+              onClick={onSkip}
+              className="rounded-full border border-border bg-white px-4 py-3 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1447,7 +1281,9 @@ export function OnboardingFlow() {
 
   return (
     <div>
-      {step <= 4 && <ProgressBar step={step} onStepClick={(s) => setStep(s)} />}
+      {/* ProgressBar removed — CareerOutlineView + Screen-05 page render
+          their own step indicators aligned to the v2 design (4-step journey:
+          Resume · Profile · Preferences · First match). */}
 
       {step === 1 && (
         <StepWelcome
@@ -1459,9 +1295,17 @@ export function OnboardingFlow() {
 
       {step === 2 && (
         <StepCareerBasics
-          onNext={() => setStep(3)}
-          onSkip={() => setStep(3)}
-          onBack={() => setStep(1)}
+          onNext={() => {
+            // v2: after upload + save, route to /onboarding/profile (Screen 05)
+            if (typeof window !== "undefined") {
+              window.location.href = "/onboarding/profile";
+            }
+          }}
+          onSkip={() => {
+            if (typeof window !== "undefined") {
+              window.location.href = "/onboarding/profile";
+            }
+          }}
         />
       )}
 
