@@ -182,7 +182,53 @@ async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
 
 // ── Per-role scoring (core innovation) ───────────────────────────────────────
 
-const COSINE_THRESHOLD = 0.45;
+// Package C (F-25): raised from 0.45 → 0.65. At 0.45 we were giving every
+// loose keyword collision a "match", producing 100%-match / 0-gap theatre
+// on the Credo AI walkthrough. 0.65 is the same threshold the Python worker
+// uses for nugget retrieval (see worker/app/tools/hybrid_retrieval.py).
+const COSINE_THRESHOLD = 0.65;
+
+// ── Package C: years-of-experience hard check (F-25) ──────────────────────────
+//
+// JD says "5+ years of experience in X"; if user's cumulative work history is
+// 3 years, we MUST flag this as a gap regardless of cosine similarity on
+// individual nuggets. Cosine similarity on loose keywords will happily match
+// "delivered a 5-feature release" → "5+ years" and produce false confidence.
+
+function parseRequiredYearsFromJD(jd: string): number | null {
+  // Match: "5+ years", "5 years", "5-7 years", "minimum 5 years", etc.
+  // We take the LOWEST number mentioned (most inclusive); if JD says
+  // "3-5 years" we treat 3 as the floor so we don't double-count.
+  const matches: number[] = [];
+  const patterns = [
+    /(\d+)\+\s*years?\b/gi,
+    /(\d+)\s*[-–]\s*\d+\s*years?\b/gi,
+    /minimum\s*(?:of\s*)?(\d+)\s*years?\b/gi,
+    /at\s*least\s*(\d+)\s*years?\b/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(jd)) !== null) {
+      const n = parseInt(m[1], 10);
+      if (!isNaN(n) && n > 0 && n < 30) matches.push(n);
+    }
+  }
+  return matches.length ? Math.min(...matches) : null;
+}
+
+function cumulativeYearsFromWorkHistory(history: WorkHistoryRow[]): number {
+  if (history.length === 0) return 0;
+  const now = Date.now();
+  let earliest = now;
+  for (const wh of history) {
+    if (!wh.start_date) continue;
+    const t = new Date(wh.start_date).getTime();
+    if (!isNaN(t) && t < earliest) earliest = t;
+  }
+  if (earliest === now) return 0;
+  const years = (now - earliest) / (365.25 * 24 * 60 * 60 * 1000);
+  return Math.round(years * 10) / 10;
+}
 
 function scoreRolesAgainstRequirements(
   requirements: JDRequirement[],
@@ -234,32 +280,49 @@ function scoreRolesAgainstRequirements(
       .map((n) => ({ ...n, _emb: parseEmbedding(n.embedding) }))
       .filter((n) => n._emb !== null);
 
+    // Package C (F-25): 1 requirement ↔ at most 1 unique nugget.
+    // Previously the same nugget could be "best evidence" for 6 requirements,
+    // producing absurd matches (the Rolex CXM bullet "covered" everything from
+    // "cloud infrastructure" to "identity management" in the walkthrough).
+    //
+    // Greedy bipartite matching:
+    //   1. Compute all (req, nugget, cosine) pairs above threshold.
+    //   2. Sort descending by cosine.
+    //   3. Walk the list; assign each pair only if NEITHER side is claimed.
+    type Pair = { reqIdx: number; nugget: NuggetRow; sim: number };
+    const candidatePairs: Pair[] = [];
+    const bestCosinePerReq: number[] = new Array(requirements.length).fill(0);
+
     for (let i = 0; i < requirements.length; i++) {
-      const req = requirements[i];
       const reqEmb = reqEmbeddings[i];
       if (!reqEmb) continue;
-
-      let bestCosine = 0;
-      let bestNugget: NuggetRow | null = null;
-
       for (const n of roleNuggets) {
         const sim = cosineSimilarity(reqEmb, n._emb!);
-        if (sim > bestCosine) {
-          bestCosine = sim;
-          bestNugget = n;
+        if (sim > bestCosinePerReq[i]) bestCosinePerReq[i] = sim;
+        if (sim >= COSINE_THRESHOLD) {
+          candidatePairs.push({ reqIdx: i, nugget: n, sim });
         }
       }
+    }
 
-      cosineScores.push(bestCosine);
+    for (let i = 0; i < requirements.length; i++) {
+      cosineScores.push(bestCosinePerReq[i]);
+    }
 
-      if (bestCosine >= COSINE_THRESHOLD && bestNugget) {
-        covers.push(req.id);
-        bestPerReq[req.id] = {
-          nugget_id: bestNugget.id,
-          nugget_text: bestNugget.nugget_text,
-          cosine_score: Math.round(bestCosine * 1000) / 1000,
-        };
-      }
+    candidatePairs.sort((a, b) => b.sim - a.sim);
+    const claimedReqs = new Set<number>();
+    const claimedNuggets = new Set<string>();
+    for (const p of candidatePairs) {
+      if (claimedReqs.has(p.reqIdx) || claimedNuggets.has(p.nugget.id)) continue;
+      claimedReqs.add(p.reqIdx);
+      claimedNuggets.add(p.nugget.id);
+      const req = requirements[p.reqIdx];
+      covers.push(req.id);
+      bestPerReq[req.id] = {
+        nugget_id: p.nugget.id,
+        nugget_text: p.nugget.nugget_text,
+        cosine_score: Math.round(p.sim * 1000) / 1000,
+      };
     }
 
     // Role relevance = avg of best cosines per requirement
@@ -383,6 +446,33 @@ export async function POST(request: Request) {
   for (const rs of roleScores) {
     for (const reqId of rs.covers) {
       coveredReqs.add(reqId);
+    }
+  }
+
+  // Package C (F-25): years-of-experience hard check.
+  // If JD asks "5+ years" but user has 3.5 years of work history, the
+  // "5+ years experience" requirement is a GAP regardless of cosine.
+  // We revoke coverage for any requirement whose text claims N+ years
+  // when the user doesn't have N years. This is a hard truth-check that
+  // prevents the "100% match despite 3.5 vs 5 years" theatre we saw in
+  // the walkthrough.
+  const requiredYears = parseRequiredYearsFromJD(jd_text);
+  const userYears = cumulativeYearsFromWorkHistory(workHistory);
+  if (requiredYears !== null && userYears < requiredYears) {
+    for (const r of requirements) {
+      // Revoke coverage for any requirement whose text mentions the years figure
+      // (or a higher one) — the "N+ years" semantic applies.
+      const mentionsYears = /(\d+)\s*[+\-–]\s*(?:to\s*\d+\s*)?years?/i.test(r.text)
+        || /(\d+)\s*years?\b/i.test(r.text);
+      if (mentionsYears) {
+        coveredReqs.delete(r.id);
+        // Also scrub from each role's covers list so the UI doesn't show
+        // this as a "✓ covered" item anywhere.
+        for (const rs of roleScores) {
+          rs.covers = rs.covers.filter((id) => id !== r.id);
+          delete rs.best_nugget_per_req[r.id];
+        }
+      }
     }
   }
 
