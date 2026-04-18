@@ -8,6 +8,12 @@ import { ConfirmDenyButtons } from "./ConfirmDenyButtons";
 import { StepLifeOS } from "./StepLifeOS";
 import { ConfidenceProgressBar } from "@/components/ConfidenceProgressBar";
 import { CareerGraph, type CytoElement } from "@/components/CareerGraph";
+import {
+  CareerOutlineView,
+  type CareerOutlineData,
+  type ParsedExperience,
+  type ParsedEducation,
+} from "@/components/onboarding/CareerOutlineView";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -155,6 +161,11 @@ function StepCareerBasics({
   const [parsed, setParsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Wave 2 Sub-phase 2A: outline-view holds the structured companies tree
+  // + first-person summary. Populated from parse-resume; user edits feed back
+  // via setOutline. Saved alongside the flat fields on Save & Continue.
+  const [outline, setOutline] = useState<CareerOutlineData | null>(null);
+
   const applyParsed = (data: Record<string, unknown>) => {
     if (typeof data.full_name === "string" && data.full_name && !fullName) setFullName(data.full_name);
     // Never overwrite email — the signup email is the account-of-record.
@@ -175,6 +186,50 @@ function StepCareerBasics({
     if (Array.isArray(data.certifications) && data.certifications.length > 0) {
       setCertifications((data.certifications as string[]).join("\n"));
     }
+
+    // Build the structured outline for CareerOutlineView. If the parser didn't
+    // emit a projects[] for an experience, we leave it empty — the view
+    // falls back to raw bullets. If career_summary_first_person is empty,
+    // CareerOutlineView just shows a placeholder — acceptable graceful degrade.
+    const experiences: ParsedExperience[] = Array.isArray(data.experiences)
+      ? (data.experiences as Array<Record<string, unknown>>).map((e) => ({
+          company: String(e.company ?? ""),
+          role: String(e.role ?? ""),
+          start_date: typeof e.start_date === "string" ? e.start_date : "",
+          end_date: typeof e.end_date === "string" ? e.end_date : "",
+          bullets: Array.isArray(e.bullets) ? (e.bullets as string[]).filter((b) => typeof b === "string") : [],
+          projects: Array.isArray(e.projects)
+            ? (e.projects as Array<Record<string, unknown>>).map((p) => ({
+                title: String(p.title ?? ""),
+                one_liner: String(p.one_liner ?? ""),
+                key_achievements: Array.isArray(p.key_achievements)
+                  ? (p.key_achievements as string[]).filter((a) => typeof a === "string")
+                  : [],
+              }))
+            : [],
+        }))
+      : [];
+
+    const educationArr: ParsedEducation[] = Array.isArray(data.education)
+      ? (data.education as Array<Record<string, unknown>>).map((e) => ({
+          institution: String(e.institution ?? ""),
+          degree: String(e.degree ?? ""),
+          year: String(e.year ?? ""),
+        }))
+      : [];
+
+    setOutline({
+      experiences,
+      education: educationArr,
+      skills: Array.isArray(data.skills) ? (data.skills as string[]).filter((s) => typeof s === "string") : [],
+      certifications: Array.isArray(data.certifications)
+        ? (data.certifications as string[]).filter((c) => typeof c === "string")
+        : [],
+      career_summary_first_person: typeof data.career_summary_first_person === "string"
+        ? data.career_summary_first_person
+        : "",
+    });
+
     setParsed(true);
     setUploadMode("none");
   };
@@ -317,9 +372,41 @@ function StepCareerBasics({
       .filter(notAlreadyInResume)
       .join("\n");
 
-    const careerText = resumePasteText.trim()
-      ? (profileSummary ? `${profileSummary}\n\n${resumePasteText.trim()}` : resumePasteText.trim())
-      : profileSummary;
+    // Wave 2 Sub-phase 2A: prepend the EDITED first-person summary. This is
+    // the user's canonical "how I describe my career" — the nugget extractor
+    // treats it as the authoritative interpretation when deriving atoms.
+    // The outline's structured experiences (companies/roles/projects/key
+    // achievements) are also flattened into the text so the categoriser
+    // sees them even though they're displayed as structured cards.
+    const firstPersonText = (outline?.career_summary_first_person ?? "").trim();
+    const structuredExperienceText = outline
+      ? outline.experiences
+          .map((exp) => {
+            const header = [exp.company, exp.role, [exp.start_date, exp.end_date].filter(Boolean).join(" – ")]
+              .filter(Boolean)
+              .join(" · ");
+            const projectLines = (exp.projects ?? [])
+              .map((p) => {
+                const bullets = p.key_achievements.map((a) => `  • ${a}`).join("\n");
+                return `  ${p.title}: ${p.one_liner}${bullets ? "\n" + bullets : ""}`;
+              })
+              .join("\n");
+            const bulletLines = exp.bullets.length > 0 && (exp.projects ?? []).length === 0
+              ? exp.bullets.map((b) => `  • ${b}`).join("\n")
+              : "";
+            return [header, projectLines, bulletLines].filter(Boolean).join("\n");
+          })
+          .join("\n\n")
+      : "";
+
+    const careerText = [
+      firstPersonText,
+      structuredExperienceText,
+      profileSummary,
+      resumePasteText.trim(),
+    ]
+      .filter((chunk) => chunk && chunk.length > 0)
+      .join("\n\n");
 
     try {
       const supabase = createBrowserSupabase();
@@ -447,15 +534,22 @@ function StepCareerBasics({
             <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
-            Resume parsed — fields pre-filled below. Edit anything that looks wrong.
+            Resume parsed — review the outline + first-person summary, edit anything that looks wrong.
           </div>
           <button
-            onClick={() => { setParsed(false); setUploadMode("none"); setParseError(""); }}
+            onClick={() => { setParsed(false); setUploadMode("none"); setParseError(""); setOutline(null); }}
             className="shrink-0 text-xs text-green-600 underline hover:text-green-800 transition-colors"
           >
             Change resume
           </button>
         </div>
+      )}
+
+      {/* Wave 2 Sub-phase 2A — structured outline + first-person interpretation.
+          Shown when we have a parsed outline; the flat-field form below remains
+          for manual entry OR when the parser emitted thin data. */}
+      {parsed && outline && outline.experiences.length > 0 && (
+        <CareerOutlineView data={outline} onChange={setOutline} />
       )}
 
       <div className="space-y-4">

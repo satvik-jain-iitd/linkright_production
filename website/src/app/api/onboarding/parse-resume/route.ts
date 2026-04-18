@@ -41,6 +41,11 @@ async function saveWorkHistory(userId: string, experiences: ParsedExperience[]):
   }
 }
 
+// Wave 2 Sub-phase 2A (2026-04-18): parse-resume now returns a STRUCTURED
+// companies tree (with nested roles + projects) + a first-person career arc
+// paragraph. The frontend (CareerOutlineView) renders both as the outline
+// view + editable interpretation panel Satvik described in the spec
+// (specs/wave-2-journey-2026-04-18.md).
 const SYSTEM_PROMPT = `You are a resume parser. Extract structured information from the resume text provided.
 
 Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
@@ -61,9 +66,17 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
       "role": "Job Title",
       "start_date": "YYYY-MM or Month YYYY",
       "end_date": "YYYY-MM or Month YYYY or present",
-      "bullets": ["bullet 1 text", "bullet 2 text"]
+      "bullets": ["bullet 1 text", "bullet 2 text"],
+      "projects": [
+        {
+          "title": "Short project name",
+          "one_liner": "One sentence saying what the project was and its scope",
+          "key_achievements": ["2-3 bullet-like phrases highlighting outcomes for THIS project"]
+        }
+      ]
     }
-  ]
+  ],
+  "career_summary_first_person": "Single paragraph (120-220 words) written IN FIRST PERSON as if the candidate is speaking: 'I am a …', 'I led …', 'Here I was …'. Covers career arc, strongest themes, and scope of impact — drawn only from facts in the source."
 }
 
 Rules:
@@ -76,6 +89,8 @@ Rules:
 - certifications: list individual certifications, max 10
 - career_text: extract ONLY the work experience/employment history as plain text — not education or skills
 - experiences: extract every job/role found. bullets = exact bullet point text from the resume, max 8 per role
+- experiences[].projects: 1-4 distinct projects per role when the resume describes them. Each project MUST have a one-liner describing scope and 2-3 key_achievements phrased as outcome-led bullets. If the role text doesn't describe distinct projects, return an empty projects array — do NOT invent.
+- career_summary_first_person: first person only ("I ...", not "Satvik did ..."). Natural flowing prose, not a bullet list. No inventions — if the candidate is a PM at Amex and Sprinklr, say that; don't guess titles or achievements that aren't in the source. Return empty string only if the text is too thin to say anything.
 - If a field is not found, use empty string or empty array
 - Return valid JSON only, no code blocks`;
 
@@ -172,7 +187,7 @@ export async function POST(request: Request) {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 2048, temperature: 0 }
+      { maxTokens: 3500, temperature: 0 }
     );
 
     const parsed = extractJson(rawText);
