@@ -11,9 +11,11 @@ function AuthContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const searchParams = useSearchParams();
   const router = useRouter();
+  // Landing "Start for Free" CTA sends ?mode=signup so we open on the right tab.
+  const initialMode: "signin" | "signup" = searchParams.get("mode") === "signup" ? "signup" : "signin";
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const urlError = searchParams.get("error");
 
   const handleGoogleSignIn = async () => {
@@ -93,10 +95,10 @@ function AuthContent() {
         {/* Auth card */}
         <div className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
           <h1 className="text-center text-xl font-semibold">
-            Get started
+            {mode === "signup" ? "Create your account" : "Welcome back"}
           </h1>
           <p className="mt-2 text-center text-sm text-muted">
-            Sign in to continue
+            {mode === "signup" ? "First resume free. No credit card." : "Sign in to continue"}
           </p>
 
           {/* Google sign-in */}

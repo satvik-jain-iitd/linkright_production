@@ -40,51 +40,47 @@ import { AppNav } from "@/components/AppNav";
 function Hero() {
   return (
     <section className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6 pt-16">
-      {/* Background gradient */}
+      {/* Signature teal radial wash — design system */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(15,190,175,0.08)_0%,_transparent_70%)]" />
 
       <div className="relative z-10 mx-auto max-w-3xl text-center">
-        {/* [BRAND-REMOVED] Introducing Sync by LinkRight badge
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-muted">
-          <span className="inline-block h-2 w-2 rounded-full bg-accent" />
-          Introducing Sync by LinkRight
-        </div>
-        */}
+        <p className="mb-4 text-sm font-medium uppercase tracking-[0.12em] text-accent">
+          career navigation os
+        </p>
 
-        <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
-          Your resume.<br />
-          <span className="text-accent">Pixel-perfect.</span> Every time.
+        <h1 className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl">
+          Find the job. Reach out.<br />
+          Prepare. Land it.<br />
+          <span className="text-accent">One memory.</span>
         </h1>
 
-        {/* // [HERO-REDESIGN] old single paragraph subheadline */}
-        {/* // [HERO-REDESIGN] <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted sm:text-xl"> */}
-        {/* // [HERO-REDESIGN]   AI that writes resume bullets filling 95-100% of the page width. Brand */}
-        {/* // [HERO-REDESIGN]   colors from the target company. Zero AI-detectable writing. */}
-        {/* // [HERO-REDESIGN] </p> */}
+        <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted sm:text-xl">
+          LinkRight is a career OS with a memory layer at the core. Five jobs — find, rank,
+          reach out, prepare, broadcast — all powered by a story of you that grows every day you show up.
+        </p>
 
         <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3 text-left">
           <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
             <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
-            Width-optimized bullets filling <span className="text-accent font-medium">95-100%</span> of the page
+            <span><span className="text-accent font-medium">5 artefacts</span> per application — resume, cover letter, LinkedIn DM, recruiter email, portfolio</span>
           </p>
           <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
             <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
-            Auto-matched <span className="text-accent font-medium">brand colors</span> from the target company
+            <span>Memory layer <span className="text-accent font-medium">sharpens daily</span> from your wins, failures, and outcomes</span>
           </p>
           <p className="flex items-center gap-3 text-base text-muted sm:text-lg">
             <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs text-accent">✓</span>
-            Human-sounding writing that <span className="text-accent font-medium">passes AI detectors</span>
+            <span>Ship-quality resume in <span className="text-accent font-medium">90 seconds</span>, no filler, no AI slop</span>
           </p>
         </div>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link
-            href="/auth"
+            href="/auth?mode=signup"
             className="rounded-full bg-cta px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl hover:shadow-cta/30"
           >
             Start for Free
           </Link>
-          {/* // [HERO-REDESIGN] <a href="#features" ... > was pointing to features instead of how-it-works */}
           <a
             href="#how-it-works"
             className="rounded-full border border-border px-8 py-3.5 text-base font-medium text-foreground/70 transition-colors hover:border-accent hover:text-accent"
@@ -101,64 +97,68 @@ function Hero() {
   );
 }
 
+// Five pillars — the product's real shape. Each card = one "job" that LinkRight does.
+// Colour assignments follow the design system zone rules (teal primary, gold achievement,
+// purple AI, pink human/relational, sage interview).
 const features = [
   {
-    title: "Width Optimization",
+    title: "Find",
+    kicker: "Jobs, everywhere.",
     description:
-      "Every line fills 95-100% of the page. No gaps, no overflow. Measured to the pixel.",
+      "Scout scans LinkedIn, Greenhouse, Lever, company careers pages. Daily + on-demand. One inbox for every relevant role — not a feed of 200.",
+    tint: "bg-accent/10 text-accent",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
       </svg>
     ),
   },
   {
-    title: "Brand Matching",
+    title: "Rank",
+    kicker: "Against your story.",
     description:
-      "Auto-detects company colors. WCAG AA compliant. Your resume looks like it belongs.",
+      "Every JD scored semantically against your memory layer + preferences. The top 20 today are the ones worth your time — gaps flagged honestly.",
+    tint: "bg-gold-500/10 text-gold-700",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
       </svg>
     ),
   },
   {
-    title: "Anti-AI Writing",
+    title: "Reach out",
+    kicker: "5 artefacts per job.",
     description:
-      "Banned 50+ AI vocabulary patterns. Passes the human test every time.",
+      "For every application: tailored resume, cover letter, LinkedIn DM, recruiter email, portfolio site — all drawn from the same memory layer.",
+    tint: "bg-secondary-500/10 text-secondary-700",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
       </svg>
     ),
   },
   {
-    title: "JD Tailoring",
+    title: "Prepare",
+    kicker: "Interview & weak spots.",
     description:
-      "Bullets scored and ranked against the specific job description. BRS algorithm picks the best.",
+      "Memory knows what you don't know. Personalised drills per role — telephonic, technical, product sense, case. A quiet room to practise.",
+    tint: "bg-sage-100 text-sage-700",
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342M6.75 15a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v-3.675A55.378 55.378 0 0 1 12 8.443m-7.007 11.55A5.981 5.981 0 0 0 6.75 15.75v-1.5" />
       </svg>
     ),
   },
   {
-    title: "One Page, Always",
+    title: "Broadcast",
+    kicker: "Brand visibility.",
     description:
-      "Fits on a single A4 page. Budget calculated before a single word is written.",
+      "Daily diary becomes weekly LinkedIn posts in your voice — from what you shipped, not thought-leadership slop. Authentic presence at scale.",
+    tint: "bg-pink-500/10 text-pink-700",
+    soon: true,
     icon: (
       <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </svg>
-    ),
-  },
-  {
-    title: "Career Intelligence",
-    description:
-      "AI interview captures your career story. Smart matching finds the right experience for each JD.",
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 0 8.835-2.535m0 0A23.74 23.74 0 0 0 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
       </svg>
     ),
   },
@@ -169,14 +169,15 @@ function Features() {
     <section id="features" className="border-t border-border px-6 py-24">
       <div className="mx-auto max-w-6xl">
         <div className="mb-16 text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
-            Features
+          <p className="mb-2 text-sm font-medium uppercase tracking-[0.12em] text-accent">
+            Five pillars
           </p>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Every detail, engineered
+            Five jobs. One memory loop.
           </h2>
-          <p className="mx-auto mt-4 max-w-lg text-muted">
-            Six systems working together to produce the best resume you have ever sent.
+          <p className="mx-auto mt-4 max-w-xl text-muted">
+            Each step feeds the memory layer — recruiter replies, failed answers, shipped work.
+            The product gets sharper every time you use it.
           </p>
         </div>
 
@@ -184,12 +185,18 @@ function Features() {
           {features.map((f) => (
             <div
               key={f.title}
-              className="group rounded-2xl border border-border bg-surface p-6 shadow-sm transition-all hover:border-accent/30 hover:shadow-md"
+              className="group relative rounded-2xl border border-border bg-surface p-6 shadow-sm transition-all hover:border-accent/30 hover:shadow-md"
             >
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
+              {f.soon && (
+                <span className="absolute right-4 top-4 rounded-full bg-gold-500/10 px-2.5 py-0.5 text-xs font-medium text-gold-700">
+                  Soon
+                </span>
+              )}
+              <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg ${f.tint}`}>
                 {f.icon}
               </div>
-              <h3 className="mb-2 text-lg font-semibold">{f.title}</h3>
+              <h3 className="mb-1 text-lg font-semibold">{f.title}</h3>
+              <p className="mb-3 text-sm font-medium text-foreground/80">{f.kicker}</p>
               <p className="text-sm leading-relaxed text-muted">
                 {f.description}
               </p>
@@ -201,24 +208,32 @@ function Features() {
   );
 }
 
+// Honest 4-step flow — matches the actual onboarding + builder journey.
+// (The old "3 steps" claim was the biggest brand/truth gap per the SIGNAL audit.)
 const steps = [
   {
     number: "01",
-    title: "Paste your JD",
+    title: "Sign up in 2 min",
     description:
-      "Drop in the job description. We extract company, role, requirements.",
+      "Email + password. No credit card. Fresh account, fresh memory layer.",
   },
   {
     number: "02",
-    title: "We build your resume",
+    title: "Upload or chat",
     description:
-      "AI writes, measures, and optimizes every line. You review and approve.",
+      "PDF, DOCX, or paste text. Memory layer builds from your work, wins, and story.",
   },
   {
     number: "03",
-    title: "Download and apply",
+    title: "Pick your target",
     description:
-      "Pixel-perfect HTML resume. Review, edit via chat, and download.",
+      "Paste a JD or let Scout suggest. We show the gaps — no 100%-fake-match theatre.",
+  },
+  {
+    number: "04",
+    title: "Apply-pack in 90s",
+    description:
+      "Tailored resume + cover letter + LinkedIn DM + recruiter email. Download or host on GitHub Pages.",
   },
 ];
 
@@ -227,38 +242,31 @@ function HowItWorks() {
     <section id="how-it-works" className="border-t border-border px-6 py-24">
       <div className="mx-auto max-w-6xl">
         <div className="mb-16 text-center">
-          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-accent">
+          <p className="mb-2 text-sm font-medium uppercase tracking-[0.12em] text-accent">
             How it works
           </p>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Three steps. One perfect resume.
+            Four steps. Honest flow.
           </h2>
+          <p className="mx-auto mt-4 max-w-lg text-muted">
+            No &ldquo;paste JD and download&rdquo; sleight of hand. This is the real path from signup to apply-pack.
+          </p>
         </div>
 
-        <div className="grid gap-0 sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:gap-8">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map((s, i) => (
-            <div key={s.number} className="contents">
-              <div className="relative text-center">
-                <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-lg font-bold text-accent">
-                  {s.number}
-                </div>
-                <h3 className="mb-3 text-lg font-semibold">{s.title}</h3>
-                <p className="text-sm leading-relaxed text-muted">
-                  {s.description}
-                </p>
+            <div key={s.number} className="relative text-center">
+              <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full border border-accent/30 bg-accent/10 text-lg font-bold text-accent">
+                {s.number}
               </div>
+              <h3 className="mb-3 text-lg font-semibold">{s.title}</h3>
+              <p className="text-sm leading-relaxed text-muted">
+                {s.description}
+              </p>
               {i < steps.length - 1 && (
-                <>
-                  {/* [LANDING-P2] horizontal connector — desktop only */}
-                  <div className="hidden items-center sm:flex" aria-hidden="true">
-                    <div className="w-12 border-t-2 border-dashed border-accent/30" />
-                    <span className="text-accent/40 text-lg -ml-1">&rarr;</span>
-                  </div>
-                  {/* [LANDING-P2] vertical connector — mobile only */}
-                  <div className="flex justify-center py-4 sm:hidden" aria-hidden="true">
-                    <div className="h-8 border-l-2 border-dashed border-accent/30" />
-                  </div>
-                </>
+                <span className="pointer-events-none absolute right-0 top-7 hidden translate-x-1/2 text-accent/40 lg:block" aria-hidden="true">
+                  &rarr;
+                </span>
               )}
             </div>
           ))}
