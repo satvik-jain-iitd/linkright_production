@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/fetch-jds",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-linkedin-tokens",
+      "schedule": "30 21 * * *"
     }
   ]
 }

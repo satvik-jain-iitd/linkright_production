@@ -38,17 +38,22 @@ export function ProfileView({
   const [diaryEntries, setDiaryEntries] = useState<number | null>(null);
   const [streak, setStreak] = useState<number>(0);
   const [linkedInConnected, setLinkedInConnected] = useState(false);
+  const [linkedInHandle, setLinkedInHandle] = useState<string | null>(null);
+  const [linkedInBusy, setLinkedInBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    const [nRes, dRes] = await Promise.all([
+    const [nRes, dRes, bRes] = await Promise.all([
       fetch("/api/nuggets/status", { cache: "no-store" }).then((r) =>
         r.ok ? r.json() : null,
       ),
       fetch("/api/diary?limit=1", { cache: "no-store" }).then((r) =>
+        r.ok ? r.json() : null,
+      ),
+      fetch("/api/broadcast/status", { cache: "no-store" }).then((r) =>
         r.ok ? r.json() : null,
       ),
     ]);
@@ -56,6 +61,10 @@ export function ProfileView({
     if (dRes) {
       setStreak(dRes.streak ?? 0);
       setDiaryEntries(dRes.entries?.length ?? 0);
+    }
+    if (bRes) {
+      setLinkedInConnected(!!bRes.linkedin_connected);
+      setLinkedInHandle(bRes.linkedin?.external_handle ?? null);
     }
   }, []);
 
@@ -273,16 +282,36 @@ export function ProfileView({
             name="LinkedIn"
             iconPath="M19 3a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14zM8.339 18.337V9.75H5.667v8.587h2.672zM7.003 8.575a1.548 1.548 0 100-3.097 1.548 1.548 0 000 3.097zm11.334 9.762V13.67c0-2.31-.494-4.087-3.193-4.087-1.297 0-2.167.712-2.523 1.387h-.036V9.75h-2.566v8.587h2.672v-4.248c0-1.121.212-2.206 1.601-2.206 1.369 0 1.387 1.281 1.387 2.278v4.176h2.658z"
             connected={linkedInConnected}
+            busy={linkedInBusy}
             subtitle={
               linkedInConnected
-                ? "Connected — broadcast posts enabled"
+                ? `Connected${linkedInHandle ? ` as ${linkedInHandle}` : ""} — broadcast posts enabled`
                 : "Connect to draft + schedule posts"
             }
-            onAction={() => {
-              // Broadcast OAuth is wired in a separate wave (linkright-6tb).
-              // For now, route to the consent screen when it ships.
-              window.location.href = "/dashboard/broadcast/connect";
-              setLinkedInConnected((x) => x); // no-op; placeholder for future
+            onAction={async () => {
+              if (linkedInConnected) {
+                if (
+                  !confirm(
+                    "Disconnect LinkedIn? Scheduled posts will stop publishing until you reconnect.",
+                  )
+                )
+                  return;
+                setLinkedInBusy(true);
+                try {
+                  const res = await fetch(
+                    "/api/broadcast/oauth/linkedin/disconnect",
+                    { method: "POST" },
+                  );
+                  if (res.ok) {
+                    setLinkedInConnected(false);
+                    setLinkedInHandle(null);
+                  }
+                } finally {
+                  setLinkedInBusy(false);
+                }
+              } else {
+                window.location.href = "/dashboard/broadcast/connect";
+              }
             }}
           />
           <ConnectionRow
@@ -346,12 +375,14 @@ function ConnectionRow({
   connected,
   subtitle,
   onAction,
+  busy,
 }: {
   name: string;
   iconPath: string;
   connected: boolean;
   subtitle: string;
   onAction: () => void;
+  busy?: boolean;
 }) {
   return (
     <div className="flex items-center gap-3.5 rounded-xl border border-border bg-white p-3.5">
@@ -377,13 +408,14 @@ function ConnectionRow({
       <button
         type="button"
         onClick={onAction}
+        disabled={busy}
         className={
           connected
-            ? "rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-red-200 hover:text-red-600"
-            : "rounded-full border border-accent bg-white px-3.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white"
+            ? "rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-red-200 hover:text-red-600 disabled:opacity-50"
+            : "rounded-full border border-accent bg-white px-3.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-accent hover:text-white disabled:opacity-50"
         }
       >
-        {connected ? "Disconnect" : "Connect"}
+        {busy ? "…" : connected ? "Disconnect" : "Connect"}
       </button>
     </div>
   );

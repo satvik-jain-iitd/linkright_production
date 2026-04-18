@@ -36,22 +36,28 @@ export async function GET(request: Request) {
     Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)),
   );
 
-  // Due scheduled posts across all users.
-  const { data: posts, error: postsErr } = await sb
-    .from("broadcast_posts")
-    .select(
-      "id, user_id, content, scheduled_at, source_insight_id, source_insight_kind",
-    )
-    .eq("status", "scheduled")
-    .lte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(limit);
+  // Atomically claim due posts (migration 032 — broadcast_claim_due RPC).
+  // The RPC holds a row lock for update + skips already-locked rows so
+  // parallel polls don't both hand out the same post.
+  const { data: claimed, error: claimErr } = await sb.rpc(
+    "broadcast_claim_due",
+    { p_limit: limit },
+  );
 
-  if (postsErr) {
-    return Response.json({ error: postsErr.message }, { status: 500 });
+  if (claimErr) {
+    return Response.json({ error: claimErr.message }, { status: 500 });
   }
 
-  if (!posts || posts.length === 0) {
+  type ClaimedRow = {
+    post_id: string;
+    user_id: string;
+    content: string;
+    scheduled_at: string;
+    claim_token: string;
+  };
+  const posts = (claimed ?? []) as ClaimedRow[];
+
+  if (posts.length === 0) {
     return Response.json({ due: [] });
   }
 
@@ -81,10 +87,11 @@ export async function GET(request: Request) {
   const due = posts.map((p) => {
     const tok = tokenByUser.get(p.user_id);
     return {
-      post_id: p.id,
+      post_id: p.post_id,
       user_id: p.user_id,
       content: p.content,
       scheduled_at: p.scheduled_at,
+      claim_token: p.claim_token, // n8n MUST echo this in the callback
       linkedin: tok?.status === "connected"
         ? {
             access_token: tok.access_token,
@@ -102,6 +109,7 @@ export async function GET(request: Request) {
 
 type CallbackBody = {
   post_id?: string;
+  claim_token?: string;
   linkedin_post_id?: string;
   posted_at?: string;
   engagement_json?: Record<string, unknown>;
@@ -119,6 +127,37 @@ export async function POST(request: Request) {
     return Response.json({ error: "post_id required" }, { status: 400 });
   }
 
+  const sb = createServiceClient();
+
+  // Claim verification — engagement-only updates (which skip claim flow)
+  // are still allowed, so the check is: if claim_token is supplied, it
+  // must match; if not supplied, the current row must already be
+  // 'posted' (i.e. this is an engagement update, not a first publish).
+  const { data: current } = await sb
+    .from("broadcast_posts")
+    .select("id, user_id, status, claim_token")
+    .eq("id", body.post_id)
+    .maybeSingle();
+
+  if (!current) {
+    return Response.json({ error: "Post not found" }, { status: 404 });
+  }
+
+  const isFirstPublish = current.status === "scheduled";
+  if (isFirstPublish) {
+    if (!body.claim_token || body.claim_token !== current.claim_token) {
+      // Either stale retry OR unauthorised callback — either way, don't
+      // let it overwrite. Idempotency saved us.
+      return Response.json(
+        {
+          error:
+            "claim_token mismatch — this post is no longer claimed to this worker",
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const status = body.status ?? (body.failed_reason ? "failed" : "posted");
   const patch: Record<string, unknown> = {
     status,
@@ -128,11 +167,16 @@ export async function POST(request: Request) {
     patch.posted_at = body.posted_at ?? new Date().toISOString();
     if (body.linkedin_post_id) patch.linkedin_post_id = body.linkedin_post_id;
     if (body.engagement_json) patch.engagement_json = body.engagement_json;
+    // Release claim on success so the admin UI shows a clean state.
+    patch.claimed_at = null;
+    patch.claim_token = null;
   } else if (status === "failed") {
     patch.failed_reason = body.failed_reason ?? "unknown";
+    // Clear claim so a retry can re-claim.
+    patch.claimed_at = null;
+    patch.claim_token = null;
   }
 
-  const sb = createServiceClient();
   const { data, error } = await sb
     .from("broadcast_posts")
     .update(patch)
