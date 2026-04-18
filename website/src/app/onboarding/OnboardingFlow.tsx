@@ -289,6 +289,21 @@ function StepCareerBasics({
       .map((c) => `- ${c.trim()}`)
       .join("\n");
 
+    // F-18: the pasted resume usually already contains Name / Email / Phone /
+    // LinkedIn / Skills / Education — prepending profileSummary verbatim
+    // caused visible duplication ("Email: x@y.com" appeared in both the
+    // summary AND the resume text). Dedupe per line: drop profile lines
+    // whose value substring is already in the pasted resume.
+    const resumeLower = resumePasteText.toLowerCase();
+    const notAlreadyInResume = (line: string): boolean => {
+      if (!resumePasteText) return true;
+      const value = line.replace(/^[a-z ]+:\s*/i, "").trim();
+      if (value.length < 4) return true; // too short to dedupe reliably
+      // Multi-line blocks (Education, Certifications) — test first content line
+      const firstValueLine = value.split("\n").find((l) => l.trim().length >= 4) ?? value;
+      return !resumeLower.includes(firstValueLine.toLowerCase());
+    };
+
     const profileSummary = [
       fullName && `Name: ${fullName}`,
       email && `Email: ${email}`,
@@ -298,11 +313,12 @@ function StepCareerBasics({
       skills.length > 0 && `Skills: ${skills.join(", ")}`,
       certLines && `Certifications:\n${certLines}`,
     ]
-      .filter(Boolean)
+      .filter((l): l is string => Boolean(l))
+      .filter(notAlreadyInResume)
       .join("\n");
 
     const careerText = resumePasteText.trim()
-      ? `${profileSummary}\n\n${resumePasteText.trim()}`
+      ? (profileSummary ? `${profileSummary}\n\n${resumePasteText.trim()}` : resumePasteText.trim())
       : profileSummary;
 
     try {
