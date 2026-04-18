@@ -172,7 +172,7 @@ function HowItWorks() {
           Three steps. One daily ritual.
         </h2>
         <div className="mt-12 flex flex-col items-stretch justify-center gap-4 sm:flex-row sm:items-start">
-          {STEPS.map((s, i, arr) => (
+          {STEPS.map((s) => (
             <div key={s.n} className="flex flex-1 flex-col items-center text-center sm:px-3">
               <div className="relative flex items-center justify-center">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-[14px] font-bold text-white">
@@ -181,9 +181,6 @@ function HowItWorks() {
               </div>
               <h3 className="mt-3.5 text-base font-semibold">{s.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-muted">{s.body}</p>
-              {i < arr.length - 1 && (
-                <span className="mt-4 hidden text-muted sm:block">&rarr;</span>
-              )}
             </div>
           ))}
         </div>

@@ -84,21 +84,15 @@ interface Props {
 
 export function NotificationsDrawer({ open, onClose, onUnreadChange }: Props) {
   const [items, setItems] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
-      const body = await res.json();
-      setItems(body.notifications ?? body.data ?? []);
-      const unread = (body.notifications ?? body.data ?? []).filter(
-        (n: Notification) => !n.read_at,
-      ).length;
-      onUnreadChange?.(unread);
-    } finally {
-      setLoading(false);
-    }
+    const res = await fetch("/api/notifications?limit=30", { cache: "no-store" });
+    const body = await res.json();
+    setItems(body.notifications ?? body.data ?? []);
+    const unread = (body.notifications ?? body.data ?? []).filter(
+      (n: Notification) => !n.read_at,
+    ).length;
+    onUnreadChange?.(unread);
   }, [onUnreadChange]);
 
   useEffect(() => {
@@ -185,10 +179,7 @@ export function NotificationsDrawer({ open, onClose, onUnreadChange }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {loading && (
-            <div className="p-5 text-sm text-muted">Loading…</div>
-          )}
-          {!loading && items.length === 0 && (
+          {items.length === 0 && (
             <div className="p-10 text-center">
               <p className="text-sm font-semibold">No notifications yet.</p>
               <p className="mt-1 text-xs text-muted">
@@ -196,8 +187,7 @@ export function NotificationsDrawer({ open, onClose, onUnreadChange }: Props) {
               </p>
             </div>
           )}
-          {!loading &&
-            items.map((n, i, arr) => {
+          {items.map((n, i, arr) => {
               const dot = DOT_COLOR[n.type] ?? "bg-border";
               const link = deepLink(n);
               const isUnread = !n.read_at;

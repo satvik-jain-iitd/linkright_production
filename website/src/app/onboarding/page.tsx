@@ -24,13 +24,18 @@ export default async function OnboardingPage() {
   // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
   // [BYOK-REMOVED]     .eq("user_id", user.id),
   // [BYOK-REMOVED] ]);
-  const { count: chunkCount } = await supabase
-    .from("career_chunks")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id);
+  const [{ count: chunkCount }, { count: nuggetCount }] = await Promise.all([
+    supabase
+      .from("career_chunks")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    supabase
+      .from("career_nuggets")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+  ]);
 
-  // [BYOK-REMOVED] const hasApiKey = (keyCount ?? 0) > 0;
-  const hasCareerData = (chunkCount ?? 0) > 0;
+  const hasCareerData = (chunkCount ?? 0) > 0 || (nuggetCount ?? 0) > 0;
 
   // Already onboarded → go to dashboard
   if (hasCareerData) {

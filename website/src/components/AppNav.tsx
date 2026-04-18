@@ -69,6 +69,14 @@ const ACCENT_UNDERLINE: Record<NavLink["accent"], string> = {
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
+  // Cover letters + resume builder live under the Applications pillar.
+  if (
+    href === "/dashboard/applications" &&
+    (pathname.startsWith("/dashboard/cover-letters") ||
+      pathname.startsWith("/resume/"))
+  ) {
+    return true;
+  }
   return pathname.startsWith(href);
 }
 
