@@ -9,7 +9,10 @@
 
 import type { APIRequestContext, APIResponse } from '@playwright/test';
 
-const DELAYS_MS = [1500, 3000, 5000, 8000];
+// Wider backoff — Groq's free tier occasionally takes 15-30s to reset under
+// burst load. Last attempt gives ~50s cumulative which matches real recovery
+// windows observed in the concurrency smoke test.
+const DELAYS_MS = [1500, 3000, 6000, 12000, 20000];
 
 export async function parseResumeWithRetry(
   request: APIRequestContext,
