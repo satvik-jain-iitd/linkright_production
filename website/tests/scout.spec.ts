@@ -116,7 +116,8 @@ test.describe.serial('Scout UI', () => {
   });
 
   test('main nav has Scout link', async () => {
-    await expect(page.getByRole('navigation').getByText('Scout')).toBeVisible();
+    // Two navs carry Scout now (sidebar + top nav) — assert at least one is visible.
+    await expect(page.getByRole('navigation').getByText('Scout').first()).toBeVisible();
   });
 
   test('watchlist page renders', async () => {

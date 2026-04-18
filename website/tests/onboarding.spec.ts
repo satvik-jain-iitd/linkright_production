@@ -31,7 +31,7 @@ test.describe.serial('Landing Page Navigation', () => {
   test('pricing page has feedback form below the fold', async () => {
     await page.goto('/pricing');
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await expect(page.getByText('Would you pay for a tool like Sync')).toBeVisible();
+    await expect(page.getByText(/Would you pay for a tool like (LinkRight|Sync)/)).toBeVisible();
     await expect(page.getByText(/features matter/i)).toBeVisible();
   });
 
@@ -169,18 +169,15 @@ test.describe.serial('Onboarding Journey', () => {
 
   // ── Step 2: Resume Upload + Auto-fill ─────────────────────────────────────
 
-  // [PDF-REMOVED] PDF upload test disabled — pdf-parse unreliable in production.
-  // The Upload PDF button has been commented out in OnboardingFlow.tsx.
-  // Re-enable this test when a reliable PDF library is found.
-  test.skip('step 2 — PDF upload parses resume successfully', async () => {});
-
-  test('step 2 — only paste option shown (no file upload button)', async () => {
+  // F-08 restored — PDF/DOCX upload re-enabled via `unpdf` (2026-04-18).
+  // Full upload round-trip is covered by pdf-upload.spec.ts (hits the API
+  // directly with fixtures/resume.pdf). This UI test just confirms the button
+  // surfaces on the onboarding Step 2 page.
+  test('step 2 — both paste and upload options shown', async () => {
     await navigatePastStep1(page);
 
-    // Paste button should be visible
     await expect(page.getByRole('button', { name: 'Paste resume text' })).toBeVisible({ timeout: 10_000 });
-    // File upload button should NOT be visible (commented out)
-    await expect(page.getByRole('button', { name: 'Upload PDF / DOCX / TXT' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upload PDF / DOCX / TXT' })).toBeVisible();
   });
 
   test('step 2 — resume text paste and auto-fill', async () => {

@@ -42,22 +42,26 @@ test.describe('Profile & Oracle token (F-32)', () => {
     await page.goto('/dashboard/profile');
     await page.waitForLoadState('networkidle');
 
-    const ensureToken = async () => {
+    const tokenText = async () => {
       const t = page.getByText(TOKEN_RE).first();
-      if (!(await t.isVisible().catch(() => false))) {
-        await page.getByRole('button', { name: /Generate token/ }).click();
-        await expect(t).toBeVisible({ timeout: 10_000 });
-      }
+      await expect(t).toBeVisible({ timeout: 10_000 });
       return (await t.textContent())?.trim() ?? '';
     };
 
-    const first = await ensureToken();
-    await page.getByRole('button', { name: /Rotate token/ }).click();
-    // Wait for new token render
-    await page.waitForTimeout(1500);
-    const second = (await page.getByText(TOKEN_RE).first().textContent())?.trim() ?? '';
+    // Generate initial token if none exists.
+    const genBtn = page.getByRole('button', { name: /Generate token/ });
+    if (await genBtn.isVisible().catch(() => false)) {
+      await genBtn.click();
+    }
+    const first = await tokenText();
 
-    expect(second).toMatch(TOKEN_RE);
-    expect(second).not.toBe(first);
+    // Rotate and wait specifically for the visible token to CHANGE.
+    // toPass retries the closure until it no longer throws, polling the DOM.
+    await page.getByRole('button', { name: /Rotate token/ }).click();
+    await expect(async () => {
+      const current = (await page.getByText(TOKEN_RE).first().textContent())?.trim() ?? '';
+      expect(current).toMatch(TOKEN_RE);
+      expect(current).not.toBe(first);
+    }).toPass({ timeout: 15_000, intervals: [300, 600, 1000] });
   });
 });

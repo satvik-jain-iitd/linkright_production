@@ -59,7 +59,7 @@ test.describe.serial('API Validation — Unauthenticated', () => {
   // These tests document the current (broken) behavior.
   // When auth middleware is fixed, flip the assertions to >= 400.
   test('unauthenticated request to /api/onboarding/status — BUG: returns 200 instead of 401', async () => {
-    const response = await page.request.get('https://sync.linkright.in/api/onboarding/status');
+    const response = await page.request.get('/api/onboarding/status');
     // KNOWN BUG: should be >= 400, but API doesn't check auth
     // When fixed, change this to: expect(response.status()).toBeGreaterThanOrEqual(400);
     expect(response.ok()).toBe(true);
@@ -67,7 +67,7 @@ test.describe.serial('API Validation — Unauthenticated', () => {
 
   // BUG P1: APIs don't enforce auth — return 200 even without cookies
   test('unauthenticated request to /api/resume/list — BUG: returns 200 instead of 401', async () => {
-    const response = await page.request.get('https://sync.linkright.in/api/resume/list');
+    const response = await page.request.get('/api/resume/list');
     // KNOWN BUG: should be >= 400, but API doesn't check auth
     // When fixed, change this to: expect(response.status()).toBeGreaterThanOrEqual(400);
     expect(response.ok()).toBe(true);

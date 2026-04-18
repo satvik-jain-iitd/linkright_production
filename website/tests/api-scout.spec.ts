@@ -27,14 +27,14 @@ test.describe.serial('Scout API — Auth gates', () => {
   });
 
   test('unauthenticated GET /api/watchlist — BUG: returns 200 instead of 401', async () => {
-    const response = await page.request.get('https://sync.linkright.in/api/watchlist');
+    const response = await page.request.get('/api/watchlist');
     // KNOWN BUG: should be 401, but API doesn't check auth for unauthenticated browser context
     // When fixed, change to: expect(response.status()).toBe(401);
     expect(response.ok()).toBe(true);
   });
 
   test('unauthenticated POST /api/watchlist — BUG: returns 200 instead of 401', async () => {
-    const response = await page.request.post('https://sync.linkright.in/api/watchlist', {
+    const response = await page.request.post('/api/watchlist', {
       data: { company_name: 'Test', company_slug: 'test-unauth' },
     });
     // KNOWN BUG: should be 401
@@ -43,7 +43,7 @@ test.describe.serial('Scout API — Auth gates', () => {
   });
 
   test('unauthenticated PUT /api/watchlist/fake-id — BUG: returns non-401', async () => {
-    const response = await page.request.put('https://sync.linkright.in/api/watchlist/fake-id', {
+    const response = await page.request.put('/api/watchlist/fake-id', {
       data: { company_name: 'Updated' },
     });
     // KNOWN BUG: should be 401
@@ -52,21 +52,21 @@ test.describe.serial('Scout API — Auth gates', () => {
   });
 
   test('unauthenticated DELETE /api/watchlist/fake-id — BUG: returns non-401', async () => {
-    const response = await page.request.delete('https://sync.linkright.in/api/watchlist/fake-id');
+    const response = await page.request.delete('/api/watchlist/fake-id');
     // KNOWN BUG: should be 401
     // When fixed, change to: expect(response.status()).toBe(401);
     expect(response.status()).toBeLessThan(500);
   });
 
   test('unauthenticated GET /api/discoveries — BUG: returns 200 instead of 401', async () => {
-    const response = await page.request.get('https://sync.linkright.in/api/discoveries');
+    const response = await page.request.get('/api/discoveries');
     // KNOWN BUG: should be 401
     // When fixed, change to: expect(response.status()).toBe(401);
     expect(response.ok()).toBe(true);
   });
 
   test('unauthenticated PUT /api/discoveries/fake-id/status — BUG: returns non-401', async () => {
-    const response = await page.request.put('https://sync.linkright.in/api/discoveries/fake-id/status', {
+    const response = await page.request.put('/api/discoveries/fake-id/status', {
       data: { status: 'saved' },
     });
     // KNOWN BUG: should be 401
@@ -75,7 +75,7 @@ test.describe.serial('Scout API — Auth gates', () => {
   });
 
   test('unauthenticated POST /api/discoveries/fake-id/apply — BUG: returns non-401', async () => {
-    const response = await page.request.post('https://sync.linkright.in/api/discoveries/fake-id/apply');
+    const response = await page.request.post('/api/discoveries/fake-id/apply');
     // KNOWN BUG: should be 401
     // When fixed, change to: expect(response.status()).toBe(401);
     expect(response.status()).toBeLessThan(500);
