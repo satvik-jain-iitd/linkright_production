@@ -16,6 +16,7 @@ interface NuggetRow {
   company: string | null;
   role: string | null;
   tags: string[] | null;
+  section_type: string | null;
   importance: string | null;
   event_date: string | null;
   leadership_signal: string | null;
@@ -58,7 +59,7 @@ interface GraphStats {
   decisions: number;
   characters: number;
   companies: { name: string; role: string; count: number; roles?: string[] }[];
-  topSkills: { name: string; count: number }[];
+  topSkills: { name: string; count: number; score?: number }[];
 }
 
 export async function GET() {
@@ -73,7 +74,7 @@ export async function GET() {
 
   const { data: nuggets, error } = await supabase
     .from("career_nuggets")
-    .select("id, nugget_text, company, role, tags, importance, event_date, leadership_signal, answer, atom_type, life_domain")
+    .select("id, nugget_text, company, role, tags, section_type, importance, event_date, leadership_signal, answer, atom_type, life_domain")
     .eq("user_id", user.id)
     .order("event_date", { ascending: false });
 
@@ -98,7 +99,33 @@ export async function GET() {
   // Track deduplication
   const experienceIds = new Map<string, string>(); // "company::role" → exp node id
   const skillIds = new Map<string, string>(); // skill name → skill node id
-  const skillCounts = new Map<string, number>(); // skill name → count
+  const skillCounts = new Map<string, number>(); // skill name → raw occurrence count
+  // F-13: skill ranking was topping "resilience" / "entrepreneurship" for a
+  // PM profile because every tag on every nugget had equal weight — a
+  // "resilience" tag on a volunteer story scored the same as a "Product
+  // Strategy" tag on a core-job bullet. Weight by section_type so
+  // work-experience skills float to the top where they belong.
+  const skillScores = new Map<string, number>(); // skill name → weighted score
+  const SECTION_WEIGHT: Record<string, number> = {
+    work_experience: 2.0,    // core signal
+    internship: 1.4,
+    certification: 1.2,
+    education: 1.0,
+    independent_project: 1.0,
+    award: 0.9,
+    volunteer: 0.5,
+    personal: 0.3,
+    interest: 0.2,
+    // Generic/unknown section_type falls back to 1.0 (even weight).
+  };
+  // Soft-quality tags that are often genuine but almost never what a user
+  // wants to see at the top of "Skills" on a resume/dashboard. If one of
+  // these shows up, it's capped at 0.4× weight regardless of section.
+  const SOFT_QUALITY_TAGS = new Set([
+    "resilience", "grit", "passion", "drive", "curiosity",
+    "entrepreneurship", "entrepreneurial", "hustle", "ambition",
+    "empathy", "humility", "integrity",
+  ]);
   const expCounts = new Map<string, number>(); // exp node id → count
 
   // Node size by importance
@@ -192,11 +219,18 @@ export async function GET() {
     }
 
     // ── Skill nodes (one per unique tag) ──────────────────────────────────
+    // F-13 weight calculation per tag:
+    //   base weight = SECTION_WEIGHT[nugget.section_type] (default 1.0)
+    //   × 0.4 if tag is a soft-quality (resilience, hustle, etc)
+    const sectionKey = (nugget.section_type ?? "").toLowerCase().replace(/\s+/g, "_");
+    const baseWeight = SECTION_WEIGHT[sectionKey] ?? 1.0;
     for (const tag of nugget.tags ?? []) {
       const normalizedTag = tag.trim();
       if (!normalizedTag) continue;
       if (normalizedTag.startsWith("source:")) continue; // metadata tag, not a real skill
       skillCounts.set(normalizedTag, (skillCounts.get(normalizedTag) ?? 0) + 1);
+      const softPenalty = SOFT_QUALITY_TAGS.has(normalizedTag.toLowerCase()) ? 0.4 : 1.0;
+      skillScores.set(normalizedTag, (skillScores.get(normalizedTag) ?? 0) + baseWeight * softPenalty);
       if (!skillIds.has(normalizedTag)) {
         const skillId = `skill:${skillIds.size}`;
         skillIds.set(normalizedTag, skillId);
@@ -257,9 +291,15 @@ export async function GET() {
     })
     .sort((a, b) => b.count - a.count);
 
+  // F-13: rank by WEIGHTED score (work experience > volunteer, soft-qualities
+  // penalised). Expose both `score` and raw `count` so the UI can choose.
   const topSkills = Array.from(skillCounts.entries())
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+    .map(([name, count]) => ({
+      name,
+      count,
+      score: Math.round((skillScores.get(name) ?? count) * 100) / 100,
+    }))
+    .sort((a, b) => b.score - a.score)
     .slice(0, 10);
 
   const achievementCount = (nuggets as NuggetRow[]).filter(

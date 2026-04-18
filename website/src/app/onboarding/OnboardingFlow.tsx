@@ -1237,11 +1237,16 @@ function ProgressBar({ step, onStepClick }: { step: Step; onStepClick?: (s: Step
             <button
               key={label}
               type="button"
-              disabled={!isCompleted}
+              // F-14: previously `disabled={!isCompleted}` made the CURRENT step
+              // render as disabled in the a11y tree (the user is on it — it
+              // should be marked with aria-current, not disabled). Only unvisited
+              // future steps are disabled now.
+              disabled={!isCompleted && !isCurrent}
+              aria-current={isCurrent ? "step" : undefined}
               onClick={() => isCompleted && onStepClick?.((idx + 1) as Step)}
               className={`text-xs font-medium transition-colors ${
                 isCurrent
-                  ? "text-primary-600"
+                  ? "text-primary-600 font-semibold"
                   : isCompleted
                     ? "text-primary-600 hover:text-primary-800 cursor-pointer underline underline-offset-2"
                     : "text-muted cursor-default"
