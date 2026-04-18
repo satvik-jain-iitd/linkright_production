@@ -131,7 +131,7 @@ export async function POST(request: Request) {
           rows.push({
             user_id: user.id,
             nugget_text: str(h.title) || answer.slice(0, 80),
-            question: null,
+            question: "",
             alt_questions: [],
             answer,
             primary_layer: "A",
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
           rows.push({
             user_id: user.id,
             nugget_text: b.slice(0, 80),
-            question: null,
+            question: "",
             alt_questions: [],
             answer: b,
             primary_layer: "A",
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       rows.push({
         user_id: user.id,
         nugget_text: str(p.title) || answer.slice(0, 80),
-        question: null,
+        question: "",
         alt_questions: [],
         answer,
         primary_layer: "A",
@@ -204,7 +204,7 @@ export async function POST(request: Request) {
     rows.push({
       user_id: user.id,
       nugget_text: take.slice(0, 80),
-      question: null,
+      question: "",
       alt_questions: [],
       answer: take,
       primary_layer: "C",
@@ -225,7 +225,7 @@ export async function POST(request: Request) {
     rows.push({
       user_id: user.id,
       nugget_text: s.slice(0, 60),
-      question: null,
+      question: "",
       alt_questions: [],
       answer: s,
       primary_layer: "B",
@@ -246,7 +246,7 @@ export async function POST(request: Request) {
     rows.push({
       user_id: user.id,
       nugget_text: c.slice(0, 80),
-      question: null,
+      question: "",
       alt_questions: [],
       answer: c,
       primary_layer: "B",

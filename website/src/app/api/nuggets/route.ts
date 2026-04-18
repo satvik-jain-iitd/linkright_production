@@ -88,7 +88,10 @@ export async function POST(request: Request) {
     user_id: user.id,
     nugget_index: nextIndex,
     nugget_text: title || answerText.slice(0, 80),
-    question: null,
+    // career_nuggets.question is NOT NULL. For user-added highlights we
+    // don't have an explicit question, so use a stable placeholder tied to
+    // the title so it still reads well in any Q/A export.
+    question: `Tell me about: ${title || answerText.slice(0, 60)}`,
     alt_questions: [],
     answer: answerText || title,
     primary_layer: "A",
