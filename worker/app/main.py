@@ -209,6 +209,65 @@ async def health():
     }
 
 
+@app.get("/debug/llm-ping")
+async def debug_llm_ping(authorization: str | None = Header(None)):
+    """Probe which providers the worker can actually reach.
+
+    Hits each configured LLM with a trivial 1-token prompt and reports latency
+    + outcome. Auth-gated so we don't leak timings to the world.
+    """
+    verify_secret(authorization)
+    out: dict[str, dict] = {
+        "env": {
+            "GEMINI_API_KEY_set": bool(os.getenv("GEMINI_API_KEY")),
+            "GROQ_API_KEY_set": bool(os.getenv("GROQ_API_KEY")),
+            "PLATFORM_GROQ_API_KEY_set": bool(os.getenv("PLATFORM_GROQ_API_KEY")),
+            "ORACLE_BACKEND_URL_set": bool(os.getenv("ORACLE_BACKEND_URL")),
+            "DEFAULT_MODEL_PROVIDER": DEFAULT_MODEL_PROVIDER,
+            "DEFAULT_MODEL_ID": DEFAULT_MODEL_ID,
+        },
+    }
+
+    async def _probe(label: str, coro):
+        t = time.time()
+        try:
+            resp = await asyncio.wait_for(coro, timeout=30)
+            return {"ok": True, "ms": int((time.time() - t) * 1000), "text": resp.text[:80]}
+        except Exception as e:
+            return {"ok": False, "ms": int((time.time() - t) * 1000), "err": f"{type(e).__name__}: {e}"[:200]}
+
+    # Gemini Flash
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        from .llm.gemini import GeminiProvider
+        g = GeminiProvider(api_key=gemini_key, model_id=os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash-exp"))
+        out["gemini"] = await _probe("gemini", g.complete("You are a ping server.", "Reply with: pong", temperature=0))
+
+    # Groq 8b
+    groq_key = os.getenv("PLATFORM_GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+    if groq_key:
+        from .llm.groq import GroqProvider
+        g8 = GroqProvider(api_key=groq_key, model_id="llama-3.1-8b-instant")
+        out["groq_8b"] = await _probe("groq-8b", g8.complete("You are a ping server.", "Reply with: pong", temperature=0))
+
+        g70 = GroqProvider(api_key=groq_key, model_id="llama-3.3-70b-versatile")
+        out["groq_70b"] = await _probe("groq-70b", g70.complete("You are a ping server.", "Reply with: pong", temperature=0))
+
+    # Oracle
+    oracle_url = os.getenv("ORACLE_BACKEND_URL")
+    if oracle_url:
+        import httpx
+        t = time.time()
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(f"{oracle_url.rstrip('/')}/health")
+                out["oracle_reach"] = {"ok": r.status_code == 200, "ms": int((time.time() - t) * 1000), "status": r.status_code}
+        except Exception as e:
+            out["oracle_reach"] = {"ok": False, "ms": int((time.time() - t) * 1000), "err": str(e)[:200]}
+
+    return out
+
+
 @app.post("/jobs/start", response_model=JobResponse, status_code=202)
 async def start_job(
     req: JobRequest,
