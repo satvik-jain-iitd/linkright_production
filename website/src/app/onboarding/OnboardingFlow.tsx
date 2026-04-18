@@ -1330,19 +1330,19 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
         </div>
       )}
 
-      {/* CTA buttons */}
+      {/* CTA buttons — route into the Wave 2 journey: Profile → Preferences → Find. */}
       <div className="space-y-3">
         <Link
-          href="/resume/new"
+          href="/onboarding/profile"
           className="block w-full rounded-xl bg-primary-500 px-6 py-3 text-center text-base font-semibold text-white hover:bg-primary-600 transition-colors"
         >
-          Create Your First Resume
+          Review your profile
         </Link>
         <Link
           href="/dashboard"
           className="block w-full rounded-xl border border-border px-6 py-3 text-center text-base font-medium text-muted hover:bg-surface-hover transition-colors"
         >
-          Go to Dashboard
+          Skip to dashboard
         </Link>
       </div>
     </div>

@@ -123,7 +123,7 @@ export default function PreferencesPage() {
       alert(`Save failed: ${body.error ?? r.status}`);
       return;
     }
-    if (proceedToBrowse) router.push("/dashboard/jobs");
+    if (proceedToBrowse) router.push("/onboarding/find");
   }
 
   if (loading) {
