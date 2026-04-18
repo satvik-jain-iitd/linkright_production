@@ -83,28 +83,43 @@ function ScreenHeader({ num, name, route, pillar, goal, reasoning, id }) {
   );
 }
 
-// App nav reused across app screens
+// App nav reused across app screens.
+// Four tabs: Your profile, Applications, Interview prep, Broadcast.
+// Each tab owns its pillar colour — the active underline uses the tab's own colour,
+// not the page's, so the navigation reads as a palette of zones.
 function AppTopNav({ current = "dashboard" }) {
   const links = [
-    { k: "dashboard", l: "Dashboard" },
-    { k: "find", l: "Find Roles" },
-    { k: "apps", l: "Applications" },
-    { k: "prepare", l: "Interview Prep" },
-    { k: "broadcast", l: "Broadcast" },
-    { k: "profile", l: "Your Profile" },
+    { k: "profile",   l: "Your profile",   c: "#8B5CF6" }, // purple — memory
+    { k: "apply",     l: "Applications",   c: "#0FBEAF" }, // teal   — search & apply
+    { k: "prepare",   l: "Interview prep", c: "#6B8346" }, // sage   — prepare
+    { k: "broadcast", l: "Broadcast",      c: "#F05A79" }, // pink   — broadcast
   ];
+  const homeActive = current === "dashboard";
   return (
     <div className="app-nav">
       <div className="left">
-        <Wordmark />
+        <span className={`home-mark${homeActive ? " active" : ""}`} title="Dashboard">
+          <Wordmark />
+        </span>
         <div className="links">
-          {links.map(l => <a key={l.k} className={current === l.k ? "active" : ""}>{l.l}</a>)}
+          {links.map(l => {
+            const active = current === l.k;
+            return (
+              <a
+                key={l.k}
+                className={active ? "active" : ""}
+                style={{ "--link-accent": l.c, color: active ? "var(--color-foreground)" : undefined }}
+              >
+                {l.l}
+              </a>
+            );
+          })}
         </div>
       </div>
       <div className="right">
         <div className="bell"><Icon d={I.bell}/><span className="badge"/></div>
         <button className="pill pill-cta pill-sm"><Icon d={I.plus} size={14}/> New application</button>
-        <div className="avatar">SJ</div>
+        <div className="avatar" title="Account & settings">SJ</div>
       </div>
     </div>
   );

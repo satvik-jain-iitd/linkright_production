@@ -73,11 +73,9 @@ function AuthContent() {
   // Design handoff: screens-enter.jsx Screen03. Two-column: warm skin-tone
   // left panel with the brand promise; right panel holds the form.
 
-  const benefits = [
-    "Top 20 matching roles refreshed daily",
-    "Five artefacts per application, one click",
-    "Posts drafted from your real wins",
-  ];
+  // Checkmark stack below was a pitch in pitch-mode. Removed per v2 copy audit
+  // ("user has already clicked sign-up, stop selling"). Left-panel is now a
+  // single promise + quiet context line.
 
   return (
     <div className="flex min-h-screen">
@@ -99,24 +97,10 @@ function AuthContent() {
             Your career, remembered.
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-[#5F4632]">
-            Upload a resume once. We read it, understand it, and keep it ready
-            — for every role you ever apply to.
+            Upload a resume once. We keep it ready for every role.
           </p>
-          <div className="mt-8 space-y-2.5">
-            {benefits.map((b) => (
-              <div
-                key={b}
-                className="flex items-center gap-2 text-sm text-[#5F4632]"
-              >
-                <span className="text-accent">✓</span>
-                {b}
-              </div>
-            ))}
-          </div>
         </div>
-        <p className="text-xs text-[#8A6E53]">
-          Made in India 🇮🇳 · Built by someone who ships
-        </p>
+        <p className="text-xs text-[#8A6E53]">Made in India 🇮🇳</p>
       </aside>
 
       {/* Right — auth form */}

@@ -36,7 +36,6 @@ export function ProfileView({
 }) {
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [diaryEntries, setDiaryEntries] = useState<number | null>(null);
-  const [streak, setStreak] = useState<number>(0);
   const [linkedInConnected, setLinkedInConnected] = useState(false);
   const [linkedInHandle, setLinkedInHandle] = useState<string | null>(null);
   const [linkedInBusy, setLinkedInBusy] = useState(false);
@@ -59,7 +58,6 @@ export function ProfileView({
     ]);
     if (nRes) setStats(nRes);
     if (dRes) {
-      setStreak(dRes.streak ?? 0);
       setDiaryEntries(dRes.entries?.length ?? 0);
     }
     if (bRes) {
@@ -151,11 +149,7 @@ export function ProfileView({
                   {companyCount} companies
                 </span>
               )}
-              {streak > 0 && (
-                <span className="rounded-full bg-gold-500/15 px-2.5 py-0.5 text-[11px] font-medium text-gold-700">
-                  🔥 {streak}-day streak
-                </span>
-              )}
+              {/* Streak chip removed per v2 audit. */}
               {diaryEntries != null && diaryEntries > 0 && (
                 <span className="rounded-full bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-700">
                   {diaryEntries} diary entries

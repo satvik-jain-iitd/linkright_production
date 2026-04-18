@@ -2,22 +2,22 @@
 
 function Screen08_FindRoles() {
   const rows = [
-    { co: "Razorpay", role: "Senior Product Manager, Payments", loc: "Bangalore · Hybrid", score: 87, comp: "₹55–75L", tags: ["Payments", "Fintech", "Series F"] },
-    { co: "Zepto", role: "Product Lead, Merchant Platform", loc: "Mumbai · Onsite", score: 82, comp: "₹60–80L", tags: ["Marketplace", "Series F"] },
-    { co: "Groww", role: "Principal PM, Investing", loc: "Bangalore · Hybrid", score: 79, comp: "₹70–90L", tags: ["Wealth", "Series E"] },
-    { co: "Meesho", role: "Senior PM, Seller Experience", loc: "Remote-India", score: 76, comp: "₹50–70L", tags: ["Marketplace", "Series F"] },
-    { co: "Cred", role: "Product Manager, Cred Pay", loc: "Bangalore · Hybrid", score: 72, comp: "₹55–75L", tags: ["Fintech", "Payments"] },
-    { co: "Rippling", role: "Senior PM, India HR Tech", loc: "Bangalore · Hybrid", score: 68, comp: "₹65–85L", tags: ["HRIS", "B2B SaaS"] },
+    { co: "Razorpay", role: "Senior Product Manager, Payments", loc: "Bangalore · Hybrid", score: 87, comp: "₹55 to 75L", tags: ["Payments", "Fintech", "Series F"] },
+    { co: "Zepto", role: "Product Lead, Merchant Platform", loc: "Mumbai · Onsite", score: 82, comp: "₹60 to 80L", tags: ["Marketplace", "Series F"] },
+    { co: "Groww", role: "Principal PM, Investing", loc: "Bangalore · Hybrid", score: 79, comp: "₹70 to 90L", tags: ["Wealth", "Series E"] },
+    { co: "Meesho", role: "Senior PM, Seller Experience", loc: "Remote-India", score: 76, comp: "₹50 to 70L", tags: ["Marketplace", "Series F"] },
+    { co: "Cred", role: "Product Manager, Cred Pay", loc: "Bangalore · Hybrid", score: 72, comp: "₹55 to 75L", tags: ["Fintech", "Payments"] },
+    { co: "Rippling", role: "Senior PM, India HR Tech", loc: "Bangalore · Hybrid", score: 68, comp: "₹65 to 85L", tags: ["HRIS", "B2B SaaS"] },
   ];
   return (
     <div className="frame" id="s08">
-      <Chrome url="linkright.in/find" />
+      <Chrome url="linkright.in/apply" />
       <div className="frame-body">
-        <AppTopNav current="find" />
+        <AppTopNav current="apply" />
         <div style={{ padding: "32px 48px 56px", maxWidth: 1200, marginInline: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
             <div>
-              <div className="eyebrow">Find roles</div>
+              <div className="eyebrow">Search &amp; apply</div>
               <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.015em", margin: "6px 0 6px" }}>20 roles matched today</h1>
               <p style={{ color: "var(--color-muted)", margin: 0, fontSize: 14 }}>Ranked by honest fit against your profile · Refreshed 8 minutes ago</p>
             </div>
@@ -30,7 +30,7 @@ function Screen08_FindRoles() {
               <div style={{ flex: 1 }}>
                 <span className="chip chip-teal" style={{ marginBottom: 12 }}><Icon d={I.bolt} size={12}/> Best fit today</span>
                 <h2 style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.01em", margin: "10px 0 4px" }}>Senior Product Manager, Payments</h2>
-                <p style={{ fontSize: 14, color: "var(--color-muted)", margin: 0 }}>Razorpay · Bangalore · Hybrid · ₹55–75L · Series F</p>
+                <p style={{ fontSize: 14, color: "var(--color-muted)", margin: 0 }}>Razorpay · Bangalore · Hybrid · ₹55 to 75L · Series F</p>
 
                 <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
                   {[
@@ -86,7 +86,7 @@ function Screen08_FindRoles() {
                   <div style={{ color: "var(--color-muted)", fontSize: 12 }}>{r.loc}</div>
                 </div>
                 <span style={{ fontSize: 13, color: "var(--color-muted)" }}>{r.comp}</span>
-                <button className="pill pill-outline-teal pill-sm" style={{ justifySelf: "end" }}>Start application →</button>
+                <button className="pill pill-outline-teal pill-sm" style={{ justifySelf: "end" }}>Start application</button>
               </div>
             ))}
           </div>
@@ -101,17 +101,22 @@ function Screen09_LayoutPlan() {
     <div className="frame" id="s09">
       <Chrome url="linkright.in/resume/customize?job=razorpay-spm-payments" />
       <div className="frame-body">
-        <AppTopNav current="find" />
-        <div style={{ padding: "24px 48px", borderBottom: "1px solid var(--color-border)", background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="chip chip-outline">Razorpay · Senior PM, Payments</span>
-            <div className="steps">
+        <AppTopNav current="apply" />
+        <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--color-border)", background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <button className="pill pill-ghost pill-sm" style={{ padding: "6px 12px" }}><Icon d={I.arrowLeft} size={13}/> Back to roles</button>
+            <div style={{ width: 1, height: 22, background: "var(--color-border)" }}/>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Razorpay · Senior PM, Payments</div>
+              <div style={{ fontSize: 11, color: "var(--color-muted)" }}>Custom application · 87% match</div>
+            </div>
+            <div className="steps" style={{ marginLeft: 8 }}>
               <span className="step active">1 Layout</span><span className="sep"/>
               <span className="step">2 Writing</span><span className="sep"/>
               <span className="step">3 Review</span>
             </div>
           </div>
-          <button className="pill pill-cta pill-sm">Confirm layout → Start writing</button>
+          <button className="pill pill-cta pill-sm">Confirm layout. Start writing.</button>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", minHeight: 720 }}>
@@ -232,17 +237,32 @@ function Screen10_LiveWriting() {
     <div className="frame" id="s10">
       <Chrome url="linkright.in/resume/customize?job=razorpay-spm-payments" />
       <div className="frame-body">
-        <AppTopNav current="find" />
-        <div style={{ padding: "24px 48px", borderBottom: "1px solid var(--color-border)", background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="chip chip-outline">Razorpay · Senior PM, Payments</span>
-            <div className="steps">
+        <AppTopNav current="apply" />
+        <div style={{ padding: "20px 48px", borderBottom: "1px solid var(--color-border)", background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <button className="pill pill-ghost pill-sm" style={{ padding: "6px 12px" }}><Icon d={I.arrowLeft} size={13}/> Back to roles</button>
+            <div style={{ width: 1, height: 22, background: "var(--color-border)" }}/>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Razorpay · Senior PM, Payments</div>
+              <div style={{ fontSize: 11, color: "var(--color-muted)" }}>Custom application · 87% match</div>
+            </div>
+            <div className="steps" style={{ marginLeft: 8 }}>
               <span className="step done">1 ✓</span><span className="sep"/>
               <span className="step active">2 Writing</span><span className="sep"/>
               <span className="step">3 Review</span>
             </div>
           </div>
-          <span style={{ fontSize: 13, color: "var(--color-muted)" }}>Elapsed 42s · est. 90s total</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 12 }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ color: "var(--color-muted)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>Elapsed</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#09766D", fontVariantNumeric: "tabular-nums" }}>00:42</div>
+            </div>
+            <div style={{ width: 1, height: 28, background: "var(--color-border)" }}/>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ color: "var(--color-muted)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>Est. total</div>
+              <div style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>01:30</div>
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", minHeight: 720 }}>
@@ -263,23 +283,23 @@ function Screen10_LiveWriting() {
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 12 }}>Experience</div>
 
               <div style={{ marginTop: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, American Express</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 – Present</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, American Express</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 to Present</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
                   <li>Redesigned returns flow for Indian merchants, lifting completion 18% and reducing support tickets 22% within 6 weeks of rollout</li>
                   <li>Automated refund SLA engine, cutting merchant wait from 5 days to 8 hours across 14k onboarded partners</li>
-                  <li>Shipped v3 merchant onboarding with KYC auto-verification — onboarding time dropped from 72h to 6h</li>
+                  <li>Shipped v3 merchant onboarding with KYC auto-verification. Onboarding time dropped from 72h to 6h.</li>
                   <li style={{ opacity: 0.3, background: "linear-gradient(90deg, #E5E7EB 50%, transparent)", borderRadius: 2, position: "relative" }}>
-                    <span style={{ position: "absolute", right: 0, top: 2, fontSize: 8, color: "#8B5CF6", fontWeight: 600 }}>writing…</span>
+                    <span style={{ position: "absolute", right: 0, top: 2, fontSize: 8, color: "#09766D", fontWeight: 600 }}>writing…</span>
                     &nbsp;
                   </li>
                 </ul>
               </div>
 
               <div style={{ marginTop: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, Sprinklr Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 – 2024</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, Sprinklr Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 to 2024</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
-                  <li>Drove 36 enterprise deployments across Walmart, Samsung, Cisco — aggregate ARR of $14M</li>
-                  <li>Built real-time policy engine for AI moderation, reducing moderator overhead by 34%</li>
+                  <li>Drove 36 enterprise deployments across Walmart, Samsung, Cisco. Aggregate ARR of $14M.</li>
+                  <li>Built real-time policy engine for content moderation, reducing moderator overhead by 34%</li>
                   <li style={{ opacity: 0.4 }}>&nbsp;</li>
                   <li style={{ opacity: 0.2 }}>&nbsp;</li>
                 </ul>
@@ -291,7 +311,7 @@ function Screen10_LiveWriting() {
                 <div style={{ background: "#E5E7EB", height: 4, borderRadius: 2, width: "72%", marginTop: 3 }}/>
               </div>
 
-              <div style={{ position: "absolute", bottom: 24, right: 24, fontSize: 9, color: "#8B5CF6", fontWeight: 600, background: "rgba(139,92,246,0.08)", padding: "4px 10px", borderRadius: 9999 }}>
+              <div style={{ position: "absolute", bottom: 24, right: 24, fontSize: 9, color: "#09766D", fontWeight: 600, background: "rgba(15,190,175,0.12)", padding: "4px 10px", borderRadius: 9999 }}>
                 <Icon d={I.sparkles} size={11} style={{ display: "inline", verticalAlign: -2 }}/> 8 of 14 bullets written
               </div>
             </div>
@@ -299,24 +319,24 @@ function Screen10_LiveWriting() {
 
           {/* Status panel */}
           <div style={{ padding: 24, borderLeft: "1px solid var(--color-border)", background: "#fff" }}>
-            <div className="eyebrow" style={{ color: "#8B5CF6" }}>In progress</div>
+            <div className="eyebrow" style={{ color: "#09766D" }}>In progress</div>
             <h3 style={{ fontSize: 18, fontWeight: 700, margin: "6px 0 4px" }}>Building your resume</h3>
-            <p style={{ fontSize: 13, color: "var(--color-muted)", margin: "0 0 20px" }}>Scroll around — you can watch it happen.</p>
+            <p style={{ fontSize: 13, color: "var(--color-muted)", margin: "0 0 20px" }}>Scroll around. You can watch it happen.</p>
 
             {/* Progress bar */}
             <div style={{ height: 6, background: "#E2E8F0", borderRadius: 9999, overflow: "hidden", marginBottom: 18 }}>
-              <div style={{ width: "47%", height: "100%", background: "linear-gradient(90deg, #8B5CF6 0%, #0FBEAF 100%)" }}/>
+              <div style={{ width: "47%", height: "100%", background: "var(--color-accent)" }}/>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {phases.map(p => (
-                <div key={p.n} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: p.active ? "rgba(139,92,246,0.08)" : "transparent" }}>
-                  <div style={{ width: 18, height: 18, borderRadius: "50%", background: p.done ? "var(--color-accent)" : p.active ? "#fff" : "#EDF2F7", border: p.active ? "2px solid #8B5CF6" : "none", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>
+                <div key={p.n} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: p.active ? "rgba(15,190,175,0.08)" : "transparent" }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", background: p.done ? "var(--color-accent)" : p.active ? "#fff" : "#EDF2F7", border: p.active ? "2px solid var(--color-accent)" : "none", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>
                     {p.done && "✓"}
-                    {p.active && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#8B5CF6" }}/>}
+                    {p.active && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-accent)" }}/>}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: p.active ? 600 : 500, color: p.done ? "var(--color-muted)" : p.active ? "#5A36AB" : "var(--color-foreground)" }}>{p.n}</div>
+                    <div style={{ fontSize: 13, fontWeight: p.active ? 600 : 500, color: p.done ? "var(--color-muted)" : p.active ? "#09766D" : "var(--color-foreground)" }}>{p.n}</div>
                     {p.active && <div style={{ fontSize: 11, color: "var(--color-muted)" }}>Bullet 8 of 14 · {p.progress}%</div>}
                   </div>
                 </div>
@@ -328,7 +348,7 @@ function Screen10_LiveWriting() {
               <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                 {["#0D3B66", "#528AAE", "#E0E5EC"].map(c => <div key={c} style={{ width: 22, height: 22, borderRadius: 6, background: c, border: "1px solid rgba(0,0,0,0.05)" }}/>)}
               </div>
-              <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 8 }}>Applied to header + section titles · WCAG AA passed.</div>
+              <div style={{ fontSize: 11, color: "var(--color-muted)", marginTop: 8 }}>Applied to header and section titles. WCAG AA passed.</div>
             </div>
           </div>
         </div>
@@ -342,16 +362,21 @@ function Screen11_Review() {
     <div className="frame" id="s11">
       <Chrome url="linkright.in/resume/customize?job=razorpay-spm-payments" />
       <div className="frame-body">
-        <AppTopNav current="find" />
-        <div style={{ padding: "24px 48px", borderBottom: "1px solid var(--color-border)", background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="chip chip-teal">✓ Done in 87 seconds</span>
-            <span className="chip chip-outline">Razorpay · Senior PM, Payments</span>
+        <AppTopNav current="apply" />
+        <div style={{ padding: "16px 48px", borderBottom: "1px solid var(--color-border)", background: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <button className="pill pill-ghost pill-sm" style={{ padding: "6px 12px", flexShrink: 0 }}><Icon d={I.arrowLeft} size={13}/> Back to roles</button>
+            <div style={{ width: 1, height: 20, background: "var(--color-border)", flexShrink: 0 }}/>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Razorpay · Senior PM, Payments</div>
+              <div style={{ fontSize: 11, color: "var(--color-accent)", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}><Icon d={I.check} size={11}/> Tailored in 87 seconds</div>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="pill pill-ghost pill-sm"><Icon d={I.document} size={14}/> Download PDF</button>
-            <button className="pill pill-ghost pill-sm">Download HTML</button>
-            <button className="pill pill-teal pill-sm"><Icon d={I.github} size={14}/> Host on GitHub Pages</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+            <button className="pill pill-ghost pill-sm"><Icon d={I.document} size={13}/> PDF</button>
+            <button className="pill pill-ghost pill-sm">HTML</button>
+            <div style={{ width: 1, height: 20, background: "var(--color-border)" }}/>
+            <button className="pill pill-teal pill-sm"><Icon d={I.github} size={13}/> Host on GitHub Pages</button>
           </div>
         </div>
 
@@ -368,20 +393,20 @@ function Screen11_Review() {
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 12 }}>Experience</div>
               <div style={{ marginTop: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, American Express</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 – Present</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, American Express</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 to Present</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
                   <li>Redesigned returns flow for 14,200 Indian merchants, lifting completion 18% and cutting tickets 22% within 6 weeks</li>
-                  <li>Automated refund SLA engine — merchant wait dropped from 5 days to 8 hours across all onboarded partners</li>
-                  <li style={{ background: "rgba(15,190,175,0.12)", outline: "2px solid var(--color-accent)", outlineOffset: 2, borderRadius: 2 }}>Shipped v3 merchant onboarding with KYC auto-verify — onboarding time dropped 72h to 6h, NPS 34 → 58</li>
-                  <li>Ran discovery for UPI-Amex rails partnership — signed term sheet with 3 bank partners</li>
+                  <li>Automated refund SLA engine. Merchant wait dropped from 5 days to 8 hours across all onboarded partners.</li>
+                  <li style={{ background: "rgba(15,190,175,0.12)", outline: "2px solid var(--color-accent)", outlineOffset: 2, borderRadius: 2 }}>Shipped v3 merchant onboarding with KYC auto-verify. Onboarding time dropped 72h to 6h, NPS 34 to 58.</li>
+                  <li>Ran discovery for UPI-Amex rails partnership. Signed term sheet with 3 bank partners.</li>
                 </ul>
               </div>
               <div style={{ marginTop: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, Sprinklr Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 – 2024</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, Sprinklr Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 to 2024</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
-                  <li>Drove 36 enterprise deployments across Walmart, Samsung, Cisco — aggregate ARR of $14M by close of 2023</li>
-                  <li>Built real-time policy engine for AI moderation — cut moderator overhead 34%, adopted by 8 global brands</li>
-                  <li>Led Walmart legal escalation rebuild after 3-week embed — SLA compliance rose from 76% to 94%</li>
+                  <li>Drove 36 enterprise deployments across Walmart, Samsung, Cisco. Aggregate ARR of $14M by close of 2023.</li>
+                  <li>Built real-time policy engine for content moderation. Cut moderator overhead 34%, adopted by 8 global brands.</li>
+                  <li>Led Walmart legal escalation rebuild after 3-week embed. SLA compliance rose from 76% to 94%.</li>
                 </ul>
               </div>
             </div>
@@ -390,13 +415,13 @@ function Screen11_Review() {
           {/* Refine + What's next */}
           <div style={{ padding: 24, borderLeft: "1px solid var(--color-border)", background: "#fff", display: "flex", flexDirection: "column", gap: 24 }}>
             {/* Refine bullet */}
-            <div>
-              <div className="eyebrow">Refine highlighted bullet</div>
+            <div style={{ padding: 16, background: "rgba(15,190,175,0.05)", border: "1px solid rgba(15,190,175,0.25)", borderRadius: 12 }}>
+              <div className="eyebrow" style={{ color: "#09766D", display: "flex", alignItems: "center", gap: 6 }}><Icon d={I.sparkles} size={12}/>Refine highlighted bullet</div>
               <p style={{ fontSize: 12, color: "var(--color-muted)", margin: "6px 0 12px" }}>"Shipped v3 merchant onboarding…"</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {["Shorter", "More metrics", "Different verb", "More impact-first"].map(t => <span key={t} className="chip chip-outline" style={{ cursor: "default" }}>{t}</span>)}
+                {["Shorter", "More metrics", "Different verb", "More impact-first"].map(t => <span key={t} className="chip" style={{ cursor: "default", background: "#fff", border: "1px solid rgba(15,190,175,0.35)", color: "#09766D", fontWeight: 500 }}>{t}</span>)}
               </div>
-              <textarea disabled placeholder="Or type a custom instruction…" style={{ width: "100%", marginTop: 10, padding: 10, border: "1px solid var(--color-border)", borderRadius: 10, fontSize: 12, fontFamily: "inherit", resize: "none", height: 56 }}/>
+              <textarea disabled placeholder="Or type a custom instruction…" style={{ width: "100%", marginTop: 10, padding: 10, border: "1px solid rgba(15,190,175,0.3)", borderRadius: 10, fontSize: 12, fontFamily: "inherit", resize: "none", height: 56, background: "#fff" }}/>
             </div>
 
             <div style={{ height: 1, background: "var(--color-border)" }}/>
@@ -427,23 +452,23 @@ function Screen11_Review() {
                 </button>
                 <button className="card" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: "1px solid var(--color-border)", background: "#fff", cursor: "default", textAlign: "left", opacity: 0.55 }}>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <div className="iconTile iconTile-coral" style={{ width: 32, height: 32 }}><Icon d={I.document} size={16}/></div>
+                    <div className="iconTile" style={{ width: 32, height: 32, background: "#F1F5F9", color: "#94A3B8" }}><Icon d={I.document} size={16}/></div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>Cover letter</div>
                       <div style={{ fontSize: 11, color: "var(--color-muted)" }}>Personalised for Razorpay</div>
                     </div>
                   </div>
-                  <span className="chip chip-gold">Soon</span>
+                  <span className="chip chip-soon">Soon</span>
                 </button>
                 <button className="card" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: "1px solid var(--color-border)", background: "#fff", cursor: "default", textAlign: "left", opacity: 0.55 }}>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <div className="iconTile iconTile-gold" style={{ width: 32, height: 32 }}><Icon d={I.globe} size={16}/></div>
+                    <div className="iconTile" style={{ width: 32, height: 32, background: "#F1F5F9", color: "#94A3B8" }}><Icon d={I.globe} size={16}/></div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>Portfolio site</div>
-                      <div style={{ fontSize: 11, color: "var(--color-muted)" }}>One page · hosted for you</div>
+                      <div style={{ fontSize: 11, color: "var(--color-muted)" }}>One page. Hosted for you.</div>
                     </div>
                   </div>
-                  <span className="chip chip-gold">Soon</span>
+                  <span className="chip chip-soon">Soon</span>
                 </button>
               </div>
             </div>

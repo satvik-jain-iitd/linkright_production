@@ -7,7 +7,9 @@
 import { useState } from "react";
 
 interface Props {
+  /** kept for API-compatibility with existing callers; not displayed. */
   initialStreak?: number;
+  /** fired with the new streak count after a save — callers may still use it. */
   onLogged?: (streak: number) => void;
   variant?: "card" | "modal";
   onClose?: () => void;
@@ -21,7 +23,6 @@ const HINT_PROMPTS = [
 ];
 
 export function DiaryQuickLog({
-  initialStreak,
   onLogged,
   variant = "card",
   onClose,
@@ -29,7 +30,6 @@ export function DiaryQuickLog({
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [streak, setStreak] = useState<number | null>(initialStreak ?? null);
   const [savedJustNow, setSavedJustNow] = useState(false);
 
   const save = async () => {
@@ -48,7 +48,6 @@ export function DiaryQuickLog({
         return;
       }
       const body = (await res.json()) as { streak: number };
-      setStreak(body.streak);
       setContent("");
       setSavedJustNow(true);
       onLogged?.(body.streak);
@@ -62,17 +61,11 @@ export function DiaryQuickLog({
 
   const header = (
     <div className="flex items-center justify-between">
-      <p className="text-xs font-medium uppercase tracking-[0.14em] text-accent">
+      <p className="text-xs font-medium uppercase tracking-[0.14em] text-purple-700">
         Daily diary
       </p>
-      <div className="flex items-center gap-2 text-xs text-muted">
-        {streak != null && streak > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-gold-500/15 px-2 py-0.5 font-semibold text-gold-700">
-            🔥 {streak}-day streak
-          </span>
-        )}
-        <span>60 seconds</span>
-      </div>
+      {/* Streak chip deleted per v2 audit (gamification contradicted
+          product positioning). Activity is visible elsewhere. */}
     </div>
   );
 
@@ -106,7 +99,7 @@ export function DiaryQuickLog({
       )}
       {savedJustNow && (
         <p className="mt-2 text-xs font-semibold text-accent">
-          +1 added to your profile · streak now {streak}
+          +1 added to your profile
         </p>
       )}
       <div className="mt-2 flex items-center justify-between gap-2">

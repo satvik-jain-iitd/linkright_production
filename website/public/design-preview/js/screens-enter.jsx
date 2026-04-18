@@ -20,26 +20,26 @@ function Screen01_Landing() {
         <div style={{ position: "relative", padding: "96px 48px 80px", textAlign: "center", background: "radial-gradient(ellipse at center, rgba(15,190,175,0.08) 0%, transparent 70%)" }}>
           <div className="eyebrow" style={{ marginBottom: 20 }}>Career OS · built for India · PM · SWE · DA</div>
           <h1 style={{ fontSize: 64, fontWeight: 700, letterSpacing: "-0.025em", lineHeight: 1.02, margin: 0, maxWidth: 880, marginInline: "auto" }}>
-            Job hunting,<br/>but your profile gets <span style={{ color: "var(--color-accent)" }}>sharper</span> every week.
+            Job hunting.<br/>Your profile gets <span style={{ color: "var(--color-accent)" }}>sharper</span> every week.
           </h1>
           <p style={{ fontSize: 18, color: "var(--color-muted)", maxWidth: 620, margin: "28px auto 0", lineHeight: 1.55 }}>
-            Upload your resume once. LinkRight builds a profile that learns what you're good at — then makes every application, every post, every interview prep sharper.
+            Upload your resume once. Every application, post, and drill starts from what you've actually done.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 36 }}>
             <button className="pill pill-cta pill-lg">Start for free <Icon d={I.arrowRight} size={16}/></button>
             <button className="pill pill-ghost pill-lg">See how it works</button>
           </div>
-          <p style={{ fontSize: 13, color: "var(--color-muted)", marginTop: 18 }}>First resume free · No credit card · Takes 90 seconds</p>
+          <p style={{ fontSize: 13, color: "var(--color-muted)", marginTop: 18 }}>Takes 90 seconds. No credit card.</p>
         </div>
 
-        {/* Proof tiles — 4 pillars (without the internal names) */}
+        {/* Proof tiles, 4 pillars (without the internal names) */}
         <div style={{ padding: "16px 48px 80px", maxWidth: 1080, marginInline: "auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
             {[
-              { c: "purple", icon: I.sparkles, t: "A profile that remembers you", d: "Every achievement, every project, every learning. It grows with you." },
-              { c: "teal", icon: I.search, t: "Honest match scores", d: "Top 20 roles for you today. If it's 62%, we say 62% — and the 3 gaps." },
-              { c: "coral", icon: I.document, t: "One click, five artefacts", d: "Resume, cover letter, LinkedIn DM, recruiter email, portfolio — tailored." },
-              { c: "pink", icon: I.chat, t: "Posts in your voice", d: "Drafted from your real wins and diary — not ChatGPT slop." },
+              { c: "purple", icon: I.sparkles, t: "A profile that remembers you.", d: "Every win, every project, every hard lesson. It compounds with you, not against the clock." },
+              { c: "teal", icon: I.target, t: "Fewer tabs. Better shots.", d: "You've scrolled a hundred roles and applied to none. We bring the twenty worth your morning, each one answered in your voice." },
+              { c: "sage", icon: I.mic, t: "Walk in, knowing what you'll say.", d: "The panel is in three days. You haven't slept well since Tuesday. Drills pulled from your own wins, until the words are already yours." },
+              { c: "pink", icon: I.chat, t: "Stay visible, without the grind.", d: "Opportunities find the people who show up. Drafts in your voice, from what you've actually shipped. You approve. We post." },
             ].map(t => (
               <div key={t.t} className="card" style={{ padding: 22 }}>
                 <div className={`iconTile iconTile-${t.c}`}><Icon d={t.icon} /></div>
@@ -60,7 +60,7 @@ function Screen01_Landing() {
             {[
               ["01", "Drop your resume", "We parse it, show you what we understood, and start your profile."],
               ["02", "Pick a role", "Honest match scores. We tell you why it's a fit and where the gaps are."],
-              ["03", "Ship the application", "Resume, cover letter, LinkedIn DM, recruiter email — all tailored."],
+              ["03", "Ship the application", "Resume, cover letter, LinkedIn DM, recruiter email. All tailored."],
             ].map(([n, t, d], i, a) => (
               <React.Fragment key={n}>
                 <div style={{ flex: 1, textAlign: "center" }}>
@@ -87,7 +87,7 @@ function Screen01_Landing() {
 function Screen02_Pricing() {
   const plans = [
     { name: "Free", price: "₹0", sub: "Forever free", features: ["3 tailored resumes / month", "Profile that learns from every resume", "Top 20 role matches", "Basic interview drills"], cta: "Start free", variant: "ghost" },
-    { name: "Pro", price: "₹499", sub: "per month", badge: "Recommended", features: ["Everything in Free", "Unlimited tailored resumes", "5-artefact apply pack (cover letter, DMs, email, portfolio)", "Oracle interview coach", "Brand-color matching", "Broadcast — LinkedIn scheduling"], cta: "Upgrade to Pro", variant: "cta" },
+    { name: "Pro", price: "₹499", sub: "per month", badge: "Recommended", features: ["Everything in Free", "Unlimited tailored resumes", "5-artefact apply pack (cover letter, DMs, email, portfolio)", "AI interview panel", "Brand-color matching", "Broadcast. LinkedIn scheduling."], cta: "Upgrade to Pro", variant: "cta" },
   ];
   return (
     <div className="frame" id="s02">
@@ -100,7 +100,7 @@ function Screen02_Pricing() {
         <div style={{ padding: "72px 48px", maxWidth: 1080, marginInline: "auto", textAlign: "center" }}>
           <div className="eyebrow">Pricing</div>
           <h2 style={{ fontSize: 44, fontWeight: 700, letterSpacing: "-0.02em", margin: "10px 0 14px" }}>Start free. Upgrade when you ship.</h2>
-          <p style={{ color: "var(--color-muted)", fontSize: 16, margin: 0 }}>One plan handles the whole hunt. No seat fees. No upsells mid-flow.</p>
+          <p style={{ color: "var(--color-muted)", fontSize: 16, margin: 0 }}>One plan. No upsells.</p>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 56, textAlign: "left" }}>
             {plans.map(p => (
@@ -124,7 +124,7 @@ function Screen02_Pricing() {
             ))}
           </div>
 
-          <p style={{ marginTop: 48, fontSize: 13, color: "var(--color-muted)" }}>Broadcast is in early access · Coming to Pro in May 2026</p>
+          <p style={{ marginTop: 48, fontSize: 13, color: "var(--color-muted)" }}>Broadcast is in early access. Coming to Pro in May 2026.</p>
         </div>
       </div>
     </div>
@@ -136,7 +136,7 @@ function Screen03_Auth() {
     <div className="frame" id="s03">
       <Chrome url="linkright.in/auth" />
       <div className="frame-body" style={{ minHeight: 720, display: "flex" }}>
-        {/* Left — warm side panel, reinforces promise */}
+        {/* Left, warm side panel, reinforces promise */}
         <div style={{ flex: "0 0 44%", background: "linear-gradient(180deg, #FDF6F0 0%, #F8E6D4 100%)", padding: "56px 48px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
           <Wordmark size={20} />
           <div>
@@ -144,7 +144,7 @@ function Screen03_Auth() {
               Your career, remembered.
             </h2>
             <p style={{ color: "#5F4632", fontSize: 15, lineHeight: 1.6, marginTop: 16, maxWidth: 360 }}>
-              Upload a resume once. We read it, understand it, and keep it ready — for every role you ever apply to.
+              Upload a resume once. We keep it ready for every role you apply to.
             </p>
             <div style={{ marginTop: 32, display: "flex", flexDirection: "column", gap: 10 }}>
               {["Top 20 matching roles refreshed daily", "Five artefacts per application, one click", "Posts drafted from your real wins"].map(t => (
@@ -154,10 +154,10 @@ function Screen03_Auth() {
               ))}
             </div>
           </div>
-          <p style={{ fontSize: 12, color: "#8A6E53", margin: 0 }}>Made in India 🇮🇳 · Built by someone who ships</p>
+          <p style={{ fontSize: 12, color: "#8A6E53", margin: 0 }}>Made in India 🇮🇳</p>
         </div>
 
-        {/* Right — auth form */}
+        {/* Right, auth form */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 48 }}>
           <div style={{ width: "100%", maxWidth: 380 }}>
             <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.015em", margin: 0 }}>Create your account</h1>

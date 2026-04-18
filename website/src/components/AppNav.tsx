@@ -24,13 +24,46 @@ const LOGGED_OUT_LINKS = [
   { href: "/pricing", label: "Pricing" },
 ];
 
-const LOGGED_IN_LINKS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard/applications", label: "Applications" },
-  { href: "/dashboard/scout", label: "Scout", badge: true },
-  { href: "/dashboard/career", label: "My Career" },
-  { href: "/dashboard/nuggets", label: "Career Highlights" },
+// v2 audit — 5 tabs matching 4 pillars + Dashboard. Each tab owns its own
+// pillar colour (applied to the underline when active).
+type NavLink = {
+  href: string;
+  label: string;
+  badge?: boolean;
+  accent: "gold" | "purple" | "teal" | "sage" | "pink";
+};
+
+const LOGGED_IN_LINKS: NavLink[] = [
+  { href: "/dashboard", label: "Dashboard", accent: "gold" },
+  { href: "/dashboard/profile", label: "Your profile", accent: "purple" },
+  {
+    href: "/dashboard/applications",
+    label: "Applications",
+    accent: "teal",
+  },
+  {
+    href: "/dashboard/interview-prep",
+    label: "Interview prep",
+    accent: "sage",
+  },
+  { href: "/dashboard/broadcast", label: "Broadcast", accent: "pink" },
 ];
+
+// Per-pillar underline colours. Matches design tokens in globals.css.
+const ACCENT_TEXT: Record<NavLink["accent"], string> = {
+  gold: "text-gold-700",
+  purple: "text-purple-700",
+  teal: "text-primary-700",
+  sage: "text-sage-700",
+  pink: "text-pink-700",
+};
+const ACCENT_UNDERLINE: Record<NavLink["accent"], string> = {
+  gold: "after:bg-gold-500",
+  purple: "after:bg-purple-500",
+  teal: "after:bg-accent",
+  sage: "after:bg-sage-500",
+  pink: "after:bg-pink-500",
+};
 
 /* ---------- Helper ---------- */
 
@@ -151,18 +184,19 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
           <div className="hidden items-center gap-6 text-sm sm:flex">
             {LOGGED_IN_LINKS.map((link) => {
               const active = isActive(pathname, link.href);
+              // Per-tab pillar colour: active tab uses its own pillar accent;
+              // inactive stays muted. Underline is always the pillar colour.
+              const cls = active
+                ? `relative font-semibold pb-0.5 ${ACCENT_TEXT[link.accent]} after:absolute after:left-0 after:right-0 after:-bottom-[13px] after:h-0.5 ${ACCENT_UNDERLINE[link.accent]}`
+                : "text-muted transition-colors hover:text-foreground";
               return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={
-                    active
-                      ? "font-medium text-accent border-b-2 border-accent pb-0.5"
-                      : "text-muted transition-colors hover:text-foreground"
-                  }
+                  className={cls}
                 >
                   {link.label}
-                  {"badge" in link && link.badge && scoutBadge > 0 && (
+                  {link.badge && scoutBadge > 0 && (
                     <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
                       {scoutBadge > 99 ? "99+" : scoutBadge}
                     </span>

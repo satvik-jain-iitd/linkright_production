@@ -30,16 +30,19 @@ type Notification = {
   created_at: string;
 };
 
+// v2 audit: dot colour maps to PILLAR, not notification-type. Four zones:
+// teal = Search & Apply, purple = Memory, sage = Prepare, pink = Broadcast.
+// Streak + diary-nudge categories removed along with the streak mechanic.
 const DOT_COLOR: Record<string, string> = {
-  new_match: "bg-accent",
-  profile_ready: "bg-purple-500",
+  new_match: "bg-accent",         // teal · search-and-apply
+  resume_done: "bg-accent",
+  resume_failed: "bg-cta",        // coral · action-required error
+  profile_ready: "bg-purple-500", // purple · memory layer
+  linkedin_expired: "bg-purple-500",
+  interview_reminder: "bg-sage-500",
   post_scheduled: "bg-pink-500",
   post_sent: "bg-pink-500",
-  interview_reminder: "bg-sage-500",
-  streak: "bg-gold-500",
-  resume_done: "bg-accent",
-  resume_failed: "bg-cta",
-  diary_nudge: "bg-gold-500",
+  post_failed: "bg-cta",
 };
 
 function timeAgo(iso: string): string {
@@ -69,7 +72,7 @@ function deepLink(n: Notification): string | null {
   if (n.type === "resume_done" && typeof p.job_id === "string")
     return `/resume/new?job=${encodeURIComponent(p.job_id)}`;
   if (n.type === "resume_failed") return "/dashboard";
-  if (n.type === "streak" || n.type === "diary_nudge") return "/dashboard";
+  if (n.type === "linkedin_expired") return "/dashboard/profile";
   return null;
 }
 

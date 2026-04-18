@@ -43,25 +43,11 @@ const STEPS = [
   { n: 4, label: "First match", state: "todo" },
 ] as const;
 
-// Alternating accent palette for cards, mirrors the design's mix of teal/purple/gold/pink.
-const CARD_ACCENTS = ["teal", "purple", "gold", "pink"] as const;
-type Accent = (typeof CARD_ACCENTS)[number];
-
-function accentFor(n: Nugget, idx: number): Accent {
-  const sec = (n.section_type ?? "").toLowerCase();
-  if (sec.includes("education")) return "purple";
-  if (sec.includes("certif")) return "gold";
-  if (sec.includes("project")) return "pink";
-  if (sec.includes("skill")) return "gold";
-  return CARD_ACCENTS[idx % CARD_ACCENTS.length];
-}
-
-const CHIP_CLS: Record<Accent, string> = {
-  teal: "bg-primary-500/10 text-primary-700",
-  purple: "bg-purple-500/10 text-purple-700",
-  gold: "bg-gold-500/15 text-gold-700",
-  pink: "bg-pink-500/10 text-pink-700",
-};
+// v2 design rule: highlight cards are monochrome. The page eyebrow already
+// signals the memory pillar (purple) — cards shouldn't compete. A single
+// neutral source chip reads as "provenance label", not "decorative colour".
+const SOURCE_CHIP_CLS =
+  "bg-[#EDF2F7] text-[#4A5568]";
 
 function sourceLabel(n: Nugget): string {
   const sec = (n.section_type ?? "").toLowerCase();
@@ -306,15 +292,14 @@ export function ProfileHighlightsView() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {nuggets.map((n, i) => {
-            const accent = accentFor(n, i);
+          {nuggets.map((n) => {
             return (
               <div
                 key={n.id}
                 className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${CHIP_CLS[accent]}`}>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}>
                     {sourceLabel(n)}
                   </span>
                   <button

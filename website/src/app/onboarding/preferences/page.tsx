@@ -182,25 +182,9 @@ export default function PreferencesPage() {
         <p className="text-xs text-muted-foreground mt-1">Specific cities/regions (comma-separated)</p>
       </section>
 
-      {/* Visa */}
-      <section className="mb-6">
-        <label className="block text-sm font-medium mb-1">Work authorisation</label>
-        <div className="flex gap-2 flex-wrap">
-          {(["needs_sponsorship", "has_work_auth", "citizen", "unknown"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setPrefs({ ...prefs, visa_status: v })}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                prefs.visa_status === v
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border"
-              }`}
-            >
-              {v.replace(/_/g, " ")}
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* Work authorisation removed per v2 design audit — not a reliable
+          filter for most Indian candidates and adds friction. Defaults to
+          "unknown" on submit and the scout ranker simply ignores it. */}
 
       {/* Stage */}
       <section className="mb-6">

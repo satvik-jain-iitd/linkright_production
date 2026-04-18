@@ -191,24 +191,16 @@ export function DashboardContent({
       <AppNav user={user} />
 
       <div className="mx-auto max-w-[1200px] px-6 py-10">
-        {/* Greeting */}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-[28px] font-bold tracking-tight">
-              {greetingWord()}, {greetingName(user)}.
-            </h1>
-            <p className="mt-1.5 text-sm text-muted">
-              {topMatches.length > 0
-                ? `${topMatches.length} new match${topMatches.length === 1 ? "" : "es"} today`
-                : "Scout is still catching up — check back soon for matches."}
-              {diaryStreak > 0 && ` · You're on a ${diaryStreak}-day streak`}
-            </p>
-          </div>
-          {diaryStreak > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-500/15 px-3 py-1.5 text-xs font-semibold text-gold-700">
-              🔥 {diaryStreak}-day streak · don&apos;t break it
-            </span>
-          )}
+        {/* Greeting — v2 audit removed the streak chip + subtitle tail. */}
+        <div>
+          <h1 className="text-[28px] font-bold tracking-tight">
+            {greetingWord()}, {greetingName(user)}.
+          </h1>
+          <p className="mt-1.5 text-sm text-muted">
+            {topMatches.length > 0
+              ? `${topMatches.length} new match${topMatches.length === 1 ? "" : "es"} today.`
+              : "Scout is still catching up. Check back soon for matches."}
+          </p>
         </div>
 
         {nuggetCount === 0 && (
@@ -627,28 +619,15 @@ export function DashboardContent({
               <h3 className="mt-1.5 text-lg font-bold tracking-tight">
                 Still growing.
               </h3>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {[
-                  [
-                    String(status?.total_extracted ?? nuggetCount ?? 0),
-                    "highlights",
-                  ],
-                  [String(diaryStreak), "day streak"],
-                  [
-                    String(jobs.filter((j) => j.status === "completed").length),
-                    "resumes built",
-                  ],
-                  [String(watchlist.length), "watched"],
-                ].map(([n, l]) => (
-                  <div key={l}>
-                    <div className="text-[22px] font-bold tracking-tight text-purple-800">
-                      {n}
-                    </div>
-                    <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                      {l}
-                    </div>
-                  </div>
-                ))}
+              {/* v2 audit: stat grid of 4 was "data slop". Keep the single
+                  useful number — highlights — and lose the rest. */}
+              <div className="mt-4">
+                <div className="text-[28px] font-bold tracking-tight text-purple-800">
+                  {status?.total_extracted ?? nuggetCount ?? 0}
+                </div>
+                <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                  highlights in your profile
+                </div>
               </div>
               <Link
                 href="/onboarding/profile"

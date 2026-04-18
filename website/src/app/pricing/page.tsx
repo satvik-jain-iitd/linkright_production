@@ -69,9 +69,7 @@ export default async function PricingPage() {
           <h1 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
             Start free. Upgrade when you ship.
           </h1>
-          <p className="mt-4 text-muted">
-            One plan handles the whole hunt. No seat fees. No upsells mid-flow.
-          </p>
+          <p className="mt-4 text-muted">One plan. No upsells.</p>
 
           <div className="mt-14 grid gap-6 text-left md:grid-cols-2">
             {PLANS.map((p) => (
