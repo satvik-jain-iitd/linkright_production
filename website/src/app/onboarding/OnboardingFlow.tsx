@@ -166,6 +166,16 @@ function StepCareerBasics({
   // via setOutline. Saved alongside the flat fields on Save & Continue.
   const [outline, setOutline] = useState<CareerOutlineData | null>(null);
 
+  // S04 design: show file metadata chip inside CareerOutlineView.
+  const [fileMeta, setFileMeta] = useState<{ filename: string; sizeKB: number; parsedSec?: number } | null>(null);
+
+  const handleSwapResume = () => {
+    setOutline(null);
+    setFileMeta(null);
+    setParsed(false);
+    setUploadMode("file");
+  };
+
   const applyParsed = (data: Record<string, unknown>) => {
     if (typeof data.full_name === "string" && data.full_name && !fullName) setFullName(data.full_name);
     // Never overwrite email — the signup email is the account-of-record.
@@ -271,6 +281,7 @@ function StepCareerBasics({
     }
     setParsing(true);
     setParseError("");
+    const startedAt = performance.now();
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -281,6 +292,11 @@ function StepCareerBasics({
       const data = await res.json();
       if (res.ok && data.parsed) {
         applyParsed(data.parsed);
+        setFileMeta({
+          filename: file.name,
+          sizeKB: file.size / 1024,
+          parsedSec: (performance.now() - startedAt) / 1000,
+        });
       } else {
         setParseError(data.error ?? "Could not parse file. Please paste your resume text instead.");
         setUploadMode("paste");
@@ -549,7 +565,12 @@ function StepCareerBasics({
           Shown when we have a parsed outline; the flat-field form below remains
           for manual entry OR when the parser emitted thin data. */}
       {parsed && outline && outline.experiences.length > 0 && (
-        <CareerOutlineView data={outline} onChange={setOutline} />
+        <CareerOutlineView
+          data={outline}
+          onChange={setOutline}
+          fileMeta={fileMeta ?? undefined}
+          onSwap={handleSwapResume}
+        />
       )}
 
       <div className="space-y-4">

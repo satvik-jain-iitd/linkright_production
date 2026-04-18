@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>LinkRight — User Journey (21 screens)</title>
+<meta name="viewport" content="width=1440" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/tokens.css" />
+<link rel="stylesheet" href="styles/journey.css" />
+<style>
+  body { background: #F4F5F7; }
+  .phase { margin-top: 120px; }
+  .phase:first-of-type { margin-top: 64px; }
+  .screen-frame-wrap { max-width: 1200px; margin: 0 auto 72px; }
+  .frame-body { min-height: 580px; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ======================= DOCUMENT HEADER ======================= -->
+  <header class="doc-head">
+    <div class="logo-row">
+      <span class="mark">Link<span class="tr">Right</span></span>
+      <div class="crumbs">
+        <span>Design</span><span class="sep">/</span><span>Wave 2</span><span class="sep">/</span><span>User journey</span>
+      </div>
+    </div>
+    <h1>The full LinkRight journey, in 21 screens.</h1>
+    <p class="lede">From "I'm updating my resume" to "I landed the job, and my profile got sharper along the way." Every screen is a shippable hand-off — real copy, real components, production design system. Organised in four phases that match how a user actually moves through the product.</p>
+
+    <div class="meta-grid">
+      <div class="meta"><div class="k">Audience</div><div class="v">Engineering handoff — give this to Claude Code</div></div>
+      <div class="meta"><div class="k">Fidelity</div><div class="v">Hi-fi · production-grade UI</div></div>
+      <div class="meta"><div class="k">Viewport</div><div class="v">1280 desktop web</div></div>
+      <div class="meta"><div class="k">Design system</div><div class="v">LinkRight v1 · Inter, teal + coral</div></div>
+    </div>
+
+    <!-- Anchor list -->
+    <div class="anchor-list">
+      <a href="#s01"><span class="n">01</span>Landing</a>
+      <a href="#s02"><span class="n">02</span>Pricing</a>
+      <a href="#s03"><span class="n">03</span>Auth</a>
+      <a href="#s04"><span class="n">04</span>Upload resume</a>
+      <a href="#s05"><span class="n">05</span>Profile — highlights</a>
+      <a href="#s06"><span class="n">06</span>Highlight modal</a>
+      <a href="#s07"><span class="n">07</span>Preferences</a>
+      <a href="#s08"><span class="n">08</span>Find roles</a>
+      <a href="#s09"><span class="n">09</span>Resume — plan</a>
+      <a href="#s10"><span class="n">10</span>Live writing</a>
+      <a href="#s11"><span class="n">11</span>Review & ship</a>
+      <a href="#s12"><span class="n">12</span>Dashboard</a>
+      <a href="#s13"><span class="n">13</span>Interview prep</a>
+      <a href="#s14"><span class="n">14</span>Applications</a>
+      <a href="#s15"><span class="n">15</span>Broadcast — connect</a>
+      <a href="#s16"><span class="n">16</span>Insights browser</a>
+      <a href="#s17"><span class="n">17</span>Compose post</a>
+      <a href="#s18"><span class="n">18</span>Schedule & track</a>
+      <a href="#s19"><span class="n">19</span>Diary</a>
+      <a href="#s20"><span class="n">20</span>Profile / settings</a>
+      <a href="#s21"><span class="n">21</span>Notifications</a>
+    </div>
+  </header>
+
+  <!-- ======================= PHASE 1: ENTER ======================= -->
+  <div class="phase">
+    <div class="phase-head">
+      <span class="num">Phase 01</span>
+      <span class="name">Enter</span>
+      <p class="sub">First touch — land, understand the promise, create an account. The user decides in 30 seconds whether LinkRight is worth their email.</p>
+    </div>
+    <div class="phase-flow">
+      <span class="node">Landing</span><span class="arrow">→</span>
+      <span class="node">Pricing</span><span class="arrow">→</span>
+      <span class="node">Auth</span>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div id="screen-header-01"></div>
+    <div class="screen-frame-wrap"><div id="screen-01"></div></div>
+  </div>
+  <div class="screen">
+    <div id="screen-header-02"></div>
+    <div class="screen-frame-wrap"><div id="screen-02"></div></div>
+  </div>
+  <div class="screen">
+    <div id="screen-header-03"></div>
+    <div class="screen-frame-wrap"><div id="screen-03"></div></div>
+  </div>
+
+  <!-- ======================= PHASE 2: BUILD ======================= -->
+  <div class="phase">
+    <div class="phase-head">
+      <span class="num">Phase 02</span>
+      <span class="name">Build your profile</span>
+      <p class="sub">The memory layer. Instead of a dev-tool wall, we ask one thing — drop your resume — and surface what we extracted. The user edits, approves, sets preferences. This is the foundation every downstream feature retrieves from.</p>
+    </div>
+    <div class="phase-flow">
+      <span class="node">Upload resume</span><span class="arrow">→</span>
+      <span class="node">Review highlights</span><span class="arrow">→</span>
+      <span class="node">Edit a highlight</span><span class="arrow">→</span>
+      <span class="node">Preferences</span>
+    </div>
+  </div>
+
+  <div class="screen"><div id="screen-header-04"></div><div class="screen-frame-wrap"><div id="screen-04"></div></div></div>
+  <div class="screen"><div id="screen-header-05"></div><div class="screen-frame-wrap"><div id="screen-05"></div></div></div>
+  <div class="screen"><div id="screen-header-06"></div><div class="screen-frame-wrap"><div id="screen-06"></div></div></div>
+  <div class="screen"><div id="screen-header-07"></div><div class="screen-frame-wrap"><div id="screen-07"></div></div></div>
+
+  <!-- ======================= PHASE 3: ACT ======================= -->
+  <div class="phase">
+    <div class="phase-head">
+      <span class="num">Phase 03</span>
+      <span class="name">Act — build & apply</span>
+      <p class="sub">The first magic moment. User finds a role, watches Sync plan the layout, then watches bullets get written live from their own memory layer. Ends with a pixel-perfect, ATS-safe PDF.</p>
+    </div>
+    <div class="phase-flow">
+      <span class="node">Find roles</span><span class="arrow">→</span>
+      <span class="node">Layout plan</span><span class="arrow">→</span>
+      <span class="node">Live writing</span><span class="arrow">→</span>
+      <span class="node">Review & ship</span>
+    </div>
+  </div>
+
+  <div class="screen"><div id="screen-header-08"></div><div class="screen-frame-wrap"><div id="screen-08"></div></div></div>
+  <div class="screen"><div id="screen-header-09"></div><div class="screen-frame-wrap"><div id="screen-09"></div></div></div>
+  <div class="screen"><div id="screen-header-10"></div><div class="screen-frame-wrap"><div id="screen-10"></div></div></div>
+  <div class="screen"><div id="screen-header-11"></div><div class="screen-frame-wrap"><div id="screen-11"></div></div></div>
+
+  <!-- ======================= PHASE 4: GROW ======================= -->
+  <div class="phase">
+    <div class="phase-head">
+      <span class="num">Phase 04</span>
+      <span class="name">Grow — the daily loop</span>
+      <p class="sub">The returning user. Dashboard becomes the morning ritual: today's matches, interview prep, the Kanban, Broadcast. The diary feeds the memory layer. This is where LinkRight compounds.</p>
+    </div>
+    <div class="phase-flow">
+      <span class="node">Dashboard</span><span class="arrow">→</span>
+      <span class="node">Interview prep</span><span class="arrow">→</span>
+      <span class="node">Applications</span><span class="arrow">→</span>
+      <span class="node">Broadcast</span><span class="arrow">→</span>
+      <span class="node">Diary</span><span class="arrow">→</span>
+      <span class="node">Profile + notifs</span>
+    </div>
+  </div>
+
+  <div class="screen"><div id="screen-header-12"></div><div class="screen-frame-wrap"><div id="screen-12"></div></div></div>
+  <div class="screen"><div id="screen-header-13"></div><div class="screen-frame-wrap"><div id="screen-13"></div></div></div>
+  <div class="screen"><div id="screen-header-14"></div><div class="screen-frame-wrap"><div id="screen-14"></div></div></div>
+  <div class="screen"><div id="screen-header-15"></div><div class="screen-frame-wrap"><div id="screen-15"></div></div></div>
+  <div class="screen"><div id="screen-header-16"></div><div class="screen-frame-wrap"><div id="screen-16"></div></div></div>
+  <div class="screen"><div id="screen-header-17"></div><div class="screen-frame-wrap"><div id="screen-17"></div></div></div>
+  <div class="screen"><div id="screen-header-18"></div><div class="screen-frame-wrap"><div id="screen-18"></div></div></div>
+  <div class="screen"><div id="screen-header-19"></div><div class="screen-frame-wrap"><div id="screen-19"></div></div></div>
+  <div class="screen"><div id="screen-header-20"></div><div class="screen-frame-wrap"><div id="screen-20"></div></div></div>
+  <div class="screen"><div id="screen-header-21"></div><div class="screen-frame-wrap"><div id="screen-21"></div></div></div>
+
+  <footer style="margin-top: 120px; padding-top: 48px; border-top: 1px solid var(--color-border); text-align: center; color: var(--color-muted); font-size: 13px;">
+    LinkRight · 21-screen user journey · hand-off ready · April 2026
+  </footer>
+</div>
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="js/primitives.jsx"></script>
+<script type="text/babel" src="js/screens-enter.jsx"></script>
+<script type="text/babel" src="js/screens-build.jsx"></script>
+<script type="text/babel" src="js/screens-act.jsx"></script>
+<script type="text/babel" src="js/screens-grow.jsx"></script>
+
+<script type="text/babel">
+  // Screen metadata — goals, reasoning, pillar coding
+  const META = {
+    "01": { name: "Landing", route: "linkright.in/", pillar: { kind: "global", label: "Acquisition" }, goal: "A visitor — a PM at Razorpay updating their CV at midnight — arrives and has to understand what LinkRight is in 10 seconds.", reasoning: "The hero leads with the compounding promise — 'your profile gets sharper every week' — not a feature list. Teal radial wash signals brand warmth without visual noise. A single coral CTA dominates. Social proof (36+ implementations, real PMs) is evidence, not fluff." },
+    "02": { name: "Pricing", route: "linkright.in/pricing", pillar: { kind: "global", label: "Acquisition" }, goal: "Decide whether to trust LinkRight with real career work. Compare Free vs. Pro quickly.", reasoning: "Three plans, Pro marked as recommended with teal border — no fake urgency or coloured gradients. Prices in ₹ because the audience is India. 'First resume free' is the honest headline — we want users committed before they pay." },
+    "03": { name: "Auth", route: "linkright.in/auth", pillar: { kind: "global", label: "Acquisition" }, goal: "Create an account with the minimum friction.", reasoning: "OAuth first (Google / LinkedIn), email as fallback. Social login is 2 clicks to dashboard. No 'confirm password', no captcha on the happy path. The form sits in a warm skin-tone left panel to soften the moment; the right is the brand promise." },
+    "04": { name: "Upload resume", route: "linkright.in/onboarding/upload", pillar: { kind: "discover", label: "Build profile" }, goal: "Give LinkRight a starting point — ideally a PDF of your current resume.", reasoning: "Drag-drop first, paste as fallback, 'Start from scratch' last. The job is clear: we need raw material to extract highlights. We don't ask for 20 form fields. One file, and we do the work. This replaces the memory-layer wall (Claude Code in the old flow)." },
+    "05": { name: "Profile — highlights", route: "linkright.in/profile", pillar: { kind: "discover", label: "Build profile" }, goal: "Review what LinkRight extracted and confirm it's accurate.", reasoning: "Highlights are shown as review-able cards with company provenance. Purple for AI-extracted — the user can see every item came from their own text. Each is editable, tag-able, deletable. 'Add one of your own' nudges contribution without forcing it." },
+    "06": { name: "Edit a highlight", route: "modal", pillar: { kind: "discover", label: "Build profile" }, goal: "Sharpen one highlight — the story, the number, the context.", reasoning: "Modal on dim overlay keeps context visible. The impact number has its own input because every good bullet has one. 'Where did this happen?' tag is how we attach provenance to memory — so later, retrieving for a resume for a fintech role pulls fintech-tagged highlights first." },
+    "07": { name: "Preferences", route: "linkright.in/profile/preferences", pillar: { kind: "discover", label: "Build profile" }, goal: "Tell LinkRight what roles, locations, comp, and company types you actually want.", reasoning: "Preferences power Scout's ranking. Chips over dropdowns — fast to click, visible state. Compensation as a range slider reflects how people actually think about salary. 'Working style' is coded with pillar colour to reinforce the four-pillar system." },
+    "08": { name: "Find roles", route: "linkright.in/find", pillar: { kind: "find", label: "Find" }, goal: "See ranked, high-fit roles today — not a feed of 200.", reasoning: "Each row shows the one number that matters (match %) and the evidence behind it (chips). Coral CTA on the top match draws the eye to action. Filters are preset, not open-ended — we know the user's profile, we know what's relevant. 'Load more' not infinite scroll: job hunt is a deliberate act." },
+    "09": { name: "Resume — layout plan", route: "linkright.in/build/:id", pillar: { kind: "outreach", label: "Reach out" }, goal: "See what Sync is about to do, and approve/tweak before it writes.", reasoning: "Before any LLM call runs, we show the plan: which sections, how many bullets each, which company branding. The user can reorder or tweak. Transparency beats surprise — when the resume is done, nothing is a shock. The Credo AI brand colours on the right mirror what will appear in the PDF." },
+    "10": { name: "Live writing", route: "linkright.in/build/:id", pillar: { kind: "outreach", label: "Reach out" }, goal: "Watch Sync write each bullet — verify it's using your real content.", reasoning: "The phases panel on the left is the heartbeat (no more silent hangs). Each bullet streams in with provenance — which highlight it pulled from. The user can regenerate one bullet or adjust tone. This is the moment the product earns trust: every word is traceable to something real you did." },
+    "11": { name: "Review & ship", route: "linkright.in/build/:id", pillar: { kind: "outreach", label: "Reach out" }, goal: "Approve the final PDF, download, and apply.", reasoning: "Full preview with real typography, brand-matched accent, 95-100% line fill validated. Four checks on the right confirm ATS-safe, AI-slop-free, line-filled, brand-matched. 'Copy tailored DM for Ayushi' is the next artefact we bolt on — cover letter, LinkedIn DM, recruiter email — built from the same memory layer." },
+    "12": { name: "Dashboard", route: "linkright.in/dashboard", pillar: { kind: "global", label: "Daily loop" }, goal: "Open LinkRight in the morning, see what's worth doing today.", reasoning: "Matches first (urgent, decaying). 'Keep going' catches abandoned work — resume drafts, prep drills — so nothing gets orphaned. Scout watchlist on the bottom keeps long-lead companies in view. Right rail: your profile progress + daily diary. One screen, whole product." },
+    "13": { name: "Interview prep", route: "linkright.in/prepare", pillar: { kind: "prepare", label: "Prepare" }, goal: "Pick a drill for what you're practicing today.", reasoning: "Sage-green zone — the quiet-room palette from the design system, distinct from the four primary pillars. Eight drill types, each sized by queued drills (your tailored backlog). Oracle (multi-persona roundtable) is teased as 'Soon' — a feature roadmap marker without breaking the shippable surface." },
+    "14": { name: "Applications", route: "linkright.in/applications", pillar: { kind: "outreach", label: "Reach out" }, goal: "See every application in flight and its status.", reasoning: "Six-column Kanban: Wishlist → Drafting → Applied → Interview → Offer → Rejected. Each column has a pillar-coloured dot so status is legible at a glance. Cards show just enough — company, role, timing, next action. 'Applied Apr 14' resolves to relative time ('3 days ago') in the tag." },
+    "15": { name: "Broadcast — connect", route: "linkright.in/broadcast/connect", pillar: { kind: "broadcast", label: "Broadcast" }, goal: "Link LinkedIn so we can draft posts from your real work.", reasoning: "Pink zone — Broadcast's colour. Two-column 'will / won't' box is explicit about data boundaries — no auto-posting, no DM scraping. This is a moment the brand can lose or win trust; we over-communicate on purpose. One coral CTA. Clear revocation path." },
+    "16": { name: "Insights browser", route: "linkright.in/broadcast", pillar: { kind: "broadcast", label: "Broadcast" }, goal: "Pick a real moment from your diary / profile to turn into a post.", reasoning: "Every card is pulled from something you actually said or shipped — diary entries, shipped work, failures, takes. Filter chips across the top (Wins, Learnings, Takes, Failures, Shipped). One CTA per card: 'Write a post about this'. No generic 'share to LinkedIn' prompts — the source is always evident." },
+    "17": { name: "Compose post", route: "linkright.in/broadcast/compose", pillar: { kind: "broadcast", label: "Broadcast" }, goal: "Draft the post, see the LinkedIn preview, refine tone, schedule or publish.", reasoning: "Left: the draft at full width with character counter and regeneration budget. Right: the source insight (so you remember why you're writing this) and a live LinkedIn preview (so you see exactly how it'll look). Tone chips below the draft (Shorter, Punchier, Add a question) are atomic edits, not a chatbox." },
+    "18": { name: "Schedule & track", route: "linkright.in/broadcast/schedule", pillar: { kind: "broadcast", label: "Broadcast" }, goal: "See what's queued, what's posted, and how your voice is landing.", reasoning: "Three tabs (Scheduled / Posted / Drafts). Posted cards show real engagement inline. Right rail: 30-day impressions, bar chart of daily activity, tile stats. The analytics live where the posts live — no separate 'Insights' tab." },
+    "19": { name: "Daily diary", route: "modal over dashboard", pillar: { kind: "global", label: "Memory" }, goal: "Log today's ship / learning / frustration in 60 seconds, feeding the memory layer.", reasoning: "The single most important screen. A modal so the user can log from anywhere. Type or record. Hint chips remove blank-page paralysis. Streak visible top-right — loss aversion is the retention mechanic. Each entry = +1 highlight on your profile, tomorrow's resume gets sharper." },
+    "20": { name: "Profile / settings", route: "linkright.in/profile", pillar: { kind: "global", label: "Settings" }, goal: "Edit account basics, connect integrations, bulk-upload a career file.", reasoning: "Identity card on top. Bulk upload (JSON) for power users — the JSON path we expose is downloadable as a template, so this is an affordance, not a gatekeeper. Connected accounts show both what's linked and what's available. Danger zone walled off at the bottom with coral tint." },
+    "21": { name: "Notifications", route: "drawer over app", pillar: { kind: "global", label: "Global" }, goal: "Catch up on what matters without leaving your current context.", reasoning: "Right-drawer overlay, not a separate page — you never lose your spot. Pillar-coloured dot on each item lets you scan by type (teal = find, purple = memory, pink = broadcast, sage = prepare, gold = streak/in-flight). Unread items have a faint teal wash background." }
+  };
+
+  const { useEffect } = React;
+
+  function Mount({ id, Component, viewport }) {
+    return <Component />;
+  }
+
+  function renderAll() {
+    const screens = [
+      ["01", Screen01_Landing], ["02", Screen02_Pricing], ["03", Screen03_Auth],
+      ["04", Screen04_Upload], ["05", Screen05_Profile], ["06", Screen06_HighlightModal], ["07", Screen07_Preferences],
+      ["08", Screen08_FindRoles], ["09", Screen09_LayoutPlan], ["10", Screen10_LiveWriting], ["11", Screen11_Review],
+      ["12", Screen12_Dashboard], ["13", Screen13_InterviewPrep], ["14", Screen14_Applications],
+      ["15", Screen15_BroadcastConnect], ["16", Screen16_InsightsBrowser], ["17", Screen17_Compose],
+      ["18", Screen18_ScheduleTracker], ["19", Screen19_Diary], ["20", Screen20_Profile], ["21", Screen21_Notifications],
+    ];
+
+    for (const [num, Comp] of screens) {
+      // Header
+      const headerEl = document.getElementById(`screen-header-${num}`);
+      const meta = META[num];
+      if (headerEl && meta) {
+        ReactDOM.createRoot(headerEl).render(
+          <ScreenHeader num={num} name={meta.name} route={meta.route} pillar={meta.pillar} goal={meta.goal} reasoning={meta.reasoning} />
+        );
+      }
+      // Screen
+      const screenEl = document.getElementById(`screen-${num}`);
+      if (screenEl && Comp) {
+        try {
+          ReactDOM.createRoot(screenEl).render(<Comp />);
+        } catch (e) {
+          screenEl.innerHTML = `<div style="padding: 40px; text-align: center; color: #B3341C; border: 1px dashed #FF5733; border-radius: 12px;">Error rendering screen ${num}: ${e.message}</div>`;
+        }
+      }
+    }
+  }
+
+  // Wait for all script files to execute
+  setTimeout(renderAll, 100);
+</script>
+
+</body>
+</html>

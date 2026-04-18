@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>LinkRight — Journey Wireframes</title>
+<meta name="viewport" content="width=1400" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- =================================================================== -->
+<!-- TAB BAR + TWEAKS                                                     -->
+<!-- =================================================================== -->
+<nav class="tabs" id="tabs">
+  <div class="brand">Link<span class="r">Right</span> · journey</div>
+  <button class="tab active" data-tab="pillars">The product</button>
+  <button class="tab" data-tab="current">Current state</button>
+  <button class="tab" data-tab="v1">Opt v1 · Aha in 60s</button>
+  <button class="tab" data-tab="v2">Opt v2 · Daily Coach</button>
+  <button class="tab" data-tab="v3">Opt v3 · Memory-OS</button>
+  <button class="tab" data-tab="signal">⚑ SIGNAL</button>
+  <div class="spacer"></div>
+  <div class="tweaks">
+    <label><input type="checkbox" id="tw-ann" checked> annotations</label>
+    <label><input type="checkbox" id="tw-gray"> grayscale</label>
+  </div>
+</nav>
+
+<!-- =================================================================== -->
+<!-- SECTION: THE PRODUCT (what LinkRight actually is)                    -->
+<!-- =================================================================== -->
+<section class="section active" id="sec-pillars">
+  <div class="section-head">
+    <span class="tag">what linkright actually is</span>
+    <h1>Not a resume tool. A <span class="accent">career navigation OS</span>, with a memory layer at the core.</h1>
+    <p class="sub">The current landing page sells "pixel-perfect resumes." That's one atom of a much larger product. LinkRight is the end-to-end job-hunt OS for ambitious folks in India: <b>find</b> roles across portals, <b>rank</b> them against your preferences, <b>reach out</b> with personalised resume + cover letter + LinkedIn DM + recruiter email + portfolio site, <b>prepare</b> for the interview, and <b>build brand visibility</b> with memory-driven content — all powered by a Memory Layer that grows every day you show up.</p>
+  </div>
+
+  <!-- The Memory Layer diagram -->
+  <div style="display:grid; grid-template-columns: 1fr 2.5fr; gap: 28px; margin-top: 10px;">
+
+    <!-- Memory layer card -->
+    <div class="signal-card teal">
+      <div class="kicker">🧠 the core</div>
+      <h3>The Memory Layer</h3>
+      <p style="font-family: var(--sans); font-size: 13.5px; line-height: 1.55; color: var(--ink-2);">
+        A structured, retrievable store of <i>you</i>. Built from:
+      </p>
+      <ul style="font-family:var(--sans); font-size:13px; color:var(--ink-2);">
+        <li><b>Resumes &amp; portfolios</b> you paste</li>
+        <li><b>Career nuggets</b> from voice interviews</li>
+        <li><b>Daily diary</b> — what you shipped, learned, struggled with today</li>
+        <li><b>Interview answers</b>, failed answers, patterns</li>
+        <li><b>Outcomes</b> — which angles got replies, which didn't</li>
+      </ul>
+      <p style="font-family: var(--sans); font-size: 13px; line-height: 1.55; color: var(--ink-2); margin-top:8px;">
+        Everything downstream — tailored resume, cover letter, LinkedIn post, interview coach, recruiter DM — <b>retrieves from here.</b> The more you use LinkRight, the sharper it gets.
+      </p>
+    </div>
+
+    <!-- The 5 pillars -->
+    <div>
+      <div style="font-family: var(--hand-big); font-size: 28px; margin-bottom: 10px;">Five jobs. One loop.</div>
+      <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">
+
+        <div class="frame" style="min-height: 260px; padding: 14px;">
+          <div class="frame-head"><span><span class="step">1</span>FIND</span></div>
+          <h3 class="frame-title">Jobs, everywhere.</h3>
+          <p class="frame-note">Scout scans LinkedIn, Greenhouse, Lever, company careers pages. Daily cron + on-demand. One inbox for everything.</p>
+          <div class="stack-sm" style="font-size:10.5px; color: var(--ink-soft); font-family:var(--sans);">
+            <div>• /api/scan</div>
+            <div>• /api/watchlist</div>
+            <div>• /api/discoveries</div>
+            <div>• /api/cron/fetch-jds</div>
+          </div>
+        </div>
+
+        <div class="frame" style="min-height: 260px; padding: 14px;">
+          <div class="frame-head"><span><span class="step">2</span>RANK</span></div>
+          <h3 class="frame-title">Against your story.</h3>
+          <p class="frame-note">Every JD scored against your memory layer + preferences. "Top 20 today", not a feed of 200.</p>
+          <div class="stack-sm" style="font-size:10.5px; color: var(--ink-soft); font-family:var(--sans);">
+            <div>• /api/recommendations/today</div>
+            <div>• /api/jd/analyze</div>
+            <div>• /api/cron/recompute-top-20</div>
+            <div>• BRS scoring</div>
+          </div>
+        </div>
+
+        <div class="frame" style="min-height: 260px; padding: 14px; border-color: var(--teal-deep); background:#F2FBFA;">
+          <div class="frame-head"><span><span class="step">3</span>REACH OUT</span></div>
+          <h3 class="frame-title">5 artefacts per job.</h3>
+          <p class="frame-note" style="color: var(--ink);"><b>For every application:</b></p>
+          <div class="stack-sm" style="font-size:11px;">
+            <div class="box" style="padding:4px 7px; font-size:10.5px;">📄 tailored resume</div>
+            <div class="box" style="padding:4px 7px; font-size:10.5px;">✉︎ cover letter</div>
+            <div class="box" style="padding:4px 7px; font-size:10.5px;">💬 LinkedIn DM</div>
+            <div class="box" style="padding:4px 7px; font-size:10.5px;">📧 recruiter email</div>
+            <div class="box" style="padding:4px 7px; font-size:10.5px;">🌐 portfolio site</div>
+          </div>
+        </div>
+
+        <div class="frame" style="min-height: 260px; padding: 14px;">
+          <div class="frame-head"><span><span class="step">4</span>PREPARE</span></div>
+          <h3 class="frame-title">Interview &amp; weak spots.</h3>
+          <p class="frame-note">Memory knows what you don't know. Tests you on weak areas. Personalised mock interviews per job.</p>
+          <div class="stack-sm" style="font-size:10.5px; color: var(--ink-soft); font-family:var(--sans);">
+            <div>• /api/interview-prep</div>
+            <div>• /api/oracle/*</div>
+            <div>• /api/enrich/questions</div>
+            <div>• weakness coaching</div>
+          </div>
+        </div>
+
+        <div class="frame" style="min-height: 260px; padding: 14px; border-style: dashed; opacity: 0.92;">
+          <div class="frame-head"><span><span class="step">5</span>BROADCAST</span></div>
+          <h3 class="frame-title">Brand visibility.</h3>
+          <p class="frame-note">Social-media automation (roadmap). Memory-layer → LinkedIn posts that reflect today's real story. Not generic thought-leadership slop.</p>
+          <div class="stack-sm" style="font-size:10.5px; color: var(--ink-soft); font-family:var(--sans);">
+            <div>• daily diary → post draft</div>
+            <div>• learning → carousel</div>
+            <div>• win → authentic update</div>
+            <div><i>not in code yet</i></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Flywheel note -->
+      <div class="box" style="margin-top: 16px; background: #FFF4E5; border-color: #8A6D00; font-family: var(--sans); font-size: 13px; line-height: 1.55; padding: 12px 14px;">
+        <b>The loop:</b> Each step feeds the Memory Layer. Recruiter replies to your DM → that angle is now a preferred pattern. You bombed a Q in interview prep → we drill you on it. Today's diary mentions a PR you shipped → tomorrow it's a bullet, a talking point, and maybe a LinkedIn post. <b>The product gets smarter with every login.</b>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="big-quote">
+    "The resume is one artefact. The memory layer is the product. <br/>Everything else is retrieval."
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- SECTION: CURRENT STATE                                               -->
+<!-- =================================================================== -->
+<section class="section" id="sec-current">
+  <div class="section-head">
+    <span class="tag">walked end-to-end · 2026-04-18</span>
+    <h1>What LinkRight <span class="accent">feels like today.</span></h1>
+    <p class="sub">The product in the code is ambitious: Scout, Oracle, nuggets, interview prep, cover letters, brand colours, BRS scoring. But the marketing, the landing page, the dashboard — all point at one atom (the resume). And the spine of it (memory layer) is gated behind a developer tool. Here's the real journey.</p>
+    <div class="legend">
+      <span><span class="dot red"></span>friction / signal</span>
+      <span><span class="dot green"></span>works — keep it</span>
+      <span><span class="dot gold"></span>exists in code · hidden in UI</span>
+    </div>
+  </div>
+
+  <!-- PHASE: ACQUISITION -->
+  <div class="phase-head">
+    <span class="num">01</span>
+    <h2>Landing &amp; auth</h2>
+    <span class="hint">Landing sells 1/5 of the product. User arrives expecting a resume builder. The memory layer, scout, outreach suite, interview coach, visibility engine — invisible.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="addr">linkright.in</div></div>
+      <div class="frame-head"><span><span class="step">1</span>Landing</span><span class="url">/</span></div>
+      <div class="nav-top">
+        <span class="logo">Link<span class="r">Right</span></span>
+        <span class="item">Features</span><span class="item">Pricing</span><span class="sp"></span>
+        <span class="pill small cta">Start free</span>
+      </div>
+      <h3 class="frame-title">Your resume. Pixel-perfect.</h3>
+      <p class="frame-note">6 feature cards, all about the resume. No mention of scout, cover letter, recruiter DM, portfolio, interview prep, memory layer, or social visibility.</p>
+      <div class="grid-3" style="margin-top:8px">
+        <div class="box muted">Paste JD</div>
+        <div class="box muted">We build</div>
+        <div class="box muted">Download</div>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">1</span><b>Marketing under-sells by 80%.</b> LinkRight is 5 jobs, landing sells 1. User who wants a career OS never finds it.</div>
+        <div class="callout"><span class="num">2</span>"3 steps" is a lie. Real flow is ~9 screens before resume #1.</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">2</span>Auth</span><span class="url">/auth</span></div>
+      <h3 class="frame-title">Sign in.</h3>
+      <p class="frame-note">"Start for free" from landing opens Sign-IN, not Sign-UP. Heading never changes on toggle.</p>
+      <div class="stack">
+        <div class="box">email</div>
+        <div class="box">password</div>
+        <div class="row"><span class="btn-primary">Continue →</span></div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">3</span>Onboarding · Roles</span><span class="url">/onboarding</span></div>
+      <div class="steps" style="margin-bottom:8px">
+        <span class="st active">1 Roles</span><span class="st">2 Profile</span><span class="st">3 Career</span><span class="st">4 Ready</span>
+      </div>
+      <h3 class="frame-title">What kind of roles?</h3>
+      <div class="row">
+        <span class="pill small">Product</span><span class="pill small ghost">SWE</span>
+        <span class="pill small ghost">Data</span><span class="pill small ghost">Design</span>
+        <span class="pill small ghost">Marketing</span><span class="pill small ghost">Finance</span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="row wide"><span></span><span class="btn-primary">Get started →</span></div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">✓</span>Clean and fast. Keeper.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PHASE: ONBOARDING -->
+  <div class="phase-head">
+    <span class="num">02</span>
+    <h2>Onboarding — the memory-layer wall</h2>
+    <span class="hint">Step 3 asks a PM to open Claude Code. The product's spine is gated behind a dev tool.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">4</span>Profile (paste resume)</span><span class="url">/onboarding</span></div>
+      <h3 class="frame-title">Paste your resume.</h3>
+      <div class="box tall" style="min-height:70px"><span class="scrib w80"></span><span class="scrib w60 thin"></span><span class="scrib w70 thin"></span></div>
+      <div class="grid-2" style="margin-top:8px">
+        <div class="box muted">Name</div>
+        <div class="box muted">Email <span class="inline-tag tag-red">overwritten</span></div>
+        <div class="box muted">Phone</div>
+        <div class="box muted">LinkedIn <span class="inline-tag tag-red">hallucinated</span></div>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">3</span>Silently overwrites signup email. Invents a LinkedIn URL. No PDF upload despite marketing.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame tall" style="border-color: var(--red-ink); background: #FFF7F2;">
+      <div class="frame-head"><span><span class="step">5</span>The memory-layer wall</span><span class="url">/onboarding</span></div>
+      <h3 class="frame-title">"Open Claude Code."</h3>
+      <p class="frame-note">"Run <code>/interview-coach</code>. Answer ~10 questions. Download JSON. Upload here." This step builds the <b>memory layer</b> — the core of the product — and it's gated behind a developer tool.</p>
+      <div class="box dashed" style="border-color:var(--red-ink); color:var(--red-ink); text-align:center; padding: 24px;">
+        ⬆︎ drag career_nuggets.json
+      </div>
+      <div class="row" style="margin-top:10px">
+        <span class="btn-ghost">Skip for now →</span>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">4</span><b>The memory layer is the product.</b> Gating it behind Claude Code means 80% of users build their entire LinkRight experience on impoverished data. Every downstream feature (rank, outreach, prep, broadcast) runs worse.</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">6</span>Embedding wait</span><span class="url">/onboarding</span></div>
+      <h3 class="frame-title">Embedding 33 nuggets…</h3>
+      <div style="flex:1; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px">
+        <div style="width:60px; height:60px; border-radius:50%; border:4px solid var(--line-soft); border-top-color: var(--teal-deep); animation: spin 1s linear infinite"></div>
+        <div style="font-family: var(--sans); font-size: 12px; color: var(--ink-soft);">12 / 33</div>
+        <style>@keyframes spin { to { transform: rotate(360deg);} }</style>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">5</span>~6s/nugget, no ETA. 3-minute spinner stare.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">7</span>Ready</span><span class="url">/onboarding</span></div>
+      <h3 class="frame-title">You're ready.</h3>
+      <div class="grid-3">
+        <div class="stat"><div class="n">33</div><div class="l">achievements</div></div>
+        <div class="stat"><div class="n">15</div><div class="l">companies</div></div>
+        <div class="stat"><div class="n">121</div><div class="l">skills</div></div>
+      </div>
+      <div style="flex:1"></div>
+      <div class="btn-primary" style="align-self:flex-start">Go to dashboard →</div>
+      <div class="callouts">
+        <div class="callout"><span class="num">6</span>"15 companies" wrong — Sprinklr counted 4×. "Top skills" = resilience, entrepreneurship. For a PM?</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PHASE: DASHBOARD -->
+  <div class="phase-head">
+    <span class="num">03</span>
+    <h2>Dashboard — 5 jobs, 0 centre of gravity</h2>
+    <span class="hint">The product does 5 things. The dashboard gives no hierarchy. Two navs, six labels, three dead links.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame xl" style="grid-column: span 2">
+      <div class="frame-head"><span><span class="step">8</span>Dashboard</span><span class="url">/dashboard</span></div>
+      <div class="nav-top">
+        <span class="logo">Link<span class="r">Right</span></span>
+        <span class="item active">Dashboard</span><span class="item">Applications</span>
+        <span class="item">Scout</span><span class="item">My Career</span><span class="item">Highlights</span>
+        <span class="sp"></span><span class="pill small cta">+ Create Resume</span>
+      </div>
+      <div class="row" style="align-items:stretch">
+        <div class="sidebar">
+          <div class="it">Profile</div>
+          <div class="it">Jobs</div>
+          <div class="it dead">Custom Apps</div>
+          <div class="it">Tracking</div>
+          <div class="it active">Scout</div>
+          <div class="it dead">Settings</div>
+          <div class="it dead">Admin</div>
+        </div>
+        <div style="flex:1">
+          <h3 class="frame-title" style="margin-top:0">Welcome back.</h3>
+          <div class="grid-3">
+            <div class="stat"><div class="n">0</div><div class="l">matches today</div></div>
+            <div class="stat"><div class="n">20/20</div><div class="l">resume slots</div></div>
+            <div class="stat"><div class="n">0</div><div class="l">apps sent</div></div>
+          </div>
+          <div class="box dashed muted" style="margin-top:10px; text-align:center">No matches yet…</div>
+        </div>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">7</span>Dual nav. 6 items for 4 pages. Sidebar "Tracking" = Topnav "Applications".</div>
+        <div class="callout"><span class="num">8</span>3 dead links. "Custom Apps" → 404. "Admin" → 404 for non-admins. "Settings" redirects away.</div>
+        <div class="callout"><span class="num">9</span>Where's cover letter? Portfolio? LinkedIn DM? Recruiter email? Diary? <b>The nav shows ~30% of what the product does.</b></div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">9</span>Scout (FIND)</span><span class="url">/dashboard/scout</span></div>
+      <h3 class="frame-title">0 discoveries.</h3>
+      <div class="grid-4" style="font-size:9px">
+        <div class="stat"><div class="n">0</div><div class="l">total</div></div>
+        <div class="stat"><div class="n">0</div><div class="l">new</div></div>
+        <div class="stat"><div class="n">0</div><div class="l">saved</div></div>
+        <div class="stat"><div class="n">0</div><div class="l">applied</div></div>
+      </div>
+      <div class="box dashed muted" style="margin-top:10px">Add company: name · <b>slug</b> · <b>ATS</b> · careers URL · keywords</div>
+      <div class="box" style="margin-top:8px; background:#FDE8E0; border-color: var(--red-ink); color: var(--red-ink); font-size:11px;">
+        429 · max 1 scan per 5 min
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">10</span>Form demands slug + ATS platform. PMs don't know these. This is the FIND pillar — and it feels like devops.</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">10</span>Applications</span><span class="url">/dashboard/applications</span></div>
+      <h3 class="frame-title">0 total.</h3>
+      <div class="grid-3" style="margin-top:6px">
+        <div class="kan-col"><h4>Wishlist</h4><div class="box dashed muted" style="font-size:10px; text-align:center">empty</div></div>
+        <div class="kan-col"><h4>Drafting</h4><div class="box dashed muted" style="font-size:10px; text-align:center">empty</div></div>
+        <div class="kan-col"><h4>Applied</h4><div class="box dashed muted" style="font-size:10px; text-align:center">empty</div></div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">✓</span>Kanban is clean. Missing: interview/offer/closed columns.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PHASE: RESUME BUILDER -->
+  <div class="phase-head">
+    <span class="num">04</span>
+    <h2>Reach out — but only one artefact is exposed</h2>
+    <span class="hint">Code has /api/cover-letter, /api/interview-prep, portfolio hosting. UI only builds resumes. The other four artefacts are invisible to the user.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">11</span>Sync · JD</span><span class="url">/resume/new</span></div>
+      <div class="steps" style="margin-bottom:6px">
+        <span class="st active">1</span><span class="st">2</span><span class="st">3</span><span class="st">4</span><span class="st">5</span>
+      </div>
+      <h3 class="frame-title">Paste the JD.</h3>
+      <div class="box tall" style="min-height:60px"><span class="scrib w80"></span><span class="scrib w70 thin"></span></div>
+      <div class="grid-2" style="margin-top:6px">
+        <div class="box muted">Target company</div>
+        <div class="box muted">Target role</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame tall" style="grid-column: span 2; border-color: var(--red-ink); background: #FFF7F2;">
+      <div class="frame-head"><span><span class="step">12</span>JD analysis · <span style="color:var(--red-ink)">false 100%</span></span><span class="url">/resume/new</span></div>
+      <div class="row wide">
+        <h3 class="frame-title">100% match. 20/20. 0 gaps.</h3>
+        <span class="pill teal">✓ perfect fit</span>
+      </div>
+      <div class="stack" style="margin-top:8px">
+        <div class="box" style="font-size:11px"><b>"5+ yrs PM"</b> → <span style="color:var(--red-ink)">matched to a 3.5-yr profile ✓</span></div>
+        <div class="box" style="font-size:11px"><b>"Cloud infrastructure"</b> → <span style="color:var(--red-ink)">"Scaled team from 6 to 14"</span></div>
+        <div class="box" style="font-size:11px"><b>"Security &amp; compliance"</b> → <span style="color:var(--red-ink)">same scaling bullet (reused 6×)</span></div>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">11</span><b>Keyword match, no semantic check.</b> User ships a "perfect fit" resume for a role they're not qualified for. Trust breaks the moment they read it.</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">13</span>Q&amp;A · wrong retrieval</span><span class="url">/resume/new</span></div>
+      <h3 class="frame-title">8 questions.</h3>
+      <div class="box" style="font-size:11px"><b>Q:</b> Revenue impact at <b>Amex</b> as Sr. APM?<br/><span style="color: var(--red-ink)">A (auto): "At Sprinklr, led Walmart launch of…"</span></div>
+      <div class="callouts">
+        <div class="callout"><span class="num">12</span>Memory retrieval ignores company tags. Wrong story attached to wrong job.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame tall" style="grid-column: span 2; border-color: var(--red-ink); background: #FFF7F2;">
+      <div class="frame-head"><span><span class="step">14</span>Build · <span style="color:var(--red-ink)">hang @ 58%</span></span><span class="url">/resume/new</span></div>
+      <h3 class="frame-title">Optimising 10 bullets in 2 batches…</h3>
+      <div class="box" style="padding:10px">
+        <div style="height:10px; background:#EEE; border:1.5px solid var(--ink); border-radius:3px; position:relative; overflow:hidden;">
+          <div style="width:58%; height:100%; background: repeating-linear-gradient(45deg, var(--teal-deep) 0 6px, var(--teal) 6px 12px);"></div>
+        </div>
+        <div style="margin-top:4px; font-family:var(--sans); font-size:11px; color: var(--red-ink);">elapsed 6 min 32 s · no update</div>
+      </div>
+      <div class="stack-sm" style="margin-top:10px; font-size: 11px; color: var(--ink-soft); font-family: ui-monospace, monospace">
+        <div>✓ Developed product strategy for enterprise SaaS scale, resulting in improved…</div>
+        <div>✓ Demonstrated AI fluency through experience with AI/ML technologies…</div>
+        <div>✓ Driven outcome-driven results through experience with outcome-driven…</div>
+      </div>
+      <div class="callouts">
+        <div class="callout"><span class="num">13</span>Silent hang. Worker dies. No timeout, no error. Core product unreachable.</div>
+        <div class="callout"><span class="num">14</span>Hallucinated filler bullets — same template, zero real numbers. Same AI-slop the landing page brags about defeating.</div>
+      </div>
+    </div>
+
+    <div class="frame" style="border-color: #8A6D00; background: #FFFBEA;">
+      <div class="frame-head"><span><span class="step">15</span>Cover letter</span><span class="url">/api/cover-letter</span></div>
+      <h3 class="frame-title">Hidden in the API.</h3>
+      <p class="frame-note">Endpoint exists. No UI button. No prompt to generate it after resume. User who wants a cover letter doesn't know this product offers them.</p>
+      <div class="inline-tag tag-gold">backend ready · UI missing</div>
+      <div class="callouts">
+        <div class="callout warn"><span class="num">15</span>Same story for LinkedIn DM, recruiter email, portfolio site, interview prep. All built, none surfaced.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PHASE: PREPARE + VISIBILITY -->
+  <div class="phase-head">
+    <span class="num">05</span>
+    <h2>Prepare &amp; broadcast — invisible</h2>
+    <span class="hint">/api/interview-prep, /api/oracle, brand-visibility — exist in code, absent in the product the user sees.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame" style="border-color: #8A6D00; background: #FFFBEA;">
+      <div class="frame-head"><span><span class="step">16</span>Interview prep</span><span class="url">/api/interview-prep</span></div>
+      <h3 class="frame-title">No interview tab.</h3>
+      <p class="frame-note">Dashboard has no "prep for Credo interview tomorrow." Endpoint exists, no user entry point.</p>
+      <div class="inline-tag tag-gold">backend ready · UI missing</div>
+    </div>
+
+    <div class="frame" style="border-color: #8A6D00; background: #FFFBEA;">
+      <div class="frame-head"><span><span class="step">17</span>Oracle · daily diary</span><span class="url">/api/oracle/*</span></div>
+      <h3 class="frame-title">The memory feeder.</h3>
+      <p class="frame-note">Oracle ingests "atoms" — daily career moments — via a Custom GPT and LR-XXXXXX token. The token surface is missing from the UI (Settings redirects away). The whole <b>diary → memory</b> loop is unreachable unless you know to hit the API.</p>
+      <div class="inline-tag tag-gold">backend ready · UI dead</div>
+      <div class="callouts">
+        <div class="callout"><span class="num">16</span>The daily-diary feeder is the whole differentiator. It's hidden. This is the silent abandonment that matters most.</div>
+      </div>
+    </div>
+
+    <div class="frame" style="border-style: dashed;">
+      <div class="frame-head"><span><span class="step">18</span>Social-media automation</span><span class="url">(roadmap)</span></div>
+      <h3 class="frame-title">Not built yet.</h3>
+      <p class="frame-note">The BROADCAST pillar. Should turn daily diary + weekly wins into LinkedIn posts, carousels, and replies. Zero code yet.</p>
+      <div class="inline-tag tag-gold">future</div>
+    </div>
+
+    <div class="frame" style="border-color: var(--red-ink); background: #FFF7F2;">
+      <div class="frame-head"><span><span class="step">19</span>Review &amp; ship</span><span class="url">/resume/[id]</span></div>
+      <h3 class="frame-title">Never reached today.</h3>
+      <p class="frame-note">Pipeline hung → PDF, cover letter, interview prep, portfolio — none reachable from this session.</p>
+      <div class="mini-resume" style="opacity:.4; filter: grayscale(1)">
+        <div class="name">Candidate Name</div>
+        <div class="hr"></div>
+        <div class="sec">Experience</div>
+        <div>• …</div>
+        <div>• …</div>
+      </div>
+    </div>
+
+  </div>
+
+  <hr class="sep" />
+
+  <div class="big-quote">
+    The product in the code is a career OS. <br/>
+    The product in the UI is a broken resume tool.
+  </div>
+
+</section>
+
+<!-- =================================================================== -->
+<!-- SECTION: OPTIMIZED v1 — AHA IN 60 SECONDS                            -->
+<!-- =================================================================== -->
+<section class="section" id="sec-v1">
+  <div class="section-head">
+    <span class="tag">optimized · variant 1 · time-to-value</span>
+    <h1>Version 1 — <span class="accent">Aha in 60 seconds.</span></h1>
+    <p class="sub">Thesis: <b>don't sell the OS — demo it with one atom.</b> Anonymous user pastes a JD and resume, watches ONE bullet get rewritten live, with a number from their real content. The landing page shows all 5 pillars as a progression ("today: resume → tomorrow: cover letter, recruiter DM, interview prep, visibility"). Signup happens at download, not before.</p>
+    <div class="legend">
+      <span><span class="dot green"></span>removed friction</span>
+      <span><span class="dot gold"></span>new behaviour</span>
+    </div>
+  </div>
+
+  <div class="phase-head">
+    <span class="num">01</span>
+    <h2>Landing = the loop, not one step</h2>
+    <span class="hint">Top of landing: demo. Below: the full 5-pillar OS promise with evidence.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame xl" style="grid-column: span 2">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="addr">linkright.in</div></div>
+      <div class="frame-head"><span><span class="step">1</span>Landing = the product</span><span class="url">/</span></div>
+      <h3 class="frame-title" style="font-size:26px;">Find the job. Reach out. Land it. Stay sharp.</h3>
+      <p class="frame-note">One memory layer, five things it does for you. Try any of them before you sign up.</p>
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; margin-top:8px; flex:1">
+        <div>
+          <div class="box dashed" style="min-height:50px">paste a JD</div>
+          <div class="box dashed" style="min-height:50px; margin-top:6px">paste your resume</div>
+          <div class="row" style="margin-top:8px"><span class="btn-primary">Tailor one bullet — free →</span></div>
+          <div style="margin-top:14px; font-family: var(--hand-big); font-size:20px;">…then unlock the rest:</div>
+          <div class="grid-3" style="margin-top:6px; gap:4px">
+            <div class="box" style="font-size:10.5px;">✉︎ cover letter</div>
+            <div class="box" style="font-size:10.5px;">💬 LinkedIn DM</div>
+            <div class="box" style="font-size:10.5px;">📧 recruiter email</div>
+            <div class="box" style="font-size:10.5px;">🌐 portfolio</div>
+            <div class="box" style="font-size:10.5px;">🎤 interview prep</div>
+            <div class="box" style="font-size:10.5px;">📢 auto-post</div>
+          </div>
+        </div>
+        <div class="box" style="background:#F2FBFA; border-color:var(--teal-deep); font-size:11.5px;">
+          <div style="font-family:var(--hand-big); font-size:18px; margin-bottom:4px">Live example</div>
+          <div style="color: var(--ink-soft); font-size: 10px;">BEFORE</div>
+          <div>Worked on AML risk engine.</div>
+          <div style="text-align:center; color: var(--teal-deep); font-family:var(--hand-big); font-size: 20px;">↓</div>
+          <div style="color: var(--teal-deep); font-size: 10px;">AFTER · matched to Credo JD</div>
+          <div><b>Cut false-positive rate from 18%→2%</b> across 40M txns, saving 2 FTE.</div>
+        </div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">A</span>Demo lives on the landing page. 5-pillar promise is visible. Memory layer named as the engine.</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">2</span>Live streaming rewrite</span><span class="url">/try</span></div>
+      <h3 class="frame-title">Watch it think.</h3>
+      <div class="stack-sm" style="font-size:11px">
+        <div class="row tight"><span class="inline-tag tag-green">done</span> Cut false-positive 18%→2%</div>
+        <div class="row tight"><span class="inline-tag tag-gold">writing</span> Launched Rolex CXM <span style="opacity:.5">|</span></div>
+        <div class="row tight"><span class="inline-tag" style="background:#EEE; color:#999; border:1px solid #999;">next</span> Scaled team 6→14…</div>
+      </div>
+      <div class="box" style="margin-top:8px; background:#F2FBFA; font-size:10.5px;">
+        <b>Heartbeat · 2s ago.</b> If nothing updates in 30s, we retry the phase &amp; tell you.
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">B</span>Hang becomes a retry, not a mystery.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">3</span>Signup at the gate</span><span class="url">/claim</span></div>
+      <h3 class="frame-title">Save, or just download.</h3>
+      <div class="box" style="background:#FFF4E5; border-color:#8A6D00; font-size:11px;">
+        <b>Save your memory layer →</b><br/>
+        <span style="color: var(--ink-soft)">next job, you skip the pasting. We'll also draft your cover letter, DM, and prep in one click.</span>
+      </div>
+      <div class="box muted" style="margin-top:6px">your@email.com</div>
+      <div class="row" style="margin-top:6px"><span class="btn-primary">Save &amp; download</span><span class="btn-ghost">Just download</span></div>
+    </div>
+
+  </div>
+
+  <div class="phase-head">
+    <span class="num">02</span>
+    <h2>After signup — progressive depth, 5 pillars in sight</h2>
+    <span class="hint">Dashboard puts all 5 pillars on one page. Memory layer visible as the engine.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame xl" style="grid-column: span 2">
+      <div class="frame-head"><span><span class="step">4</span>Dashboard day 1</span><span class="url">/home</span></div>
+      <div class="nav-top">
+        <span class="logo">Link<span class="r">Right</span></span>
+        <span class="item active">Today</span>
+        <span class="item">Find</span>
+        <span class="item">Reach out</span>
+        <span class="item">Prepare</span>
+        <span class="item">Broadcast</span>
+        <span class="sp"></span>
+        <span class="pill small" style="background:#F2FBFA;border-color:var(--teal-deep);color:var(--teal-deep);">🧠 memory · 23%</span>
+      </div>
+      <h3 class="frame-title">Hi Satvik. Here's today.</h3>
+      <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px">
+        <div class="stack">
+          <div class="box" style="background:#F2FBFA; border-color:var(--teal-deep);">
+            <b>Credo AI</b> · 89% match · <span class="pill small teal">resume ready</span>
+            <div style="font-size:10.5px; color: var(--ink-soft); margin-top:3px;">closes in 4d · recruiter Ayushi M. on LinkRight</div>
+            <div class="row" style="margin-top:6px">
+              <span class="btn-primary">Apply pack →</span>
+              <span style="font-size:10.5px; color: var(--ink-soft); align-self:center;">resume · letter · DM · email · portfolio</span>
+            </div>
+          </div>
+          <div class="box"><b>Razorpay · 76%</b> · tailor 30s</div>
+          <div class="box"><b>Rippling · 71%</b> · tailor 30s</div>
+        </div>
+        <div class="box" style="background:#F2FBFA; border-color:var(--teal-deep); font-size:11px;">
+          <div style="font-family:var(--hand-big); font-size:18px;">🧠 Memory layer</div>
+          <div style="margin-top:4px">47 achievements · 23% depth</div>
+          <div style="height:6px; background:#EEE; border:1px solid var(--ink); border-radius:3px; margin-top:4px; overflow:hidden"><div style="width:23%; height:100%; background: var(--teal-deep)"></div></div>
+          <div style="margin-top:8px; color: var(--ink-soft); font-size:10.5px">last diary: 2d ago</div>
+          <div class="row" style="margin-top:6px"><span class="btn-teal">+ today's entry</span></div>
+        </div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">C</span>Nav = 5 pillars. "Apply pack" replaces 5 scattered buttons. Memory layer visible as the engine.</div>
+        <div class="callout good"><span class="num">D</span>Daily diary has a home. The memory feeder is one click, not a dev tool.</div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">5</span>Apply pack view</span><span class="url">/apply/credo</span></div>
+      <h3 class="frame-title">5 artefacts · 1 click.</h3>
+      <div class="stack-sm" style="font-size:11px">
+        <div class="box"><span class="inline-tag tag-green">✓</span> <b>Resume</b> · 89% match · 14 bullets</div>
+        <div class="box"><span class="inline-tag tag-green">✓</span> <b>Cover letter</b> · lead w/ AML angle</div>
+        <div class="box"><span class="inline-tag tag-green">✓</span> <b>LinkedIn DM</b> · to Ayushi (73% reply rate)</div>
+        <div class="box"><span class="inline-tag tag-green">✓</span> <b>Recruiter email</b> · draft ready</div>
+        <div class="box"><span class="inline-tag tag-green">✓</span> <b>Portfolio</b> · credo.linkright.me (live)</div>
+      </div>
+      <div class="row" style="margin-top:auto"><span class="btn-primary">Open pack →</span></div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">E</span>Every application generates the whole set, not just a resume. This is what the code already supports — just never exposed.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">6</span>Honest JD analysis</span><span class="url">/pack/credo/fit</span></div>
+      <h3 class="frame-title">72% match — here's the gap.</h3>
+      <div class="stack-sm" style="font-size:11px">
+        <div class="box" style="background:#E8F7F5;border-color:var(--teal-deep);"><b>✓ Strong (14/20):</b> AML · multi-tenant platform · stakeholder…</div>
+        <div class="box" style="background:#FFF3BD;border-color:#8A6D00;"><b>△ Partial (3/20):</b> cloud infra · governance dashboards</div>
+        <div class="box" style="background:#FDE8E0;border-color:var(--red-ink);"><b>✗ Missing (3/20):</b> 5+ yrs (you 3.5) · RLHF ops · SOC2</div>
+      </div>
+      <div class="box" style="margin-top:8px; font-size:11px; background:#F2FBFA;">
+        <b>Apply anyway?</b> 43% of 3.5-yr PMs got interviews here in past 6 mo. Winning angle: governance.
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- SECTION: OPTIMIZED v2 — DAILY COACH                                  -->
+<!-- =================================================================== -->
+<section class="section" id="sec-v2">
+  <div class="section-head">
+    <span class="tag">optimized · variant 2 · retention</span>
+    <h1>Version 2 — <span class="accent">The Daily Coach.</span></h1>
+    <p class="sub">V1 gets them in. V2 keeps them. Thesis: <b>job search is a 60–90 day slog, not a one-shot.</b> The memory layer demands a daily habit. Build one. 5-minute morning ritual: 3 jobs, 1 diary atom, 1 weak spot drilled. Replace doomscrolling LinkedIn with "opening LinkRight."</p>
+  </div>
+
+  <div class="phase-head">
+    <span class="num">01</span>
+    <h2>The morning briefing</h2>
+    <span class="hint">8am IST email. 3 jobs. 1 already tailored. 1 interview prep drill if you have one scheduled.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">1</span>Daily email</span><span class="url">gmail.com</span></div>
+      <h3 class="frame-title" style="font-family: var(--sans); font-size: 15px; font-weight: 700;">📬 3 jobs · 1 diary · 1 drill</h3>
+      <p class="frame-note" style="font-family:var(--sans); font-size:11px;">From: LinkRight &lt;today@linkright.in&gt;</p>
+      <div class="stack-sm">
+        <div class="box" style="font-size:11px; background:#F2FBFA; border-color:var(--teal-deep);">
+          <b>89%</b> Credo AI · <span style="color:var(--teal-deep)">pack ready ✓</span>
+        </div>
+        <div class="box" style="font-size:11px;"><b>76%</b> Razorpay · tailor 1-click</div>
+        <div class="box" style="font-size:11px;"><b>71%</b> Rippling · tailor 1-click</div>
+        <div class="box" style="font-size:11px; background:#FFFBEA; border-color:#8A6D00;">🎤 <b>Linear interview T-2</b> · drill 1 weak Q</div>
+        <div class="box" style="font-size:11px;">📝 what did you ship yesterday?</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame xl">
+      <div class="frame-head"><span><span class="step">2</span>Today view</span><span class="url">/today</span></div>
+      <div class="nav-top">
+        <span class="logo">Link<span class="r">Right</span></span>
+        <span class="item active">Today</span><span class="item">Find</span><span class="item">Reach out</span><span class="item">Prepare</span><span class="item">Broadcast</span>
+        <span class="sp"></span>
+        <span class="pill small" style="background:#FFF3BD; border-color:#8A6D00; color:#8A6D00;">🔥 14 day streak</span>
+      </div>
+      <h3 class="frame-title">Good morning.</h3>
+      <div class="stack">
+        <div class="box" style="font-size:11.5px; border-width:2px; border-color: var(--teal-deep); background: #F2FBFA">
+          <div class="row wide"><div><b>FIND · Credo AI</b> · Sr PM · 89%</div><div><span class="pill small teal">pack ready</span></div></div>
+          <div class="row" style="margin-top:6px"><span class="btn-primary">Review pack →</span><span class="btn-ghost">Skip</span></div>
+        </div>
+        <div class="box" style="font-size:11.5px; background:#FFFBEA; border-color:#8A6D00;">
+          <b>PREPARE · Linear interview · T-2</b><br/>
+          <span style="font-size:10.5px;">Yesterday you flubbed "kill a feature". 3-min drill ↓</span>
+          <div class="row" style="margin-top:6px"><span class="btn-teal">Drill now</span></div>
+        </div>
+        <div class="box" style="font-size:11.5px;">
+          <b>📝 Today's diary (60s)</b><br/>
+          <span style="color: var(--ink-soft); font-size:10.5px;">One line: what did you ship/learn/struggle with?</span>
+          <div class="row" style="margin-top:6px"><span class="btn-ghost">🎙 record</span><span class="btn-ghost">✏ type</span></div>
+        </div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">F</span><b>Bounded inbox.</b> Three jobs, one drill, one diary. Every day. Finite commitment → daily return.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">3</span>Diary entry → memory</span><span class="url">/diary</span></div>
+      <h3 class="frame-title">"What happened today?"</h3>
+      <div class="box" style="font-size:11px; background: #F2FBFA; border-color: var(--teal-deep);">
+        🎙 "Shipped the risk engine refactor, cut compute 40%. Lead was happy."
+      </div>
+      <div style="margin: 6px 0; font-family:var(--hand-big); font-size:18px; text-align:center; color: var(--teal-deep);">↓ extracted</div>
+      <div class="stack-sm" style="font-size:10.5px;">
+        <div class="box"><b>Atom:</b> shipped risk-engine refactor · -40% compute</div>
+        <div class="box"><b>Skill signal:</b> cost optimisation, infra sense</div>
+        <div class="box"><b>Story seed:</b> "cut compute 40%" — reusable</div>
+      </div>
+      <div class="box" style="margin-top:8px; background:#FFF4E5; border-color:#8A6D00; font-size:10.5px;">
+        You can reuse this on Razorpay app tomorrow, or post it.
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">G</span>Daily diary replaces Claude Code. 60s voice → memory atom. Same engine, no dev tool.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="phase-head">
+    <span class="num">02</span>
+    <h2>The feedback loop</h2>
+    <span class="hint">Apps sent → replies → interviews → outcomes. Memory learns which angles win.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">4</span>Pipeline</span><span class="url">/pipeline</span></div>
+      <h3 class="frame-title">18 apps · 3 interviewing</h3>
+      <div class="grid-4" style="gap:4px">
+        <div class="kan-col"><h4>Saved · 5</h4><div class="kan-card">Credo · 89%</div></div>
+        <div class="kan-col"><h4>Applied · 8</h4><div class="kan-card">Stripe</div><div class="kan-card">Plaid</div></div>
+        <div class="kan-col" style="background:#FFF3BD"><h4>Interview · 3</h4><div class="kan-card"><b>Linear</b> · T-2<br/><span style="font-size:9px; color:var(--teal-deep)">prep ready</span></div></div>
+        <div class="kan-col"><h4>Closed · 2</h4><div class="kan-card">Google · 💔</div></div>
+      </div>
+      <div class="box" style="margin-top:6px; font-size:10.5px; background:#F2FBFA;">
+        <b>📈 What's working:</b> cold AML angle → 17% reply (3× avg). Generic PM framing → 0 of 4.
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">5</span>Interview prep · personal</span><span class="url">/prep/linear</span></div>
+      <h3 class="frame-title">🎤 Linear · T-2</h3>
+      <div class="stack-sm" style="font-size: 11px">
+        <div class="box"><b>Likely Q1:</b> "Kill a feature" · <span style="color: var(--ink-soft)">your Sprinklr CXM sunset fits</span></div>
+        <div class="box"><b>Likely Q2:</b> "Measure platform ROI" · <span style="color: var(--ink-soft)">Amex fraud metric frame</span></div>
+        <div class="box" style="background:#FDE8E0; border-color:var(--red-ink);"><b>Weak spot:</b> RLHF ops · we'll drill 3× this week</div>
+      </div>
+      <div class="row" style="margin-top:auto"><span class="btn-primary">Voice mock →</span></div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">H</span>Prep tied to <i>a specific interview in 2 days.</i> Memory knows what you're weak at — drills proactively.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">6</span>Sunday recap</span><span class="url">/sunday</span></div>
+      <h3 class="frame-title">Week in review.</h3>
+      <div class="grid-2" style="gap:6px">
+        <div class="stat"><div class="n">14</div><div class="l">apps</div></div>
+        <div class="stat"><div class="n">3</div><div class="l">replies</div></div>
+        <div class="stat"><div class="n">1</div><div class="l">interview</div></div>
+        <div class="stat"><div class="n">7</div><div class="l">diary atoms</div></div>
+      </div>
+      <div class="box" style="margin-top:8px; font-size:11px; background:#F2FBFA;">
+        <b>Memory grew:</b> +12 atoms. Depth 23% → 31%.<br/>
+        <b>Ran well:</b> governance angle. <b>Flopped:</b> growth framing.
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- =================================================================== -->
+<!-- SECTION: OPTIMIZED v3 — MEMORY OS (extension + broadcast + network)  -->
+<!-- =================================================================== -->
+<section class="section" id="sec-v3">
+  <div class="section-head">
+    <span class="tag">optimized · variant 3 · product-led growth</span>
+    <h1>Version 3 — <span class="accent">Memory-OS.</span></h1>
+    <p class="sub">V1 sells. V2 retains. V3 <b>compounds.</b> Three multipliers: (1) browser extension — LinkRight appears <i>wherever the job lives</i>, (2) broadcast engine — memory → LinkedIn posts that are true because they came from your diary, (3) peer signal — anonymised outcomes from users who actually got the job.</p>
+  </div>
+
+  <div class="phase-head">
+    <span class="num">01</span>
+    <h2>Extension · LinkRight on every job page</h2>
+    <span class="hint">LinkedIn, Greenhouse, Lever, any careers site. Tailor &amp; apply-pack without leaving the tab.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame xl" style="grid-column: span 2">
+      <div class="chrome"><div class="dots"><span></span><span></span><span></span></div><div class="addr">linkedin.com/jobs/view/…</div></div>
+      <div class="frame-head"><span><span class="step">1</span>Overlay on LinkedIn</span><span class="url">extension</span></div>
+      <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 12px; flex:1;">
+        <div class="box" style="font-size:11px; min-height: 220px;">
+          <b>Senior PM · Credo AI</b><br/>
+          <span style="color: var(--ink-soft); font-size:10px">Remote · Posted 2d · 43 applicants</span>
+          <div class="scrib w90"></div><div class="scrib w80 thin"></div><div class="scrib w70 thin"></div>
+          <div class="scrib w80 thin"></div><div class="scrib w60 thin"></div><div class="scrib w70 thin"></div>
+        </div>
+        <div class="box" style="background: #F2FBFA; border-color: var(--teal-deep); border-width:2px; font-size: 11px;">
+          <div class="row" style="margin-bottom:6px;">
+            <span class="logo" style="font-family: var(--hand-big); font-size: 14px;">Link<span style="color:var(--teal-deep)">Right</span></span>
+          </div>
+          <div style="font-family: var(--hand-big); font-size: 38px; color: var(--teal-deep); line-height:1;">89%</div>
+          <div style="font-size:10px; color: var(--ink-soft);">match vs memory</div>
+          <div style="border-top: 1px dashed var(--line-soft); margin: 6px 0; padding-top: 6px; font-size: 10.5px;">
+            <b>Strong:</b> AML · multi-tenant<br/>
+            <b>Gap:</b> 5+ yrs<br/>
+            <b>Angle:</b> governance-first
+          </div>
+          <div class="stack-sm" style="margin-top:6px; font-size: 10px;">
+            <div class="row tight"><span>📄 resume</span><span style="margin-left:auto">25s</span></div>
+            <div class="row tight"><span>✉︎ cover letter</span><span style="margin-left:auto">+5s</span></div>
+            <div class="row tight"><span>💬 LinkedIn DM</span><span style="margin-left:auto">+3s</span></div>
+            <div class="row tight"><span>📧 recruiter email</span><span style="margin-left:auto">+3s</span></div>
+            <div class="row tight"><span>🌐 portfolio</span><span style="margin-left:auto">+10s</span></div>
+          </div>
+          <span class="btn-primary" style="display:block; text-align:center; margin-top: 6px;">Build pack (45s)</span>
+        </div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">I</span><b>Kills paste.</b> LinkRight appears where the decision is made. Whole apply-pack in one overlay.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">2</span>Silent career capture</span><span class="url">/memory</span></div>
+      <h3 class="frame-title">The memory layer — visible.</h3>
+      <p class="frame-note">Not a hidden dev skill. A living document. Every tailor, every diary, every interview answer — landed here.</p>
+      <div class="stack-sm" style="font-size:11px">
+        <div class="box"><b>47 atoms</b> · 3 resumes + 31 answers + 13 diary days</div>
+        <div class="box"><span style="color: var(--teal-deep)">+ 3 this week</span> · from yesterday's Razorpay tailor</div>
+        <div class="box muted">"Tell me about the Rolex launch that went wrong" — 60s voice?</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="phase-head">
+    <span class="num">02</span>
+    <h2>Broadcast · the visibility flywheel</h2>
+    <span class="hint">The 5th pillar. Memory → LinkedIn posts that sound like <i>you</i>, because they came from your actual week.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame xl" style="grid-column: span 2">
+      <div class="frame-head"><span><span class="step">3</span>Post composer · memory-driven</span><span class="url">/broadcast</span></div>
+      <h3 class="frame-title">This week, post about…</h3>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+        <div class="box" style="font-size:11px; background: #F2FBFA; border-color: var(--teal-deep);">
+          <b>Draft 1 · build-in-public</b><br/>
+          <span style="color: var(--ink-soft); font-size:10px;">Source: Mon diary · "cut compute 40% on risk engine"</span>
+          <div class="scrib w90"></div><div class="scrib w80 thin"></div><div class="scrib w60 thin"></div>
+          <div class="row" style="margin-top:4px"><span class="pill small">edit</span><span class="pill small">schedule</span></div>
+        </div>
+        <div class="box" style="font-size:11px;">
+          <b>Draft 2 · learning</b><br/>
+          <span style="color: var(--ink-soft); font-size:10px;">Source: Wed diary · "got stumped on RLHF ops"</span>
+          <div class="scrib w90"></div><div class="scrib w70 thin"></div>
+        </div>
+        <div class="box" style="font-size:11px;">
+          <b>Draft 3 · the win</b><br/>
+          <span style="color: var(--ink-soft); font-size:10px;">Source: pipeline · "Linear interview unlocked"</span>
+          <div class="scrib w80"></div><div class="scrib w70 thin"></div>
+        </div>
+        <div class="box dashed muted" style="font-size:11px;">
+          + carousel from Sunday recap<br/>
+          + reply draft for Ayushi's post on risk-ops
+        </div>
+      </div>
+      <div class="box" style="margin-top:8px; background:#FFF4E5; border-color:#8A6D00; font-size:11px;">
+        <b>Rule:</b> every post cites a source atom from your memory. No generic thought leadership. If memory doesn't have it, LinkRight won't write it.
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">J</span>Solves the "AI slop post" problem the same way the resume does: retrieval, not generation from thin air.</div>
+        <div class="callout good"><span class="num">K</span>Broadcast is a visibility flywheel — inbound recruiter DMs become the next FIND pillar input.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">4</span>Peer signal</span><span class="url">/peer/credo</span></div>
+      <h3 class="frame-title">What got people hired here.</h3>
+      <p class="frame-note">From 31 LinkRight users who interviewed at Credo in 6 mo (anonymised).</p>
+      <div class="stack-sm" style="font-size: 11px">
+        <div class="box"><b>Median exp:</b> 4 yrs (you 3.5) · not disqualifying</div>
+        <div class="box"><b>Winning angle:</b> governance story (7/9 hires)</div>
+        <div class="box"><b>Rejection theme:</b> "too infra-focused"</div>
+        <div class="box"><b>Process:</b> 4 rounds · 18 days · case in R2</div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">L</span>Data LinkedIn will never show. Network effect: more users → sharper peer signal.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="phase-head">
+    <span class="num">03</span>
+    <h2>Close the flywheel</h2>
+    <span class="hint">Hired users produce the peer signal that hires the next users. And the posts that pull them in.</span>
+  </div>
+
+  <div class="flow tight">
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">5</span>Warm referral</span><span class="url">/refer/credo</span></div>
+      <h3 class="frame-title">2 alumni at Credo.</h3>
+      <div class="box" style="font-size: 11px; border-color: var(--pink); background:#FEF0F3;">
+        <b>Ayushi M.</b> · Staff PM · IIT-D '14 (2y overlap)<br/>
+        <span style="color: var(--ink-soft)">responds 73% · posts weekly about governance</span>
+        <div class="row" style="margin-top:6px"><span class="btn-teal">Draft warm intro →</span></div>
+      </div>
+      <div class="box" style="margin-top:8px; font-size:10.5px; background: #FFF4E5; border-color: #8A6D00;">
+        Pre-drafted from <i>her</i> last 3 posts + <i>your</i> memory. You edit, send.
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame">
+      <div class="frame-head"><span><span class="step">6</span>Share the win</span><span class="url">/win/linear</span></div>
+      <h3 class="frame-title">🎯 Linear offer. Share?</h3>
+      <div class="stack-sm" style="font-size:11px">
+        <div class="box"><b>Which bullet landed it?</b> <span class="scrib w70 thin"></span></div>
+        <div class="box"><b>What did you do differently?</b> <span class="scrib w70 thin"></span></div>
+        <div class="box dashed muted">Anonymised by default · credit if you want</div>
+      </div>
+      <div class="row" style="margin-top:6px"><span class="btn-primary">Share → 3mo premium</span></div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">M</span>Outcome feeds peer-signal. Peer-signal hires the next user. The loop compounds.</div>
+      </div>
+    </div>
+
+    <div class="arrow">→</div>
+
+    <div class="frame" style="border-color: var(--pink); background:#FEF0F3;">
+      <div class="frame-head"><span><span class="step">7</span>Inbound from broadcast</span><span class="url">/inbox</span></div>
+      <h3 class="frame-title">You were noticed.</h3>
+      <p class="frame-note">Your Monday post ("cut compute 40%") drew 2 recruiter DMs. One is a 92% match against your memory.</p>
+      <div class="stack-sm" style="font-size: 11px">
+        <div class="box" style="background: #F2FBFA; border-color: var(--teal-deep);"><b>Valkyrie · Sr PM · 92%</b><br/>inbound recruiter DM · 2h ago</div>
+      </div>
+      <div class="callouts">
+        <div class="callout good"><span class="num">N</span>The broadcast pillar closes the loop back to FIND. Inbound leads become the top of tomorrow's funnel.</div>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- =================================================================== -->
+<!-- SECTION: SIGNAL                                                      -->
+<!-- =================================================================== -->
+<section class="section" id="sec-signal">
+  <div class="section-head">
+    <span class="tag">signal panel · the honest read</span>
+    <h1>The three things. <span class="accent">Fix these. Fix these only.</span></h1>
+    <p class="sub">The product does five things. The marketing sells one. The UI exposes 1.5 of them. And the spine — the memory layer — is gated behind a developer tool. Here's the signal.</p>
+  </div>
+
+  <div class="big-quote">
+    "If I give you 30 things to fix, you fix zero. <br/>Pick the three that bleed."
+  </div>
+
+  <div class="signal-grid">
+
+    <!-- SIGNAL 1 -->
+    <div class="signal-card red">
+      <div class="kicker">🔴 signal 1 · positioning</div>
+      <h3>The landing page sells 20% of the product and hides the other 80%.</h3>
+      <p>LinkRight is a career navigation OS: <b>find · rank · reach out · prepare · broadcast</b>, all powered by a memory layer that grows with daily use. The current landing is "pixel-perfect resumes + 6 feature cards" — and even those cards are all about the resume. The cover letter, LinkedIn DM, recruiter email, portfolio, interview prep, Oracle daily-diary, peer graph, broadcast roadmap — invisible to the prospect.</p>
+      <ul>
+        <li><b>Where:</b> <code>website/src/app/page.tsx</code> + all pricing/marketing copy</li>
+        <li><b>Fix:</b> rewrite the hero around the loop. Hero = "Find the job. Reach out. Land it. Stay sharp." Under it, 5 pillar cards with one demo each. Make the memory layer the named engine.</li>
+        <li><b>Impact:</b> a resume tool is a $15/mo commodity. A memory-backed career OS is a $50/mo subscription people stay on for 6+ months.</li>
+      </ul>
+    </div>
+
+    <!-- SIGNAL 2 -->
+    <div class="signal-card red">
+      <div class="kicker">🔴 signal 2 · the spine is hidden</div>
+      <h3>The memory layer is the product. It's behind Claude Code.</h3>
+      <p>Every other feature — tailored resume, cover letter, recruiter DM, interview prep, broadcast — is just retrieval against the memory layer. If the memory layer is thin, everything degrades. The current onboarding gates it behind "run <code>/interview-coach</code> in Claude Code and upload the JSON." 80%+ of target users can't do that. They skip. Downstream, everything produces worse output. They never see the product at full strength. They churn.</p>
+      <ul>
+        <li><b>Where:</b> <code>src/app/onboarding/StepLifeOS.tsx</code> + missing daily-diary UI on Oracle endpoints</li>
+        <li><b>Fix:</b> in-product voice interview (60s Q&amp;A, not 15min). Daily diary with a voice button on the home screen. Passive capture: every tailor, every answer, every outcome feeds memory automatically.</li>
+        <li><b>Impact:</b> depth of memory after 30 days → 10× higher → every downstream artefact is sharper → retention unlocks.</li>
+      </ul>
+    </div>
+
+    <!-- SIGNAL 3 -->
+    <div class="signal-card red">
+      <div class="kicker">🔴 signal 3 · core pipeline lies &amp; hangs</div>
+      <h3>The one atom that <i>is</i> shipped — the resume — hallucinates filler and hangs at 58%.</h3>
+      <p>Hallucinated filler ("Developed product strategy for enterprise SaaS scale, resulting in improved product development…") ships in the live stream. The landing page brags "0 AI words detected." The build pipeline silently hangs for 6.5+ min — <code>resume_jobs.updated_at</code> never advances, frontend polls happily, no timeout, no error. The one thing users came for is broken <i>and</i> lying.</p>
+      <ul>
+        <li><b>Where:</b> <code>worker/app/pipeline/orchestrator.py</code> phase 5 + <code>worker/app/pipeline/prompts.py</code></li>
+        <li><b>Fix:</b> heartbeat + 60s per-phase timeout + user-visible retries. Prompt must <i>refuse</i> to emit a bullet without a source memory atom — fewer bullets &gt; fake bullets.</li>
+        <li><b>Impact:</b> without this, every other fix is theatre.</li>
+      </ul>
+    </div>
+
+    <!-- CUT LIST -->
+    <div class="signal-card">
+      <div class="kicker">✂︎ the cut list</div>
+      <h3>Not redesign. Remove.</h3>
+      <ol>
+        <li><b>The sidebar.</b> Top nav is enough. Two navs = 6 labels for 4 pages + 3 dead links. Kill the sidebar.</li>
+        <li><b>The "3 steps" claim on landing.</b> Real flow is 9. Either make it 3, or stop promising 3.</li>
+        <li><b>"Custom Apps", "Admin" for non-admins, "Settings" redirect.</b> Dead. Delete.</li>
+        <li><b>"Chunks" vs "Highlights" terminology.</b> The user does not care. Pick one word — "atoms" or "highlights".</li>
+        <li><b>4th brand color at 1.0:1 contrast</b> staying in the palette despite failing WCAG.</li>
+        <li><b>Auto-fill overwrite of signup email.</b> Silent data mutation. Never.</li>
+        <li><b>LinkedIn URL hallucination from name.</b> Leave blank. Ask.</li>
+        <li><b>"Skip analysis" button on step 1</b> of resume builder. Nobody skips the thing they came for.</li>
+      </ol>
+    </div>
+
+    <!-- DESIGN CRIMES -->
+    <div class="signal-card gold">
+      <div class="kicker">design crimes · 3 most embarrassing</div>
+      <h3>The ones that show someone stopped caring.</h3>
+      <ol>
+        <li><b>JD analysis · 100% match / 0 gaps.</b> Same Sprinklr bullet matched as "proof" for 6 unrelated JD requirements including "Bachelor's in CS." A trophy for a race the user hasn't run. The product lying to flatter.</li>
+        <li><b>Q&amp;A auto-fill pulls the wrong company's story.</b> Question about <i>American Express</i> → answer is the entire <i>Sprinklr + Walmart</i> narrative. Memory retrieval ignores company tags.</li>
+        <li><b>Cover letter, LinkedIn DM, recruiter email, portfolio, interview prep — all built in the backend.</b> None exposed in the UI. The team built them, then hid them. Users pay for the 20% they can see.</li>
+      </ol>
+    </div>
+
+    <!-- SILENT ABANDONMENT -->
+    <div class="signal-card red">
+      <div class="kicker">silent abandonment · where users quietly quit</div>
+      <h3>Not rage-quits. The ones that don't show up in analytics.</h3>
+      <ol>
+        <li><b>Onboarding step 3.</b> User: "am I supposed to install a developer tool? is this for me?" Product: ambiguous copy + a skip that quietly cripples every future feature.</li>
+        <li><b>Build phase 5 · 58%.</b> User: "is it still working?" Product: a spinner that hasn't moved in 6 minutes. Tab closed at minute 4.</li>
+        <li><b>After the first resume.</b> User: "what else does this do?" Product: a dashboard with 0 matches, 20/20 slots, a dead sidebar. They never learn about cover letters, recruiter DM, interview prep, or daily diary. They don't come back, because nothing pulled them.</li>
+      </ol>
+    </div>
+
+    <!-- OVERALL -->
+    <div class="signal-card teal">
+      <div class="kicker">overall · noise ratio</div>
+      <h3>Is this team working on the right things?</h3>
+      <p style="font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--ink-2);">
+        The team is building <i>fast</i> and <i>a lot</i>. They shipped Scout, Oracle, nuggets, BRS scoring, cover letter, interview prep, portfolio hosting, brand-colour matching, career graph. Then they pointed the landing page at one of those things and hid the rest.
+      </p>
+      <p style="font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--ink-2);">
+        <b>Verdict:</b> the team has built a career OS. They haven't positioned it as one. Until they do, users pay for a broken resume tool while the product quietly contains a $50/mo subscription they never discover.
+      </p>
+    </div>
+
+    <!-- THE VISION -->
+    <div class="signal-card teal">
+      <div class="kicker">the vision</div>
+      <h3>Different quality of decisions. Not more features.</h3>
+      <p style="font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--ink-2);">
+        LinkRight is the 5-minute morning ritual that replaces doomscrolling LinkedIn. 8am IST email: 3 jobs, 1 interview drill, 1 diary prompt. Open the app: your apply-pack for the top job is already drafted — resume, cover letter, recruiter DM, portfolio link, warm-referral draft. 60 seconds of voice goes into the diary. The memory layer grows a little.
+      </p>
+      <p style="font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--ink-2);">
+        Sunday: what worked, what didn't. Monday: a LinkedIn post, drawn from last week's diary — true because it came from you, not from a prompt. Three recruiter DMs arrive by Wednesday. One is a 92% match. The memory hires the memory. <b>That</b> is the product. Not "pixel-perfect resumes."
+      </p>
+    </div>
+
+    <!-- ONE MORE THING -->
+    <div class="signal-card" style="grid-column: span 2; background: var(--ink); color: var(--paper); border-color: var(--ink);">
+      <div class="kicker" style="color: var(--teal);">one more thing</div>
+      <h3 style="color: var(--paper);">You built the OS. You're selling a calculator.</h3>
+      <p style="font-family: var(--sans); font-size: 15px; line-height: 1.6;">
+        Every great platform company looked small at launch because they had the discipline to demo one atom, and the ambition to say the big thing out loud. Figma demoed the canvas, but called itself "the collaborative design platform." Linear demoed the issue, but called itself "the tool for high-performance teams." You have a memory-backed career OS with five pillars shipped or half-shipped. You are calling it a resume builder.
+      </p>
+      <p style="font-family: var(--sans); font-size: 15px; line-height: 1.6;">
+        The single change with the highest leverage in this whole document is not a bug fix. It is renaming what LinkRight is, on the landing page, in the onboarding, in the dashboard nav. Four verbs — <b>find, reach out, prepare, broadcast</b> — one noun — <b>memory</b>. Everything else follows.
+      </p>
+      <p style="font-family: var(--hand-big); font-size: 30px; line-height: 1.1; color: var(--paper); margin-top: 18px;">
+        Start by telling the truth <br/>about what you built.
+      </p>
+    </div>
+
+  </div>
+
+</section>
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  const secs = document.querySelectorAll('.section');
+  function show(t) {
+    tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    secs.forEach(s => s.classList.toggle('active', s.id === 'sec-' + t));
+    try { localStorage.setItem('lr.tab', t); } catch(e){}
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  tabs.forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
+  try {
+    const saved = localStorage.getItem('lr.tab');
+    if (saved && document.getElementById('sec-' + saved)) show(saved);
+  } catch(e){}
+
+  const twAnn = document.getElementById('tw-ann');
+  const twGray = document.getElementById('tw-gray');
+  function applyTweaks() {
+    document.body.classList.toggle('no-annotations', !twAnn.checked);
+    document.body.classList.toggle('grayscale', twGray.checked);
+    try {
+      localStorage.setItem('lr.ann', twAnn.checked ? '1' : '0');
+      localStorage.setItem('lr.gray', twGray.checked ? '1' : '0');
+    } catch(e){}
+  }
+  twAnn.addEventListener('change', applyTweaks);
+  twGray.addEventListener('change', applyTweaks);
+  try {
+    const a = localStorage.getItem('lr.ann'); if (a !== null) twAnn.checked = a === '1';
+    const g = localStorage.getItem('lr.gray'); if (g !== null) twGray.checked = g === '1';
+  } catch(e){}
+  applyTweaks();
+</script>
+
+</body>
+</html>

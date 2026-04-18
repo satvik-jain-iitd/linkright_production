@@ -76,7 +76,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no expla
       ]
     }
   ],
-  "career_summary_first_person": "Single paragraph (120-220 words) written IN FIRST PERSON as if the candidate is speaking: 'I am a …', 'I led …', 'Here I was …'. Covers career arc, strongest themes, and scope of impact — drawn only from facts in the source."
+  "career_summary_first_person": "Detailed first-person narration of the ENTIRE career — NOT a short summary. 3-6 paragraphs separated by \\n\\n. Write ONE paragraph PER ROLE (most recent first), each 3-6 sentences long. Each paragraph starts with the company: 'At American Express, I led...' or 'Before that at Sprinklr, I was responsible for...'. Within each paragraph: describe the biggest projects, the problem, the approach, and the outcome with numbers when present. Use 'I' throughout — never third person. No invention — every claim must be traceable to the source text. If education or a standout project deserves its own paragraph, add it after the roles."
 }
 
 Rules:
@@ -90,7 +90,7 @@ Rules:
 - career_text: extract ONLY the work experience/employment history as plain text — not education or skills
 - experiences: extract every job/role found. bullets = exact bullet point text from the resume, max 8 per role
 - experiences[].projects: 1-4 distinct projects per role when the resume describes them. Each project MUST have a one-liner describing scope and 2-3 key_achievements phrased as outcome-led bullets. If the role text doesn't describe distinct projects, return an empty projects array — do NOT invent.
-- career_summary_first_person: first person only ("I ...", not "Satvik did ..."). Natural flowing prose, not a bullet list. No inventions — if the candidate is a PM at Amex and Sprinklr, say that; don't guess titles or achievements that aren't in the source. Return empty string only if the text is too thin to say anything.
+- career_summary_first_person: first person only ("I ...", not "Satvik did ..."). VERBOSE — one paragraph per role, separated by blank lines (\\n\\n). Each paragraph 3-6 sentences covering projects + problem + approach + outcome with real numbers. No inventions — if the candidate is a PM at Amex and Sprinklr, say that; don't guess titles or achievements that aren't in the source. Return empty string only if the text is too thin to say anything.
 - If a field is not found, use empty string or empty array
 - Return valid JSON only, no code blocks`;
 

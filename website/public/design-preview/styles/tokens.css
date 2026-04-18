@@ -1,0 +1,219 @@
+/* ==========================================================================
+   LinkRight Design System — Colors & Type
+   Source: github.com/satvik-jain-iitd/linkright_production (website/globals.css)
+   ========================================================================== */
+
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("fonts/Inter-VariableFont_slnt,wght.ttf") format("truetype-variations");
+}
+
+:root {
+  /* ---------- Brand Palette ----------
+     Teal primary — trust, professionalism
+     Coral secondary — energy, action (CTAs)
+     Purple tertiary — creativity, premium
+     Gold quaternary — warmth, success
+     Pink & skin & sage — additional warm ambient backgrounds
+  */
+
+  /* Primary — Teal */
+  --color-primary-50: #E6FAF8;
+  --color-primary-100: #B3F0EA;
+  --color-primary-200: #80E6DC;
+  --color-primary-300: #4DDCCE;
+  --color-primary-400: #26D4C2;
+  --color-primary-500: #0FBEAF;
+  --color-primary-600: #0C9A8E;
+  --color-primary-700: #09766D;
+  --color-primary-800: #06534D;
+  --color-primary-900: #03302D;
+
+  /* Deep brand teal (wordmark color from logo) */
+  --color-brand-teal: #1F5F6B;
+
+  /* Secondary — Coral / Orange */
+  --color-secondary-50: #FFF1ED;
+  --color-secondary-100: #FFD9CF;
+  --color-secondary-200: #FFB3A0;
+  --color-secondary-300: #FF8D71;
+  --color-secondary-400: #FF6F4A;
+  --color-secondary-500: #FF5733;
+  --color-secondary-600: #E04425;
+  --color-secondary-700: #B3341C;
+  --color-secondary-800: #862714;
+  --color-secondary-900: #591A0D;
+
+  /* Tertiary — Purple */
+  --color-tertiary-50: #F3EEFA;
+  --color-tertiary-100: #DCC8F0;
+  --color-tertiary-200: #C5A6E6;
+  --color-tertiary-300: #AE84DC;
+  --color-tertiary-400: #9B6BD5;
+  --color-tertiary-500: #8B5CF6;
+  --color-tertiary-600: #7044D4;
+  --color-tertiary-700: #5A36AB;
+  --color-tertiary-800: #432882;
+  --color-tertiary-900: #2D1B59;
+
+  /* Gold */
+  --color-gold-50: #FEFBF0;
+  --color-gold-100: #FDF3D3;
+  --color-gold-200: #FAE5A0;
+  --color-gold-300: #F7D76D;
+  --color-gold-400: #F4C93A;
+  --color-gold-500: #E5B80B;
+  --color-gold-600: #C49B09;
+  --color-gold-700: #9A7A07;
+  --color-gold-800: #705905;
+  --color-gold-900: #463803;
+
+  /* Pink — warm accent */
+  --color-pink-50: #FFF0F3;
+  --color-pink-100: #FFD6DE;
+  --color-pink-200: #FFADBD;
+  --color-pink-300: #FF839B;
+  --color-pink-500: #F05A79;
+  --color-pink-700: #B13355;
+
+  /* Skin / Peach — warm neutral for backgrounds */
+  --color-skin-50: #FDF6F0;
+  --color-skin-100: #F8E6D4;
+  --color-skin-200: #F1CDAA;
+  --color-skin-300: #E9B382;
+  --color-skin-500: #D48B56;
+
+  /* Sage — warm leaf green, "quiet room" hue for Interview zone + reflective surfaces */
+  --color-sage-50:  #F3F6EA;
+  --color-sage-100: #E4EBD0;
+  --color-sage-200: #C9D4A8;
+  --color-sage-300: #AABA85;
+  --color-sage-400: #8FA572;
+  --color-sage-500: #6B8346;
+  --color-sage-700: #4A5D32;
+  --color-sage-900: #2E3B1E;
+
+  /* ---------- Semantic Tokens (light) ---------- */
+  --color-background: #FAFBFC;
+  --color-foreground: #1A202C;
+  --color-accent: #0FBEAF;           /* = primary-500 */
+  --color-accent-hover: #0C9A8E;     /* = primary-600 */
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F7FAFC;
+  --color-border: #E2E8F0;
+  --color-muted: #718096;
+
+  /* CTA */
+  --color-cta: #FF5733;              /* = secondary-500 */
+  --color-cta-hover: #E04425;
+
+  /* ---------- Dark Theme Tokens ---------- */
+  --color-background-dark: #0E1620;   /* matches dark-logo background */
+  --color-surface-dark: #151F2B;
+  --color-foreground-dark: #EEF5F2;
+  --color-muted-dark: #8FA3B1;
+  --color-border-dark: #253140;
+
+  /* ---------- Typography ---------- */
+  /* Inter — everything. UI, body, marketing, wordmark. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ---------- Type Scale ---------- */
+  --text-xs: 0.75rem;    /* 12 */
+  --text-sm: 0.875rem;   /* 14 */
+  --text-base: 1rem;     /* 16 */
+  --text-lg: 1.125rem;   /* 18 */
+  --text-xl: 1.25rem;    /* 20 */
+  --text-2xl: 1.5rem;    /* 24 */
+  --text-3xl: 1.875rem;  /* 30 */
+  --text-4xl: 2.25rem;   /* 36 */
+  --text-5xl: 3rem;      /* 48 */
+  --text-6xl: 3.75rem;   /* 60 */
+
+  /* ---------- Spacing ---------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-24: 6rem;
+
+  /* ---------- Radii (full-round pills are signature) ---------- */
+  --radius-sm: 0.5rem;    /* 8 */
+  --radius-md: 0.75rem;   /* 12 */
+  --radius-lg: 1rem;      /* 16 — cards */
+  --radius-xl: 1.25rem;   /* 20 */
+  --radius-2xl: 1.5rem;   /* 24 — larger cards */
+  --radius-full: 9999px;  /* pill CTAs */
+
+  /* ---------- Shadows (soft, subtle) ---------- */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow-cta: 0 8px 24px rgba(255, 87, 51, 0.20);
+  --shadow-cta-hover: 0 12px 32px rgba(255, 87, 51, 0.30);
+}
+
+/* ---------- Base Element Styles ---------- */
+body {
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, .h1 {
+  font-family: var(--font-sans);
+  font-size: var(--text-5xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+h2, .h2 {
+  font-family: var(--font-sans);
+  font-size: var(--text-4xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+h3, .h3 {
+  font-family: var(--font-sans);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.eyebrow {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+p { line-height: 1.6; color: var(--color-foreground); }
+.muted { color: var(--color-muted); }
+
+code, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+::selection { background: var(--color-accent); color: white; }
+
+/* ---------- Wordmark helper (V2 · Dual Voice) ---------- */
+/* Serif "Link" in Fraunces + sans "Right" in Inter, Right tinted with accent. */
+.logo-text { font-size: 1em; line-height: 1; display: inline-flex; align-items: baseline; letter-spacing: -0.02em; }
+.logo-text .link { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-variation-settings: 'opsz' 72; color: var(--color-foreground); }
+.logo-text .right, .logo-text .accent { font-family: var(--font-sans); font-weight: 700; color: var(--color-accent); letter-spacing: -0.015em; }
