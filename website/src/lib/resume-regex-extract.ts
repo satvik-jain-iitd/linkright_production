@@ -20,7 +20,10 @@ const PHONE_RE =
 
 const LINKEDIN_RE = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[\w-]+\/?/i;
 
-// Common degree tokens, ordered most specific → least.
+// Common degree tokens, ordered most specific → least. Ambiguous prefixes
+// like "MS ", "BA ", "BS " removed — they false-matched "MS Excel", "BA in
+// Roles", etc. "Associate" dropped (matches job titles). "Diploma" kept
+// only if paired with a subject via the pickDegree regex.
 const DEGREE_TOKENS = [
   "Ph.D",
   "PhD",
@@ -30,20 +33,16 @@ const DEGREE_TOKENS = [
   "M.Sc",
   "M.S.",
   "MSc",
-  "MS ",
   "Masters",
   "Master of",
   "B.Tech",
   "B.Sc",
   "B.E.",
   "BSc",
-  "BS ",
   "B.A.",
-  "BA ",
   "Bachelor of",
   "Bachelors",
-  "Diploma",
-  "Associate",
+  "Diploma in",
   "Higher Secondary",
 ];
 
@@ -86,10 +85,18 @@ const SKILL_SEEDS = new Set(
   ].map((s) => s.toLowerCase()),
 );
 
+// Common job-title / role suffix words that sometimes follow the name
+// on line 1. Stripping them keeps the extracted name clean ("Satvik Jain"
+// not "Satvik Jain PRODUCT MANAGER").
+const ROLE_SUFFIX_RE =
+  /\s+(?:product\s+manager|senior\s+product\s+manager|principal\s+pm|group\s+pm|pm|engineer|software\s+engineer|developer|designer|analyst|consultant|lead|director|head\s+of\s+\w+|founder|co-?founder|cto|ceo|cfo|coo|vp|svp|curriculum\s+\w+|resume|cv)\b.*$/i;
+
 function firstLineAsName(raw: string): string {
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const candidate = lines[0] ?? "";
-  // Heuristic: 1–5 words, mostly Title-cased letters, no email/URL/phone chars.
+  let candidate = lines[0] ?? "";
+  // Strip role/title suffix (case-insensitive) so "Satvik Jain PRODUCT MANAGER"
+  // becomes "Satvik Jain".
+  candidate = candidate.replace(ROLE_SUFFIX_RE, "").trim();
   const words = candidate.split(/\s+/);
   if (
     words.length >= 1 &&
@@ -112,7 +119,22 @@ function extractLinkedIn(text: string): string {
 }
 
 function extractEducationLines(text: string): RegexExtract["education"] {
-  const lines = text
+  // Scope to the EDUCATION section only — prevents false matches on job
+  // titles ("Customer Support Associate"), skills lists ("MS Excel"),
+  // or project descriptions that mention universities.
+  const sectionRe =
+    /(?:^|\n)\s*(?:education|academic|qualifications|academic background)\s*[:\n]/i;
+  const m = text.match(sectionRe);
+  if (!m || m.index == null) return [];
+  const sectionStart = m.index + m[0].length;
+  const afterSection = text.slice(sectionStart);
+  // Stop at the next ALL-CAPS header or 2500 chars.
+  const stopIdx = afterSection.search(
+    /\n\s*\n\s*[A-Z][A-Z &]{3,}(?:\n|:|$)/,
+  );
+  const sectionText = stopIdx > 0 ? afterSection.slice(0, stopIdx) : afterSection.slice(0, 2500);
+
+  const lines = sectionText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
@@ -126,7 +148,7 @@ function extractEducationLines(text: string): RegexExtract["education"] {
       line.toLowerCase().includes(t.toLowerCase()),
     );
     const year = line.match(YEAR_RE)?.[0] ?? "";
-    if (inst || deg) {
+    if (inst || deg || year) {
       hits.push({
         institution: inst ? pickInstitution(line) : "",
         degree: deg ? pickDegree(line) : "",
@@ -134,13 +156,14 @@ function extractEducationLines(text: string): RegexExtract["education"] {
       });
     }
   }
-  // Dedupe on (institution+degree).
+  // Dedupe on (institution+degree). Keep only rows with real content.
   const seen = new Set<string>();
   return hits.filter((h) => {
+    if (!h.institution && !h.degree) return false;
     const k = `${h.institution}|${h.degree}`;
     if (seen.has(k)) return false;
     seen.add(k);
-    return !!(h.institution || h.degree);
+    return true;
   });
 }
 

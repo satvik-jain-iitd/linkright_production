@@ -71,7 +71,7 @@ Return ONLY a valid JSON object in this exact shape (no markdown, no commentary)
       ]
     }
   ],
-  "career_summary_first_person": "First-person narration of the career. ALWAYS non-empty as long as there is any role to describe. One paragraph PER ROLE (most recent first), separated by \\n\\n. 3-6 sentences per paragraph when the role has enough content; a single 2-3 sentence paragraph is fine for a junior/thin role. Each paragraph starts with the company: 'At American Express, I led...' or 'Before that at Sprinklr, I was responsible for...'. Describe projects, problem, approach, and outcome with numbers when present. Use 'I' throughout — never third person. No invention — every claim must be traceable to the source."
+  "career_summary_first_person": "First-person narration of the career. MUST use DOUBLE NEWLINES (\\n\\n) between paragraphs — one paragraph PER ROLE. Always non-empty if any role exists. Example format (literal \\n\\n between paragraphs):\\n\\n'At American Express, I led a 12-person team redesigning the returns flow. 18% conversion lift, 22% fewer support tickets.\\n\\nBefore that at Sprinklr, I was PM for enterprise AI moderation. Built the real-time policy engine that cut moderator overhead by 34%.\\n\\nEarlier at <role>, I <specifics>.'\\n\\nRules: 3-6 sentences per paragraph for rich roles, 2-3 for thin junior roles. Each paragraph starts with 'At {company}', 'Before that at {company}', 'Earlier at {company}', 'Previously at {company}', or 'Most recently at {company}'. Use 'I' throughout, never third person. No invention, every claim traceable to source."
 }
 
 Rules:
@@ -198,6 +198,7 @@ export async function POST(request: Request) {
     // experiences/certifications/narration. Fall back to LLM output if the
     // regex returned empty for a field (rare for contact, common for
     // non-standard resumes).
+    const rawNarration = (llmParsed.career_summary_first_person ?? "") as string;
     const parsed: Record<string, unknown> = {
       full_name: regex.full_name || (llmParsed as Record<string, unknown>).full_name || "",
       email: regex.email,
@@ -208,7 +209,7 @@ export async function POST(request: Request) {
       certifications: llmParsed.certifications ?? [],
       career_text: llmParsed.career_text ?? "",
       experiences: llmParsed.experiences ?? [],
-      career_summary_first_person: llmParsed.career_summary_first_person ?? "",
+      career_summary_first_person: normaliseNarrationParagraphs(rawNarration),
     };
 
     // ── Save structured work experiences to DB (fire-and-forget) ──────────
@@ -229,6 +230,29 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+}
+
+// The LLM is inconsistent about emitting \n\n between role paragraphs —
+// sometimes it returns everything as one long paragraph. Detect role-boundary
+// phrases and insert paragraph breaks if they aren't already there.
+function normaliseNarrationParagraphs(raw: string): string {
+  if (!raw || typeof raw !== "string") return "";
+  // If the model already returned 2+ paragraphs, trust it.
+  if (/\n{2,}/.test(raw)) return raw.trim();
+  // Otherwise look for role-transition phrases and inject \n\n before them.
+  const transitions = [
+    /\s+(Before that at [^,.]+,)/gi,
+    /\s+(Earlier at [^,.]+,)/gi,
+    /\s+(Previously at [^,.]+,)/gi,
+    /\s+(Most recently at [^,.]+,)/gi,
+    /\s+(Prior to that at [^,.]+,)/gi,
+    /\s+(Before joining [^,.]+,)/gi,
+  ];
+  let normalised = raw.trim();
+  for (const re of transitions) {
+    normalised = normalised.replace(re, "\n\n$1");
+  }
+  return normalised;
 }
 
 function extractJson(text: string): Record<string, unknown> | null {
