@@ -41,7 +41,7 @@ from ..langfuse_client import trace_generation, get_prompt
 from ..tools.nugget_extractor import extract_nuggets, Nugget
 from ..tools.nugget_embedder import embed_nuggets
 from ..tools.quality_judge import judge_quality
-from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
+from ..tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm, valid_atom_ids
 from ..key_manager import KeyManager
 from ..llm.oracle import OracleProvider
 from ..llm.gemini import GeminiProvider
@@ -305,6 +305,88 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     ctx.current_phase = phase
     ctx.phase_message = msg
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
+
+
+# ── Package B (honest bullets) — Phase 4A hallucination filter ───────────
+#
+# Drops generated paragraphs that meet ANY of these rejection criteria:
+#   1. Missing / empty evidence_atom_ids array.
+#   2. Any cited atom ID not present in the valid_atom_ids set (fabricated).
+#   3. Contains a banned filler phrase ("by leveraging skills in ...", etc).
+#   4. No concrete proof signal (number, %, $, unit, or proper noun capital).
+#
+# "Fewer > fake" — it is correct to drop paragraphs here; Phase 4b re-ranks
+# the survivors. If the entire company returns zero accepted paragraphs, that
+# company ends up with no bullets (intentional — honest gap vs AI fluff).
+
+_BANNED_PHRASES = (
+    "by leveraging skills in",
+    "resulting in improved product development",
+    "resulting in improved platform infrastructure",
+    "outcome-driven",
+    "demonstrated expertise in",
+    "showcased proficiency in",
+    "drove results",
+    "drove outcomes",
+)
+
+# A concrete proof signal is ANY of: a digit (metric), a currency symbol,
+# a percentage sign, or a typical unit token. Proper nouns are too noisy
+# to regex; we rely on the digits/units heuristic + banned-phrase check.
+import re as _re  # safe — orchestrator already imports `re` indirectly
+
+_PROOF_PATTERN = _re.compile(
+    r"\d|[₹$€£¥]|%|\b(hours?|hrs?|days?|weeks?|months?|years?|yrs?|quarters?|"
+    r"pp|bps|MAU|DAU|mrr|arr|ttv|ndr|retention|churn|NPS|CSAT|conversion)\b",
+    _re.IGNORECASE,
+)
+
+
+def _filter_hallucinated_paragraphs(
+    paragraphs: list[dict],
+    valid_atom_ids: set[str],
+) -> tuple[list[dict], list[dict]]:
+    """Return (accepted, rejected). Rejected items include a 'reason' field."""
+    accepted: list[dict] = []
+    rejected: list[dict] = []
+
+    for p in paragraphs:
+        text = (p.get("text_html") or "").strip()
+        cited = p.get("evidence_atom_ids") or []
+        # Normalise: sometimes the model outputs a single string, not a list.
+        if isinstance(cited, str):
+            cited = [cited]
+
+        reason: str | None = None
+
+        # Skip validation entirely if we have no valid set (legacy path).
+        if valid_atom_ids:
+            if not cited:
+                reason = "missing_evidence_atom_ids"
+            else:
+                bad = [c for c in cited if c not in valid_atom_ids]
+                if bad:
+                    reason = f"fabricated_atom_id({bad[0]})"
+
+        if reason is None:
+            lower = text.lower()
+            hit = next((bp for bp in _BANNED_PHRASES if bp in lower), None)
+            if hit:
+                reason = f"banned_phrase({hit})"
+
+        if reason is None and text and not _PROOF_PATTERN.search(text):
+            reason = "no_concrete_proof_signal"
+
+        if reason is None:
+            accepted.append(p)
+        else:
+            rejected.append({
+                "reason": reason,
+                "text_html": text[:140],
+                "evidence_atom_ids": cited,
+            })
+
+    return accepted, rejected
 
 
 def _fill_contact_from_text(contact: dict, career_text: str) -> dict:
@@ -1261,11 +1343,22 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
 
         await _progress(ctx, sb, 4, f"Writing paragraphs — {co_name}", 40 + idx * 5)
 
-        # Get per-company context: QMD chunks or career text fallback
-        if idx in ctx._company_chunks and ctx._company_chunks[idx]:
+        # Get per-company context: prefer fresh NuggetResult objects so we can
+        # emit `[atom:XXXXXXXX]` prefixes required by Package B evidence citation.
+        # Fall back to QMD chunks / career text when nuggets aren't available.
+        company_nugget_results = [
+            r for r in (getattr(ctx, "_nugget_results", None) or [])
+            if r.company == co_name
+        ]
+        if company_nugget_results:
+            company_context = format_nuggets_for_llm(company_nugget_results)[:5000]
+            company_valid_ids = valid_atom_ids(company_nugget_results)
+        elif idx in ctx._company_chunks and ctx._company_chunks[idx]:
             company_context = "\n\n---\n\n".join(ctx._company_chunks[idx])[:5000]
+            company_valid_ids = set()  # no atom citation available — skip validator
         else:
             company_context = _get_company_context(ctx, idx)
+            company_valid_ids = set()
 
         system_msg = phase_4a_template.format(
             bullet_count=num_bullets,
@@ -1303,7 +1396,20 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
         except json.JSONDecodeError as e:
             raise ValueError(f"Phase 4A ({co_name}): invalid JSON — {e}") from e
 
-        for p in data.get("paragraphs", []):
+        # Package B validator: drop hallucinated / templated paragraphs BEFORE
+        # they get into the resume. Skipped when company_valid_ids is empty
+        # (old QMD path — no atom IDs to validate against).
+        raw_paragraphs = data.get("paragraphs", [])
+        accepted, rejected = _filter_hallucinated_paragraphs(raw_paragraphs, company_valid_ids)
+        if rejected:
+            logger.info(
+                f"Job {ctx.job_id}: Phase 4A {co_name} — dropped {len(rejected)}/"
+                f"{len(raw_paragraphs)} paragraphs (reasons: "
+                f"{', '.join(sorted(set(r['reason'] for r in rejected)))})"
+            )
+            ctx.stats.setdefault("phase_4a_dropped", []).extend(rejected)
+
+        for p in accepted:
             p["company_index"] = idx
             all_verbose.append(p)
             if p.get("verb"):

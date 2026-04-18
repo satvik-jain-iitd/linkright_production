@@ -196,15 +196,40 @@ Example — Google's "Best" tier (Laszlo Bock, Google SVP People):
   (signal: placement + scope; NOT "won + built app + with teammates" crammed
    together — one clean bullet per signal.)
 
-# ANTI-HALLUCINATION
+# ANTI-HALLUCINATION — STRICT
 
 Only use facts present in the "Relevant Career Context" below. Do NOT invent:
   - Years of experience, dates, locations, or team sizes
   - Metrics, percentages, dollar amounts
   - Tools, frameworks, role titles, company names
 
-If the context lacks enough distinct signals, return FEWER paragraphs.
-Never pad with invented content.
+**FEWER > FAKE.** If the context has 6 distinct signals, return 6 paragraphs —
+NOT 10. A resume with 5 real bullets beats one with 10 bullets where half
+are generic filler.
+
+# EVIDENCE CITATION — MANDATORY
+
+Every nugget in the Career Context is prefixed with `[atom:XXXXXXXX]` — a
+short source ID. EVERY paragraph you emit MUST cite the atom ID(s) it
+draws from in a new required field `evidence_atom_ids` (array of strings).
+
+If you cannot cite any real atom for a paragraph, **do not emit that
+paragraph.** Don't guess an atom ID; the validator will drop any paragraph
+whose cited IDs don't match the provided atoms.
+
+# BANNED PHRASES — REFUSE TO EMIT
+
+These templated patterns ship as AI slop and break the brand promise
+("passes AI detectors"). Never produce a paragraph containing:
+
+  - "by leveraging skills in …"
+  - "resulting in improved <generic noun>"
+  - "outcome-driven"
+  - "cross-functional collaboration" as the main verb/noun of a bullet
+  - "drove results", "drove outcomes" without a specific metric
+  - "demonstrated expertise in" / "showcased proficiency in"
+  - Any paragraph lacking at least ONE concrete number, date, proper
+    noun (product/company/client), or unit (%, $, ₹, hrs, week, count).
 
 # JD keyword integration
 
@@ -227,7 +252,8 @@ Return ONLY valid JSON:
         "z_action": "What the candidate did for THIS signal"
       }},
       "covers_requirements": ["r1"],
-      "signal_type": "metric|deliverable|leadership|award|skill"
+      "signal_type": "metric|deliverable|leadership|award|skill",
+      "evidence_atom_ids": ["XXXXXXXX"]
     }}
   ]
 }}
@@ -247,6 +273,9 @@ RULES:
 12. verbose_context MUST be 100-200 words — complete story for THIS one signal
 13. covers_requirements: list JD requirement IDs this ONE signal addresses
 14. signal_type: classify the signal category (for downstream diversity-aware ranking)
+15. evidence_atom_ids: MANDATORY non-empty array of atom IDs from the Career
+    Context that support THIS paragraph's facts. Hallucinated or empty
+    arrays → paragraph is dropped by the validator.
 
 Strategy: {{strategy}}
 Strategy emphasis: {{strategy_description}}

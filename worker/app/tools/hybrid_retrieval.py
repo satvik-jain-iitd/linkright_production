@@ -452,6 +452,12 @@ def format_nuggets_for_llm(results: list[NuggetResult]) -> str:
     Groups nuggets by company and emits a compact, markdown-friendly block
     that is easy for an LLM to parse without being token-wasteful.
 
+    EACH nugget is prefixed with `[atom:<short_id>]` so the downstream
+    bullet-generation prompt can require the LLM to cite `evidence_atom_id`
+    per generated paragraph. This is how Package B enforces "no bullet
+    without a source memory atom" — the validator in orchestrator.py
+    rejects paragraphs whose citation doesn't match any emitted atom id.
+
     Args:
         results: Ordered list of NuggetResult objects (highest score first).
 
@@ -469,8 +475,25 @@ def format_nuggets_for_llm(results: list[NuggetResult]) -> str:
             lines.append(f"\n## Company: {r.company} | Role: {r.role}")
             current_company = r.company
         tags_str = ", ".join(r.tags[:3]) if r.tags else ""
-        lines.append(f"[{r.importance} · {r.section_type}] {r.answer}")
+        # Short atom ID: first 8 chars of the nugget UUID — unique enough in a
+        # per-resume retrieval context and cheap to cite back in JSON output.
+        short_id = (r.nugget_id or "").split("-")[0][:8] or "unknown"
+        lines.append(f"[atom:{short_id}] [{r.importance} · {r.section_type}] {r.answer}")
         if tags_str:
             lines.append(f"  Tags: {tags_str}")
 
     return "\n".join(lines)
+
+
+def valid_atom_ids(results: list[NuggetResult]) -> set[str]:
+    """Return the set of short atom IDs emitted by `format_nuggets_for_llm`.
+
+    Used by the post-gen validator in Phase 4A to reject paragraphs whose
+    `evidence_atom_id` doesn't reference a real nugget (hallucinated citation).
+    """
+    out: set[str] = set()
+    for r in results:
+        short_id = (r.nugget_id or "").split("-")[0][:8]
+        if short_id:
+            out.add(short_id)
+    return out
