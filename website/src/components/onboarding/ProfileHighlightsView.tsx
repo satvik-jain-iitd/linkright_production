@@ -13,6 +13,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HighlightFollowUpModal } from "./HighlightFollowUpModal";
+import {
+  HighlightEditorModal,
+  type EditableNugget,
+} from "./HighlightEditorModal";
 
 type Nugget = {
   id: string;
@@ -89,6 +93,9 @@ export function ProfileHighlightsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeNugget, setActiveNugget] = useState<Nugget | null>(null);
+  const [editor, setEditor] = useState<
+    { mode: "create"; existing: null } | { mode: "edit"; existing: EditableNugget } | null
+  >(null);
   const [profileReadyToast, setProfileReadyToast] = useState(false);
 
   const loadNuggets = useCallback(async () => {
@@ -189,26 +196,48 @@ export function ProfileHighlightsView() {
           </p>
         </div>
         <div className="text-right">
-          <button
-            type="button"
-            onClick={goToPreferences}
-            className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-          >
-            Continue to find jobs
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditor({ mode: "create", existing: null })}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent hover:text-accent"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
-              />
-            </svg>
-          </button>
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4.5v15m7.5-7.5h-15"
+                />
+              </svg>
+              Add highlight
+            </button>
+            <button
+              type="button"
+              onClick={goToPreferences}
+              className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+            >
+              Continue to find jobs
+              <svg
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                />
+              </svg>
+            </button>
+          </div>
           <p className="mt-2 text-xs text-muted">You can always come back to this.</p>
         </div>
       </div>
@@ -280,17 +309,32 @@ export function ProfileHighlightsView() {
           {nuggets.map((n, i) => {
             const accent = accentFor(n, i);
             return (
-              <button
+              <div
                 key={n.id}
-                type="button"
-                onClick={() => setActiveNugget(n)}
                 className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${CHIP_CLS[accent]}`}>
                     {sourceLabel(n)}
                   </span>
-                  <span className="text-muted transition group-hover:text-accent">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditor({
+                        mode: "edit",
+                        existing: {
+                          id: n.id,
+                          nugget_text: n.nugget_text,
+                          answer: n.answer,
+                          company: n.company,
+                          role: n.role,
+                        },
+                      });
+                    }}
+                    aria-label="Edit highlight"
+                    className="text-muted opacity-0 transition hover:text-accent group-hover:opacity-100"
+                  >
                     <svg
                       className="h-4 w-4"
                       fill="none"
@@ -298,22 +342,32 @@ export function ProfileHighlightsView() {
                       strokeWidth="1.5"
                       viewBox="0 0 24 24"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
+                      />
                     </svg>
-                  </span>
+                  </button>
                 </div>
-                <h4 className="mt-2.5 text-sm font-semibold leading-snug text-foreground">
-                  {shortTitle(n)}
-                </h4>
-                {shortDescription(n) && (
-                  <p className="mt-1.5 text-xs leading-snug text-muted">
-                    {shortDescription(n)}
-                  </p>
-                )}
-                <div className="mt-3 text-[11px] font-semibold text-accent opacity-0 transition group-hover:opacity-100">
-                  Add depth →
-                </div>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveNugget(n)}
+                  className="block w-full text-left"
+                >
+                  <h4 className="mt-2.5 text-sm font-semibold leading-snug text-foreground">
+                    {shortTitle(n)}
+                  </h4>
+                  {shortDescription(n) && (
+                    <p className="mt-1.5 text-xs leading-snug text-muted">
+                      {shortDescription(n)}
+                    </p>
+                  )}
+                  <div className="mt-3 text-[11px] font-semibold text-accent opacity-0 transition group-hover:opacity-100">
+                    Add depth →
+                  </div>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -337,13 +391,25 @@ export function ProfileHighlightsView() {
         </Link>
       </div>
 
-      {/* Modal */}
+      {/* Follow-up modal (click card) */}
       {activeNugget && (
         <HighlightFollowUpModal
           nugget={activeNugget}
           onClose={() => {
             setActiveNugget(null);
             loadNuggets();
+          }}
+        />
+      )}
+
+      {/* Edit / Create modal */}
+      {editor && (
+        <HighlightEditorModal
+          mode={editor.mode}
+          existing={editor.existing}
+          onClose={(saved) => {
+            setEditor(null);
+            if (saved) loadNuggets();
           }}
         />
       )}
