@@ -27,6 +27,16 @@ GEMINI_API_KEY = (
     or os.getenv("GEMINI_API_KEY_2", "")
     or os.getenv("GEMINI_API_KEY_3", "")
 )
+# All Gemini keys available for rotation — each free-tier key has its own RPM/RPD
+# quota, so round-robin lets us stack 3x capacity (or more) without paying.
+GEMINI_API_KEYS: list[str] = [
+    k for k in (
+        os.getenv("GEMINI_API_KEY", ""),
+        os.getenv("GEMINI_API_KEY_1", ""),
+        os.getenv("GEMINI_API_KEY_2", ""),
+        os.getenv("GEMINI_API_KEY_3", ""),
+    ) if k
+]
 GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash")
 
 # Oracle ARM — local LLM endpoint for Phase 5 width rewriting

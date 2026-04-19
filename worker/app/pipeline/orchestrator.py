@@ -147,6 +147,15 @@ def _get_oracle_llm() -> OracleProvider | None:
 # Gemini Flash — used for heavy reasoning phases (Phase 1+2, Phase 4a)
 # Falls back to default user LLM (Groq) if not configured
 def _get_gemini_llm() -> GeminiProvider | None:
+    # Prefer the multi-key list so we round-robin across _1/_2/_3 and stack
+    # free-tier quota. Fall back to the single-key path if only the legacy
+    # GEMINI_API_KEY is set.
+    keys = getattr(worker_config, "GEMINI_API_KEYS", [])
+    if keys:
+        return GeminiProvider(
+            api_keys=keys,
+            model_id=worker_config.GEMINI_MODEL_ID,
+        )
     if worker_config.GEMINI_API_KEY:
         return GeminiProvider(
             api_key=worker_config.GEMINI_API_KEY,

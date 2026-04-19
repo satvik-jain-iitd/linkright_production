@@ -206,7 +206,7 @@ async def health():
         "service": "linkright-sync-worker",
         "active_jobs": 3 - _pipeline_semaphore._value,
         "max_concurrent": 3,
-        "build": "phase1-fallback-fix-0b21d95",
+        "build": "gemini-rotation-v1",
     }
 
 
@@ -246,14 +246,19 @@ async def debug_llm_ping(authorization: str | None = Header(None)):
         except Exception as e:
             return {"ok": False, "ms": int((time.time() - t) * 1000), "err": f"{type(e).__name__}: {e}"[:200]}
 
-    # Gemini Flash — use the fallback chain resolver, not raw env
-    gemini_key = worker_config.GEMINI_API_KEY
-    if gemini_key:
+    # Gemini Flash — probe each key individually so we know which are healthy
+    gemini_keys = getattr(worker_config, "GEMINI_API_KEYS", [])
+    if not gemini_keys and worker_config.GEMINI_API_KEY:
+        gemini_keys = [worker_config.GEMINI_API_KEY]
+    if gemini_keys:
         from .llm.gemini import GeminiProvider
-        g = GeminiProvider(api_key=gemini_key, model_id=worker_config.GEMINI_MODEL_ID)
-        out["gemini"] = await _probe("gemini", g.complete("You are a ping server.", "Reply with: pong", temperature=0))
+        out["gemini_per_key"] = []
+        for i, k in enumerate(gemini_keys, 1):
+            single = GeminiProvider(api_key=k, model_id=worker_config.GEMINI_MODEL_ID)
+            res = await _probe(f"gemini#{i}", single.complete("You are a ping server.", "Reply with: pong", temperature=0))
+            out["gemini_per_key"].append({"idx": i, **res})
     else:
-        out["gemini"] = {"ok": False, "err": "no GEMINI_API_KEY[_1/_2/_3] resolved"}
+        out["gemini_per_key"] = [{"ok": False, "err": "no GEMINI_API_KEY[_1/_2/_3] resolved"}]
 
     # Groq 8b
     groq_key = os.getenv("PLATFORM_GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
