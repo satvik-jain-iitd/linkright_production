@@ -155,7 +155,10 @@ async def process_job(req: JobRequest):
         try:
             # Pipeline-level timeout: 300s is 3.3× our observed p95 (~90s) —
             # generous enough for cold LLM starts yet bounds user wait time.
-            await asyncio.wait_for(run_pipeline(ctx, sb), timeout=300)
+            # 8 min — lets retry backoff handle a full 60s rate-limit window
+            # multiple times without the outer kill-switch firing. Users still
+            # get a deterministic upper bound.
+            await asyncio.wait_for(run_pipeline(ctx, sb), timeout=480)
         finally:
             hb_task.cancel()
             try:
@@ -206,7 +209,7 @@ async def health():
         "service": "linkright-sync-worker",
         "active_jobs": 3 - _pipeline_semaphore._value,
         "max_concurrent": 3,
-        "build": "gemini-rotation-v1",
+        "build": "rate-limit-patience-v1",
     }
 
 

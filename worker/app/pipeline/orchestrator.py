@@ -557,17 +557,19 @@ async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: in
             return resp
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429 and attempt < MAX_LLM_RETRIES:
-                # Rate limited — exponential backoff with jitter
+                # Rate limited — back off long enough to clear a 60s RPM window.
+                # Free-tier Gemini/Groq resets every minute; shorter waits just
+                # burn retries without letting the window roll over.
                 retry_after = e.response.headers.get("retry-after")
                 if retry_after:
                     try:
-                        wait = min(float(retry_after), 60)
+                        wait = min(float(retry_after), 75)
                     except ValueError:
-                        wait = min(2 ** (attempt + 1), 30)
+                        wait = [15, 30, 60, 60, 60][min(attempt, 4)]
                 else:
-                    # 2s, 4s, 8s, 16s, 30s base — with ±25% jitter
-                    base = min(2 ** (attempt + 1), 30)
-                    jitter = base * 0.25 * (2 * random.random() - 1)
+                    # 15s, 30s, 60s, 60s, 60s — one full minute window per retry
+                    base = [15, 30, 60, 60, 60][min(attempt, 4)]
+                    jitter = base * 0.1 * (2 * random.random() - 1)
                     wait = base + jitter
                 logger.warning(
                     f"Job {ctx.job_id} phase {phase}: rate limited (429), "
@@ -1430,6 +1432,13 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
         # Update draft_html with verbose paragraphs for this company
         _update_draft_with_verbose(ctx, all_verbose, companies)
         update_job(sb, ctx.job_id, draft_html=ctx.draft_html)
+
+        # Spread successive heavy calls across the 60s RPM window so free-tier
+        # Gemini (15 RPM per key × 3 keys = 45 RPM total) + Groq 70B (30 RPM)
+        # don't starve. 4 companies × 4s = 16s of added wall time, well worth
+        # the reliability it buys on free tier.
+        if idx < len(company_keys) - 1:
+            await asyncio.sleep(4)
 
         # Review gate: pause between companies for natural pacing
         if idx < len(company_keys) - 1 and REVIEW_PAUSE_SECONDS > 0:
