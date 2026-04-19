@@ -218,9 +218,18 @@ async def debug_llm_ping(authorization: str | None = Header(None)):
     + outcome. Auth-gated so we don't leak timings to the world.
     """
     verify_secret(authorization)
+    # Import worker_config so we see what the pipeline actually resolves to
+    # (it has a fallback chain that the raw os.getenv checks miss).
+    from . import config as worker_config
     out: dict[str, dict] = {
         "env": {
             "GEMINI_API_KEY_set": bool(os.getenv("GEMINI_API_KEY")),
+            "GEMINI_API_KEY_1_set": bool(os.getenv("GEMINI_API_KEY_1")),
+            "GEMINI_API_KEY_2_set": bool(os.getenv("GEMINI_API_KEY_2")),
+            "GEMINI_API_KEY_3_set": bool(os.getenv("GEMINI_API_KEY_3")),
+            "GEMINI_resolved_via_chain": bool(worker_config.GEMINI_API_KEY),
+            "GEMINI_resolved_len": len(worker_config.GEMINI_API_KEY or ""),
+            "GEMINI_MODEL_ID": worker_config.GEMINI_MODEL_ID,
             "GROQ_API_KEY_set": bool(os.getenv("GROQ_API_KEY")),
             "PLATFORM_GROQ_API_KEY_set": bool(os.getenv("PLATFORM_GROQ_API_KEY")),
             "ORACLE_BACKEND_URL_set": bool(os.getenv("ORACLE_BACKEND_URL")),
@@ -237,12 +246,14 @@ async def debug_llm_ping(authorization: str | None = Header(None)):
         except Exception as e:
             return {"ok": False, "ms": int((time.time() - t) * 1000), "err": f"{type(e).__name__}: {e}"[:200]}
 
-    # Gemini Flash
-    gemini_key = os.getenv("GEMINI_API_KEY")
+    # Gemini Flash — use the fallback chain resolver, not raw env
+    gemini_key = worker_config.GEMINI_API_KEY
     if gemini_key:
         from .llm.gemini import GeminiProvider
-        g = GeminiProvider(api_key=gemini_key, model_id=os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash-exp"))
+        g = GeminiProvider(api_key=gemini_key, model_id=worker_config.GEMINI_MODEL_ID)
         out["gemini"] = await _probe("gemini", g.complete("You are a ping server.", "Reply with: pong", temperature=0))
+    else:
+        out["gemini"] = {"ok": False, "err": "no GEMINI_API_KEY[_1/_2/_3] resolved"}
 
     # Groq 8b
     groq_key = os.getenv("PLATFORM_GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
