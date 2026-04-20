@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { track } from "@/lib/analytics";
 import { HighlightFollowUpModal } from "./HighlightFollowUpModal";
 import {
   HighlightEditorModal,
@@ -26,8 +27,38 @@ type Nugget = {
   role?: string | null;
   section_type?: string | null;
   importance?: string | null;
+  event_date?: string | null;
+  created_at?: string | null;
   is_embedded?: boolean;
 };
+
+type NuggetGroup = {
+  key: string;
+  company: string;
+  role: string;
+  items: Nugget[];
+  latestDate: string;
+};
+
+function groupAndSortNuggets(nuggets: Nugget[]): NuggetGroup[] {
+  const groups = new Map<string, NuggetGroup>();
+  for (const n of nuggets) {
+    const key = `${n.company ?? ""}::${n.role ?? ""}`;
+    if (!groups.has(key)) {
+      groups.set(key, { key, company: n.company ?? "", role: n.role ?? "", items: [], latestDate: "" });
+    }
+    groups.get(key)!.items.push(n);
+  }
+  for (const g of groups.values()) {
+    g.items.sort((a, b) => {
+      const da = a.event_date || a.created_at || "";
+      const db = b.event_date || b.created_at || "";
+      return db.localeCompare(da);
+    });
+    g.latestDate = g.items[0]?.event_date || g.items[0]?.created_at || "";
+  }
+  return [...groups.values()].sort((a, b) => b.latestDate.localeCompare(a.latestDate));
+}
 
 type NuggetStatus = {
   total_extracted: number;
@@ -106,13 +137,22 @@ export function ProfileHighlightsView() {
     loadNuggets();
   }, [loadNuggets]);
 
-  // Poll embedding status until fully embedded (max ~3 min).
+  // One-time status fetch on mount so polling starts even if loadNuggets is slow.
   useEffect(() => {
-    if (!status) return;
-    if (status.ready) {
+    fetch("/api/nuggets/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setStatus)
+      .catch(() => {});
+  }, []);
+
+  // Poll embedding status until fully embedded (max ~3 min).
+  // Dep is status?.ready (not status) so the interval isn't recreated on every poll.
+  useEffect(() => {
+    if (status?.ready) {
       setProfileReadyToast(true);
       return;
     }
+    if (!status) return;
     const id = setInterval(async () => {
       const res = await fetch("/api/nuggets/status", { cache: "no-store" });
       if (res.ok) {
@@ -120,6 +160,7 @@ export function ProfileHighlightsView() {
         setStatus(json);
         if (json.ready) {
           setProfileReadyToast(true);
+          track({ event: "profile_fully_processed", properties: {} });
           clearInterval(id);
         }
       }
@@ -129,7 +170,8 @@ export function ProfileHighlightsView() {
       clearInterval(id);
       clearTimeout(stop);
     };
-  }, [status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.ready]);
 
   const total = status?.total_extracted ?? nuggets.length;
   const embedded = status?.total_embedded ?? nuggets.filter((n) => n.is_embedded).length;
@@ -171,7 +213,7 @@ export function ProfileHighlightsView() {
       {/* Headline + primary CTA */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-xl">
-          <p className="text-xs font-medium uppercase tracking-[0.12em] text-purple-700">
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-tertiary-700">
             Your profile
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
@@ -186,7 +228,7 @@ export function ProfileHighlightsView() {
             <button
               type="button"
               onClick={() => setEditor({ mode: "create", existing: null })}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent hover:text-accent"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-tertiary-500 hover:text-tertiary-700"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -236,7 +278,7 @@ export function ProfileHighlightsView() {
           borderColor: "rgba(139, 92, 246, 0.2)",
         }}
       >
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-purple-700">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-tertiary-700">
           <svg
             className="h-4 w-4"
             fill="none"
@@ -252,9 +294,9 @@ export function ProfileHighlightsView() {
           </svg>
           Getting your profile ready
         </span>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-purple-500/15">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-tertiary-500/15">
           <div
-            className="h-full rounded-full bg-purple-500 transition-all"
+            className="h-full rounded-full bg-tertiary-500 transition-all"
             style={{ width: `${processedPct}%` }}
           />
         </div>
@@ -291,70 +333,79 @@ export function ProfileHighlightsView() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {nuggets.map((n) => {
-            return (
-              <div
-                key={n.id}
-                className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}>
-                    {sourceLabel(n)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditor({
-                        mode: "edit",
-                        existing: {
-                          id: n.id,
-                          nugget_text: n.nugget_text,
-                          answer: n.answer,
-                          company: n.company,
-                          role: n.role,
-                        },
-                      });
-                    }}
-                    aria-label="Edit highlight"
-                    className="text-muted opacity-0 transition hover:text-accent group-hover:opacity-100"
+        <div className="space-y-6">
+          {groupAndSortNuggets(nuggets).map((group) => (
+            <div key={group.key}>
+              {(group.company || group.role) && (
+                <p className="mb-2.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
+                  {[group.company, group.role].filter(Boolean).join(" · ")}
+                </p>
+              )}
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                {group.items.map((n) => (
+                  <div
+                    key={n.id}
+                    className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
                   >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      viewBox="0 0 24 24"
+                    <div className="flex items-start justify-between gap-2">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}>
+                        {sourceLabel(n)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditor({
+                            mode: "edit",
+                            existing: {
+                              id: n.id,
+                              nugget_text: n.nugget_text,
+                              answer: n.answer,
+                              company: n.company,
+                              role: n.role,
+                            },
+                          });
+                        }}
+                        aria-label="Edit highlight"
+                        className="text-muted opacity-0 transition hover:text-accent group-hover:opacity-100"
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveNugget(n)}
+                      className="block w-full text-left"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
-                      />
-                    </svg>
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveNugget(n)}
-                  className="block w-full text-left"
-                >
-                  <h4 className="mt-2.5 text-sm font-semibold leading-snug text-foreground">
-                    {shortTitle(n)}
-                  </h4>
-                  {shortDescription(n) && (
-                    <p className="mt-1.5 text-xs leading-snug text-muted">
-                      {shortDescription(n)}
-                    </p>
-                  )}
-                  <div className="mt-3 text-[11px] font-semibold text-accent opacity-0 transition group-hover:opacity-100">
-                    Add depth →
+                      <h4 className="mt-2.5 text-sm font-semibold leading-snug text-foreground">
+                        {shortTitle(n)}
+                      </h4>
+                      {shortDescription(n) && (
+                        <p className="mt-1.5 text-xs leading-snug text-muted">
+                          {shortDescription(n)}
+                        </p>
+                      )}
+                      <div className="mt-3 text-[11px] font-semibold text-tertiary-700 opacity-0 transition group-hover:opacity-100">
+                        Add depth →
+                      </div>
+                    </button>
                   </div>
-                </button>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
 
@@ -370,7 +421,7 @@ export function ProfileHighlightsView() {
         </div>
         <Link
           href="/dashboard/profile#bulk-upload"
-          className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+          className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
         >
           Upload a file →
         </Link>
@@ -403,7 +454,7 @@ export function ProfileHighlightsView() {
       {profileReadyToast && (
         <div className="fixed bottom-6 left-6 z-40 flex max-w-sm items-center gap-3 rounded-xl border bg-white p-3.5 shadow-lg"
              style={{ borderColor: "rgba(139, 92, 246, 0.3)" }}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-tertiary-500/10 text-tertiary-700">
             <svg
               className="h-4 w-4"
               fill="none"

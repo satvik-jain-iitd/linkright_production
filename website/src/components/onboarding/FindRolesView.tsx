@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { track } from "@/lib/analytics";
 
 type JobDiscovery = {
   id: string;
@@ -76,6 +77,12 @@ export function FindRolesView({ embedded }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [nuggetStatus, setNuggetStatus] = useState<NuggetStatus | null>(null);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customCompany, setCustomCompany] = useState("");
+  const [customRole, setCustomRole] = useState("");
+  const [customJD, setCustomJD] = useState("");
+  const [customSaving, setCustomSaving] = useState(false);
+  const [customError, setCustomError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,8 +98,15 @@ export function FindRolesView({ embedded }: Props) {
       }
       const recJson: RecsResponse = await recRes.json();
       setRecs(recJson);
-      if (nugRes.ok) setNuggetStatus(await nugRes.json());
+      const nugJson = nugRes.ok ? await nugRes.json() : null;
+      if (nugJson) setNuggetStatus(nugJson);
       setError("");
+      // Track empty state for funnel analysis
+      const hasRows = (recJson.top20 ?? []).filter((r: { job_discoveries: unknown }) => r.job_discoveries).length > 0;
+      if (!hasRows) {
+        const reason = nugJson && !nugJson.ready ? "profile_incomplete" : "no_matches";
+        track({ event: "job_search_empty", properties: { reason } });
+      }
     } catch {
       setError("Network error — try again.");
     } finally {
@@ -105,7 +119,33 @@ export function FindRolesView({ embedded }: Props) {
   }, [load]);
 
   const startApplication = (jobId: string) => {
+    track({ event: "resume_builder_started", properties: { job_id: jobId } });
     router.push(`/resume/new?job_id=${encodeURIComponent(jobId)}`);
+  };
+
+  const submitCustomJob = async () => {
+    if (!customCompany.trim()) { setCustomError("Company is required."); return; }
+    if (!customRole.trim()) { setCustomError("Role is required."); return; }
+    if (!customJD.trim() || customJD.trim().length < 20) { setCustomError("Paste the job description — at least a few lines."); return; }
+    setCustomError("");
+    setCustomSaving(true);
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company: customCompany.trim(), role: customRole.trim(), jd_text: customJD.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCustomError(data.error ?? "Couldn't save. Try again.");
+        return;
+      }
+      router.push(`/resume/new?application_id=${encodeURIComponent(data.id)}`);
+    } catch {
+      setCustomError("Network error — try again.");
+    } finally {
+      setCustomSaving(false);
+    }
   };
 
   const rows = (recs?.top20 ?? []).filter((r) => r.job_discoveries);
@@ -160,9 +200,9 @@ export function FindRolesView({ embedded }: Props) {
 
       {/* Pending-embedding banner */}
       {nuggetStatus && !nuggetStatus.ready && nuggetStatus.total_extracted > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-500/30 bg-purple-500/5 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-tertiary-500/30 bg-tertiary-500/5 p-4">
           <div>
-            <p className="text-sm font-semibold text-purple-700">
+            <p className="text-sm font-semibold text-tertiary-700">
               We&apos;re still finishing your profile.
             </p>
             <p className="mt-0.5 text-xs text-muted">
@@ -173,7 +213,7 @@ export function FindRolesView({ embedded }: Props) {
           <div className="flex gap-2">
             <Link
               href="/onboarding/profile"
-              className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+              className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
             >
               Add a few more details →
             </Link>
@@ -205,21 +245,77 @@ export function FindRolesView({ embedded }: Props) {
       )}
 
       {/* Empty */}
-      {!loading && !error && rows.length === 0 && (
+      {!loading && !error && rows.length === 0 && !customOpen && (
         <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
-          <p className="text-sm font-semibold text-foreground">
-            Nothing matched right now.
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            Your preferences may be narrow, or we haven&apos;t finished scouting yet. Try
-            tuning filters or check back in a bit.
-          </p>
-          <Link
-            href="/onboarding/preferences"
-            className="mt-4 inline-block rounded-full bg-cta px-4 py-2 text-xs font-semibold text-white"
-          >
-            Tune preferences
-          </Link>
+          {nuggetStatus && !nuggetStatus.ready ? (
+            <>
+              <p className="text-sm font-semibold text-foreground">
+                We&apos;re still building your profile ({nuggetStatus.total_embedded} of {nuggetStatus.total_extracted}).
+              </p>
+              <p className="mt-1 text-xs text-muted">Come back in a few minutes — matches will appear once your highlights are ready.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-foreground">Nothing matched right now.</p>
+              <p className="mt-1 text-xs text-muted">Your preferences may be narrow, or we haven&apos;t finished scouting yet.</p>
+            </>
+          )}
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <Link
+              href="/onboarding/preferences"
+              className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+            >
+              Tune preferences
+            </Link>
+            <button
+              type="button"
+              onClick={() => setCustomOpen(true)}
+              className="rounded-full bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+            >
+              Add a custom job →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Custom job form */}
+      {!loading && !error && rows.length === 0 && customOpen && (
+        <div className="rounded-2xl border border-border bg-white p-6">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent">Custom application</p>
+              <h3 className="mt-1 text-base font-bold tracking-tight">Add your own job</h3>
+              <p className="mt-0.5 text-xs text-muted">Paste the JD — we&apos;ll build you a tailored resume.</p>
+            </div>
+            <button type="button" onClick={() => setCustomOpen(false)} className="text-muted hover:text-foreground">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-foreground">Company <span className="text-cta">*</span></label>
+                <input value={customCompany} onChange={(e) => setCustomCompany(e.target.value)} placeholder="Google" className="mt-1 w-full rounded-[10px] border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-foreground">Role <span className="text-cta">*</span></label>
+                <input value={customRole} onChange={(e) => setCustomRole(e.target.value)} placeholder="Product Manager" className="mt-1 w-full rounded-[10px] border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-foreground">Job description <span className="text-cta">*</span></label>
+              <textarea value={customJD} onChange={(e) => setCustomJD(e.target.value)} rows={8} placeholder="Paste the full job description here…" className="mt-1 w-full resize-y rounded-[10px] border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none" />
+            </div>
+          </div>
+          {customError && <p className="mt-2 rounded-[10px] bg-red-50 p-2 text-xs text-red-700">{customError}</p>}
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => { setCustomOpen(false); setCustomError(""); }} className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground hover:border-accent transition">Cancel</button>
+            <button type="button" onClick={submitCustomJob} disabled={customSaving} className="inline-flex items-center gap-1.5 rounded-full bg-cta px-5 py-1.5 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50">
+              {customSaving ? "Saving…" : "Build my resume →"}
+            </button>
+          </div>
         </div>
       )}
 

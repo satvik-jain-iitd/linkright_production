@@ -63,7 +63,23 @@ type SyncEvent =
         has_feedback: boolean;
         is_authenticated: boolean;
       };
-    };
+    }
+  // Onboarding / Growth funnel
+  | { event: "onboarding_started"; properties: Record<string, never> }
+  | { event: "resume_upload_attempted"; properties: { method: "file" | "paste" } }
+  | { event: "resume_parse_completed"; properties: { experience_count: number; parse_ms: number } }
+  | { event: "narration_stream_started"; properties: Record<string, never> }
+  | { event: "narration_stream_completed"; properties: { chunk_count: number } }
+  | { event: "initiative_approved"; properties: { company: string } }
+  | { event: "career_profile_saved"; properties: Record<string, never> }
+  | { event: "highlight_depth_added"; properties: { nugget_id: string } }
+  | { event: "highlight_added_manual"; properties: Record<string, never> }
+  | { event: "profile_fully_processed"; properties: Record<string, never> }
+  | { event: "job_search_attempted"; properties: { nuggets_ready: number; nuggets_total: number } }
+  | { event: "job_match_viewed"; properties: { job_id: string } }
+  | { event: "resume_builder_started"; properties: { job_id: string } }
+  | { event: "nugget_extraction_incomplete"; properties: { extracted: number; total: number } }
+  | { event: "job_search_empty"; properties: { reason: "no_matches" | "profile_incomplete" } };
 
 export function track(eventData: SyncEvent) {
   if (typeof window !== "undefined" && posthog.__loaded) {

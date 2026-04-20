@@ -55,6 +55,9 @@ async def _startup():
 # Concurrency limiter — max 3 simultaneous pipelines
 _pipeline_semaphore = asyncio.Semaphore(3)
 
+# In-flight guard: prevents duplicate nugget refresh runs for the same user
+_active_refresh: set[str] = set()
+
 
 # ── Request / Response Models ────────────────────────────────────────────
 
@@ -340,6 +343,13 @@ async def _run_nugget_refresh(user_id: str) -> None:
         logger.exception("nugget_refresh: failed for user=%s — %s", user_id, exc)
 
 
+async def _run_and_release_refresh(user_id: str) -> None:
+    try:
+        await _run_nugget_refresh(user_id)
+    finally:
+        _active_refresh.discard(user_id)
+
+
 @app.post("/nuggets/refresh", status_code=202)
 async def refresh_nuggets(
     req: NuggetRefreshRequest,
@@ -347,7 +357,10 @@ async def refresh_nuggets(
     authorization: str | None = Header(None),
 ):
     verify_secret(authorization)
-    background_tasks.add_task(_run_nugget_refresh, req.user_id)
+    if req.user_id in _active_refresh:
+        return {"status": "already_running", "user_id": req.user_id}
+    _active_refresh.add(req.user_id)
+    background_tasks.add_task(_run_and_release_refresh, req.user_id)
     return {"status": "processing", "user_id": req.user_id}
 
 

@@ -14,7 +14,8 @@
 //   │ [explainer]                                    [Save and continue →]    │
 //   └──────────────────────────────────────────────────────────────────────────┘
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { track } from "@/lib/analytics";
 
 export interface ParsedProject {
   title: string;
@@ -91,6 +92,7 @@ export function CareerOutlineView({
   const narration = data.career_summary_first_person ?? "";
   const [editBuffer, setEditBuffer] = useState<string | null>(null);
   const editing = editBuffer !== null;
+  const [approvedSet, setApprovedSet] = useState<Set<number>>(new Set());
 
   const paragraphs = useMemo(
     () =>
@@ -100,6 +102,14 @@ export function CareerOutlineView({
         .filter(Boolean),
     [narration],
   );
+
+  const initiativeCards = useMemo(() => parseInitiativeCards(narration), [narration]);
+
+  const approveCard = useCallback((i: number) => {
+    setApprovedSet((prev) => new Set([...prev, i]));
+    const company = data.experiences[0]?.company ?? "";
+    track({ event: "initiative_approved", properties: { company } });
+  }, [data.experiences]);
 
   function patchExperience(idx: number, patch: Partial<ParsedExperience>) {
     const next = data.experiences.map((e, i) => (i === idx ? { ...e, ...patch } : e));
@@ -196,7 +206,7 @@ export function CareerOutlineView({
             <button
               type="button"
               onClick={onSwap}
-              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
             >
               Swap resume
             </button>
@@ -368,8 +378,15 @@ export function CareerOutlineView({
                 Rewrite anything that doesn&apos;t sound like you.
               </p>
             </div>
-            {/* "AI draft" chip removed per v2 copy audit. Purple accent on
-                the narration block carries the meaning on its own. */}
+            {!editing && !streamingNarration && paragraphs.length > 0 && (
+              <button
+                type="button"
+                onClick={startEditing}
+                className="text-xs font-semibold text-accent hover:text-accent-hover transition"
+              >
+                Edit narration →
+              </button>
+            )}
           </div>
 
           {editing ? (
@@ -385,7 +402,7 @@ export function CareerOutlineView({
                 <button
                   type="button"
                   onClick={cancelEditing}
-                  className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent"
+                  className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent"
                 >
                   Cancel
                 </button>
@@ -398,39 +415,60 @@ export function CareerOutlineView({
                 </button>
               </div>
             </div>
-          ) : paragraphs.length > 0 ? (
-            <div className="space-y-3 text-sm leading-relaxed text-foreground">
-              {paragraphs.map((p, i) => (
-                <p
-                  key={i}
-                  className="border-l-2 border-purple-500/30 pl-3"
-                  dangerouslySetInnerHTML={{
-                    __html: boldFirstClause(escapeHtml(p)),
-                  }}
-                />
-              ))}
+          ) : initiativeCards.length > 0 ? (
+            <div className="space-y-3">
+              {initiativeCards.map((card, i) => {
+                const approved = approvedSet.has(i);
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-[20px] border p-4 shadow-sm transition ${
+                      approved
+                        ? "border-primary-200 bg-primary-50/40"
+                        : "border-border bg-surface"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-foreground leading-snug">
+                        {card.heading}
+                      </h4>
+                      {approved ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                          ✓ Approved
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => approveCard(i)}
+                          className="shrink-0 rounded-full border border-accent px-3 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
+                        >
+                          Approve
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
+                      {card.body
+                        .split(/\n+/)
+                        .filter(Boolean)
+                        .map((line, j) => (
+                          <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
+                        ))}
+                    </div>
+                  </div>
+                );
+              })}
               {streamingNarration && (
-                <span className="inline-block h-4 w-0.5 animate-pulse bg-accent align-middle" />
+                <div className="h-20 animate-pulse rounded-[20px] border border-border bg-white" />
               )}
-              <div>
-                <button
-                  type="button"
-                  onClick={streamingNarration ? undefined : startEditing}
-                  disabled={streamingNarration}
-                  className={`mt-2 text-xs font-semibold ${
-                    streamingNarration
-                      ? "cursor-not-allowed text-muted"
-                      : "text-accent hover:text-accent-hover"
-                  }`}
-                >
-                  {streamingNarration ? "Generating your story…" : "Edit narration →"}
-                </button>
-              </div>
             </div>
           ) : streamingNarration ? (
-            <div className="flex items-center gap-2 text-sm text-muted">
-              <span className="inline-block h-4 w-0.5 animate-pulse bg-accent" />
-              <span>Writing your story…</span>
+            <div className="space-y-3">
+              {[1, 2, 3].map((k) => (
+                <div
+                  key={k}
+                  className="h-20 animate-pulse rounded-[20px] border border-border bg-white"
+                />
+              ))}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border bg-white/60 p-4 text-center text-xs text-muted">
@@ -480,6 +518,36 @@ export function CareerOutlineView({
       )}
     </div>
   );
+}
+
+function parseInitiativeCards(narration: string): { heading: string; body: string }[] {
+  if (!narration?.trim()) return [];
+  const hasInitiatives = /^### /m.test(narration);
+  if (hasInitiatives) {
+    const cards: { heading: string; body: string }[] = [];
+    const roleSections = narration.split(/(?=^## )/m).filter((s) => s.trim());
+    for (const roleSection of roleSections) {
+      const parts = roleSection.split(/(?=^### )/m);
+      for (const part of parts) {
+        const trimmed = part.trimStart();
+        if (!trimmed.startsWith("### ")) continue;
+        const lines = trimmed.split("\n");
+        const heading = lines[0].replace(/^### /, "").trim();
+        const body = lines.slice(1).join("\n").trim();
+        if (heading && body) cards.push({ heading, body });
+      }
+    }
+    if (cards.length > 0) return cards;
+  }
+  // Fallback: no ### found — split by ## role sections
+  const roleSections = narration.split(/(?=^## )/m).filter((s) => s.trim());
+  const cards = roleSections.map((section) => {
+    const lines = section.split("\n");
+    const heading = lines[0].replace(/^## /, "").trim() || "Your story";
+    const body = lines.slice(1).join("\n").trim();
+    return { heading, body };
+  }).filter((c) => c.body);
+  return cards.length > 0 ? cards : [];
 }
 
 function escapeHtml(s: string): string {

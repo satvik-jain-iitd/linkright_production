@@ -44,7 +44,7 @@ export default async function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-2xl px-6 pt-16 pb-32">
+      <div className="mx-auto w-full max-w-[1200px] px-6 pt-16 pb-32">
         <OnboardingFlow />
       </div>
     </div>

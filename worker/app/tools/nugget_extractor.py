@@ -452,8 +452,8 @@ async def extract_nuggets(
             if raw_text is None:
                 consecutive_429s += 1
                 logger.warning("extract_nuggets: batch %d failed (%d consecutive)", batch_num, consecutive_429s)
-                # Stop early if 2+ consecutive failures — daily quota likely exhausted
-                if consecutive_429s >= 2:
+                # Stop early if 4+ consecutive failures — daily quota likely exhausted
+                if consecutive_429s >= 4:
                     logger.warning("extract_nuggets: stopping early — daily rate limit suspected (batch %d/%d)", batch_num, len(batches))
                     break
                 continue

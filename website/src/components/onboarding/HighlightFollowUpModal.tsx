@@ -190,12 +190,12 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
                   <span className="absolute left-[7px] top-4 bottom-[-16px] w-px bg-border" />
                 )}
                 <span
-                  className={`absolute left-0 top-2 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white ${q.saved ? "bg-accent" : "border border-border bg-white"}`}
+                  className={`absolute left-0 top-2 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white ${q.saved ? "bg-tertiary-600" : "border border-border bg-white"}`}
                 >
                   {q.saved ? "✓" : ""}
                 </span>
                 <div
-                  className={`rounded-xl border p-4 ${q.saved ? "border-border bg-white" : "border-accent bg-white shadow-[0_0_0_3px_rgba(15,190,175,0.08)]"}`}
+                  className={`rounded-xl border p-4 ${q.saved ? "border-border bg-white" : "border-tertiary-400 bg-white shadow-[0_0_0_3px_rgba(139,92,246,0.08)]"}`}
                 >
                   <div className="text-sm font-semibold leading-snug">{q.question}</div>
                   {q.saved ? (
@@ -215,7 +215,7 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
                         }
                         rows={2}
                         placeholder="A few sentences is plenty…"
-                        className="w-full resize-none rounded-lg border border-border bg-white p-2.5 text-xs text-foreground focus:border-accent focus:outline-none"
+                        className="w-full resize-none rounded-[10px] border border-border bg-white p-2.5 text-xs text-foreground focus:border-tertiary-500 focus:outline-none"
                       />
                       <div className="mt-2 flex justify-end gap-2">
                         <button
@@ -227,7 +227,7 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
                               ),
                             )
                           }
-                          className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-muted transition hover:border-accent hover:text-accent"
+                          className="rounded-lg border border-border px-3 py-1 text-[11px] font-semibold text-muted transition hover:border-tertiary-500 hover:text-tertiary-700"
                         >
                           Skip
                         </button>
@@ -235,7 +235,7 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
                           type="button"
                           onClick={() => save(idx)}
                           disabled={q.saving || !q.answer.trim()}
-                          className="rounded-full bg-accent px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-50"
+                          className="rounded-full bg-tertiary-600 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-tertiary-700 disabled:opacity-50"
                         >
                           {q.saving ? "Saving…" : "Save"}
                         </button>
@@ -255,7 +255,7 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent"
+            className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-tertiary-500"
           >
             Done
           </button>

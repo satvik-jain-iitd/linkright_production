@@ -73,6 +73,10 @@ export async function POST(request: Request) {
       duration: "point_in_time",
       leadership_signal: "none",
       tags: ["user_interview"],
+      // parent_nugget_id links this Q&A back to the source highlight.
+      // Requires DB migration: ALTER TABLE career_nuggets ADD COLUMN IF NOT EXISTS
+      //   parent_nugget_id uuid REFERENCES career_nuggets(id) ON DELETE SET NULL;
+      ...(parentId ? { parent_nugget_id: parentId } : {}),
     })
     .select("id")
     .single();

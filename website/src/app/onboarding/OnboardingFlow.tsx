@@ -621,7 +621,7 @@ function StepCareerBasics({
   return (
     <div className="space-y-6 max-w-[1200px] mx-auto">
       {!parsed && (
-        <div>
+        <div className="max-w-2xl">
           <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
             Step 1 · this is the only required input
           </p>
