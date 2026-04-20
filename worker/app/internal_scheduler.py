@@ -82,11 +82,10 @@ async def _run_jd_fetcher_loop():
 
 
 async def _run_api_scanners_loop():
-    """Every 2 hours: scan Track 1 API sources (Wellfound, iimjobs, Adzuna, JSearch)."""
+    """Every 2 hours: scan Track 1 API sources (TheMuse, Adzuna, JSearch)."""
     from supabase import create_client
     from .pipeline.scanner_global import _load_scanner_settings
-    from .pipeline.scanner_wellfound import scan_wellfound_jobs
-    from .pipeline.scanner_iimjobs import scan_iimjobs
+    from .pipeline.scanner_themuse import scan_themuse_jobs
     from .pipeline.scanner_adzuna import scan_adzuna
     from .pipeline.scanner_jsearch import scan_jsearch
 
@@ -98,20 +97,19 @@ async def _run_api_scanners_loop():
             neg_kw = settings["negative_role_keywords"]
             enabled = settings["sources_enabled"]
 
-            if enabled.get("wellfound", True):
-                r = await scan_wellfound_jobs(sb, pos_kw, neg_kw)
-                logger.info("api_scanners: wellfound inserted=%d", r.inserted)
+            # TheMuse: free, ~1,900 PM jobs globally, replaces broken Wellfound API
+            if enabled.get("themuse", True):
+                r = await scan_themuse_jobs(sb, pos_kw, neg_kw)
+                logger.info("api_scanners: themuse inserted=%d errors=%s", r.inserted, r.errors[:2])
 
-            if enabled.get("iimjobs", True):
-                r = await scan_iimjobs(sb, pos_kw, neg_kw)
-                logger.info("api_scanners: iimjobs inserted=%d", r.inserted)
-
-            if enabled.get("adzuna", False) and settings["adzuna_app_id"]:
-                r = await scan_adzuna(
-                    sb, settings["adzuna_app_id"], settings["adzuna_app_key"],
-                    pos_kw, neg_kw, settings["target_countries"],
-                )
-                logger.info("api_scanners: adzuna inserted=%d", r.inserted)
+            # Adzuna: India + UAE, requires API keys — enabled if keys configured
+            if settings.get("adzuna_app_id"):
+                if enabled.get("adzuna", True):
+                    r = await scan_adzuna(
+                        sb, settings["adzuna_app_id"], settings["adzuna_app_key"],
+                        pos_kw, neg_kw, settings["target_countries"],
+                    )
+                    logger.info("api_scanners: adzuna inserted=%d", r.inserted)
 
             if enabled.get("jsearch", False) and settings["jsearch_api_key"]:
                 r = await scan_jsearch(

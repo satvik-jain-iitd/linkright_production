@@ -32,9 +32,8 @@ const PAGE_SIZE = 50;
 
 const SOURCE_LABELS: Record<string, string> = {
   ats: "ATS",
-  api_wellfound: "Wellfound",
+  api_themuse: "The Muse",
   api_adzuna: "Adzuna",
-  api_iimjobs: "iimjobs",
   api_remotive: "Remotive",
   api_jsearch: "JSearch",
   api_serpapi: "SerpAPI",
