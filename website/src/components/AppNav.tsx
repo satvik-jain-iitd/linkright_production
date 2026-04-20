@@ -90,6 +90,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
   const [scoutBadge, setScoutBadge] = useState(0);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
   const [notifUnread, setNotifUnread] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Fetch new discovery count for Scout badge
   useEffect(() => {
@@ -102,6 +103,10 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
       fetch("/api/notifications?unread=1&limit=1")
         .then((r) => r.json())
         .then((d) => setNotifUnread(d.unread_count ?? d.total ?? 0))
+        .catch(() => {});
+      fetch("/api/admin/check")
+        .then((r) => r.json())
+        .then((d) => setIsAdmin(d.is_admin === true))
         .catch(() => {});
     }
   }, [user, variant]);
@@ -288,6 +293,15 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                   >
                     Your profile
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      href="/admin/sources"
+                      onClick={() => setDropdownOpen(false)}
+                      className="block w-full px-4 py-2.5 text-left text-sm text-accent transition-colors hover:bg-background"
+                    >
+                      Admin panel
+                    </Link>
+                  )}
                   <button
                     onClick={handleSignOut}
                     className="w-full px-4 py-2.5 text-left text-sm text-muted transition-colors hover:bg-background hover:text-foreground rounded-b-xl"
