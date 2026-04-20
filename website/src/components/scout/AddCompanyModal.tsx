@@ -131,11 +131,11 @@ export function AddCompanyModal({ onClose, onAdded }: AddCompanyModalProps) {
             {careersUrl && (
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {detection.ats ? (
-                  <span className="rounded-full bg-primary-500/10 px-2.5 py-0.5 font-medium text-primary-700">
+                  <span className="rounded-[10px] bg-primary-500/10 px-2.5 py-0.5 font-medium text-primary-700">
                     ✓ Detected: {detection.ats}{detection.slug ? ` · ${detection.slug}` : ""}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-gold-500/10 px-2.5 py-0.5 font-medium text-gold-700">
+                  <span className="rounded-[10px] bg-gold-500/10 px-2.5 py-0.5 font-medium text-gold-700">
                     Couldn&apos;t auto-detect ATS — set it below
                   </span>
                 )}
@@ -227,7 +227,7 @@ export function AddCompanyModal({ onClose, onAdded }: AddCompanyModalProps) {
             <button
               type="submit"
               disabled={submitting || !companyName.trim()}
-              className="rounded-full bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition-colors hover:bg-cta-hover disabled:opacity-50"
+              className="rounded-lg bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition-colors hover:bg-cta-hover disabled:opacity-50"
             >
               {submitting ? "Adding…" : "Add Company"}
             </button>

@@ -153,7 +153,7 @@ export function CoverLettersView({
             </p>
             <Link
               href="/resume/new"
-              className="mt-3 inline-block rounded-full bg-cta px-4 py-1.5 text-xs font-semibold text-white shadow-cta"
+              className="mt-3 inline-block rounded-lg bg-cta px-4 py-1.5 text-xs font-semibold text-white shadow-cta"
             >
               Build a resume →
             </Link>

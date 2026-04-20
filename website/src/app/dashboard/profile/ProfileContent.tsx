@@ -163,7 +163,7 @@ export function ProfileContent({ user }: { user: User }) {
             <button
               onClick={saveCareerProfile}
               disabled={saving || careerText.trim().length < 200}
-              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
+              className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
             >
               {saving ? "Uploading..." : "Upload Profile"}
             </button>
@@ -197,7 +197,7 @@ export function ProfileContent({ user }: { user: User }) {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                      <span className="rounded-[10px] bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
                         #{chunk.chunk_index + 1}
                       </span>
                       <span className="text-xs text-muted">{chunk.chunk_tokens} tokens</span>

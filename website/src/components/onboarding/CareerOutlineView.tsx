@@ -497,7 +497,7 @@ export function CareerOutlineView({
             type="button"
             onClick={onContinue}
             disabled={busy}
-            className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-60"
           >
             {busy ? "Saving…" : continueLabel}
             <svg

@@ -34,7 +34,7 @@ export function StepJD({ data, update, next }: Props) {
         <button
           onClick={next}
           disabled={!valid}
-          className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next
         </button>

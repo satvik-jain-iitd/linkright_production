@@ -305,7 +305,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
               <button
                 onClick={handleCancelAndRetry}
                 disabled={cancelling}
-                className="w-full rounded-full bg-red-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                className="w-full rounded-[10px] bg-red-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
                 {cancelling ? "Cancelling..." : "Cancel Existing & Start Fresh"}
               </button>
@@ -320,7 +320,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
               {!isAlreadyGenerating && (
                 <button
                   onClick={onRetry}
-                  className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+                  className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
                 >
                   Try Again
                 </button>

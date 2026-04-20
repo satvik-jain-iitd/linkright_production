@@ -339,7 +339,7 @@ export function StepJobDetails({ data, update, next }: Props) {
             </button>
             <button
               onClick={analyze}
-              className="rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors"
+              className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors"
             >
               Retry
             </button>
@@ -350,7 +350,7 @@ export function StepJobDetails({ data, update, next }: Props) {
                 update({ target_company: targetCompany, target_role: targetRole });
                 next();
               }}
-              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+              className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
               Skip
             </button>
@@ -463,7 +463,7 @@ export function StepJobDetails({ data, update, next }: Props) {
                         >
                           {row.req.importance}
                         </span>
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                        <span className="rounded-[10px] bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
                           {row.req.category}
                         </span>
                       </div>
@@ -570,7 +570,7 @@ export function StepJobDetails({ data, update, next }: Props) {
             </button>
             <button
               onClick={handleContinue}
-              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+              className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
               Continue → Customize
             </button>
@@ -644,7 +644,7 @@ export function StepJobDetails({ data, update, next }: Props) {
           onClick={handleAnalyze}
           disabled={!valid}
           aria-disabled={!valid}
-          className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           Analyze JD
         </button>

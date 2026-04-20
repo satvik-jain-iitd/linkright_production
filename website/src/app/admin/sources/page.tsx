@@ -118,7 +118,7 @@ function SaveBtn({ onClick, saving, label = "Save settings" }: { onClick: () => 
     <button
       onClick={onClick}
       disabled={saving}
-      className="rounded-full bg-cta text-white text-sm font-semibold px-5 py-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
+      className="rounded-lg bg-cta text-white text-sm font-semibold px-5 py-2 hover:opacity-90 disabled:opacity-50 transition-opacity"
     >
       {saving ? "Saving…" : label}
     </button>
@@ -291,7 +291,7 @@ function TabSources({ settings, config, onToggle, onSaveKey }: {
                 )}
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => handleSaveKey(src.id)} disabled={saving === src.id}
-                    className="rounded-full bg-cta text-white text-sm font-semibold px-4 py-1.5 hover:opacity-90 disabled:opacity-50">
+                    className="rounded-lg bg-cta text-white text-sm font-semibold px-4 py-1.5 hover:opacity-90 disabled:opacity-50">
                     {saving === src.id ? "Saving…" : "Save & enable"}
                   </button>
                   <button onClick={() => setExpandedKey(null)} className="rounded-lg border border-border px-4 py-1.5 text-sm hover:bg-[#F8FAFC]">Cancel</button>
@@ -432,7 +432,7 @@ function TabSnippets() {
                     </p>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => handleCommit(s.id)} disabled={importing}
-                        className="rounded-full bg-cta text-white text-sm font-semibold px-4 py-1.5 hover:opacity-90 disabled:opacity-50">
+                        className="rounded-lg bg-cta text-white text-sm font-semibold px-4 py-1.5 hover:opacity-90 disabled:opacity-50">
                         {importing ? "Importing…" : `Import ${preview.valid} jobs`}
                       </button>
                       <button onClick={() => { setUploadFor(null); setPreview(null); setFile(null); }}

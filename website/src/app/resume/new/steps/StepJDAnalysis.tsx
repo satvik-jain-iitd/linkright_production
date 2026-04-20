@@ -171,13 +171,13 @@ export type { JDAnalysisResult };
 // [WIZARD-STREAMLINE]             </button>
 // [WIZARD-STREAMLINE]             <button
 // [WIZARD-STREAMLINE]               onClick={analyze}
-// [WIZARD-STREAMLINE]               className="rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors"
+// [WIZARD-STREAMLINE]               className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors"
 // [WIZARD-STREAMLINE]             >
 // [WIZARD-STREAMLINE]               Retry
 // [WIZARD-STREAMLINE]             </button>
 // [WIZARD-STREAMLINE]             <button
 // [WIZARD-STREAMLINE]               onClick={next}
-// [WIZARD-STREAMLINE]               className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+// [WIZARD-STREAMLINE]               className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
 // [WIZARD-STREAMLINE]             >
 // [WIZARD-STREAMLINE]               Skip
 // [WIZARD-STREAMLINE]             </button>

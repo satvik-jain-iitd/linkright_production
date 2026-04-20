@@ -91,7 +91,7 @@ export function ConnectExtension({
       <button
         onClick={connect}
         disabled={busy || !isValidReturn}
-        className="mt-8 inline-block rounded-full bg-cta px-8 py-3 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl disabled:opacity-50"
+        className="mt-8 inline-block rounded-lg bg-cta px-8 py-3 text-base font-semibold text-white shadow-lg shadow-cta/20 transition-all hover:bg-cta-hover hover:shadow-xl disabled:opacity-50"
       >
         {busy ? "Connecting…" : "Authorize extension"}
       </button>

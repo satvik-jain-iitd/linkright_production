@@ -234,7 +234,7 @@ export function BroadcastCompose({
         >
           ← Back
         </Link>
-        <span className="rounded-full bg-pink-500/10 px-2.5 py-0.5 text-[11px] font-medium text-pink-700">
+        <span className="rounded-[10px] bg-pink-500/10 px-2.5 py-0.5 text-[11px] font-medium text-pink-700">
           Drafting a post
         </span>
         {insight && (
@@ -278,7 +278,7 @@ export function BroadcastCompose({
               <span className="text-xs text-muted">
                 {charCount} / {charLimit} characters · LinkedIn-friendly length
               </span>
-              <span className="rounded-full bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-700">
+              <span className="rounded-[10px] bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-700">
                 {regensRemaining != null
                   ? `${regensRemaining} regens left`
                   : "AI draft"}
@@ -347,7 +347,7 @@ export function BroadcastCompose({
                 type="button"
                 disabled={saving || !draft.trim() || !scheduleAt}
                 onClick={() => save("schedule")}
-                className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-50"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-50"
               >
                 Queue for posting
               </button>
@@ -363,7 +363,7 @@ export function BroadcastCompose({
                     save("post_now");
                   }
                 }}
-                className="rounded-full bg-cta px-4 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+                className="rounded-lg bg-cta px-4 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
               >
                 Post now
               </button>

@@ -121,7 +121,7 @@ export function BroadcastInsightsBrowser() {
           </div>
           <Link
             href="/dashboard/broadcast/connect"
-            className="rounded-full bg-cta px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-cta-hover"
+            className="rounded-lg bg-cta px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-cta-hover"
           >
             Connect LinkedIn →
           </Link>
@@ -137,7 +137,7 @@ export function BroadcastInsightsBrowser() {
             onClick={() => setFilter(f)}
             className={
               filter === f
-                ? "rounded-full bg-pink-500/10 px-3.5 py-1.5 text-xs font-semibold text-pink-700"
+                ? "rounded-[10px] bg-pink-500/10 px-3.5 py-1.5 text-xs font-semibold text-pink-700"
                 : "rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-medium text-foreground transition hover:border-accent"
             }
           >

@@ -29,7 +29,7 @@ function Hero() {
         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/auth?mode=signup"
-            className="inline-flex items-center gap-2 rounded-full bg-cta px-7 py-3.5 text-base font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+            className="inline-flex items-center gap-2 rounded-lg bg-cta px-7 py-3.5 text-base font-semibold text-white shadow-cta transition hover:bg-cta-hover"
           >
             Start for free
             <svg
@@ -201,7 +201,7 @@ function FinalCta() {
         </p>
         <Link
           href="/auth?mode=signup"
-          className="mt-7 inline-flex items-center gap-2 rounded-full bg-cta px-7 py-3.5 text-base font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+          className="mt-7 inline-flex items-center gap-2 rounded-lg bg-cta px-7 py-3.5 text-base font-semibold text-white shadow-cta transition hover:bg-cta-hover"
         >
           Start for free
           <svg

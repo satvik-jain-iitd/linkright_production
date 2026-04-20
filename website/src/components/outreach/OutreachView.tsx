@@ -164,7 +164,7 @@ export function OutreachView({
               <button
                 type="button"
                 onClick={generateDm}
-                className="mt-4 rounded-full bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+                className="mt-4 rounded-lg bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
               >
                 Draft DM →
               </button>
@@ -204,7 +204,7 @@ export function OutreachView({
                   <button
                     type="button"
                     onClick={() => copy(dmContent, "dm")}
-                    className="rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover"
+                    className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover"
                   >
                     {dmCopied ? "Copied ✓" : "Copy DM"}
                   </button>
@@ -230,7 +230,7 @@ export function OutreachView({
               <button
                 type="button"
                 onClick={generateEmail}
-                className="mt-4 rounded-full bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+                className="mt-4 rounded-lg bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
               >
                 Draft email →
               </button>
@@ -288,7 +288,7 @@ export function OutreachView({
                       const full = `Subject: ${emailSubject}\n\n${emailContent}`;
                       copy(full, "email");
                     }}
-                    className="rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover"
+                    className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover"
                   >
                     {emailCopied ? "Copied ✓" : "Copy email"}
                   </button>

@@ -1,0 +1,7 @@
+At American Express (Jul 2024-present) as Senior Associate Product Manager, I led the AML risk engine MVP-1 across 100M+ accounts in 1 year, winning the Leadership Award. I drove 20+ UX research sessions with compliance analysts across 6 regions and designed 3 AML capability UIs end-to-end.
+
+At Sprinklr (Apr 2022-Jul 2024) as Senior Product Analyst, I grew Use Case Hub adoption from 35% to 85% across 1,500+ SaaS clients, enabling self-serve setup for 15 industries. I built a GenAI root-cause product for Walmart, analyzing 100K+ contacts to cut time-to-insight from 7 days to same-day.
+
+Skills: Product strategy, roadmapping, PRDs, OKRs, SQL, BigQuery, Tableau, Mixpanel, A/B testing, Figma, UI/UX research, Python, APIs, AI/ML, stakeholder management.
+
+Education: B.Tech Civil Engineering, IIT Delhi, 2017-2021.

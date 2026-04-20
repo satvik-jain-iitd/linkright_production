@@ -40,7 +40,7 @@ export function ScoutSubNav() {
             >
               {tab.label}
               {tab.showBadge && newCount > 0 && (
-                <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-accent px-1 text-[10px] font-bold text-white">
                   {newCount > 99 ? "99+" : newCount}
                 </span>
               )}

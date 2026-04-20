@@ -86,7 +86,7 @@ export default async function PricingPage() {
                 }}
               >
                 {p.badge && (
-                  <span className="absolute right-6 top-6 rounded-full bg-accent/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                  <span className="absolute right-6 top-6 rounded-[10px] bg-accent/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
                     {p.badge}
                   </span>
                 )}
@@ -112,7 +112,7 @@ export default async function PricingPage() {
                   href={p.ctaHref}
                   className={
                     p.variant === "cta"
-                      ? "mt-6 block w-full rounded-full bg-cta py-3 text-center text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+                      ? "mt-6 block w-full rounded-lg bg-cta py-3 text-center text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
                       : "mt-6 block w-full rounded-full border border-border bg-white py-3 text-center text-sm font-semibold text-foreground transition hover:border-accent"
                   }
                 >

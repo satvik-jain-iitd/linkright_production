@@ -435,7 +435,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
           <div className="relative">
             <button
               onClick={() => setDownloadOpen(o => !o)}
-              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover flex items-center gap-2"
+              className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover flex items-center gap-2"
             >
               Download Resume <span>▾</span>
             </button>
@@ -898,7 +898,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                 </div>
                 <button
                   onClick={() => setGithubOpen(false)}
-                  className="w-full rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white hover:bg-cta-hover"
+                  className="w-full rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white hover:bg-cta-hover"
                 >
                   Done
                 </button>
@@ -961,7 +961,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                   <button
                     onClick={hostOnGithub}
                     disabled={githubLoading || !githubPat.trim()}
-                    className="flex-1 rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex-1 rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {githubLoading ? (
                       <span className="flex items-center justify-center gap-2">

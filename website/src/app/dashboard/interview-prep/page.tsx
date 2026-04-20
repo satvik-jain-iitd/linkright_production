@@ -135,7 +135,7 @@ export default async function InterviewPrepHub() {
                   Tailored to you
                 </span>
                 <span
-                  className="rounded-full bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700"
+                  className="rounded-[10px] bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700"
                 >
                   Coming soon
                 </span>
@@ -166,7 +166,7 @@ export default async function InterviewPrepHub() {
               <h3 className="text-base font-bold tracking-tight">
                 Oracle — multi-persona recruiter roundtable
               </h3>
-              <span className="rounded-full bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700">
+              <span className="rounded-[10px] bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700">
                 Soon
               </span>
             </div>

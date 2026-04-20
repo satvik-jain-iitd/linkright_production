@@ -179,9 +179,9 @@ export default function PreferencesPage() {
               <span
                 className={
                   s.state === "active"
-                    ? "rounded-full bg-accent px-3 py-1.5 font-semibold text-white"
+                    ? "rounded-lg bg-accent px-3 py-1.5 font-semibold text-white"
                     : s.state === "done"
-                      ? "rounded-full bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
+                      ? "rounded-[10px] bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
                       : "rounded-full border border-border bg-white px-3 py-1.5 font-medium text-muted"
                 }
               >
@@ -224,7 +224,7 @@ export default function PreferencesPage() {
                 key={r}
                 type="button"
                 onClick={() => toggleArrayItem("target_roles", r)}
-                className="inline-flex items-center gap-1 rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                className="inline-flex items-center gap-1 rounded-[10px] bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
               >
                 {r} <span className="text-primary-500">✕</span>
               </button>
@@ -272,7 +272,7 @@ export default function PreferencesPage() {
                   onClick={() => setPrefs({ ...prefs, location_preference: opt.v })}
                   className={
                     prefs.location_preference === opt.v
-                      ? "rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                      ? "rounded-[10px] bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
                       : "rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-foreground transition hover:border-accent"
                   }
                 >
@@ -291,7 +291,7 @@ export default function PreferencesPage() {
                   key={c}
                   type="button"
                   onClick={() => toggleArrayItem("preferred_locations", c)}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                  className="inline-flex items-center gap-1 rounded-[10px] bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
                 >
                   {c} <span className="text-primary-500">✕</span>
                 </button>
@@ -342,7 +342,7 @@ export default function PreferencesPage() {
                   onClick={() => toggleArrayItem("preferred_stages", s.v)}
                   className={
                     prefs.preferred_stages.includes(s.v)
-                      ? "rounded-full bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                      ? "rounded-[10px] bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
                       : "rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-foreground transition hover:border-accent"
                   }
                 >
@@ -436,7 +436,7 @@ export default function PreferencesPage() {
             type="button"
             onClick={() => save(true)}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
           >
             {saving ? "Saving…" : "Find roles →"}
           </button>

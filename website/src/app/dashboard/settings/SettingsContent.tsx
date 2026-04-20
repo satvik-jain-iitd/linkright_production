@@ -246,7 +246,7 @@ export function SettingsContent({ user }: { user: User }) {
               <button
                 onClick={saveSettings}
                 disabled={saving}
-                className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
+                className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
               >
                 {saving ? "Saving..." : "Save Settings"}
               </button>
@@ -348,7 +348,7 @@ export function SettingsContent({ user }: { user: User }) {
                   setRegenerating(false);
                 }}
                 disabled={regenerating}
-                className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
+                className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
               >
                 {regenerating ? "Regenerating..." : webhookTokenMasked ? "Regenerate Token" : "Generate Token"}
               </button>

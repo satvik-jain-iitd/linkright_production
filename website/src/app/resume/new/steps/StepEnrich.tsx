@@ -257,7 +257,7 @@ export function StepEnrich({ data, update, next, back }: Props) {
       {hasGaps && (
         <div className="mt-8">
           <div className="mb-4 flex items-center gap-2">
-            <span className="rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+            <span className="rounded-[10px] bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
               {data.jd_analysis!.gaps.length} gaps detected
             </span>
             <span className="text-sm text-muted">
@@ -300,7 +300,7 @@ export function StepEnrich({ data, update, next, back }: Props) {
                         </label>
                       </div>
                       {isSaved && (
-                        <span className="flex-shrink-0 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+                        <span className="flex-shrink-0 rounded-[10px] bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
                           {status?.status === "duplicate" ? "Already captured" : "Saved"}
                         </span>
                       )}
@@ -373,7 +373,7 @@ export function StepEnrich({ data, update, next, back }: Props) {
                   )}
                   {autoFilled.has(i) && !searching.has(i) && (
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                      <span className="rounded-[10px] bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
                         Auto-filled from profile
                       </span>
                       {scoredChunks[i] && (
@@ -469,7 +469,7 @@ export function StepEnrich({ data, update, next, back }: Props) {
           </button>
           <button
             onClick={handleNext}
-            className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+            className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             Generate Resume
           </button>

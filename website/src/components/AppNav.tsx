@@ -146,14 +146,14 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
             ))}
             <Link
               href={ctaHref}
-              className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+              className="rounded-lg bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
               {ctaLabel}
             </Link>
           </div>
           <Link
             href={ctaHref}
-            className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white sm:hidden"
+            className="rounded-lg bg-cta px-4 py-2 text-sm font-medium text-white sm:hidden"
           >
             {ctaLabel}
           </Link>
@@ -205,7 +205,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                 >
                   {link.label}
                   {link.badge && scoutBadge > 0 && (
-                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-accent px-1 text-[10px] font-bold text-white">
                       {scoutBadge > 99 ? "99+" : scoutBadge}
                     </span>
                   )}
@@ -243,7 +243,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
           )}
           <Link
             href="/resume/new"
-            className="rounded-full bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+            className="rounded-lg bg-cta px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             + Create Resume
           </Link>
@@ -261,7 +261,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                     className="h-8 w-8 rounded-full"
                   />
                 ) : (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10 text-sm font-medium text-accent">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent/10 text-sm font-medium text-accent">
                     {(user.user_metadata?.full_name?.[0] || user.email?.[0] || "U").toUpperCase()}
                   </div>
                 )}

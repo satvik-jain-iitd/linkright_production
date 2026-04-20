@@ -346,7 +346,7 @@ function NuggetsCards({ nuggets, onDelete }: { nuggets: NuggetRow[]; onDelete: (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {/* Company badge */}
             {n.company && (
-              <span className="inline-flex items-center rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+              <span className="inline-flex items-center rounded-[10px] bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
                 {n.company}
               </span>
             )}
@@ -596,7 +596,7 @@ export default function NuggetsDashboard({ user }: { user?: import("@supabase/su
           </div>
           <button
             onClick={() => setShowImportModal(true)}
-            className="rounded-full bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+            className="rounded-lg bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
           >
             + Import Career Highlights
           </button>

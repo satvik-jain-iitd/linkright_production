@@ -248,7 +248,7 @@ export function ProfileHighlightsView() {
             <button
               type="button"
               onClick={goToPreferences}
-              className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
             >
               Continue to find jobs
               <svg
@@ -327,7 +327,7 @@ export function ProfileHighlightsView() {
           </p>
           <Link
             href="/onboarding"
-            className="mt-3 inline-block rounded-full bg-cta px-4 py-2 text-xs font-semibold text-white"
+            className="mt-3 inline-block rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white"
           >
             Back to resume upload
           </Link>

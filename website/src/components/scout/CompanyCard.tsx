@@ -51,7 +51,7 @@ export function CompanyCard({ company, onDelete, onToggle, onIntervalChange }: C
           <h3 className="font-medium text-foreground truncate">{company.company_name}</h3>
           <div className="mt-1 flex items-center gap-2">
             {company.ats_provider && (
-              <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+              <span className="rounded-[10px] bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
                 {ATS_LABELS[company.ats_provider] || company.ats_provider}
               </span>
             )}

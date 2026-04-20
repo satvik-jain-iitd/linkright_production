@@ -213,7 +213,7 @@ export function DashboardContent({
             </p>
             <Link
               href="/onboarding"
-              className="mt-3 inline-block rounded-full bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
+              className="mt-3 inline-block rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
             >
               Finish onboarding →
             </Link>
@@ -333,7 +333,7 @@ export function DashboardContent({
                     </div>
                     <Link
                       href={`/resume/new?job=${inFlightJob.id}`}
-                      className="rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-hover"
+                      className="rounded-lg bg-accent px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-hover"
                     >
                       Resume
                     </Link>
@@ -571,7 +571,7 @@ export function DashboardContent({
                                   ? "?retry_jd=" + encodeURIComponent(job.jd_text)
                                   : "")
                               }
-                              className="rounded-full bg-cta px-3 py-1 text-[11px] font-semibold text-white"
+                              className="rounded-lg bg-cta px-3 py-1 text-[11px] font-semibold text-white"
                               onClick={(e) => e.stopPropagation()}
                             >
                               Retry

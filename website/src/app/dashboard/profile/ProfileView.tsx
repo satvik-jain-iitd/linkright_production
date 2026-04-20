@@ -141,17 +141,17 @@ export function ProfileView({
               {email} · Free plan
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700">
+              <span className="rounded-[10px] bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700">
                 {totalHighlights} highlights
               </span>
               {companyCount > 0 && (
-                <span className="rounded-full bg-[#EDF2F7] px-2.5 py-0.5 text-[11px] font-medium text-[#4A5568]">
+                <span className="rounded-[10px] bg-[#EDF2F7] px-2.5 py-0.5 text-[11px] font-medium text-[#4A5568]">
                   {companyCount} companies
                 </span>
               )}
               {/* Streak chip removed per v2 audit. */}
               {diaryEntries != null && diaryEntries > 0 && (
-                <span className="rounded-full bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-700">
+                <span className="rounded-[10px] bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-700">
                   {diaryEntries} diary entries
                 </span>
               )}
@@ -225,7 +225,7 @@ export function ProfileView({
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-60"
               >
                 <svg
                   className="h-3.5 w-3.5"

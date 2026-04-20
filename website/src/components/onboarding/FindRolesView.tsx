@@ -270,7 +270,7 @@ export function FindRolesView({ embedded }: Props) {
             <button
               type="button"
               onClick={() => setCustomOpen(true)}
-              className="rounded-full bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+              className="rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
             >
               Add a custom job →
             </button>
@@ -312,7 +312,7 @@ export function FindRolesView({ embedded }: Props) {
           {customError && <p className="mt-2 rounded-[10px] bg-red-50 p-2 text-xs text-red-700">{customError}</p>}
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => { setCustomOpen(false); setCustomError(""); }} className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground hover:border-accent transition">Cancel</button>
-            <button type="button" onClick={submitCustomJob} disabled={customSaving} className="inline-flex items-center gap-1.5 rounded-full bg-cta px-5 py-1.5 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50">
+            <button type="button" onClick={submitCustomJob} disabled={customSaving} className="inline-flex items-center gap-1.5 rounded-lg bg-cta px-5 py-1.5 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50">
               {customSaving ? "Saving…" : "Build my resume →"}
             </button>
           </div>
@@ -404,7 +404,7 @@ function SpotlightCard({ row, onStart }: { row: Top20Row; onStart: () => void })
         <button
           type="button"
           onClick={onStart}
-          className="inline-flex items-center gap-2 rounded-full bg-cta px-5 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+          className="inline-flex items-center gap-2 rounded-lg bg-cta px-5 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
         >
           Start custom application
           <svg

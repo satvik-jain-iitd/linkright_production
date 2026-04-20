@@ -134,7 +134,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
             <button
               onClick={saveCareerProfile}
               disabled={saving || careerText.trim().length < 200}
-              className="rounded-full bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
+              className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-40"
             >
               {saving ? "Saving..." : "Save Profile"}
             </button>
@@ -163,7 +163,7 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowImportModal(true)}
-                className="rounded-full bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
+                className="rounded-lg bg-cta px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
               >
                 + Import Career Highlights
               </button>

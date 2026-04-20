@@ -120,7 +120,7 @@ export function DiaryQuickLog({
             type="button"
             onClick={save}
             disabled={saving || !content.trim()}
-            className="rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-50"
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover disabled:opacity-50"
           >
             {saving ? "Logging…" : "Log"}
           </button>

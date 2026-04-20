@@ -641,7 +641,7 @@ function StepCareerBasics({
           <div className="flex flex-wrap justify-center gap-3">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+              className="rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
             >
               Upload PDF / DOCX / TXT
             </button>
@@ -700,7 +700,7 @@ function StepCareerBasics({
           <button
             onClick={handleParsePaste}
             disabled={!resumePasteText.trim() || parsing}
-            className="w-full rounded-full bg-cta px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full rounded-lg bg-cta px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {parsing ? "Parsing…" : "Parse resume →"}
           </button>
@@ -729,7 +729,7 @@ function StepCareerBasics({
             <button
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-full bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save and continue →"}
             </button>
