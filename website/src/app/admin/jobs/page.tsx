@@ -41,11 +41,11 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 const EXP_LABELS: Record<string, string> = {
-  early: "Early",
-  mid: "Mid",
-  senior: "Senior",
-  executive: "Executive",
-  cxo: "CXO",
+  early: "0–3 yrs",
+  mid: "4–6 yrs",
+  senior: "6–10 yrs",
+  executive: "10–15 yrs",
+  cxo: "15+ yrs",
 };
 
 const ENRICH_COLORS: Record<string, string> = {
