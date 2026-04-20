@@ -69,6 +69,15 @@ class JobResult:
     location: str = ""
     external_id: str = ""
     description_snippet: str = ""
+    apply_url: str = ""
+    remote_ok: bool = False
+    work_type: str = ""          # 'remote' | 'hybrid' | 'onsite'
+    employment_type: str = ""    # 'full_time' | 'contract' | 'part_time'
+    salary_min: int = 0
+    salary_max: int = 0
+    salary_currency: str = "USD"
+    department: str = ""
+    source_type: str = "ats"
 
 
 @dataclass
@@ -194,17 +203,26 @@ async def _scan_lever(
         if not filter_by_keywords(title, pos_kw, neg_kw):
             continue
 
-        location = ""
-        cats = job.get("categories", {})
-        if isinstance(cats, dict):
-            location = cats.get("location", "")
+        cats = job.get("categories", {}) if isinstance(job.get("categories"), dict) else {}
+        location = cats.get("location", "")
+        commitment = (cats.get("commitment") or "").lower()
+        emp_type = "full_time" if "full" in commitment else ("contract" if "contract" in commitment else "")
+        dept = cats.get("team", "")
+        hosted = job.get("hostedUrl", "")
+        apply = job.get("applyUrl", "")
+        remote = "remote" in location.lower() or "remote" in commitment
 
         jobs.append(JobResult(
             title=title,
             company=company_name,
-            job_url=job.get("hostedUrl", "") or job.get("applyUrl", ""),
+            job_url=hosted or apply,
+            apply_url=apply if apply != hosted else "",
             location=location,
             external_id=str(job.get("id", "")),
+            employment_type=emp_type,
+            department=dept.lower() if dept else "",
+            remote_ok=remote,
+            work_type="remote" if remote else "",
         ))
 
     return jobs
@@ -229,12 +247,24 @@ async def _scan_ashby(
         if not filter_by_keywords(title, pos_kw, neg_kw):
             continue
 
+        is_remote = bool(job.get("isRemote") or job.get("locationIsRemote"))
+        emp_raw = (job.get("employmentType") or "").lower()
+        emp_type = "full_time" if "full" in emp_raw else ("contract" if "contract" in emp_raw else "")
+        dept = (job.get("departmentName") or "").lower()
+        job_url = job.get("jobUrl", "") or job.get("applicationUrl", "")
+        apply_url = job.get("applicationUrl", "") if job.get("applicationUrl") != job_url else ""
+
         jobs.append(JobResult(
             title=title,
             company=company_name,
-            job_url=job.get("jobUrl", "") or job.get("applicationUrl", ""),
+            job_url=job_url,
+            apply_url=apply_url,
             location=job.get("location", ""),
             external_id=str(job.get("id", "")),
+            remote_ok=is_remote,
+            work_type="remote" if is_remote else "",
+            employment_type=emp_type,
+            department=dept,
         ))
 
     return jobs

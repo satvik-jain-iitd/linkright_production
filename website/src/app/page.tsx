@@ -48,7 +48,7 @@ function Hero() {
           </Link>
           <a
             href="#how-it-works"
-            className="rounded-full border border-border bg-white px-7 py-3.5 text-base font-medium text-foreground transition hover:border-accent"
+            className="rounded-lg border border-border bg-white px-7 py-3.5 text-base font-medium text-foreground transition hover:border-accent"
           >
             See how it works
           </a>
@@ -264,7 +264,7 @@ export default async function Home() {
             </p>
             <Link
               href="/dashboard"
-              className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-accent-hover"
+              className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-accent-hover"
             >
               Go to dashboard →
             </Link>

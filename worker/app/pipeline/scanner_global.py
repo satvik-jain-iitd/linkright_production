@@ -81,10 +81,39 @@ def _is_fresh(company: dict) -> bool:
 # Main
 # ────────────────────────────────────────────────────────────────────────────
 
+def _load_scanner_settings(supabase_client) -> dict:
+    """Fetch scanner_settings row 1. Returns defaults if not found."""
+    try:
+        row = (
+            supabase_client.table("scanner_settings")
+            .select("*")
+            .eq("id", 1)
+            .single()
+            .execute()
+        ).data or {}
+    except Exception:
+        row = {}
+    return {
+        "positive_role_keywords": row.get("positive_role_keywords") or [],
+        "negative_role_keywords": row.get("negative_role_keywords") or [],
+        "target_countries": row.get("target_countries") or ["IN", "AE", "US"],
+        "sources_enabled": row.get("sources_enabled") or {},
+        "adzuna_app_id": row.get("adzuna_app_id") or "",
+        "adzuna_app_key": row.get("adzuna_app_key") or "",
+        "jsearch_api_key": row.get("jsearch_api_key") or "",
+        "serpapi_key": row.get("serpapi_key") or "",
+    }
+
+
 async def scan_all_global_companies(supabase_client) -> GlobalScanResult:
     """Scan every active companies_global row whose cadence has elapsed."""
     started = time.time()
     result = GlobalScanResult()
+
+    # Load configurable settings (keywords, countries, API keys)
+    settings = _load_scanner_settings(supabase_client)
+    pos_kw = settings["positive_role_keywords"]
+    neg_kw = settings["negative_role_keywords"]
 
     companies = (
         supabase_client.table("companies_global")
@@ -125,13 +154,12 @@ async def scan_all_global_companies(supabase_client) -> GlobalScanResult:
         async def _scan_one(company: dict) -> None:
             slug = company["company_slug"]
             async with sem:
-                # Map companies_global row → the "entry" shape scan_company expects
                 entry = {
                     "company_name": company.get("display_name", slug),
                     "company_slug": company.get("ats_identifier") or slug,
                     "ats_provider": company.get("ats_provider"),
-                    "positive_keywords": [],  # global scan has no per-user keywords
-                    "negative_keywords": [],
+                    "positive_keywords": pos_kw,
+                    "negative_keywords": neg_kw,
                 }
                 jobs, errs = await _per_user_scanner.scan_company(
                     client, entry, seen_urls, seen_pairs,
@@ -157,8 +185,15 @@ async def scan_all_global_companies(supabase_client) -> GlobalScanResult:
                 "company_name": job.company,
                 "location": job.location,
                 "job_url": job.job_url,
+                "apply_url": job.apply_url or None,
+                "remote_ok": job.remote_ok or None,
+                "work_type": job.work_type or None,
+                "employment_type": job.employment_type or None,
+                "department": job.department or None,
                 "status": "new",
-                "liveness_status": "active",  # freshly discovered from live ATS
+                "liveness_status": "active",
+                "source_type": "ats",
+                "enrichment_status": "pending",
             })
         try:
             supabase_client.table("job_discoveries").insert(rows).execute()

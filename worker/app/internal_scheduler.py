@@ -81,9 +81,99 @@ async def _run_jd_fetcher_loop():
         await asyncio.sleep(600)  # 10 min
 
 
+async def _run_api_scanners_loop():
+    """Every 2 hours: scan Track 1 API sources (Wellfound, iimjobs, Adzuna, JSearch)."""
+    from supabase import create_client
+    from .pipeline.scanner_global import _load_scanner_settings
+    from .pipeline.scanner_wellfound import scan_wellfound_jobs
+    from .pipeline.scanner_iimjobs import scan_iimjobs
+    from .pipeline.scanner_adzuna import scan_adzuna
+    from .pipeline.scanner_jsearch import scan_jsearch
+
+    sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    while True:
+        try:
+            settings = _load_scanner_settings(sb)
+            pos_kw = settings["positive_role_keywords"]
+            neg_kw = settings["negative_role_keywords"]
+            enabled = settings["sources_enabled"]
+
+            if enabled.get("wellfound", True):
+                r = await scan_wellfound_jobs(sb, pos_kw, neg_kw)
+                logger.info("api_scanners: wellfound inserted=%d", r.inserted)
+
+            if enabled.get("iimjobs", True):
+                r = await scan_iimjobs(sb, pos_kw, neg_kw)
+                logger.info("api_scanners: iimjobs inserted=%d", r.inserted)
+
+            if enabled.get("adzuna", False) and settings["adzuna_app_id"]:
+                r = await scan_adzuna(
+                    sb, settings["adzuna_app_id"], settings["adzuna_app_key"],
+                    pos_kw, neg_kw, settings["target_countries"],
+                )
+                logger.info("api_scanners: adzuna inserted=%d", r.inserted)
+
+            if enabled.get("jsearch", False) and settings["jsearch_api_key"]:
+                r = await scan_jsearch(
+                    sb, settings["jsearch_api_key"],
+                    pos_kw, neg_kw, settings["target_countries"],
+                )
+                logger.info("api_scanners: jsearch inserted=%d", r.inserted)
+
+        except Exception as exc:
+            logger.exception("internal_scheduler: api_scanners failed: %s", exc)
+        await asyncio.sleep(7200)  # 2 hours
+
+
+async def _run_enricher_loop():
+    """Every 30 min: enrich pending jobs with Oracle local model."""
+    from supabase import create_client
+    from .pipeline.scanner_global import _load_scanner_settings
+    from .pipeline.jd_enricher import enrich_pending_jobs
+
+    sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    while True:
+        try:
+            settings = _load_scanner_settings(sb)
+            if settings.get("enrichment_enabled", True):
+                stats = await enrich_pending_jobs(
+                    sb,
+                    batch_size=10,
+                    enrichment_model=settings.get("enrichment_model", "oracle"),
+                )
+                logger.info("internal_scheduler: enricher %s", stats)
+        except Exception as exc:
+            logger.exception("internal_scheduler: enricher failed: %s", exc)
+        await asyncio.sleep(1800)  # 30 min
+
+
+async def _run_remotive_loop():
+    """Daily: scan Remotive for remote PM jobs."""
+    from supabase import create_client
+    from .pipeline.scanner_global import _load_scanner_settings
+    from .pipeline.scanner_remotive import scan_remotive
+
+    sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    while True:
+        try:
+            settings = _load_scanner_settings(sb)
+            if settings["sources_enabled"].get("remotive", True):
+                r = await scan_remotive(sb, settings["positive_role_keywords"], settings["negative_role_keywords"])
+                logger.info("api_scanners: remotive inserted=%d", r.inserted)
+        except Exception as exc:
+            logger.exception("internal_scheduler: remotive failed: %s", exc)
+        await asyncio.sleep(86400)  # 24 hours
+
+
 async def start_internal_scheduler():
-    """Launch all three loops as fire-and-forget tasks."""
-    logger.info("internal_scheduler: starting recompute (5m) + scan (15m) + fetch_jds (10m)")
+    """Launch all loops as fire-and-forget tasks."""
+    logger.info(
+        "internal_scheduler: starting recompute (5m) + scan (15m) + fetch_jds (10m)"
+        " + api_scanners (2h) + remotive (24h) + enricher (30m)"
+    )
     asyncio.create_task(_run_recompute_loop())
     asyncio.create_task(_run_scan_global_loop())
     asyncio.create_task(_run_jd_fetcher_loop())
+    asyncio.create_task(_run_api_scanners_loop())
+    asyncio.create_task(_run_remotive_loop())
+    asyncio.create_task(_run_enricher_loop())
