@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
 import { cosineSimilarity } from "@/lib/jd-matcher";
+import { getPrompt } from "@/lib/langfuse-prompts";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -398,11 +399,12 @@ export async function POST(request: Request) {
 
   // ── Step 1: Extract requirements (Groq 8B) ────────────────────────────
 
+  const extractionPrompt = await getPrompt("jd-extraction", EXTRACTION_PROMPT);
   let requirements: JDRequirement[] = [];
   try {
     const text = await groqChat(
       [
-        { role: "system", content: EXTRACTION_PROMPT },
+        { role: "system", content: extractionPrompt },
         { role: "user", content: `Job Description:\n${jd_text.slice(0, 4000)}` },
       ],
       { maxTokens: 1500, temperature: 0.1 }

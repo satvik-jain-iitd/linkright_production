@@ -1495,6 +1495,20 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
             )
             ctx.stats.setdefault("phase_4a_dropped", []).extend(rejected)
 
+        # Minimum floor: never drop ALL bullets from a company due to missing
+        # numeric signals alone — that would leave the company blank in the resume.
+        # Keep top-2 raw paragraphs as fallback only when every rejection is
+        # no_concrete_proof_signal (not fabricated IDs or banned phrases).
+        if not accepted and rejected:
+            all_soft = all(r["reason"] == "no_concrete_proof_signal" for r in rejected)
+            if all_soft:
+                floor = raw_paragraphs[:2]
+                logger.warning(
+                    f"Job {ctx.job_id}: Phase 4A {co_name} — all {len(rejected)} paragraphs "
+                    f"lacked numeric signals; keeping top-2 as floor"
+                )
+                accepted = floor
+
         for p in accepted:
             p["company_index"] = idx
             all_verbose.append(p)
@@ -2060,7 +2074,8 @@ async def phase_4_bullets(ctx: PipelineContext, sb: Client, llm):
     # Build companies section for the batched prompt
     companies_section = _build_companies_section(ctx, companies, company_keys, budget, target_role)
 
-    system_msg = prompts.PHASE_4_BATCHED_SYSTEM.format(
+    phase_4_template, _ = get_prompt("phase_4_batched", prompts.PHASE_4_BATCHED_SYSTEM)
+    system_msg = phase_4_template.format(
         strategy=ctx.strategy,
         strategy_description=strategy_info["description"],
         career_level=ctx.career_level,

@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Early Career A4 CV</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand-primary-color: #4285F4;
+            --brand-secondary-color: #EA4335;
+            --brand-tertiary-color: #FBBC05;
+            --brand-quaternary-color: #34A853;
+
+            --ui-canvas-bg-color: #F1F3F4;
+            --ui-page-bg-color: #FFFFFF;
+            --ui-text-primary-color: #202124;
+            --ui-text-secondary-color: #5F6368;
+            --ui-divider-color: #DADCE0;
+
+            --font-size-name: 20pt;
+            --font-size-header: 13pt;
+            --font-size-subhead: 10.5pt;
+            --font-size-body: 9.5pt;
+            --font-size-contact: 9pt;
+            --font-size-role: var(--font-size-name);
+
+            --line-height-standard: 1.2;
+            --section-spacing: 3.5mm;
+            --entry-spacing: 3mm;
+            --page-margin: 12.7mm;
+            --page-width: 210mm;
+            --page-height: 297mm;
+            --ul-group-gap: 3mm;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            color: var(--ui-text-primary-color);
+            background-color: var(--ui-canvas-bg-color);
+            display: flex;
+            justify-content: center;
+            padding: 30px 0;
+        }
+
+        .page {
+            width: var(--page-width);
+            height: var(--page-height);
+            background: var(--ui-page-bg-color);
+            padding: var(--page-margin);
+            box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media print {
+            body { background: none; padding: 0; }
+            .page { margin: 0; box-shadow: none; border: none; }
+            @page { size: A4; margin: 0; }
+        }
+
+        .identity-horizon {
+            position: absolute; top: 0; left: 0; width: 100%; height: 3pt; display: flex;
+        }
+        .color-1 { flex: 1; background: var(--brand-primary-color); }
+        .color-2 { flex: 1; background: var(--brand-secondary-color); }
+        .color-3 { flex: 1; background: var(--brand-tertiary-color); }
+        .color-4 { flex: 1; background: var(--brand-quaternary-color); }
+
+        .header { margin-top: 1mm; margin-bottom: 4mm; }
+        .header-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
+        .name { font-size: var(--font-size-name); font-weight: 700; color: var(--ui-text-primary-color); letter-spacing: -0.2px; }
+        .role { font-size: var(--font-size-role); font-weight: 300; color: var(--ui-text-secondary-color); text-transform: uppercase; letter-spacing: 1.5px; }
+
+        .contact-info {
+            font-size: var(--font-size-contact);
+            color: var(--ui-text-secondary-color);
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid var(--ui-divider-color);
+            border-bottom: 1px solid var(--ui-divider-color);
+            padding: 1.5mm 0;
+        }
+        .contact-info:empty { display: none; }
+
+        .professional-summary {
+            margin-top: 2mm;
+            margin-bottom: var(--section-spacing);
+            font-size: var(--font-size-body);
+            line-height: var(--line-height-standard);
+            color: var(--ui-text-primary-color);
+        }
+        .professional-summary:empty { display: none; }
+        .professional-summary .summary-line { display: block; margin-bottom: 1mm; }
+
+        .section { margin-bottom: var(--section-spacing); }
+        .section-title { font-size: var(--font-size-header); font-weight: 500; color: var(--brand-primary-color); display: flex; flex-direction: column; margin-bottom: 2mm; }
+        .section-divider {
+            height: 1pt; width: 100%; margin-top: 0.5mm; opacity: 0.7;
+            background: linear-gradient(to right, var(--brand-primary-color) 25%, var(--brand-secondary-color) 25%, var(--brand-secondary-color) 50%, var(--brand-tertiary-color) 50%, var(--brand-tertiary-color) 75%, var(--brand-quaternary-color) 75%);
+        }
+
+        .entry { margin-bottom: var(--entry-spacing); }
+        .entry-header { display: flex; justify-content: space-between; font-weight: 700; font-size: var(--font-size-subhead); color: var(--ui-text-primary-color); margin-bottom: 0.8mm; }
+        .entry-subhead { display: flex; justify-content: space-between; font-size: var(--font-size-subhead); color: var(--ui-text-secondary-color); margin-bottom: 0.8mm; }
+
+        .project-title { font-weight: 700; font-size: var(--font-size-body); color: var(--ui-text-primary-color); margin-top: 1mm; margin-bottom: 0.5mm; font-style: italic; }
+
+        .edge-to-edge-line {
+            font-size: var(--font-size-body);
+            line-height: var(--line-height-standard);
+            text-align: justify;
+            text-align-last: justify;
+            width: 100%;
+            display: block;
+        }
+
+        .text-line {
+            font-size: var(--font-size-body);
+            line-height: var(--line-height-standard);
+            width: 100%;
+            display: block;
+        }
+
+        ul { list-style-type: none; }
+        .entry ul + ul { margin-top: var(--ul-group-gap); }
+        li { display: flex; align-items: baseline; width: 100%; margin-bottom: 1mm; }
+        li::before { content: "\2022"; color: var(--brand-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
+        .li-content { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
+        .li-content-natural { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
+        .li-content b, .li-content-natural b { color: var(--brand-primary-color); }
+        .summary-line b { color: var(--brand-primary-color); font-weight: 700; }
+
+        /*
+           EARLY CAREER SECTION HEIGHTS (% of usable body space ~250mm):
+           Education        25% (~62mm)
+           Projects/Intern  35% (~87mm)
+           Skills           15% (~37mm)
+           Work Experience  15% (~37mm)
+           Scholastic        7% (~17mm)
+           Interests         3% (~7mm)
+        */
+        .section-education    { flex: 25; }
+        .section-projects     { flex: 35; }
+        .section-skills       { flex: 15; }
+        .section-work         { flex: 15; }
+        .section-scholastic   { flex: 7; }
+        .section-interests    { flex: 3; }
+    </style>
+</head>
+<body>
+
+<div class="page">
+    <div class="identity-horizon">
+        <div class="color-1"></div><div class="color-2"></div><div class="color-3"></div><div class="color-4"></div>
+    </div>
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-top">
+            <div class="name"><!-- PLACEHOLDER: Full Name --></div>
+            <div class="role"><!-- PLACEHOLDER: Target Role Title --></div>
+        </div>
+        <div class="contact-info">
+            <span><b>Phone:</b> <!-- PLACEHOLDER --></span>
+            <span><b>Email:</b> <!-- PLACEHOLDER --></span>
+            <span><b>LinkedIn:</b> <!-- PLACEHOLDER --></span>
+            <span><b>Portfolio:</b> <!-- PLACEHOLDER --></span>
+        </div>
+    </div>
+    <div class="professional-summary"><!-- PLACEHOLDER: Professional Summary --></div>
+
+    <!--
+        1. EDUCATION (25% of page — anchor section for early career)
+        Priority: Institution name, degree, GPA, relevant coursework.
+        Up to 3 academic entries (undergrad + postgrad + exchange semester).
+    -->
+    <div class="section section-education">
+        <div class="section-title">Education<div class="section-divider"></div></div>
+
+        <div class="entry">
+            <div class="entry-header"><span><!-- PLACEHOLDER: University Name --></span><span><!-- PLACEHOLDER: Class of YYYY --></span></div>
+            <div class="entry-subhead"><span><!-- PLACEHOLDER: Degree / Specialization --></span><span><!-- PLACEHOLDER: GPA / Rank --></span></div>
+            <span class="text-line"><!-- PLACEHOLDER: Relevant coursework, thesis, or academic highlights --></span>
+        </div>
+
+        <div class="entry">
+            <div class="entry-header"><span><!-- PLACEHOLDER: School/Board Name --></span><span><!-- PLACEHOLDER: Year --></span></div>
+            <div class="entry-subhead"><span><!-- PLACEHOLDER: Class XII / X --></span><span><!-- PLACEHOLDER: Percentage / Score --></span></div>
+        </div>
+    </div>
+
+    <!--
+        2. SCHOLASTIC ACHIEVEMENTS (7% — high-signal academic prizes, rank, olympiad)
+        2-3 bullets max. Prioritize national/international rank over local awards.
+    -->
+    <div class="section section-scholastic">
+        <div class="section-title">Scholastic Achievements<div class="section-divider"></div></div>
+        <ul>
+            <li><span class="li-content-natural"><!-- PLACEHOLDER: Academic award / rank / scholarship --></span></li>
+            <li><span class="li-content-natural"><!-- PLACEHOLDER: Olympiad / national competition result --></span></li>
+        </ul>
+    </div>
+
+    <!--
+        3. PROJECTS & INTERNSHIPS (35% — primary proof-of-work for early career)
+        4-7 bullet groups across 2-4 projects/internships.
+        Format: project-title + 2-3 XYZ bullets per project.
+        Include: company/lab name, tech stack, measurable outcome.
+    -->
+    <div class="section section-projects">
+        <div class="section-title">Projects &amp; Internships<div class="section-divider"></div></div>
+
+        <div class="entry">
+            <div class="entry-header"><span><!-- PLACEHOLDER: Project / Internship Title --></span><span><!-- PLACEHOLDER: Duration --></span></div>
+            <div class="entry-subhead"><span><!-- PLACEHOLDER: Company / Lab / Self-initiated --></span><span><!-- PLACEHOLDER: Tech Stack --></span></div>
+
+            <div class="project-title"><!-- PLACEHOLDER: Key feature / module worked on --></div>
+            <ul>
+                <li><span class="li-content"><!-- PLACEHOLDER: Achievement bullet — bold-first metric --></span></li>
+                <li><span class="li-content"><!-- PLACEHOLDER: Achievement bullet --></span></li>
+            </ul>
+        </div>
+
+        <div class="entry">
+            <div class="entry-header"><span><!-- PLACEHOLDER: Project / Internship Title --></span><span><!-- PLACEHOLDER: Duration --></span></div>
+            <div class="entry-subhead"><span><!-- PLACEHOLDER: Company / Lab / Self-initiated --></span><span><!-- PLACEHOLDER: Tech Stack --></span></div>
+
+            <div class="project-title"><!-- PLACEHOLDER: Key feature / module worked on --></div>
+            <ul>
+                <li><span class="li-content"><!-- PLACEHOLDER: Achievement bullet --></span></li>
+                <li><span class="li-content"><!-- PLACEHOLDER: Achievement bullet --></span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!--
+        4. SKILLS (15% — concise, category-grouped)
+        3-4 categories: Languages, Frameworks, Tools, Domain.
+        Each category on one text-line — no bullets.
+    -->
+    <div class="section section-skills">
+        <div class="section-title">Skills<div class="section-divider"></div></div>
+        <div class="entry-header"><!-- PLACEHOLDER: Skill Category (e.g. Languages) --></div>
+        <span class="text-line"><!-- PLACEHOLDER: Comma-separated skills --></span>
+        <div class="entry-header" style="margin-top:1.5mm;"><!-- PLACEHOLDER: Skill Category (e.g. Frameworks) --></div>
+        <span class="text-line"><!-- PLACEHOLDER: Comma-separated skills --></span>
+    </div>
+
+    <!--
+        5. WORK EXPERIENCE (15% — part-time / contract / freelance if any)
+        1-2 entries. If blank, pipeline omits this section.
+    -->
+    <div class="section section-work">
+        <div class="section-title">Work Experience<div class="section-divider"></div></div>
+
+        <div class="entry">
+            <div class="entry-header"><span><!-- PLACEHOLDER: Company Name --></span><span><!-- PLACEHOLDER: Location | Date Range --></span></div>
+            <div class="entry-subhead"><span><!-- PLACEHOLDER: Job Title --></span><span><!-- PLACEHOLDER: Part-time / Contract --></span></div>
+
+            <ul>
+                <li><span class="li-content"><!-- PLACEHOLDER: Achievement bullet --></span></li>
+                <li><span class="li-content"><!-- PLACEHOLDER: Achievement bullet --></span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!--
+        6. CERTIFICATIONS (optional, shown when present)
+    -->
+    <div class="section">
+        <div class="section-title">Certifications<div class="section-divider"></div></div>
+        <ul>
+            <li><span class="li-content-natural"><!-- PLACEHOLDER: Certification name, issuer, year --></span></li>
+        </ul>
+    </div>
+
+    <!-- 7. INTERESTS (pinned to bottom) -->
+    <div class="section" style="margin-top: auto;">
+        <div class="section-title">Interests<div class="section-divider"></div></div>
+        <span class="text-line"><!-- PLACEHOLDER: Interests --></span>
+    </div>
+
+</div>
+
+</body>
+</html>
