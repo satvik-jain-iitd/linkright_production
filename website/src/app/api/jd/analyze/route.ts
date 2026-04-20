@@ -184,11 +184,17 @@ async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
 
 // ── Per-role scoring (core innovation) ───────────────────────────────────────
 
-// Package C (F-25): raised from 0.45 → 0.65. At 0.45 we were giving every
-// loose keyword collision a "match", producing 100%-match / 0-gap theatre
-// on the Credo AI walkthrough. 0.65 is the same threshold the Python worker
-// uses for nugget retrieval (see worker/app/tools/hybrid_retrieval.py).
-const COSINE_THRESHOLD = 0.65;
+// Calibrated to Oracle nomic-embed-text (Ollama) via empirical probe:
+//   HIGH-relevance pairs (e.g. "Led payments team" ↔ "fintech PM"):   0.46–0.55
+//   MEDIUM-relevance pairs:                                            0.40–0.48
+//   LOW-relevance pairs (unrelated domains):                           0.40–0.42
+// Nomic via Ollama produces a much tighter, lower cosine range than Jina
+// text-matching (0.70–0.90). The old 0.65 threshold was set when this
+// pipeline ran on Jina; on nomic it's unreachable and returns 0% coverage
+// even for obvious matches.
+// 0.50 separates HIGH from LOW cleanly; raising it above 0.55 re-introduces
+// the "everything is a gap" regression.
+const COSINE_THRESHOLD = 0.50;
 
 // ── Package C: years-of-experience hard check (F-25) ──────────────────────────
 //

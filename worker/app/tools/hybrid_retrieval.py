@@ -417,7 +417,7 @@ async def hybrid_retrieve(
     query: str,
     company: Optional[str] = None,
     limit: int = 8,
-    similarity_threshold: float = 0.75,
+    similarity_threshold: float = 0.50,
 ) -> tuple[list[NuggetResult], str]:
     """Retrieve the top-k most relevant career nuggets using hybrid search.
 
@@ -436,8 +436,11 @@ async def hybrid_retrieve(
         company: Optional company name to scope the primary search pass.
         limit:   Maximum number of NuggetResult objects to return.
         similarity_threshold: drop vector results with cosine similarity below this
-            (0.0 disables, sensible production value 0.55-0.65). Protects Phase 4a
-            from being fed irrelevant context that it will hallucinate around.
+            (0.0 disables). Calibrated for Oracle nomic-embed-text via Ollama
+            (empirical probe: HIGH matches 0.46–0.55, LOW 0.40–0.42). 0.50 is the
+            cleanest HIGH/LOW separator. Values ≥ 0.60 return zero results because
+            even obvious matches top out at 0.55 on this embedding model.
+            Protects Phase 4a from being fed irrelevant context.
 
     Returns:
         Tuple of (ranked NuggetResult list, retrieval_method_used string).
