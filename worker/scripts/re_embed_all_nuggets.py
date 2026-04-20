@@ -46,7 +46,7 @@ async def _embed(oracle_url: str, oracle_secret: str, text: str) -> list[float] 
     return None
 
 
-async def re_embed(dry_run: bool, user_id: str | None) -> None:
+async def re_embed(dry_run: bool, user_id: str | None, force: bool = False) -> None:
     oracle_url = os.environ.get("ORACLE_BACKEND_URL", "")
     oracle_secret = os.environ.get("ORACLE_BACKEND_SECRET", "")
     supabase_url = os.environ.get("SUPABASE_URL", "")
@@ -72,7 +72,7 @@ async def re_embed(dry_run: bool, user_id: str | None) -> None:
     to_embed = [
         r for r in rows
         if (r.get("answer") or "").strip()
-        and r.get("embedding_model", "") != "nomic-embed-text"
+        and (force or r.get("embedding_model", "") != "nomic-embed-text")
     ]
     skipped = len(rows) - len(to_embed)
     re_embedded = 0
@@ -82,10 +82,14 @@ async def re_embed(dry_run: bool, user_id: str | None) -> None:
             logger.info("[DRY RUN] Would re-embed id=%s (current_model=%s)", row["id"], row.get("embedding_model", ""))
         re_embedded = len(to_embed)
     else:
-        # Local model — no rate limits, parallelize all at once
+        # Limit concurrency to 10 — Oracle nginx can handle bursts but 100+ parallel
+        # connections to the local Ollama model cause timeouts.
+        sem = asyncio.Semaphore(10)
+
         async def _embed_one(row: dict) -> None:
             nonlocal re_embedded
-            embedding = await _embed(oracle_url, oracle_secret, (row.get("answer") or "").strip())
+            async with sem:
+                embedding = await _embed(oracle_url, oracle_secret, (row.get("answer") or "").strip())
             if embedding:
                 sb.table("career_nuggets").update(
                     {"embedding": embedding, "embedding_model": "nomic-embed-text"}
@@ -107,8 +111,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Re-embed all nuggets with nomic-embed-text")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
     parser.add_argument("--user-id", help="Restrict to a specific user UUID")
+    parser.add_argument("--force", action="store_true", help="Re-embed even if embedding_model already set")
     args = parser.parse_args()
-    asyncio.run(re_embed(args.dry_run, args.user_id))
+    asyncio.run(re_embed(args.dry_run, args.user_id, args.force))
 
 
 if __name__ == "__main__":
