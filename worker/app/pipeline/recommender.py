@@ -203,10 +203,8 @@ async def score_fresh_discoveries_for_user(sb, user_id: str) -> int:
 def _load_all_scored(sb, user_id: str) -> list[dict]:
     """Join job_discoveries + job_scores for ranking input.
 
-    Critical filter: ONLY 'active' liveness (not 'unknown') can surface in
-    top-20. A discovery marked 'unknown' either hasn't been liveness-checked
-    yet or had a transient error — both cases: don't show to user until a
-    future pass confirms it's live.
+    Includes both 'active' and 'unknown' liveness so recently discovered jobs
+    (not yet liveness-checked) can surface immediately for users.
     """
     since = (datetime.now(timezone.utc) - timedelta(days=RECENCY_WINDOW_DAYS)).isoformat()
     scores = (
@@ -226,7 +224,7 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
         .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,user_id")
         .in_("id", ids)
         .gte("discovered_at", since)
-        .eq("liveness_status", "active")          # strict: only confirmed-live
+        .in_("liveness_status", ["active", "unknown"])
         .in_("status", ["new", "saved"])
         .execute()
     ).data or []
@@ -456,13 +454,12 @@ async def recompute_top_20_for_user(sb, user_id: str) -> dict[str, Any]:
 
 
 async def recompute_top_20_for_all_users(sb) -> list[dict[str, Any]]:
-    """Iterate all active users with watchlists and recompute. Sequential,
+    """Iterate all active users (by preferences) and recompute. Sequential,
     intentionally — the scoring Gemini calls go through rate_governor which
     already paces per-minute/per-day."""
     users = (
-        sb.table("company_watchlist")
+        sb.table("user_preferences")
         .select("user_id")
-        .eq("is_active", True)
         .execute()
     ).data or []
     unique_users = list({u["user_id"] for u in users if u.get("user_id")})

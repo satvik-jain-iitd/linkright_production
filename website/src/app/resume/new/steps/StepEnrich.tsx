@@ -117,9 +117,9 @@ export function StepEnrich({ data, update, next, back }: Props) {
         if (qs.length > 0) autoFillFromProfile(qs);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
-          setError("Question generation timed out — you can skip this step");
+          setError("Question generation timed out. You can skip this step.");
         } else {
-          setError("Network error — please try again");
+          setError("Network error. Please try again.");
         }
       } finally {
         clearTimeout(timeout);
@@ -147,10 +147,15 @@ export function StepEnrich({ data, update, next, back }: Props) {
       const newScored: Record<number, ScoredChunk[]> = {};
       results.forEach((r, i) => {
         if (r.status === "fulfilled" && r.value.chunks?.length > 0) {
-          newAnswers[i] = r.value.chunks.join("\n\n");
+          const scored: ScoredChunk[] = r.value.scored ?? [];
+          const highQuality = scored.filter((s) => s.score >= 40);
+          const source = highQuality.length > 0
+            ? highQuality.map((s) => s.chunk)
+            : (r.value.chunks as string[]);
+          newAnswers[i] = source.join(" ").trim().slice(0, 200);
           filled.add(i);
-          if (r.value.scored?.length > 0) {
-            newScored[i] = r.value.scored;
+          if (scored.length > 0) {
+            newScored[i] = scored;
           }
         }
       });
@@ -202,7 +207,7 @@ export function StepEnrich({ data, update, next, back }: Props) {
       if (result.status === "added") {
         showToast(`Career profile enriched: ${result.summary || "New experience added"}`);
       } else if (result.status === "duplicate") {
-        showToast("Already in your profile — skipped.");
+        showToast("Already in your profile. Skipped.");
       }
     } catch {
       setAnswerStatuses((prev) => ({

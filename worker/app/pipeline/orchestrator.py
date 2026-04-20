@@ -1717,7 +1717,14 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
 
     verbose = ctx._ranked_verbose_bullets or ctx._verbose_bullets
     if not verbose:
-        raise ValueError("Phase 4C: No verbose bullets to condense")
+        logger.warning(
+            "Phase 4C: no verbose bullets to condense — dropped_stats=%s ranked=%d unranked=%d",
+            ctx.stats.get("phase_4a_dropped", {}),
+            len(ctx._ranked_verbose_bullets or []),
+            len(ctx._verbose_bullets or []),
+        )
+        ctx._raw_bullets = []
+        return
 
     phase_4c_template, _ = get_prompt("phase_4c_condense", prompts.PHASE_4C_CONDENSE_SYSTEM)
 

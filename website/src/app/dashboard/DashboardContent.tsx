@@ -57,12 +57,6 @@ type NuggetStatus = {
   ready: boolean;
 };
 
-type WatchedCompany = {
-  id: string;
-  company_name: string;
-  last_scan_at?: string | null;
-  new_jobs_last_scan?: number | null;
-};
 
 const ERROR_PATTERNS: Array<[RegExp, string]> = [
   [/timed?\s*out/i, "Resume generation timed out. Please try again."],
@@ -111,7 +105,6 @@ export function DashboardContent({
   const [jobs, setJobs] = useState<ResumeJob[]>([]);
   const [recs, setRecs] = useState<RecsResponse | null>(null);
   const [status, setStatus] = useState<NuggetStatus | null>(null);
-  const [watchlist, setWatchlist] = useState<WatchedCompany[]>([]);
   const [diaryStreak, setDiaryStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -131,9 +124,6 @@ export function DashboardContent({
       fetch("/api/nuggets/status", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => setStatus(data)),
-      fetch("/api/watchlist", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : { watchlist: [] }))
-        .then((data) => setWatchlist(data.watchlist ?? [])),
       fetch("/api/diary?limit=1", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -199,7 +189,7 @@ export function DashboardContent({
           <p className="mt-1.5 text-sm text-muted">
             {topMatches.length > 0
               ? `${topMatches.length} new match${topMatches.length === 1 ? "" : "es"} today.`
-              : "Scout is still catching up. Check back soon for matches."}
+              : "We're still finding matches for you. Check back soon."}
           </p>
         </div>
 
@@ -251,11 +241,11 @@ export function DashboardContent({
                 <div className="rounded-2xl border border-dashed border-border bg-white p-6 text-center">
                   <p className="text-sm font-medium">No matches yet today.</p>
                   <p className="mt-1 text-xs text-muted">
-                    Scout refreshes every 30 min. Try tuning your preferences.
+                    Matches refresh every 30 min. Try tuning your preferences.
                   </p>
                   <Link
                     href="/onboarding/preferences"
-                    className="mt-3 inline-block rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold transition hover:border-accent hover:text-accent"
+                    className="mt-3 inline-block rounded-lg border border-border px-3.5 py-1.5 text-xs font-semibold transition hover:border-accent hover:text-accent"
                   >
                     Tune preferences
                   </Link>
@@ -409,78 +399,6 @@ export function DashboardContent({
                   </div>
                 )}
               </div>
-            </section>
-
-            {/* Scout watchlist */}
-            <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-base font-semibold tracking-tight">
-                  Scout · companies you&apos;re watching
-                </h2>
-                <Link
-                  href="/dashboard/scout"
-                  className="text-xs font-semibold text-accent hover:text-accent-hover"
-                >
-                  Manage →
-                </Link>
-              </div>
-              {watchlist.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-border bg-white p-5 text-center">
-                  <p className="text-sm">
-                    Watch specific companies — we&apos;ll pulse you when they
-                    post.
-                  </p>
-                  <Link
-                    href="/dashboard/scout"
-                    className="mt-3 inline-block rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold transition hover:border-accent hover:text-accent"
-                  >
-                    Add a company
-                  </Link>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-2xl border border-border bg-white">
-                  {watchlist.slice(0, 5).map((w, i, arr) => {
-                    const dot =
-                      (w.new_jobs_last_scan ?? 0) > 0
-                        ? "bg-accent"
-                        : w.last_scan_at
-                          ? "bg-muted/50"
-                          : "bg-border";
-                    const updateText =
-                      (w.new_jobs_last_scan ?? 0) > 0
-                        ? `${w.new_jobs_last_scan} new role${w.new_jobs_last_scan === 1 ? "" : "s"} posted recently`
-                        : w.last_scan_at
-                          ? `Scanned ${new Date(w.last_scan_at).toLocaleDateString(
-                              "en-IN",
-                              { day: "numeric", month: "short" },
-                            )}`
-                          : "Not scanned yet";
-                    return (
-                      <div
-                        key={w.id}
-                        className={
-                          "flex items-center gap-3.5 px-4 py-3" +
-                          (i === arr.length - 1 ? "" : " border-b border-border")
-                        }
-                      >
-                        <span className={`h-2 w-2 rounded-full ${dot}`} />
-                        <div className="flex-1">
-                          <div className="text-sm font-semibold">
-                            {w.company_name}
-                          </div>
-                          <div className="text-xs text-muted">{updateText}</div>
-                        </div>
-                        <Link
-                          href={`/dashboard/scout`}
-                          className="text-xs text-muted transition hover:text-foreground"
-                        >
-                          View →
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </section>
 
             {/* Your resumes (existing jobs list, compact) */}

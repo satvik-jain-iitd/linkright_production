@@ -55,7 +55,34 @@ RULES:
 - NEVER fabricate. Only expand what is in the input.
 - If a bullet is vague, include it as one honest sentence.
 - Thin resumes: fewer, honest sections. Do not pad.
-- ### heading should name the specific initiative, not generic labels like "Key Achievement 1"`;
+- ### heading should name the specific initiative, not generic labels like "Key Achievement 1"
+
+MANDATORY LENGTH RULE — NO EXCEPTIONS:
+❌ PROHIBITED: Any ### section body shorter than 200 characters. A section under 200 characters
+lacks sufficient signal. MERGE it into an adjacent related section — NEVER output it standalone.
+❌ PROHIBITED: Any ### section body longer than 350 characters. A section exceeding 350 characters
+MUST be split into two or more separate ### sections, one per distinct signal. This is NON-NEGOTIABLE.
+✅ TARGET: Every ### section body MUST be 200–350 characters. Count before outputting.
+
+MANDATORY SINGLE-SIGNAL RULE — NEVER VIOLATE:
+❌ PROHIBITED: Mixing two distinct signal types in one ### section. Examples of FORBIDDEN mixing:
+  - "Led a 12-person team" + "built the data pipeline" → MUST be two separate ### sections
+  - "Launched UPI feature" + "redesigned returns flow" → MUST be two separate ### sections
+✅ MANDATORY: Every ### section MUST pass the Single-Signal Test before output:
+  "If a recruiter reads ONLY this paragraph, does it describe exactly ONE thing this person did?"
+  If the answer is NO or MAYBE → you MUST split it. No exceptions.
+
+SIGNAL SEPARATION — REQUIRED EXAMPLES:
+✅ CORRECT — two signals = two ### sections:
+### UPI Feature Launch
+At CRED, as PM, on the UPI Integration: Led the 12-engineer payments team to ship...
+
+### Returns Flow Redesign
+At CRED, as PM, on the Returns Flow: Owned the end-to-end redesign that reduced...
+
+❌ WRONG — two signals crammed into one ### section:
+### CRED Payments Work
+Led UPI launch AND redesigned returns flow AND managed the team...`;
 
 export async function POST(request: Request) {
   const supabase = await createClient();

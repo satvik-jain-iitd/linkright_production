@@ -54,7 +54,7 @@ export default function ScoutOverview() {
     <div className="space-y-8" data-testid="scout-overview">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Scout</h1>
+          <h1 className="text-2xl font-bold text-foreground">Find Roles</h1>
           <p className="mt-1 text-sm text-muted">
             Automatically discover jobs from companies you care about
           </p>
@@ -99,11 +99,6 @@ export default function ScoutOverview() {
 
       {/* Quick links */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <QuickLink
-          href="/dashboard/scout/watchlist"
-          title="Manage Watchlist"
-          description="Add or remove companies to track"
-        />
         <QuickLink
           href="/dashboard/scout/discoveries"
           title="Browse Discoveries"

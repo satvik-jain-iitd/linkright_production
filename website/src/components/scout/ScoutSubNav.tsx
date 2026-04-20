@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 
 const SCOUT_TABS = [
   { href: "/dashboard/scout", label: "Overview", exact: true },
-  { href: "/dashboard/scout/watchlist", label: "Watchlist" },
   { href: "/dashboard/scout/discoveries", label: "Discoveries", showBadge: true },
 ];
 

@@ -146,10 +146,11 @@ export function ProfileHighlightsView() {
   }, []);
 
   // Poll embedding status until fully embedded (max ~3 min).
-  // Dep is status?.ready (not status) so the interval isn't recreated on every poll.
+  // Also re-fetches nuggets on every tick so the list auto-updates without a hard refresh.
   useEffect(() => {
     if (status?.ready) {
       setProfileReadyToast(true);
+      loadNuggets();
       return;
     }
     if (!status) return;
@@ -158,6 +159,9 @@ export function ProfileHighlightsView() {
       if (res.ok) {
         const json: NuggetStatus = await res.json();
         setStatus(json);
+        if (json.total_extracted > 0) {
+          loadNuggets();
+        }
         if (json.ready) {
           setProfileReadyToast(true);
           track({ event: "profile_fully_processed", properties: {} });

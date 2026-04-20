@@ -93,6 +93,9 @@ export function CareerOutlineView({
   const [editBuffer, setEditBuffer] = useState<string | null>(null);
   const editing = editBuffer !== null;
   const [approvedSet, setApprovedSet] = useState<Set<number>>(new Set());
+  const [editingCardIdx, setEditingCardIdx] = useState<number | null>(null);
+  const [editingCardHeading, setEditingCardHeading] = useState("");
+  const [editingCardBody, setEditingCardBody] = useState("");
 
   const paragraphs = useMemo(
     () =>
@@ -128,6 +131,25 @@ export function CareerOutlineView({
     if (editBuffer === null) return;
     onChange({ ...data, career_summary_first_person: editBuffer });
     setEditBuffer(null);
+  }
+
+  function startCardEdit(i: number) {
+    const card = initiativeCards[i];
+    if (!card) return;
+    setEditingCardIdx(i);
+    setEditingCardHeading(card.heading);
+    setEditingCardBody(card.body);
+  }
+
+  function cancelCardEdit() {
+    setEditingCardIdx(null);
+  }
+
+  function commitCardEdit() {
+    if (editingCardIdx === null) return;
+    const updated = replaceCardInNarration(narration, editingCardIdx, editingCardHeading, editingCardBody);
+    onChange({ ...data, career_summary_first_person: updated });
+    setEditingCardIdx(null);
   }
 
   return (
@@ -240,22 +262,21 @@ export function CareerOutlineView({
                       key={`${exp.company}-${expIdx}`}
                       className="rounded-r-lg border-l-2 border-accent bg-accent/5 px-3.5 py-3"
                     >
-                      <div className="flex flex-wrap items-baseline gap-x-2">
+                      <div className="flex items-baseline gap-x-2">
                         <input
                           value={exp.role}
                           onChange={(e) =>
                             patchExperience(expIdx, { role: e.target.value })
                           }
-                          className="min-w-[160px] flex-1 bg-transparent text-sm font-semibold text-foreground focus:outline-none"
+                          className="bg-transparent text-sm font-semibold text-foreground focus:outline-none"
                           placeholder="Role"
                         />
-                        <span className="text-muted">·</span>
                         <input
                           value={exp.company}
                           onChange={(e) =>
                             patchExperience(expIdx, { company: e.target.value })
                           }
-                          className="min-w-[120px] flex-1 bg-transparent text-sm text-muted focus:outline-none"
+                          className="ml-auto bg-transparent text-sm text-muted focus:outline-none text-right"
                           placeholder="Company"
                         />
                       </div>
@@ -419,6 +440,7 @@ export function CareerOutlineView({
             <div className="space-y-3">
               {initiativeCards.map((card, i) => {
                 const approved = approvedSet.has(i);
+                const isEditingThis = editingCardIdx === i;
                 return (
                   <div
                     key={i}
@@ -428,32 +450,68 @@ export function CareerOutlineView({
                         : "border-border bg-surface"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-foreground leading-snug">
-                        {card.heading}
-                      </h4>
-                      {approved ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-primary-100 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
-                          ✓ Approved
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => approveCard(i)}
-                          className="shrink-0 rounded-[10px] border border-accent px-3 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
-                        >
-                          Approve
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
-                      {card.body
-                        .split(/\n+/)
-                        .filter(Boolean)
-                        .map((line, j) => (
-                          <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
-                        ))}
-                    </div>
+                    {isEditingThis ? (
+                      <div className="space-y-2">
+                        <input
+                          value={editingCardHeading}
+                          onChange={(e) => setEditingCardHeading(e.target.value)}
+                          className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-semibold text-foreground focus:border-accent focus:outline-none"
+                          placeholder="Initiative heading"
+                        />
+                        <textarea
+                          value={editingCardBody}
+                          onChange={(e) => setEditingCardBody(e.target.value)}
+                          rows={4}
+                          className="w-full resize-y rounded-lg border border-border bg-white px-3 py-2 text-xs leading-relaxed text-foreground focus:border-accent focus:outline-none"
+                          placeholder="Describe this initiative..."
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button type="button" onClick={cancelCardEdit} className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-foreground transition hover:border-accent">Cancel</button>
+                          <button type="button" onClick={commitCardEdit} className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-white transition hover:bg-accent-hover">Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="text-sm font-semibold text-foreground leading-snug">
+                            {card.heading}
+                          </h4>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {!approved && (
+                              <button
+                                type="button"
+                                onClick={() => startCardEdit(i)}
+                                className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-medium text-muted transition hover:border-accent hover:text-accent"
+                                title="Edit this card"
+                              >
+                                ✏
+                              </button>
+                            )}
+                            {approved ? (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                                ✓ Approved
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => approveCard(i)}
+                                className="rounded-lg border border-accent px-3 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
+                              >
+                                Approve
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
+                          {card.body
+                            .split(/\n+/)
+                            .filter(Boolean)
+                            .map((line, j) => (
+                              <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
+                            ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -557,6 +615,41 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function replaceCardInNarration(
+  narration: string,
+  cardIndex: number,
+  newHeading: string,
+  newBody: string,
+): string {
+  const lines = narration.split("\n");
+  let count = -1;
+  let inTarget = false;
+  const out: string[] = [];
+  let bodyInserted = false;
+
+  for (const line of lines) {
+    if (line.startsWith("### ")) {
+      count++;
+      if (count === cardIndex) {
+        inTarget = true;
+        bodyInserted = false;
+        out.push(`### ${newHeading}`);
+        newBody.split("\n").forEach((bl) => out.push(bl));
+        bodyInserted = true;
+        continue;
+      } else if (inTarget) {
+        inTarget = false;
+      }
+    } else if (inTarget && line.startsWith("## ")) {
+      inTarget = false;
+    }
+    if (!inTarget) {
+      out.push(line);
+    }
+  }
+  return out.join("\n");
 }
 
 // Bold the lead clause if paragraph starts with "At {Company}," or "Before that at …,".

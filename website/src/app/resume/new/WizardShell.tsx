@@ -85,11 +85,12 @@ function loadSaved(): { step: number; data: WizardData } | null {
   }
 }
 
-export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, discoveryRole }: { userId: string; jobId?: string; retryJdText?: string; discoveryCompany?: string; discoveryRole?: string }) {
+export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, discoveryRole, isFirstResume }: { userId: string; jobId?: string; retryJdText?: string; discoveryCompany?: string; discoveryRole?: string; isFirstResume?: boolean }) {
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
   // 5 steps: JobDetails=0, Customize=1, Layout=2, Build=3, Review=4
-  // Skip Step 0 when coming from a discovery (JD + company + role already pre-filled)
+  // From a discovery (JD + company + role pre-filled): skip directly to Build (step 3)
+  // First-time resume with no discovery: show step 0 only, then jump to Build
   const initialStep = jobId
     ? 4
     : saved?.data?.job_id
@@ -97,7 +98,7 @@ export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, disc
         ? saved.step
         : 3
       : (!saved && discoveryCompany && retryJdText)
-        ? 1
+        ? 3
         : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
@@ -198,7 +199,11 @@ export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, disc
   const next = () => {
     if (stepping.current) return;
     stepping.current = true;
-    setStep((s) => Math.min(s + 1, STEP_LABELS.length - 1));
+    setStep((s) => {
+      // First-time resume: from step 0 (Job Details) skip directly to Build (step 3)
+      if (isFirstResume && s === 0) return 3;
+      return Math.min(s + 1, STEP_LABELS.length - 1);
+    });
     setTimeout(() => { stepping.current = false; }, 300);
   };
   const back = () => setStep((s) => Math.max(s - 1, 0));

@@ -137,7 +137,7 @@ export default function PreferencesPage() {
 
   async function save(proceedToBrowse: boolean) {
     if (proceedToBrowse && prefs.target_roles.length === 0) {
-      alert("Pick at least one target role so Scout knows what to find.");
+      alert("Pick at least one target role so we know what to find.");
       return;
     }
     setSaving(true);
@@ -419,7 +419,7 @@ export default function PreferencesPage() {
         <button
           type="button"
           onClick={() => router.push("/onboarding/profile")}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent"
+          className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent"
         >
           ← Back
         </button>

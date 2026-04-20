@@ -476,7 +476,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                 label: "ATS-safe",
                 ok: ats,
                 body: ats
-                  ? "No images, no tables, no text in columns — parsers can read it."
+                  ? "No images, no tables, no text in columns. Parsers can read it."
                   : "Template used features ATS parsers may mis-read.",
               },
               {
@@ -484,7 +484,7 @@ export function StepReview({ data, onNewResume }: { data: WizardData; onNewResum
                 ok: brs == null ? true : brs >= 0.6,
                 body:
                   brs == null
-                    ? "Bullets traced to your own highlights — evidence-cited."
+                    ? "Bullets traced to your own highlights, evidence-cited."
                     : `Avg relevance ${Math.round(brs * 100)}% · ${tier1 ?? 0} top-tier bullets`,
               },
               {

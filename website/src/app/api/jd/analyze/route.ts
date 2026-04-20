@@ -5,7 +5,7 @@
  *
  * Flow:
  *   1. Groq 8B extracts JD requirements
- *   2. Oracle nomic-embed-text embeds each requirement (same model as stored nuggets)
+ *   2. Jina jina-embeddings-v3 embeds each requirement (same model as stored nuggets)
  *   3. For each company/role: find best nugget per requirement (cosine)
  *   4. Rank roles → primary / secondary / tertiary
  *   5. Identify gaps (uncovered requirements)
@@ -138,43 +138,56 @@ function parseRequirements(text: string): JDRequirement[] {
     }));
 }
 
-// ── Oracle nomic-embed-text (same model as stored nugget embeddings) ──────────
-// Nuggets are embedded by nugget_embedder.py via Oracle /lifeos/embed endpoint.
+// ── Jina jina-embeddings-v3 (same model as stored nugget embeddings) ─────────
+// Nuggets are embedded by nugget_embedder.py using jina-embeddings-v3 (768 dims).
 // Must use the same model here or cosine similarity scores are meaningless.
 
-const ORACLE_EMBED_URL = process.env.ORACLE_BACKEND_URL
-  ? `${process.env.ORACLE_BACKEND_URL}/lifeos/embed`
-  : "http://80.225.198.184:8000/lifeos/embed";
+const JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings";
+const JINA_EMBED_MODEL = "jina-embeddings-v3";
+const JINA_DIMENSIONS = 768;
 
-async function oracleEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
-  const apiKey = process.env.ORACLE_BACKEND_SECRET ?? "";
+async function jinaEmbedBatch(texts: string[]): Promise<(number[] | null)[]> {
+  const apiKey = process.env.JINA_API_KEY ?? "";
   if (texts.length === 0) return [];
+  if (!apiKey) {
+    console.warn("[jd/analyze] JINA_API_KEY not set — skipping embeddings");
+    return texts.map(() => null);
+  }
 
-  // Oracle /lifeos/embed is single-text only — embed sequentially
-  const results: (number[] | null)[] = [];
-  for (const text of texts) {
+  const results: (number[] | null)[] = texts.map(() => null);
+  // Jina supports batch requests — send all at once in chunks of 20
+  const CHUNK = 20;
+  for (let start = 0; start < texts.length; start += CHUNK) {
+    const batch = texts.slice(start, start + CHUNK);
     try {
-      const resp = await fetch(ORACLE_EMBED_URL, {
+      const resp = await fetch(JINA_EMBED_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({
+          model: JINA_EMBED_MODEL,
+          input: batch,
+          dimensions: JINA_DIMENSIONS,
+          task: "text-matching",
+        }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!resp.ok) {
-        console.warn("[jd/analyze] Oracle embed failed:", resp.status);
-        results.push(null);
+        console.warn("[jd/analyze] Jina embed failed:", resp.status);
         continue;
       }
 
-      const data = await resp.json() as { embedding: number[] };
-      results.push(Array.isArray(data?.embedding) && data.embedding.length > 0 ? data.embedding : null);
+      const data = await resp.json() as { data: Array<{ embedding: number[]; index: number }> };
+      for (const item of data.data ?? []) {
+        if (Array.isArray(item.embedding) && item.embedding.length === JINA_DIMENSIONS) {
+          results[start + item.index] = item.embedding;
+        }
+      }
     } catch (err) {
-      console.warn("[jd/analyze] Oracle embed error:", err);
-      results.push(null);
+      console.warn("[jd/analyze] Jina embed error:", err);
     }
   }
   return results;
@@ -404,14 +417,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Could not extract requirements from JD" }, { status: 422 });
   }
 
-  // ── Step 2: Embed requirements (Oracle nomic-embed-text) ───────────────
+  // ── Step 2: Embed requirements (Jina jina-embeddings-v3) ──────────────
 
   const reqTexts = requirements.map((r) => r.text);
-  const reqEmbeddings = await oracleEmbedBatch(reqTexts);
+  const reqEmbeddings = await jinaEmbedBatch(reqTexts);
 
   const embeddedCount = reqEmbeddings.filter((e) => e !== null).length;
   if (embeddedCount === 0) {
-    console.warn("[jd/analyze] No embeddings generated — Oracle backend unreachable. Proceeding without semantic scoring.");
+    console.warn("[jd/analyze] No embeddings generated — JINA_API_KEY missing or Jina unreachable. Proceeding without semantic scoring.");
   }
 
   // ── Step 3: Fetch user's nuggets (with embeddings) + work_history ──────

@@ -52,7 +52,7 @@ export default async function NewResumePage({
   // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
   // [BYOK-REMOVED]     .eq("user_id", user.id),
   // [BYOK-REMOVED] ]);
-  const [{ count: nuggetCount }, { count: chunkCount }] = await Promise.all([
+  const [{ count: nuggetCount }, { count: chunkCount }, { count: resumeCount }] = await Promise.all([
     supabase
       .from("career_nuggets")
       .select("*", { count: "exact", head: true })
@@ -61,15 +61,22 @@ export default async function NewResumePage({
       .from("career_chunks")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id),
+    supabase
+      .from("resume_jobs")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .in("status", ["completed", "processing", "queued"]),
   ]);
 
   if ((nuggetCount ?? 0) === 0 && (chunkCount ?? 0) === 0) {
     redirect("/onboarding");
   }
 
+  const isFirstResume = (resumeCount ?? 0) === 0;
+
   return (
     <div className="min-h-screen bg-background">
-      <WizardShell userId={user.id} jobId={job} retryJdText={retryJdText} discoveryCompany={discoveryCompany} discoveryRole={discoveryRole} />
+      <WizardShell userId={user.id} jobId={job} retryJdText={retryJdText} discoveryCompany={discoveryCompany} discoveryRole={discoveryRole} isFirstResume={isFirstResume} />
     </div>
   );
 }

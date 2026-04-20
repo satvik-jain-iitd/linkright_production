@@ -156,9 +156,9 @@ export function StepCustomize({ data, update, next, back }: Props) {
         if (qs.length > 0) autoFillFromProfile(qs);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
-          setError("Question generation timed out — you can skip this step");
+          setError("Question generation timed out. You can skip this step.");
         } else {
-          setError("Network error — please try again");
+          setError("Network error. Please try again.");
         }
       } finally {
         clearTimeout(timeout);
@@ -243,7 +243,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
       if (result.status === "added") {
         showToast(`Career profile enriched: ${result.summary || "New experience added"}`);
       } else if (result.status === "duplicate") {
-        showToast("Already in your profile — skipped.");
+        showToast("Already in your profile. Skipped.");
       }
     } catch {
       setAnswerStatuses((prev) => ({
@@ -465,7 +465,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
                                 return n;
                               })
                             }
-                            className="rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-accent"
+                            className="rounded-lg border border-border bg-background px-2 py-0.5 text-xs text-muted transition-colors hover:border-accent/40 hover:text-accent"
                           >
                             {expandedVectors.has(i) ? "Hide sources" : `View sources (${scoredChunks[i].length})`}
                           </button>

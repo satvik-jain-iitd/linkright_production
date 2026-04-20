@@ -149,7 +149,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
             return;
           }
         } catch {
-          setError("Could not check existing job — please try again");
+          setError("Could not check existing job. Please try again.");
           return;
         }
       }
@@ -185,7 +185,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
         update({ job_id: result.job_id });
         cleanupFn = subscribeToJob(result.job_id);
       } catch {
-        setError("Network error — please try again");
+        setError("Network error. Please try again.");
       }
     };
 

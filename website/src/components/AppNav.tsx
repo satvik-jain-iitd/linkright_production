@@ -284,7 +284,6 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                     <p className="text-sm font-medium text-foreground truncate">
                       {user.user_metadata?.full_name || "User"}
                     </p>
-                    <p className="text-xs text-muted truncate">{user.email}</p>
                   </div>
                   <Link
                     href="/dashboard/profile"

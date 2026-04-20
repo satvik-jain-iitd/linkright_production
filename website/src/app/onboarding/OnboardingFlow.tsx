@@ -647,7 +647,7 @@ function StepCareerBasics({
             </button>
             <button
               onClick={() => setUploadMode("paste")}
-              className="rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground transition hover:border-accent"
+              className="rounded-lg border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground transition hover:border-accent"
             >
               Paste resume text
             </button>
@@ -735,7 +735,7 @@ function StepCareerBasics({
             </button>
             <button
               onClick={onSkip}
-              className="rounded-full border border-border bg-white px-4 py-3 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
+              className="rounded-lg border border-border bg-white px-4 py-3 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
             >
               Skip
             </button>
