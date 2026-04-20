@@ -71,14 +71,22 @@ export async function POST(request: Request) {
     return rateLimitResponse("narration");
   }
 
-  const { experiences } = await request.json();
+  const body = await request.json();
+  const { experiences, projects } = body as {
+    experiences?: ExperienceInput[];
+    projects?: ProjectInput[];
+  };
 
   if (!Array.isArray(experiences) || experiences.length === 0) {
     return Response.json({ error: "No experiences provided" }, { status: 400 });
   }
 
   const systemPrompt = await getPrompt("career-narration", CAREER_NARRATION_FALLBACK);
-  const userContent = formatExperiences(experiences as ExperienceInput[]);
+  const expContent = formatExperiences(experiences);
+  const projContent = Array.isArray(projects) && projects.length > 0
+    ? "\n\n---\n\n" + formatProjects(projects)
+    : "";
+  const userContent = expContent + projContent;
 
   // Try Gemini streaming first
   try {
@@ -137,6 +145,19 @@ interface ExperienceInput {
   end_date?: string;
   bullets?: string[];
   projects?: ProjectInput[];
+}
+
+function formatProjects(projects: ProjectInput[]): string {
+  const items = projects
+    .map((p) => {
+      const achievements = (p.key_achievements ?? [])
+        .map((a) => `  * ${a}`)
+        .join("\n");
+      return `Project: ${p.title ?? ""}\n${p.one_liner ?? ""}${achievements ? "\n" + achievements : ""}`;
+    })
+    .filter(Boolean);
+  if (items.length === 0) return "";
+  return "Independent Projects\n\n" + items.join("\n\n");
 }
 
 function formatExperiences(experiences: ExperienceInput[]): string {

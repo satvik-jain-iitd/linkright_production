@@ -71,6 +71,33 @@ RULES:
 Return ONLY valid JSON array, no other text.\
 """
 
+_SYSTEM_PROMPT_MD = """\
+You are a career data extractor. Extract atomic nuggets from career text.
+Each nugget = one coherent achievement, skill, or fact.
+
+For each nugget write a ## nugget block with these fields:
+
+## nugget
+type: work_experience
+company: <company name or none>
+role: <job title or none>
+importance: <P0/P1/P2/P3>
+answer: <self-contained sentence(s) — include company, role, metrics>
+tags: <tag1, tag2, tag3>
+leadership: <none/individual/team_lead>
+
+type values: work_experience, independent_project, skill, education, certification, award
+importance: P0=career-defining (top 3 ever), P1=strong, P2=supporting, P3=background
+leadership: none=solo, individual=drove decisions, team_lead=managed people
+tags: 2-5 lowercase labels for skills/themes
+
+RULES:
+- Every work_experience nugget MUST have company AND role set
+- answer MUST be self-contained: include company name, role, and any metric from the source
+- Each nugget is atomic — one achievement per block
+- Write ONLY ## nugget blocks, no other text\
+"""
+
 
 @dataclass
 class Nugget:
@@ -196,6 +223,55 @@ async def _parse_with_retry(api_key: str, user_text: str, raw_text: str) -> Opti
             return None
 
 
+def _parse_markdown_nuggets(text: str) -> Optional[list]:
+    """Parse ## nugget blocks from Markdown-format LLM output into raw dicts."""
+    import re
+    blocks = re.split(r"^## nugget", text, flags=re.MULTILINE | re.IGNORECASE)
+    result = []
+    for block in blocks:
+        if not block.strip():
+            continue
+        raw: dict = {}
+        for line in block.split("\n"):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if ":" in line:
+                key, _, val = line.partition(":")
+                raw[key.strip().lower()] = val.strip()
+        if not raw.get("answer"):
+            continue
+        answer = raw["answer"]
+        tags_raw = raw.get("tags", "")
+        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        importance = raw.get("importance", "P2").upper()
+        if importance not in ("P0", "P1", "P2", "P3"):
+            importance = "P2"
+        section_type = raw.get("type", "work_experience").lower()
+        primary_layer = "B" if section_type in ("relationships", "health", "finance", "inner_life", "logistics", "recreation") else "A"
+        result.append({
+            "nugget_text": answer,
+            "question": "",
+            "alt_questions": [],
+            "answer": answer,
+            "primary_layer": primary_layer,
+            "section_type": section_type,
+            "life_domain": None,
+            "resume_relevance": {"P0": 0.9, "P1": 0.75, "P2": 0.5, "P3": 0.3}.get(importance, 0.5),
+            "resume_section_target": "experience" if section_type == "work_experience" else section_type,
+            "importance": importance,
+            "factuality": "fact",
+            "temporality": "past",
+            "company": raw.get("company") or None,
+            "role": raw.get("role") or None,
+            "event_date": None,
+            "people": [],
+            "tags": tags,
+            "leadership_signal": raw.get("leadership", "none"),
+        })
+    return result if result else None
+
+
 def _raw_to_nugget(raw: dict, index: int) -> Nugget:
     """Convert a raw LLM dict to a typed Nugget dataclass."""
     return Nugget(
@@ -292,8 +368,8 @@ async def extract_nuggets(
             logger.warning("extract_nuggets: no API key provided")
             return []
 
-        # Fetch versioned prompt from Langfuse (falls back to local _SYSTEM_PROMPT)
-        system_prompt, prompt_version = get_prompt("nugget_extractor", _SYSTEM_PROMPT)
+        # Fetch versioned prompt from Langfuse (falls back to local _SYSTEM_PROMPT_MD)
+        system_prompt, prompt_version = get_prompt("nugget_extractor_md", _SYSTEM_PROMPT_MD)
 
         batches = _split_into_batches(career_text)
         all_nuggets: list[Nugget] = []
@@ -384,9 +460,8 @@ async def extract_nuggets(
 
             consecutive_429s = 0  # reset on success
 
-            # --- JSON parse (with one retry) ---
-            active_key = groq_api_key or byok_api_key
-            nuggets_raw = await _parse_with_retry(active_key, batch_text, raw_text)
+            # --- Markdown parse ---
+            nuggets_raw = _parse_markdown_nuggets(raw_text)
             if not nuggets_raw:
                 continue
 

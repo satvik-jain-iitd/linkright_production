@@ -83,6 +83,13 @@ One-liner: One sentence describing what this project was and its scope
 
 - Bullet from resume
 
+## PROJECTS
+
+### Project Name | Year
+One-liner: One sentence describing what this project is and its purpose
+- Key achievement or outcome
+- Another achievement
+
 Rules:
 - NEVER fabricate or infer. Only extract what is EXPLICITLY in the source.
 - ## EDUCATION: one line per degree, format: Degree | Institution | Year. Omit section if none.
@@ -90,8 +97,8 @@ Rules:
 - ## CERTIFICATIONS: one per line. Omit section if none.
 - ### header format: Company | Role | Start | End (use "Present" if current)
 - bullets: exact text from resume, max 8 per role
-- **Project:** blocks: only when resume explicitly names a project. 1-4 per role. Skip if none.
-- One-liner: must come immediately after **Project:** line, before achievement bullets
+- **Project:** blocks inside ## EXPERIENCE: only when resume explicitly names a project under a role. Skip if none.
+- ## PROJECTS: for standalone portfolio/personal/side projects NOT under any company. Each gets a ### header with name and year.
 - Do not add commentary or text outside this format.`;
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -222,6 +229,7 @@ export async function POST(request: Request) {
       skills: llmParsed.skills.length > 0 ? llmParsed.skills : regex.skills,
       certifications: llmParsed.certifications,
       experiences,
+      projects: llmParsed.projects,
     };
 
     // ── Save structured work experiences to DB (fire-and-forget) ──────────
@@ -254,6 +262,7 @@ interface MarkdownParsed {
   skills: string[];
   certifications: string[];
   experiences: ParsedExperience[];
+  projects: ParsedProject[];
 }
 
 function markdownToJson(text: string): MarkdownParsed | null {
@@ -262,8 +271,9 @@ function markdownToJson(text: string): MarkdownParsed | null {
     const skills = parseSkills(text);
     const certifications = parseCertifications(text);
     const experiences = parseExperiences(text);
+    const projects = parseTopLevelProjects(text);
     if (experiences.length === 0 && certifications.length === 0 && education.length === 0) return null;
-    return { education, skills, certifications, experiences };
+    return { education, skills, certifications, experiences, projects };
   } catch {
     return null;
   }
@@ -386,4 +396,39 @@ function parseExperienceBody(body: string): {
 
   if (current) projects.push(current);
   return { bullets, projects };
+}
+
+function parseTopLevelProjects(text: string): ParsedProject[] {
+  const section = text.match(/## PROJECTS\n([\s\S]*?)(?=\n## |$)/i);
+  if (!section) return [];
+
+  const blocks = section[1].split(/^(?=### )/m).filter((b) => b.trim());
+  const result: ParsedProject[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const header = lines[0].replace(/^###\s*/, "").trim();
+    // "Project Name | Year" — year is optional
+    const [title = ""] = header.split("|").map((p) => p.trim());
+    if (!title) continue;
+
+    const body = lines.slice(1).join("\n");
+    let one_liner = "";
+    const key_achievements: string[] = [];
+
+    for (const raw of body.split("\n")) {
+      const line = raw.trim();
+      if (!line) continue;
+      const ol = line.match(/^One-liner:\s*(.+)$/i);
+      if (ol) { one_liner = ol[1].trim(); continue; }
+      if (line.startsWith("- ")) {
+        const val = line.slice(2).trim();
+        if (!one_liner) { one_liner = val; } else { key_achievements.push(val); }
+      }
+    }
+
+    result.push({ title, one_liner, key_achievements });
+  }
+
+  return result;
 }

@@ -274,14 +274,14 @@ function StepCareerBasics({
   // Keys are ### heading strings (used for diff when user edits).
   const [enrichedChunks, setEnrichedChunks] = useState<EnrichedChunkUpload[]>([]);
 
-  const startNarrationStream = async (experiences: ParsedExperience[]) => {
+  const startNarrationStream = async (experiences: ParsedExperience[], projects?: Array<{ title?: string; one_liner?: string; key_achievements?: string[] }>) => {
     if (!experiences || experiences.length === 0) return;
     setStreamingNarration(true);
     try {
       const resp = await fetch("/api/onboarding/narrate-career", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ experiences }),
+        body: JSON.stringify({ experiences, projects: projects ?? [] }),
       });
       if (!resp.ok || !resp.body) return;
       const reader = resp.body.getReader();
@@ -366,6 +366,16 @@ function StepCareerBasics({
         }))
       : [];
 
+    const topLevelProjects = Array.isArray(data.projects)
+      ? (data.projects as Array<Record<string, unknown>>).map((p) => ({
+          title: String(p.title ?? ""),
+          one_liner: String(p.one_liner ?? ""),
+          key_achievements: Array.isArray(p.key_achievements)
+            ? (p.key_achievements as string[]).filter((a) => typeof a === "string")
+            : [],
+        }))
+      : [];
+
     setOutline({
       experiences,
       education: educationArr,
@@ -373,6 +383,7 @@ function StepCareerBasics({
       certifications: Array.isArray(data.certifications)
         ? (data.certifications as string[]).filter((c) => typeof c === "string")
         : [],
+      projects: topLevelProjects,
       career_summary_first_person: "",
     });
 
@@ -398,7 +409,7 @@ function StepCareerBasics({
       const data = await res.json();
       if (res.ok && data.parsed) {
         applyParsed(data.parsed);
-        startNarrationStream(data.parsed.experiences as ParsedExperience[]);
+        startNarrationStream(data.parsed.experiences as ParsedExperience[], data.parsed.projects as Array<{ title?: string; one_liner?: string; key_achievements?: string[] }> | undefined);
       } else {
         setParseError(data.error ?? "Could not parse resume. Please fill in manually.");
       }
@@ -429,7 +440,7 @@ function StepCareerBasics({
       const data = await res.json();
       if (res.ok && data.parsed) {
         applyParsed(data.parsed);
-        startNarrationStream(data.parsed.experiences as ParsedExperience[]);
+        startNarrationStream(data.parsed.experiences as ParsedExperience[], data.parsed.projects as Array<{ title?: string; one_liner?: string; key_achievements?: string[] }> | undefined);
         setFileMeta({
           filename: file.name,
           sizeKB: file.size / 1024,

@@ -37,12 +37,19 @@ export interface ParsedEducation {
   year: string;
 }
 
+export interface IndependentProject {
+  title: string;
+  one_liner: string;
+  key_achievements: string[];
+}
+
 export interface CareerOutlineData {
   experiences: ParsedExperience[];
   education: ParsedEducation[];
   skills: string[];
   certifications: string[];
   career_summary_first_person: string;
+  projects?: IndependentProject[];
 }
 
 export interface FileMeta {
@@ -294,6 +301,27 @@ export function CareerOutlineView({
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {(data.projects ?? []).length > 0 && (
+            <div className="mb-4">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.1em] text-muted">
+                Projects
+              </p>
+              <div className="space-y-2">
+                {(data.projects ?? []).map((p, i) => (
+                  <div
+                    key={`proj-${i}`}
+                    className="rounded-r-lg border-l-2 border-primary-400 bg-primary-50/40 px-3.5 py-2.5"
+                  >
+                    <p className="text-sm font-semibold text-foreground">{p.title}</p>
+                    {p.one_liner && (
+                      <p className="mt-0.5 text-xs text-muted line-clamp-2">{p.one_liner}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
