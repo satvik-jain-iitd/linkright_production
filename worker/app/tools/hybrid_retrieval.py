@@ -52,17 +52,46 @@ class NuggetResult:
 # ---------------------------------------------------------------------------
 
 async def _embed_query(api_key: str, text: str) -> Optional[list[float]]:
-    """Embed query text using Jina AI jina-embeddings-v3.
+    """Embed query text — Oracle nomic-embed-text primary, Jina fallback only if Oracle not configured.
 
-    Returns the 768-dim vector or None on any failure. Logs the exact reason
-    (empty key / empty text / HTTP error code) so we can debug deployment
-    issues without needing to poke the API by hand.
+    Mixing embedding models corrupts cosine similarity — nuggets and queries MUST use the same model.
+    Oracle is the canonical model (nomic-embed-text, 768-dim). Jina fallback is only allowed when
+    ORACLE_BACKEND_URL is not set at all (dev/test environments without Oracle access).
     """
-    if not api_key:
-        logger.warning("hybrid_retrieval: JINA_API_KEY is empty")
-        return None
     if not text.strip():
         logger.warning("hybrid_retrieval: query text is empty (len=%d)", len(text or ""))
+        return None
+
+    oracle_url = os.environ.get("ORACLE_BACKEND_URL", "").rstrip("/")
+    oracle_secret = os.environ.get("ORACLE_BACKEND_SECRET", "")
+
+    if oracle_url:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{oracle_url}/lifeos/embed",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {oracle_secret}",
+                    },
+                    json={"text": text},
+                )
+                if resp.status_code == 200:
+                    embedding = resp.json().get("embedding")
+                    if embedding:
+                        return embedding
+                logger.warning(
+                    "hybrid_retrieval: Oracle embed returned %d — %s",
+                    resp.status_code, resp.text[:120],
+                )
+        except Exception as exc:
+            logger.warning("hybrid_retrieval: Oracle embed failed — %s", exc)
+        # Oracle configured but failed → return None (don't fall back to Jina; would mix models)
+        return None
+
+    # Oracle not configured at all → Jina is safe (no Oracle nuggets exist in this env)
+    if not api_key:
+        logger.warning("hybrid_retrieval: no ORACLE_BACKEND_URL and no JINA_API_KEY — cannot embed query")
         return None
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -78,8 +107,8 @@ async def _embed_query(api_key: str, text: str) -> Optional[list[float]]:
             )
             if resp.status_code != 200:
                 logger.warning(
-                    "hybrid_retrieval: Jina %d — %s (text_len=%d, key_prefix=%s)",
-                    resp.status_code, resp.text[:120], len(text), api_key[:8],
+                    "hybrid_retrieval: Jina %d — %s (text_len=%d)",
+                    resp.status_code, resp.text[:120], len(text),
                 )
                 return None
             return resp.json()["data"][0]["embedding"]
@@ -340,13 +369,55 @@ def _to_nugget_results(items: list[dict], method: str) -> list[NuggetResult]:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _graph_expand(
+    sb,
+    user_id: str,
+    initial: list[NuggetResult],
+    limit: int,
+) -> list[NuggetResult]:
+    """Tag-based graph walk: DEMONSTRATES edge traversal.
+
+    Fetches nuggets sharing tags with the already-retrieved set.
+    Semantically: traverses Achievement -[:DEMONSTRATES]-> Skill -> Achievement
+    without needing a separate graph DB — uses career_nuggets.tags[] overlap.
+    """
+    if not initial:
+        return []
+
+    seed_tags: set[str] = set()
+    for r in initial:
+        seed_tags.update(r.tags or [])
+    if not seed_tags:
+        return []
+
+    # PostgreSQL array overlap operator &&
+    tags_pg = "{" + ",".join(seed_tags) + "}"
+    try:
+        res = (
+            sb.table("career_nuggets")
+            .select("id, answer, nugget_text, company, role, importance, tags, section_type, resume_relevance")
+            .eq("user_id", user_id)
+            .filter("tags", "ov", tags_pg)
+            .limit(limit)
+            .execute()
+        )
+        rows = res.data or []
+        return _to_nugget_results(
+            [{"data": r, "score": 0.5 / (60 + i)} for i, r in enumerate(rows)],
+            "graph_walk",
+        )
+    except Exception as exc:
+        logger.warning("hybrid_retrieval: graph_expand failed — %s", exc)
+        return []
+
+
 async def hybrid_retrieve(
     sb,
     user_id: str,
     query: str,
     company: Optional[str] = None,
     limit: int = 8,
-    similarity_threshold: float = 0.0,
+    similarity_threshold: float = 0.75,
 ) -> tuple[list[NuggetResult], str]:
     """Retrieve the top-k most relevant career nuggets using hybrid search.
 
@@ -393,11 +464,21 @@ async def hybrid_retrieve(
 
         merged = _dedup_and_limit(company_fused, unscoped_fused, limit)
         method = "hybrid"
+        initial_results = _to_nugget_results(merged, method)
         logger.info(
             "hybrid_retrieval: user=%s company=%s → hybrid, %d results",
-            user_id, company, len(merged),
+            user_id, company, len(initial_results),
         )
-        return _to_nugget_results(merged, method), method
+
+        # Graph expansion: DEMONSTRATES edge traversal via shared tags
+        if initial_results:
+            neighbors = _graph_expand(sb, user_id, initial_results, limit)
+            seen_ids = {r.nugget_id for r in initial_results}
+            new_neighbors = [r for r in neighbors if r.nugget_id not in seen_ids]
+            slots = max(0, limit - len(initial_results))
+            initial_results = initial_results + new_neighbors[:slots]
+
+        return initial_results, method
 
     except Exception as exc:
         logger.warning("hybrid_retrieval: hybrid tier failed — %s", exc)

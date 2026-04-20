@@ -26,11 +26,12 @@ export async function POST(request: Request) {
   const chunks = chunkText(career_text);
 
   // INSERT new chunks before deleting old ones — safe window: both versions exist simultaneously
-  const rows = chunks.map((text, i) => ({
+  const rows = chunks.map(({ text, metadata }, i) => ({
     user_id: user.id,
     chunk_index: i,
     chunk_text: text,
     chunk_tokens: Math.ceil(text.length / 4),
+    metadata,
   }));
 
   const { data: inserted, error: insertError } = await supabase
@@ -75,8 +76,72 @@ export async function POST(request: Request) {
   return Response.json({ chunk_count: chunks.length });
 }
 
-function chunkText(text: string): string[] {
-  // Split by double newlines (paragraph breaks)
+interface Chunk {
+  text: string;
+  metadata: Record<string, unknown>;
+}
+
+function chunkText(text: string): Chunk[] {
+  // Structured path: text has ## Role / ### Initiative headers (from narrate-career)
+  if (/^## /m.test(text)) {
+    return splitStructuredNarration(text);
+  }
+  // Fallback: paragraph-based splitting (raw resume paste or legacy text)
+  return splitByParagraphs(text);
+}
+
+function splitStructuredNarration(text: string): Chunk[] {
+  const chunks: Chunk[] = [];
+
+  // Split on ## headers → per-role sections
+  const roleSections = text.split(/(?=^## )/m).filter((s) => s.trim());
+
+  for (const roleSection of roleSections) {
+    const lines = roleSection.trimStart().split("\n");
+    const roleHeader = lines[0].trim(); // "## Company — Role (dates)"
+    const { company, role, period } = parseRoleHeader(roleHeader);
+
+    // Split by ### initiative headers within this role
+    const parts = roleSection.split(/(?=^### )/m);
+    // parts[0] is the role header line (before any ###)
+
+    const initiativeParts = parts.filter((p) => p.trimStart().startsWith("### "));
+
+    if (initiativeParts.length === 0) {
+      // No ### sub-headings — role section is one chunk
+      const body = roleSection.trim();
+      if (body) {
+        chunks.push({ text: body, metadata: { company, role, period, initiative: null } });
+      }
+      continue;
+    }
+
+    for (const part of initiativeParts) {
+      const partLines = part.trimStart().split("\n");
+      const initiativeHeader = partLines[0].trim(); // "### Initiative Name"
+      const initiative = initiativeHeader.replace(/^### /, "").trim();
+      const body = partLines.slice(1).join("\n").trim();
+      if (!body) continue;
+
+      // Each chunk = role header + initiative header + paragraph body
+      const chunkText = `${roleHeader}\n\n${initiativeHeader}\n${body}`;
+      chunks.push({ text: chunkText, metadata: { company, role, period, initiative } });
+    }
+  }
+
+  return chunks.length > 0 ? chunks : splitByParagraphs(text);
+}
+
+function parseRoleHeader(header: string): { company: string; role: string; period: string } {
+  // "## Company Name — Role Title (Jul 2024 to Present)"
+  const m = header.match(/^##\s+([^—–]+)[—–]\s*([^(]+?)(?:\s*\(([^)]*)\))?\s*$/);
+  if (m) {
+    return { company: m[1].trim(), role: m[2].trim(), period: (m[3] ?? "").trim() };
+  }
+  return { company: "", role: "", period: "" };
+}
+
+function splitByParagraphs(text: string): Chunk[] {
   const paragraphs = text
     .split(/\n\s*\n/)
     .filter((p) => p.trim().length > 0);
@@ -85,7 +150,6 @@ function chunkText(text: string): string[] {
   let current = "";
 
   for (const p of paragraphs) {
-    // If adding this paragraph would exceed ~1000 chars, flush current chunk
     if (current.length + p.length > 1000 && current.length > 0) {
       chunks.push(current.trim());
       current = p;
@@ -115,5 +179,5 @@ function chunkText(text: string): string[] {
     }
   }
 
-  return result;
+  return result.map((t) => ({ text: t, metadata: {} }));
 }

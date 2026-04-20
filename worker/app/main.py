@@ -392,51 +392,39 @@ async def _run_nugget_embed(user_id: str) -> None:
         embedded_count = 0
 
         if oracle_url:
-            # ── Primary path: Oracle nomic-embed-text (local model, no API key needed) ──
+            # ── Oracle nomic-embed-text (local model, no rate limit) ──
+            # No Jina fallback — mixing models corrupts vector similarity.
+            # Local model: no batching/sleep needed — parallelize all embeddings.
+            embed_url = f"{oracle_url.rstrip('/')}/lifeos/embed"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {oracle_secret}",
+            }
+
+            async def _embed_one(client: httpx.AsyncClient, row: dict) -> None:
+                nonlocal embedded_count
+                answer_text = (row.get("answer") or "").strip()
+                if not answer_text:
+                    return
+                try:
+                    resp = await client.post(embed_url, headers=headers, json={"text": answer_text})
+                    resp.raise_for_status()
+                    embedding = resp.json().get("embedding")
+                    if embedding and isinstance(embedding, list):
+                        sb.table("career_nuggets").update(
+                            {"embedding": embedding, "embedding_model": "nomic-embed-text"}
+                        ).eq("id", row["id"]).execute()
+                        embedded_count += 1
+                except Exception as exc:
+                    logger.warning("nugget_embed: Oracle embed failed for id=%s: %s", row["id"], exc)
+
             async with httpx.AsyncClient(timeout=15) as client:
-                for row in rows:
-                    answer_text = (row.get("answer") or "").strip()
-                    if not answer_text:
-                        continue
-                    try:
-                        resp = await client.post(
-                            f"{oracle_url.rstrip('/')}/lifeos/embed",
-                            headers={
-                                "Content-Type": "application/json",
-                                "Authorization": f"Bearer {oracle_secret}",
-                            },
-                            json={"text": answer_text},
-                        )
-                        resp.raise_for_status()
-                        embedding = resp.json().get("embedding")
-                        if embedding and isinstance(embedding, list):
-                            sb.table("career_nuggets").update(
-                                {"embedding": embedding}
-                            ).eq("id", row["id"]).execute()
-                            embedded_count += 1
-                    except Exception as exc:
-                        logger.warning("nugget_embed: Oracle embed failed for id=%s: %s", row["id"], exc)
-                    # Small delay between calls to be gentle on Oracle
-                    await asyncio.sleep(0.2)
+                await asyncio.gather(*[_embed_one(client, row) for row in rows])
         else:
-            # ── Fallback path: Jina embeddings (only if JINA_API_KEY is set) ──
-            from dataclasses import dataclass, field
-            from typing import Optional
-            from .tools.nugget_embedder import embed_nuggets
-
-            jina_api_key = os.getenv("JINA_API_KEY", "")
-            if not jina_api_key:
-                logger.warning("nugget_embed: no ORACLE_BACKEND_URL and no JINA_API_KEY — skipping")
-                return
-
-            @dataclass
-            class _EmbedNugget:
-                id: Optional[str] = None
-                answer: str = ""
-
-            nuggets = [_EmbedNugget(id=r["id"], answer=r.get("answer", "")) for r in rows]
-            embeddings = await embed_nuggets(nuggets, jina_api_key, sb, user_id)
-            embedded_count = sum(1 for e in embeddings if e)
+            logger.warning(
+                "nugget_embed: ORACLE_BACKEND_URL not set — skipping (no Jina fallback; mixing models breaks retrieval)"
+            )
+            return
 
     except Exception as exc:
         logger.exception("nugget_embed: failed for user=%s — %s", user_id, exc)

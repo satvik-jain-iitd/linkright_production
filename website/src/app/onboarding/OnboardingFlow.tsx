@@ -161,18 +161,46 @@ function StepCareerBasics({
   const [parsed, setParsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Wave 2 Sub-phase 2A: outline-view holds the structured companies tree
-  // + first-person summary. Populated from parse-resume; user edits feed back
-  // via setOutline. Saved alongside the flat fields on Save & Continue.
+  // Wave 2 Sub-phase 2A: outline-view holds the structured companies tree.
+  // Populated from parse-resume; narration streamed separately via narrate-career.
   const [outline, setOutline] = useState<CareerOutlineData | null>(null);
+  const [streamingNarration, setStreamingNarration] = useState(false);
 
   // S04 design: show file metadata chip inside CareerOutlineView.
   const [fileMeta, setFileMeta] = useState<{ filename: string; sizeKB: number; parsedSec?: number } | null>(null);
+
+  const startNarrationStream = async (experiences: ParsedExperience[]) => {
+    if (!experiences || experiences.length === 0) return;
+    setStreamingNarration(true);
+    try {
+      const resp = await fetch("/api/onboarding/narrate-career", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experiences }),
+      });
+      if (!resp.ok || !resp.body) return;
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        accumulated += decoder.decode(value, { stream: true });
+        const text = accumulated;
+        setOutline((prev) => prev ? { ...prev, career_summary_first_person: text } : null);
+      }
+    } catch (err) {
+      console.warn("[narrate-career] Streaming failed:", err);
+    } finally {
+      setStreamingNarration(false);
+    }
+  };
 
   const handleSwapResume = () => {
     setOutline(null);
     setFileMeta(null);
     setParsed(false);
+    setStreamingNarration(false);
     setUploadMode("file");
   };
 
@@ -235,9 +263,7 @@ function StepCareerBasics({
       certifications: Array.isArray(data.certifications)
         ? (data.certifications as string[]).filter((c) => typeof c === "string")
         : [],
-      career_summary_first_person: typeof data.career_summary_first_person === "string"
-        ? data.career_summary_first_person
-        : "",
+      career_summary_first_person: "",
     });
 
     setParsed(true);
@@ -262,6 +288,7 @@ function StepCareerBasics({
       const data = await res.json();
       if (res.ok && data.parsed) {
         applyParsed(data.parsed);
+        startNarrationStream(data.parsed.experiences as ParsedExperience[]);
       } else {
         setParseError(data.error ?? "Could not parse resume. Please fill in manually.");
       }
@@ -292,6 +319,7 @@ function StepCareerBasics({
       const data = await res.json();
       if (res.ok && data.parsed) {
         applyParsed(data.parsed);
+        startNarrationStream(data.parsed.experiences as ParsedExperience[]);
         setFileMeta({
           filename: file.name,
           sizeKB: file.size / 1024,
@@ -390,12 +418,9 @@ function StepCareerBasics({
       .filter(notAlreadyInResume)
       .join("\n");
 
-    // Wave 2 Sub-phase 2A: prepend the EDITED first-person summary. This is
-    // the user's canonical "how I describe my career" — the nugget extractor
-    // treats it as the authoritative interpretation when deriving atoms.
-    // The outline's structured experiences (companies/roles/projects/key
-    // achievements) are also flattened into the text so the categoriser
-    // sees them even though they're displayed as structured cards.
+    // Use streaming narration (## Role / ### Initiative format) as career_text when available.
+    // It already contains all career information in a semantically rich, chunkable format.
+    // Fallback: flatten structured experiences + raw paste for users who skipped narration.
     const firstPersonText = (outline?.career_summary_first_person ?? "").trim();
     const structuredExperienceText = outline
       ? outline.experiences
@@ -417,14 +442,11 @@ function StepCareerBasics({
           .join("\n\n")
       : "";
 
-    const careerText = [
-      firstPersonText,
-      structuredExperienceText,
-      profileSummary,
-      resumePasteText.trim(),
-    ]
-      .filter((chunk) => chunk && chunk.length > 0)
-      .join("\n\n");
+    const careerText = firstPersonText
+      ? firstPersonText
+      : [structuredExperienceText, profileSummary, resumePasteText.trim()]
+          .filter((chunk) => chunk && chunk.length > 0)
+          .join("\n\n");
 
     try {
       const supabase = createBrowserSupabase();
@@ -558,6 +580,7 @@ function StepCareerBasics({
           onChange={setOutline}
           fileMeta={fileMeta ?? undefined}
           onSwap={handleSwapResume}
+          streamingNarration={streamingNarration}
         />
       )}
 

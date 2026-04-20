@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { groqChat } from "@/lib/groq";
 import { createServiceClient } from "@/lib/supabase/service";
 import { regexExtract } from "@/lib/resume-regex-extract";
+import { getPrompt } from "@/lib/langfuse-prompts";
+import { platformChatWithFallback } from "@/lib/gemini";
 
 function serviceSupabase() {
   return createServiceClient();
@@ -49,47 +50,49 @@ async function saveWorkHistory(userId: string, experiences: ParsedExperience[]):
   }
 }
 
-// Cost reduction 2026-04-18 (per Satvik): hybrid extractor.
-// Basics (full_name / email / phone / linkedin / education / skills) are
-// pulled deterministically via regex in @/lib/resume-regex-extract — zero
-// LLM cost, zero hallucination risk.
-// The LLM is only asked for the HARD fields: certifications + experiences
-// tree + career_text + career_summary_first_person narration. ~30% fewer
-// output tokens than the all-LLM prompt.
-const SYSTEM_PROMPT = `You are a resume parser. The user will give you resume text. Extract ONLY the fields below — basics like email/phone/linkedin have already been regex-extracted, so don't waste tokens on them.
+// Hybrid extractor: basics (name/email/phone/linkedin/education/skills) via regex,
+// hard fields (certifications + experiences tree) via LLM writing Markdown.
+// LLM writes Markdown (not JSON) — far fewer format errors. markdownToJson() converts.
+// Narration handled separately by /api/onboarding/narrate-career (streaming).
+const RESUME_PARSE_FALLBACK = `You are a resume parser. Extract all sections from the resume text.
+Write your output in the Markdown format below — do NOT write JSON.
 
-Return ONLY a valid JSON object in this exact shape (no markdown, no commentary):
-{
-  "certifications": ["cert1", "cert2"],
-  "career_text": "full raw text representation of the work experience section only (for search indexing)",
-  "experiences": [
-    {
-      "company": "Company Name",
-      "role": "Job Title",
-      "start_date": "YYYY-MM or Month YYYY",
-      "end_date": "YYYY-MM or Month YYYY or present",
-      "bullets": ["bullet 1 text", "bullet 2 text"],
-      "projects": [
-        {
-          "title": "Short project name",
-          "one_liner": "One sentence saying what the project was and its scope",
-          "key_achievements": ["2-3 bullet-like phrases highlighting outcomes for THIS project"]
-        }
-      ]
-    }
-  ],
-  "career_summary_first_person": "First-person narration built ONLY from the resume text. One paragraph PER role, separated by \\n\\n. Start each paragraph with the real company name from the source: 'At {company},' for the most recent, 'Before that at {company},' for older. 3-6 sentences per role. First person throughout. If the source has one thin role, return one short 2-sentence paragraph."
-}
+## EDUCATION
+- Degree Name | Institution Name | Year
+
+## SKILLS
+Skill1, Skill2, Skill3, Python, React, SQL
+
+## CERTIFICATIONS
+- Certification name here
+- Another certification
+
+## EXPERIENCE
+
+### Company Name | Job Title | Start Date | End Date
+
+- Exact bullet text from resume (max 8 bullets)
+- Another bullet
+
+**Project: Project Name**
+One-liner: One sentence describing what this project was and its scope
+- Key achievement or outcome
+- Another achievement
+
+### Next Company | Next Role | Start Date | End Date
+
+- Bullet from resume
 
 Rules:
-- NEVER fabricate or infer values. Only extract what is EXPLICITLY in the source.
-- certifications: list individual certifications, max 10. Empty array if none.
-- career_text: ONLY the work-experience section as plain text (not education / skills / contact).
-- experiences: extract every job/role found. bullets = exact bullet text, max 8 per role.
-- experiences[].projects: 1-4 distinct projects per role ONLY when the resume describes them. Each project needs a one-liner + 2-3 key_achievements (outcome-led). No projects? Return empty array — NEVER invent.
-- career_summary_first_person: first person only ("I ..."), one paragraph per role, separated by \\n\\n. 3-6 sentences per paragraph. If the resume is thin (one short role, few bullets), still write ONE honest paragraph of whatever can be said — never return an empty string. Length adapts to content: a 3-bullet customer-support role gets one shorter paragraph; a 4-job senior career gets 4-6 paragraphs. No inventions.
-- If a field is not found, use empty string or empty array.
-- Return valid JSON only, no code blocks.`;
+- NEVER fabricate or infer. Only extract what is EXPLICITLY in the source.
+- ## EDUCATION: one line per degree, format: Degree | Institution | Year. Omit section if none.
+- ## SKILLS: comma-separated list of skills. Omit section if none.
+- ## CERTIFICATIONS: one per line. Omit section if none.
+- ### header format: Company | Role | Start | End (use "Present" if current)
+- bullets: exact text from resume, max 8 per role
+- **Project:** blocks: only when resume explicitly names a project. 1-4 per role. Skip if none.
+- One-liner: must come immediately after **Project:** line, before achievement bullets
+- Do not add commentary or text outside this format.`;
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -179,23 +182,24 @@ export async function POST(request: Request) {
   const truncated = resumeText.slice(0, 8000);
 
   // Phase 1 — regex extractors (contact, education, skills). Deterministic,
-  // zero token cost, zero hallucination risk. If the regex finds it, we
-  // trust it; the LLM never gets asked for it.
+  // zero token cost, zero hallucination risk.
   const regex = regexExtract(truncated);
 
+  // Phase 2 — LLM extracts only certifications + experiences tree.
+  // Prompt fetched from Langfuse (name: resume-parse-structured); falls back to
+  // RESUME_PARSE_FALLBACK if Langfuse is unavailable.
+  const systemPrompt = await getPrompt("resume-parse-structured", RESUME_PARSE_FALLBACK);
+
   try {
-    const rawText = await groqChat(
+    const { text: rawText } = await platformChatWithFallback(
       [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: truncated },
       ],
-      // Bumped 2600 → 4000: richer resumes (4-5 roles × projects × narration)
-      // hit the old ceiling and the LLM returned truncated JSON, failing
-      // extractJson and bubbling to a 422 the retry helper couldn't recover.
-      { maxTokens: 4000, temperature: 0 }
+      { maxTokens: 4000, temperature: 0, taskType: "structured" }
     );
 
-    const llmParsed = extractJson(rawText);
+    const llmParsed = markdownToJson(rawText);
 
     if (!llmParsed) {
       return Response.json(
@@ -204,26 +208,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Merge: regex extracts are source of truth for basics; LLM provides
-    // experiences/certifications/narration. Fall back to LLM output if the
-    // regex returned empty for a field (rare for contact, common for
-    // non-standard resumes).
-    const rawNarration = (llmParsed.career_summary_first_person ?? "") as string;
-    const experiences = (llmParsed.experiences ?? []) as ParsedExperience[];
-    const narration =
-      normaliseNarrationParagraphs(rawNarration) ||
-      synthNarrationFromExperiences(experiences);
+    const experiences = llmParsed.experiences;
+
+    // Merge: regex is source of truth for contact fields (email/phone/linkedin — zero hallucination).
+    // LLM Markdown is source of truth for structured content (education/skills/certifications/experiences).
+    // Regex used as fallback if LLM section was empty.
     const parsed: Record<string, unknown> = {
-      full_name: regex.full_name || (llmParsed as Record<string, unknown>).full_name || "",
+      full_name: regex.full_name || "",
       email: regex.email,
       phone: regex.phone,
       linkedin: regex.linkedin,
-      education: regex.education.length > 0 ? regex.education : llmParsed.education ?? [],
-      skills: regex.skills.length > 0 ? regex.skills : llmParsed.skills ?? [],
-      certifications: llmParsed.certifications ?? [],
-      career_text: llmParsed.career_text ?? "",
+      education: llmParsed.education.length > 0 ? llmParsed.education : regex.education,
+      skills: llmParsed.skills.length > 0 ? llmParsed.skills : regex.skills,
+      certifications: llmParsed.certifications,
       experiences,
-      career_summary_first_person: narration,
     };
 
     // ── Save structured work experiences to DB (fire-and-forget) ──────────
@@ -245,82 +243,147 @@ export async function POST(request: Request) {
   }
 }
 
-// Last-resort narration: if the LLM returns empty or the experiences
-// array has data but no prose, synthesise a plain first-person paragraph
-// per role straight from the extracted structured data. Never empty if
-// there is any experience row.
-function synthNarrationFromExperiences(exps: ParsedExperience[]): string {
-  if (!exps || exps.length === 0) return "";
-  const paragraphs: string[] = [];
-  exps.forEach((e, i) => {
-    const lead =
-      i === 0
-        ? `At ${e.company},`
-        : i === 1
-          ? `Before that at ${e.company},`
-          : `Earlier at ${e.company},`;
-    const roleLabel = e.role ? `I worked as ${e.role}.` : "";
-    const bulletLines = (e.bullets ?? [])
-      .slice(0, 3)
-      .map((b) => b.replace(/^[-•\d.\s]+/, "").trim())
-      .filter(Boolean);
-    const bulletText = bulletLines
-      .map((b) => (b.startsWith("I ") ? b : `I ${b[0]?.toLowerCase()}${b.slice(1)}`))
-      .join(" ");
-    const projectLines = (e.projects ?? [])
-      .slice(0, 2)
-      .map((p) =>
-        [p.one_liner, ...(p.key_achievements ?? [])].filter(Boolean).join(". "),
-      )
-      .filter(Boolean)
-      .join(" ");
-    const body = [roleLabel, bulletText, projectLines].filter(Boolean).join(" ").trim();
-    if (body) paragraphs.push(`${lead} ${body}`);
-  });
-  return paragraphs.join("\n\n");
+interface ParsedEducationRow {
+  degree: string;
+  institution: string;
+  year: string;
 }
 
-// The LLM is inconsistent about emitting \n\n between role paragraphs —
-// sometimes it returns everything as one long paragraph. Detect role-boundary
-// phrases and insert paragraph breaks if they aren't already there.
-function normaliseNarrationParagraphs(raw: string): string {
-  if (!raw || typeof raw !== "string") return "";
-  // If the model already returned 2+ paragraphs, trust it.
-  if (/\n{2,}/.test(raw)) return raw.trim();
-  // Otherwise look for role-transition phrases and inject \n\n before them.
-  const transitions = [
-    /\s+(Before that at [^,.]+,)/gi,
-    /\s+(Earlier at [^,.]+,)/gi,
-    /\s+(Previously at [^,.]+,)/gi,
-    /\s+(Most recently at [^,.]+,)/gi,
-    /\s+(Prior to that at [^,.]+,)/gi,
-    /\s+(Before joining [^,.]+,)/gi,
-  ];
-  let normalised = raw.trim();
-  for (const re of transitions) {
-    normalised = normalised.replace(re, "\n\n$1");
-  }
-  return normalised;
+interface MarkdownParsed {
+  education: ParsedEducationRow[];
+  skills: string[];
+  certifications: string[];
+  experiences: ParsedExperience[];
 }
 
-function extractJson(text: string): Record<string, unknown> | null {
-  // Strip markdown code blocks if present
-  const stripped = text
-    .replace(/^```(?:json)?\n?/m, "")
-    .replace(/\n?```$/m, "")
-    .trim();
+function markdownToJson(text: string): MarkdownParsed | null {
   try {
-    return JSON.parse(stripped);
+    const education = parseEducation(text);
+    const skills = parseSkills(text);
+    const certifications = parseCertifications(text);
+    const experiences = parseExperiences(text);
+    if (experiences.length === 0 && certifications.length === 0 && education.length === 0) return null;
+    return { education, skills, certifications, experiences };
   } catch {
-    // Try to find JSON object within the text
-    const match = stripped.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        return null;
-      }
-    }
     return null;
   }
+}
+
+function parseEducation(text: string): ParsedEducationRow[] {
+  const m = text.match(/## EDUCATION\n([\s\S]*?)(?=\n## |\n###|$)/i);
+  if (!m) return [];
+  return m[1]
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- "))
+    .map((l) => {
+      const parts = l.slice(2).split("|").map((p) => p.trim());
+      return {
+        degree: parts[0] ?? "",
+        institution: parts[1] ?? "",
+        year: parts[2] ?? "",
+      };
+    })
+    .filter((e) => e.degree || e.institution);
+}
+
+function parseSkills(text: string): string[] {
+  const m = text.match(/## SKILLS\n([\s\S]*?)(?=\n## |\n###|$)/i);
+  if (!m) return [];
+  const line = m[1].split("\n").find((l) => l.trim().length > 0) ?? "";
+  return line
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseCertifications(text: string): string[] {
+  const m = text.match(/## CERTIFICATIONS\n([\s\S]*?)(?=\n## |\n###|$)/i);
+  if (!m) return [];
+  return m[1]
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- "))
+    .map((l) => l.slice(2).trim())
+    .filter(Boolean)
+    .slice(0, 10);
+}
+
+function parseExperiences(text: string): ParsedExperience[] {
+  const expSection = text.match(/## EXPERIENCE\n([\s\S]*?)(?=\n## |$)/i);
+  if (!expSection) return [];
+
+  // Split on ### headers (each experience block)
+  const blocks = expSection[1].split(/^(?=### )/m).filter((b) => b.trim());
+  const result: ParsedExperience[] = [];
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const header = lines[0].replace(/^###\s*/, "").trim();
+    const parts = header.split("|").map((p) => p.trim());
+    if (parts.length < 2) continue;
+
+    const [company = "", role = "", start_date = "", end_date = ""] = parts;
+    const body = lines.slice(1).join("\n");
+    const { bullets, projects } = parseExperienceBody(body);
+
+    result.push({ company, role, start_date, end_date, bullets, projects });
+  }
+
+  return result;
+}
+
+function parseExperienceBody(body: string): {
+  bullets: string[];
+  projects: ParsedProject[];
+} {
+  const bullets: string[] = [];
+  const projects: ParsedProject[] = [];
+  let current: ParsedProject | null = null;
+  let afterOneLiner = false;
+
+  for (const raw of body.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // **Project: Name** or Project: Name
+    const projMatch =
+      line.match(/^\*\*Project:\s*(.+?)\*\*$/) ??
+      line.match(/^Project:\s*(.+)$/i);
+    if (projMatch) {
+      if (current) projects.push(current);
+      current = { title: projMatch[1].trim(), one_liner: "", key_achievements: [] };
+      afterOneLiner = false;
+      continue;
+    }
+
+    // One-liner: (only inside a project)
+    if (current && !afterOneLiner) {
+      const ol = line.match(/^One-liner:\s*(.+)$/i) ?? line.match(/^One_liner:\s*(.+)$/i);
+      if (ol) {
+        current.one_liner = ol[1].trim();
+        afterOneLiner = true;
+        continue;
+      }
+    }
+
+    // Bullet line
+    if (line.startsWith("- ")) {
+      const val = line.slice(2).trim();
+      if (current) {
+        if (!afterOneLiner) {
+          // Bullet before one-liner → treat as one-liner (LLM omitted the prefix)
+          current.one_liner = val;
+          afterOneLiner = true;
+        } else {
+          current.key_achievements = [...(current.key_achievements ?? []), val];
+        }
+      } else {
+        bullets.push(val);
+      }
+    }
+  }
+
+  if (current) projects.push(current);
+  return { bullets, projects };
 }

@@ -60,6 +60,7 @@ interface Props {
   onSkip?: () => void;
   continueLabel?: string;
   busy?: boolean;
+  streamingNarration?: boolean;
 }
 
 const STEPS = [
@@ -78,6 +79,7 @@ export function CareerOutlineView({
   onSkip,
   continueLabel = "Save and continue",
   busy,
+  streamingNarration = false,
 }: Props) {
   const narration = data.career_summary_first_person ?? "";
   const [editBuffer, setEditBuffer] = useState<string | null>(null);
@@ -379,13 +381,28 @@ export function CareerOutlineView({
                   }}
                 />
               ))}
-              <button
-                type="button"
-                onClick={startEditing}
-                className="mt-2 text-xs font-semibold text-accent hover:text-accent-hover"
-              >
-                Edit narration →
-              </button>
+              {streamingNarration && (
+                <span className="inline-block h-4 w-0.5 animate-pulse bg-accent align-middle" />
+              )}
+              <div>
+                <button
+                  type="button"
+                  onClick={streamingNarration ? undefined : startEditing}
+                  disabled={streamingNarration}
+                  className={`mt-2 text-xs font-semibold ${
+                    streamingNarration
+                      ? "cursor-not-allowed text-muted"
+                      : "text-accent hover:text-accent-hover"
+                  }`}
+                >
+                  {streamingNarration ? "Generating your story…" : "Edit narration →"}
+                </button>
+              </div>
+            </div>
+          ) : streamingNarration ? (
+            <div className="flex items-center gap-2 text-sm text-muted">
+              <span className="inline-block h-4 w-0.5 animate-pulse bg-accent" />
+              <span>Writing your story…</span>
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border bg-white/60 p-4 text-center text-xs text-muted">
