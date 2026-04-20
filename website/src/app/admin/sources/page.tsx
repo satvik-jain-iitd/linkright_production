@@ -587,6 +587,7 @@ function TabHealth() {
               <tr className="border-b border-border bg-[#FAFBFC]">
                 <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Source</th>
                 <th className="text-right px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Jobs</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -594,6 +595,9 @@ function TabHealth() {
                 <tr key={src} className="border-b border-border last:border-0">
                   <td className="px-4 py-3 text-foreground font-mono text-xs">{src}</td>
                   <td className="px-4 py-3 text-right text-foreground font-semibold">{cnt.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right">
+                    <a href={`/admin/jobs?source_type=${src}`} className="text-xs text-accent hover:underline">View →</a>
+                  </td>
                 </tr>
               ))}
             </tbody>
