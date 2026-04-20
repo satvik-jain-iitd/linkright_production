@@ -16,14 +16,19 @@ export async function POST(request: Request) {
     return rateLimitResponse("career upload");
   }
 
-  const { career_text } = await request.json();
+  const body = await request.json();
+  const career_text: string = body.career_text ?? "";
+  // Pre-enriched chunks from frontend (importance, tags, leadership already classified)
+  const enriched_chunks: EnrichedChunk[] | undefined = body.enriched_chunks;
 
   if (!career_text || career_text.trim().length < 200) {
     return Response.json({ error: "Career text too short" }, { status: 400 });
   }
 
-  // Chunk the text FIRST — before touching the database
-  const chunks = chunkText(career_text);
+  // If frontend sent pre-enriched chunks, use them directly — skip re-chunking
+  const chunks: Chunk[] = enriched_chunks?.length
+    ? enriched_chunks.map((c) => ({ text: c.text, metadata: c.metadata ?? {} }))
+    : chunkText(career_text);
 
   // INSERT new chunks before deleting old ones — safe window: both versions exist simultaneously
   const rows = chunks.map(({ text, metadata }, i) => ({
@@ -79,6 +84,11 @@ export async function POST(request: Request) {
 interface Chunk {
   text: string;
   metadata: Record<string, unknown>;
+}
+
+interface EnrichedChunk {
+  text: string;
+  metadata?: Record<string, unknown>;
 }
 
 function chunkText(text: string): Chunk[] {

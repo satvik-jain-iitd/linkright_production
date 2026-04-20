@@ -53,6 +53,107 @@ interface ConversationTurn {
   confirmed: boolean;
 }
 
+// ── Silent Enrichment Types + Helpers ────────────────────────────────────────
+
+interface EnrichedChunkUpload {
+  text: string;
+  metadata: Record<string, unknown>;
+}
+
+function parseNarrationChunks(narration: string): { heading: string; text: string }[] {
+  if (!narration || !/^## /m.test(narration)) return [];
+  const chunks: { heading: string; text: string }[] = [];
+  const roleSections = narration.split(/(?=^## )/m).filter((s) => s.trim());
+  for (const roleSection of roleSections) {
+    const lines = roleSection.trimStart().split("\n");
+    const roleHeader = lines[0].trim();
+    const parts = roleSection.split(/(?=^### )/m);
+    const initiativeParts = parts.filter((p) => p.trimStart().startsWith("### "));
+    if (initiativeParts.length === 0) {
+      chunks.push({ heading: roleHeader, text: roleSection.trim() });
+      continue;
+    }
+    for (const part of initiativeParts) {
+      const partLines = part.trimStart().split("\n");
+      const heading = partLines[0].trim().replace(/^### /, "");
+      const body = partLines.slice(1).join("\n").trim();
+      if (!body) continue;
+      chunks.push({ heading, text: `${roleHeader}\n\n${partLines.join("\n").trim()}` });
+    }
+  }
+  return chunks;
+}
+
+function extractChunkMeta(chunk: { heading: string; text: string }): Record<string, unknown> {
+  const roleMatch = chunk.text.match(/^## ([^—–]+)[—–]\s*([^(\n]+)/m);
+  return {
+    company: roleMatch ? roleMatch[1].trim() : "",
+    role: roleMatch ? roleMatch[2].trim() : "",
+    initiative: chunk.heading,
+  };
+}
+
+function buildCareerContext(experiences: ParsedExperience[]): string {
+  if (!experiences?.length) return "";
+  const current = experiences[0];
+  const prev = experiences.slice(1, 3).map((e) => e.company).filter(Boolean);
+  let ctx = `${current.role} at ${current.company}`;
+  if (prev.length > 0) ctx += `, prev ${prev.join(", ")}`;
+  return ctx;
+}
+
+async function enrichNarrationChunks(
+  narration: string,
+  careerContext: string
+): Promise<EnrichedChunkUpload[]> {
+  const chunks = parseNarrationChunks(narration);
+  if (chunks.length === 0) return [];
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const base = extractChunkMeta(chunk);
+      try {
+        const res = await fetch("/api/onboarding/enrich-chunk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
+        });
+        const data = res.ok ? await res.json() : {};
+        return { text: chunk.text, metadata: { ...base, ...data } };
+      } catch {
+        return { text: chunk.text, metadata: base };
+      }
+    })
+  );
+  return results;
+}
+
+// On Save: diff final chunks against pre-enriched state — re-enrich only changed chunks
+async function buildFinalChunks(
+  finalChunks: { heading: string; text: string }[],
+  cached: EnrichedChunkUpload[],
+  careerContext: string
+): Promise<EnrichedChunkUpload[]> {
+  const cachedByText = new Map(cached.map((c) => [c.text, c.metadata]));
+  return Promise.all(
+    finalChunks.map(async (chunk) => {
+      const existing = cachedByText.get(chunk.text);
+      if (existing) return { text: chunk.text, metadata: existing };
+      const base = extractChunkMeta(chunk);
+      try {
+        const res = await fetch("/api/onboarding/enrich-chunk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
+        });
+        const data = res.ok ? await res.json() : {};
+        return { text: chunk.text, metadata: { ...base, ...data } };
+      } catch {
+        return { text: chunk.text, metadata: base };
+      }
+    })
+  );
+}
+
 // ── Step 1: Welcome + Target Roles ────────────────────────────────────────
 
 function StepWelcome({
@@ -169,6 +270,10 @@ function StepCareerBasics({
   // S04 design: show file metadata chip inside CareerOutlineView.
   const [fileMeta, setFileMeta] = useState<{ filename: string; sizeKB: number; parsedSec?: number } | null>(null);
 
+  // Enriched chunk metadata — populated silently after narration stream completes.
+  // Keys are ### heading strings (used for diff when user edits).
+  const [enrichedChunks, setEnrichedChunks] = useState<EnrichedChunkUpload[]>([]);
+
   const startNarrationStream = async (experiences: ParsedExperience[]) => {
     if (!experiences || experiences.length === 0) return;
     setStreamingNarration(true);
@@ -188,6 +293,11 @@ function StepCareerBasics({
         accumulated += decoder.decode(value, { stream: true });
         const text = accumulated;
         setOutline((prev) => prev ? { ...prev, career_summary_first_person: text } : null);
+      }
+      // Silently enrich initiative chunks while user reads — stored in state only
+      if (accumulated.trim()) {
+        const careerContext = buildCareerContext(experiences);
+        enrichNarrationChunks(accumulated, careerContext).then(setEnrichedChunks).catch(() => {});
       }
     } catch (err) {
       console.warn("[narrate-career] Streaming failed:", err);
@@ -458,10 +568,23 @@ function StepCareerBasics({
       }
 
       if (careerText.trim().length >= 200) {
+        // Build final enriched chunks: diff against silently pre-enriched state.
+        // Chunks whose text hasn't changed reuse cached metadata; changed or new
+        // chunks are enriched synchronously here before upload.
+        const finalChunks = parseNarrationChunks(careerText);
+        let chunksToUpload: EnrichedChunkUpload[] | undefined;
+        if (finalChunks.length > 0) {
+          const careerContext = buildCareerContext(outline?.experiences ?? []);
+          chunksToUpload = await buildFinalChunks(finalChunks, enrichedChunks, careerContext);
+        }
+
         const uploadRes = await fetch("/api/career/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ career_text: careerText }),
+          body: JSON.stringify({
+            career_text: careerText,
+            ...(chunksToUpload?.length ? { enriched_chunks: chunksToUpload } : {}),
+          }),
         });
         if (!uploadRes.ok) {
           const data = await uploadRes.json().catch(() => ({}));
