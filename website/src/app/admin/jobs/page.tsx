@@ -10,6 +10,7 @@ interface Job {
   location: string | null;
   source_type: string | null;
   experience_level: string | null;
+  min_years_experience: number | null;
   work_type: string | null;
   employment_type: string | null;
   industry: string | null;
@@ -41,12 +42,21 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 const EXP_LABELS: Record<string, string> = {
-  early: "0–3 yrs",
-  mid: "4–6 yrs",
-  senior: "6–10 yrs",
-  executive: "10–15 yrs",
-  cxo: "15+ yrs",
+  early: "Early",
+  mid: "Mid",
+  senior: "Senior",
+  executive: "Executive",
+  cxo: "CXO",
 };
+
+// Encoded as "min-max" or "min+" for open-ended
+const YEARS_RANGES = [
+  { value: "0-3", label: "0–3 yrs" },
+  { value: "4-6", label: "4–6 yrs" },
+  { value: "6-10", label: "6–10 yrs" },
+  { value: "10-15", label: "10–15 yrs" },
+  { value: "15+", label: "15+ yrs" },
+];
 
 const ENRICH_COLORS: Record<string, string> = {
   done: "bg-green-50 text-green-700",
@@ -67,8 +77,11 @@ function fmt(date: string) {
 function ExpandedRow({ job }: { job: Job }) {
   return (
     <tr>
-      <td colSpan={8} className="bg-[#FAFBFC] px-6 py-4 border-b border-border">
+      <td colSpan={9} className="bg-[#FAFBFC] px-6 py-4 border-b border-border">
         <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3 lg:grid-cols-4">
+          {job.min_years_experience != null && (
+            <div><p className="text-[11px] uppercase tracking-wide text-muted font-medium">Min experience</p><p className="text-foreground mt-0.5">{job.min_years_experience} yrs</p></div>
+          )}
           {job.industry && (
             <div><p className="text-[11px] uppercase tracking-wide text-muted font-medium">Industry</p><p className="text-foreground mt-0.5">{job.industry}</p></div>
           )}
@@ -133,6 +146,7 @@ export default function AdminJobsPage() {
   const [q, setQ] = useState("");
   const [sourceType, setSourceType] = useState("");
   const [expLevel, setExpLevel] = useState("");
+  const [yearsRange, setYearsRange] = useState("");
   const [enrichStatus, setEnrichStatus] = useState("");
   const [livenessStatus, setLivenessStatus] = useState("");
 
@@ -142,6 +156,7 @@ export default function AdminJobsPage() {
     if (q) params.set("q", q);
     if (sourceType) params.set("source_type", sourceType);
     if (expLevel) params.set("experience_level", expLevel);
+    if (yearsRange) params.set("years_range", yearsRange);
     if (enrichStatus) params.set("enrichment_status", enrichStatus);
     if (livenessStatus) params.set("liveness_status", livenessStatus);
     params.set("limit", String(PAGE_SIZE));
@@ -152,7 +167,7 @@ export default function AdminJobsPage() {
     setJobs(d.jobs || []);
     setTotal(d.total || 0);
     setLoading(false);
-  }, [q, sourceType, expLevel, enrichStatus, livenessStatus, page]);
+  }, [q, sourceType, expLevel, yearsRange, enrichStatus, livenessStatus, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -193,6 +208,11 @@ export default function AdminJobsPage() {
           <option value="">All levels</option>
           {Object.entries(EXP_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <select value={yearsRange} onChange={(e) => { setYearsRange(e.target.value); setPage(0); }}
+          className="rounded-[10px] border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent bg-white">
+          <option value="">Any experience</option>
+          {YEARS_RANGES.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+        </select>
         <select value={enrichStatus} onChange={(e) => { setEnrichStatus(e.target.value); setPage(0); }}
           className="rounded-[10px] border border-border px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent bg-white">
           <option value="">All enrichment</option>
@@ -218,6 +238,7 @@ export default function AdminJobsPage() {
               <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Company</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Source</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Level</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Exp required</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Work type</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Enrichment</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-muted uppercase tracking-wide">Liveness</th>
@@ -226,9 +247,9 @@ export default function AdminJobsPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted">Loading…</td></tr>
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-muted">Loading…</td></tr>
             ) : jobs.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted">No jobs found</td></tr>
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-muted">No jobs found</td></tr>
             ) : jobs.map((job) => (
               <>
                 <tr
@@ -247,6 +268,9 @@ export default function AdminJobsPage() {
                   </td>
                   <td className="px-4 py-3 text-muted text-[12px]">
                     {job.experience_level ? EXP_LABELS[job.experience_level] || job.experience_level : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted text-[12px]">
+                    {job.min_years_experience != null ? `${job.min_years_experience}+ yrs` : "—"}
                   </td>
                   <td className="px-4 py-3 text-muted text-[12px]">{job.work_type || "—"}</td>
                   <td className="px-4 py-3">

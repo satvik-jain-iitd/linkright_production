@@ -77,15 +77,29 @@ FIELD_PROMPTS: dict[str, tuple[str, str]] = {
         "What stage is this company at? Answer only one: startup, growth, or enterprise.",
         "startup,growth,enterprise",
     ),
+    "min_years_experience": (
+        "How many minimum years of experience does this job require? Answer only a single integer (e.g. 0, 3, 5, 10). If not mentioned, answer 0.",
+        "integer",
+    ),
 }
 
 BOOL_FIELDS = {"remote_ok"}
+INT_FIELDS = {"min_years_experience"}
 
 
 def _parse_answer(field: str, raw: str, valid: str) -> Optional[object]:
     """Parse a raw LLM answer into a typed value."""
     cleaned = raw.strip().lower().strip(".,;\"'`")
     if not cleaned:
+        return None
+
+    if field in INT_FIELDS:
+        import re
+        nums = re.findall(r"\d+", cleaned)
+        if nums:
+            val = int(nums[0])
+            if 0 <= val <= 50:
+                return val
         return None
 
     valid_opts = [v.strip() for v in valid.split(",")]
