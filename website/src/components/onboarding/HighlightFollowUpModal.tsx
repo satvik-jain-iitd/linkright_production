@@ -130,7 +130,7 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
           <div>
-            <span className="rounded-full bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700">
+            <span className="rounded-[10px] bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700">
               {sourceChip(nugget)}
             </span>
             <h3 className="mt-2 text-base font-semibold leading-snug tracking-tight">
@@ -235,7 +235,7 @@ export function HighlightFollowUpModal({ nugget, onClose }: Props) {
                           type="button"
                           onClick={() => save(idx)}
                           disabled={q.saving || !q.answer.trim()}
-                          className="rounded-full bg-tertiary-600 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-tertiary-700 disabled:opacity-50"
+                          className="rounded-lg bg-tertiary-600 px-3 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-tertiary-700 disabled:opacity-50"
                         >
                           {q.saving ? "Saving…" : "Save"}
                         </button>

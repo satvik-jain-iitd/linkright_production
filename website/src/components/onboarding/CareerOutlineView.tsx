@@ -140,8 +140,8 @@ export function CareerOutlineView({
               <span
                 className={
                   s.n === 1
-                    ? "rounded-full bg-accent px-3 py-1.5 font-semibold text-white"
-                    : "rounded-full border border-border bg-white px-3 py-1.5 font-medium text-muted"
+                    ? "rounded-[10px] bg-accent px-3 py-1.5 font-semibold text-white"
+                    : "rounded-[10px] border border-border bg-white px-3 py-1.5 font-medium text-muted"
                 }
               >
                 {s.n} {s.label}
@@ -220,7 +220,7 @@ export function CareerOutlineView({
         <div className="rounded-2xl border border-border bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Outline</h3>
-            <span className="rounded-full border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-muted">
+            <span className="rounded-[10px] border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-muted">
               Click any field to edit
             </span>
           </div>
@@ -283,7 +283,7 @@ export function CareerOutlineView({
                           {chips.slice(0, 4).map((c, i) => (
                             <span
                               key={`${exp.company}-chip-${i}`}
-                              className="rounded-full bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700"
+                              className="rounded-[10px] bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700"
                             >
                               {c}
                             </span>
@@ -344,7 +344,7 @@ export function CareerOutlineView({
                 {data.skills.slice(0, 24).map((s, i) => (
                   <span
                     key={`skill-${i}`}
-                    className="rounded-full bg-[#EDF2F7] px-2.5 py-0.5 text-[11px] font-medium text-[#4A5568]"
+                    className="rounded-[10px] bg-[#EDF2F7] px-2.5 py-0.5 text-[11px] font-medium text-[#4A5568]"
                   >
                     {s}
                   </span>
@@ -409,7 +409,7 @@ export function CareerOutlineView({
                 <button
                   type="button"
                   onClick={commitNarration}
-                  className="rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover"
+                  className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-accent-hover"
                 >
                   Save narration
                 </button>
@@ -433,14 +433,14 @@ export function CareerOutlineView({
                         {card.heading}
                       </h4>
                       {approved ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-primary-100 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
                           ✓ Approved
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => approveCard(i)}
-                          className="shrink-0 rounded-full border border-accent px-3 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
+                          className="shrink-0 rounded-[10px] border border-accent px-3 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
                         >
                           Approve
                         </button>
@@ -478,7 +478,7 @@ export function CareerOutlineView({
               <button
                 type="button"
                 onClick={startEditing}
-                className="rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white"
+                className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white"
               >
                 Write narration
               </button>

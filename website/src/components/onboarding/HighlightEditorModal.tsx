@@ -269,7 +269,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                 {tags.map((t) => (
                   <span
                     key={t}
-                    className="rounded-full bg-tertiary-50 px-2.5 py-0.5 text-[11px] font-medium text-tertiary-700"
+                    className="rounded-[10px] bg-tertiary-50 px-2.5 py-0.5 text-[11px] font-medium text-tertiary-700"
                   >
                     {t}
                   </span>
@@ -278,7 +278,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
             )}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">Importance:</span>
-              <span className="rounded-full bg-gold-100 px-2.5 py-0.5 text-[11px] font-semibold text-gold-700">
+              <span className="rounded-[10px] bg-gold-100 px-2.5 py-0.5 text-[11px] font-semibold text-gold-700">
                 {IMPORTANCE_LABELS[importance] ?? importance}
               </span>
             </div>
@@ -312,7 +312,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                   type="button"
                   onClick={save}
                   disabled={saving}
-                  className="rounded-full bg-tertiary-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-tertiary-600 disabled:opacity-50"
+                  className="rounded-lg bg-tertiary-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-tertiary-600 disabled:opacity-50"
                 >
                   {saving ? "Saving…" : "Save highlight"}
                 </button>
@@ -330,7 +330,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                   type="button"
                   onClick={save}
                   disabled={saving}
-                  className="rounded-full bg-tertiary-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-tertiary-600 disabled:opacity-50"
+                  className="rounded-lg bg-tertiary-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-tertiary-600 disabled:opacity-50"
                 >
                   {saving ? "Saving…" : "Save changes"}
                 </button>
@@ -348,7 +348,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                   type="button"
                   onClick={generatePreview}
                   disabled={generating}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-tertiary-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-tertiary-600 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-tertiary-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-tertiary-600 disabled:opacity-50"
                 >
                   {generating ? (
                     <>

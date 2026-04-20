@@ -189,10 +189,10 @@ export function ProfileHighlightsView() {
               <span
                 className={
                   s.state === "active"
-                    ? "rounded-full bg-accent px-3 py-1.5 font-semibold text-white"
+                    ? "rounded-[10px] bg-accent px-3 py-1.5 font-semibold text-white"
                     : s.state === "done"
-                      ? "rounded-full bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
-                      : "rounded-full border border-border bg-white px-3 py-1.5 font-medium text-muted"
+                      ? "rounded-[10px] bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
+                      : "rounded-[10px] border border-border bg-white px-3 py-1.5 font-medium text-muted"
                 }
               >
                 {s.n} {s.state === "done" ? `${s.label} ✓` : s.label}
@@ -348,7 +348,7 @@ export function ProfileHighlightsView() {
                     className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}>
+                      <span className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}>
                         {sourceLabel(n)}
                       </span>
                       <button

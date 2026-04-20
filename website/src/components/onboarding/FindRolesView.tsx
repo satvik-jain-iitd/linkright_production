@@ -163,10 +163,10 @@ export function FindRolesView({ embedded }: Props) {
                   <span
                     className={
                       s.state === "active"
-                        ? "rounded-full bg-accent px-3 py-1.5 font-semibold text-white"
+                        ? "rounded-[10px] bg-accent px-3 py-1.5 font-semibold text-white"
                         : s.state === "done"
-                          ? "rounded-full bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
-                          : "rounded-full border border-border bg-white px-3 py-1.5 font-medium text-muted"
+                          ? "rounded-[10px] bg-accent/10 px-3 py-1.5 font-medium text-primary-700"
+                          : "rounded-[10px] border border-border bg-white px-3 py-1.5 font-medium text-muted"
                     }
                   >
                     {s.n} {s.state === "done" ? `${s.label} ✓` : s.label}
@@ -361,7 +361,7 @@ function SpotlightCard({ row, onStart }: { row: Top20Row; onStart: () => void })
     <div className="rounded-2xl border-2 border-accent/40 bg-gradient-to-br from-accent/5 via-white to-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary-700">
+          <span className="inline-flex items-center gap-1.5 rounded-[10px] bg-accent/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-primary-700">
             ★ Top pick for you
           </span>
           <h3 className="mt-2.5 text-xl font-bold tracking-tight text-foreground">
@@ -373,7 +373,7 @@ function SpotlightCard({ row, onStart }: { row: Top20Row; onStart: () => void })
               {chips.map((c, i) => (
                 <span
                   key={i}
-                  className="rounded-full bg-white px-2.5 py-1 text-[11px] text-muted ring-1 ring-border"
+                  className="rounded-[10px] bg-white px-2.5 py-1 text-[11px] text-muted ring-1 ring-border"
                 >
                   {c}
                 </span>
@@ -452,7 +452,7 @@ function RoleRow({ row, onStart }: { row: Top20Row; onStart: () => void }) {
         <button
           type="button"
           onClick={onStart}
-          className="rounded-full border border-border bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-cta hover:bg-cta hover:text-white"
+          className="rounded-lg border border-border bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-cta hover:bg-cta hover:text-white"
         >
           Start →
         </button>
