@@ -626,6 +626,73 @@ def _extract_company_keys(budget: dict) -> list[str]:
     return ["company_1_total"]
 
 
+def _apply_career_profile_weights(ctx: PipelineContext) -> None:
+    """Redistribute bullet_budget using career_profiles space_allocation percentages.
+
+    Freshers/entry: internship/project bullets boosted, work exp reduced.
+    Mid/Senior: work exp bullets dominate.
+    """
+    if not ctx.career_level or not ctx._bullet_budget:
+        return
+
+    from ..data.career_profiles import CAREER_PROFILES
+    profile = CAREER_PROFILES.get(ctx.career_level)
+    if not profile:
+        return
+
+    alloc = profile["space_allocation"]
+
+    work_pct = 0
+    voluntary_pct = 0
+    awards_pct = 0
+    for name, pct in alloc.items():
+        low = name.lower()
+        if any(kw in low for kw in ("professional experience", "work experience", "internship experience", "key initiative")):
+            work_pct += pct
+        elif any(kw in low for kw in ("project", "voluntary", "extracurricular")):
+            voluntary_pct += pct
+        elif any(kw in low for kw in ("award", "recognition", "scholastic", "board", "advisory")):
+            awards_pct += pct
+
+    total_relevant_pct = work_pct + voluntary_pct + awards_pct
+    if total_relevant_pct < 15:
+        return
+
+    company_keys = _extract_company_keys(ctx._bullet_budget)
+    current_work = sum(ctx._bullet_budget.get(k, 0) for k in company_keys)
+    current_voluntary = ctx._bullet_budget.get("voluntary", 2)
+    current_awards = ctx._bullet_budget.get("awards", 2)
+    total_bullets = current_work + current_voluntary + current_awards
+
+    if total_bullets < 6:
+        return
+
+    new_work = max(2, round(total_bullets * work_pct / total_relevant_pct))
+    new_voluntary = max(1, round(total_bullets * voluntary_pct / total_relevant_pct)) if voluntary_pct > 0 else 0
+    new_awards = max(1, round(total_bullets * awards_pct / total_relevant_pct)) if awards_pct > 0 else 0
+
+    if company_keys:
+        per_company = max(2, new_work // len(company_keys))
+        remainder = new_work - (per_company * len(company_keys))
+        for ck in company_keys:
+            ctx._bullet_budget[ck] = per_company
+        if remainder > 0:
+            ctx._bullet_budget[company_keys[0]] += remainder
+
+    if new_voluntary > 0:
+        ctx._bullet_budget["voluntary"] = new_voluntary
+    if new_awards > 0:
+        ctx._bullet_budget["awards"] = new_awards
+    elif "awards" in ctx._bullet_budget:
+        ctx._bullet_budget["awards"] = 0
+
+    logger.info(
+        "career_profile_weights: level=%s work=%d voluntary=%d awards=%d (was %d/%d/%d)",
+        ctx.career_level, new_work, new_voluntary, new_awards,
+        current_work, current_voluntary, current_awards,
+    )
+
+
 def _format_qa_context(ctx: PipelineContext) -> str:
     """Format Q&A answers into a string for LLM prompts."""
     if not ctx.qa_answers:
@@ -910,7 +977,8 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
         raise ValueError(f"Phase 1+2: LLM returned invalid JSON — {e}. Response start: {resp.text[:300]}") from e
 
     ctx._parsed = data
-    ctx._section_order = data.get("section_order", [])
+    if not ctx._section_order:  # Preserve user-selected template section order
+        ctx._section_order = data.get("section_order", [])
     ctx._bullet_budget = data.get("bullet_budget", {})
 
     # Guard 3.3c: validate Phase 1+2 output
@@ -925,7 +993,8 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
             ctx.strategy = data_retry.get("strategy", ctx.strategy)
             ctx.theme_colors = ctx.override_theme_colors or data_retry.get("theme_colors", ctx.theme_colors)
             ctx._parsed = data_retry
-            ctx._section_order = data_retry.get("section_order", ctx._section_order)
+            if not ctx._section_order:  # Preserve user-selected template section order
+                ctx._section_order = data_retry.get("section_order", ctx._section_order)
             ctx._bullet_budget = data_retry.get("bullet_budget", ctx._bullet_budget)
             p12_failures_retry = _validate_phase_1_2(ctx)
             if p12_failures_retry:
@@ -933,6 +1002,9 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
         except Exception as e:
             logger.warning(f"Job {ctx.job_id} phase 1+2 retry failed: {e} — proceeding best-effort")
             _record_validation_failures(ctx, "1_2", p12_failures)
+
+    # Rebalance bullet_budget based on career-profile space weights
+    _apply_career_profile_weights(ctx)
 
     # Fetch relevant career chunks via full-text search
     keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]

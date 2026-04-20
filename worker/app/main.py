@@ -74,6 +74,7 @@ class JobRequest(BaseModel):
     override_theme_colors: dict | None = None  # user-confirmed brand colors from wizard
     locked_sections: list[str] = []  # section names to skip LLM re-generation (use frozen HTML)
     section_html_frozen: dict[str, str] = {}  # section_name → frozen HTML from template
+    section_order: list[str] = []  # user-selected template section order (from StepLayout)
 
 
 class JobResponse(BaseModel):
@@ -136,6 +137,8 @@ async def process_job(req: JobRequest):
             locked_sections=req.locked_sections or [],
             section_html_frozen=req.section_html_frozen or {},
         )
+        if req.section_order:
+            ctx._section_order = list(req.section_order)
 
         logger.info(f"Job {req.job_id}: starting pipeline ({model_provider}/{model_id})")
         update_job(sb, req.job_id, status="processing", current_phase="starting", phase_number=0)

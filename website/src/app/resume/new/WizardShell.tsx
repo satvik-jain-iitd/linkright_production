@@ -66,7 +66,12 @@ const EMPTY_DATA: WizardData = {
   qa_answers: [],
   target_company: "",
   target_role: "",
-  brand_colors: null,
+  brand_colors: {
+    brand_primary: "#1B2A4A",
+    brand_secondary: "#2563EB",
+    brand_tertiary: "#6B7280",
+    brand_quaternary: "#FFFFFF",
+  },
   jd_analysis: null,
 };
 
@@ -80,25 +85,31 @@ function loadSaved(): { step: number; data: WizardData } | null {
   }
 }
 
-export function WizardShell({ userId, jobId, retryJdText }: { userId: string; jobId?: string; retryJdText?: string }) { // [PSA5-ayd.2.1.3]
+export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, discoveryRole }: { userId: string; jobId?: string; retryJdText?: string; discoveryCompany?: string; discoveryRole?: string }) {
   const saved = typeof window !== "undefined" ? loadSaved() : null;
 
   // 5 steps: JobDetails=0, Customize=1, Layout=2, Build=3, Review=4
-  // If jobId param present, go straight to Review (step 4)
-  // If saved job_id and was on Build/Review, resume there
+  // Skip Step 0 when coming from a discovery (JD + company + role already pre-filled)
   const initialStep = jobId
     ? 4
     : saved?.data?.job_id
       ? saved.step >= 3
         ? saved.step
         : 3
-      : (saved?.step ?? 0);
+      : (!saved && discoveryCompany && retryJdText)
+        ? 1
+        : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
-  // [PSA5-ayd.2.1.3] Pre-fill jd_text from retry_jd query param if provided
   const initialData: WizardData = saved?.data ?? { ...EMPTY_DATA };
   if (retryJdText && !jobId) {
     initialData.jd_text = retryJdText;
+  }
+  if (discoveryCompany && !saved?.data) {
+    initialData.target_company = discoveryCompany;
+  }
+  if (discoveryRole && !saved?.data) {
+    initialData.target_role = discoveryRole;
   }
   const [data, setData] = useState<WizardData>(initialData);
   const [retryKey, setRetryKey] = useState(0);

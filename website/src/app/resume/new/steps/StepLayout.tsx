@@ -1,97 +1,7 @@
 "use client";
 
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { WizardData } from "../WizardShell";
-
-// Section definitions: name (matches worker), display label, estimated height, always shown
-const SECTION_DEFS: { id: string; label: string; heightClass: string; pinned?: boolean }[] = [
-  { id: "Professional Summary", label: "Professional Summary", heightClass: "h-10", pinned: true },
-  { id: "Professional Experience", label: "Professional Experience", heightClass: "h-28" },
-  { id: "Education", label: "Education", heightClass: "h-10" },
-  { id: "Skills", label: "Skills", heightClass: "h-10" },
-  { id: "Awards & Recognitions", label: "Awards & Recognitions", heightClass: "h-10" },
-  { id: "Interests", label: "Interests", heightClass: "h-8" },
-];
-
-const DEFAULT_ORDER = SECTION_DEFS.map((s) => s.id);
-
-interface SortableItemProps {
-  id: string;
-  label: string;
-  heightClass: string;
-  pinned?: boolean;
-  index: number;
-}
-
-function SortableItem({ id, label, heightClass, pinned, index }: SortableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id, disabled: !!pinned });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-stretch gap-3 rounded-xl border transition-shadow ${
-        isDragging
-          ? "shadow-lg border-primary-300 bg-primary-50 z-10"
-          : pinned
-            ? "border-primary-200 bg-primary-50/60"
-            : "border-border bg-surface hover:border-primary-200"
-      }`}
-    >
-      {/* Left: section number */}
-      <div className="flex items-center justify-center w-8 flex-shrink-0 rounded-l-xl bg-border/40 text-xs text-muted font-medium">
-        {index + 1}
-      </div>
-
-      {/* Middle: visual box representing section height */}
-      <div className={`flex-1 ${heightClass} flex items-center py-2`}>
-        <div className="w-full">
-          <p className="text-sm font-medium text-foreground leading-tight">{label}</p>
-          {pinned && (
-            <p className="text-xs text-primary-600 mt-0.5">Always first</p>
-          )}
-        </div>
-      </div>
-
-      {/* Right: drag handle */}
-      {!pinned && (
-        <div
-          {...attributes}
-          {...listeners}
-          className="flex items-center px-3 cursor-grab active:cursor-grabbing text-muted hover:text-foreground transition-colors"
-          aria-label={`Drag to reorder ${label}`}
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-          </svg>
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface Props {
   data: WizardData;
@@ -100,90 +10,207 @@ interface Props {
   back: () => void;
 }
 
+interface Template {
+  id: "fresher" | "mid" | "senior";
+  name: string;
+  yearRange: string;
+  description: string;
+  callout: string;
+  sectionOrder: string[];
+  weights: { label: string; pct: number; color: string }[];
+}
+
+const TEMPLATES: Template[] = [
+  {
+    id: "fresher",
+    name: "Early Career",
+    yearRange: "0–2 years",
+    description: "Education-first. Projects and achievements highlighted.",
+    callout: "Education at top · Academic wins highlighted · Work experience de-emphasised",
+    sectionOrder: [
+      "Education",
+      "Scholastic Achievements",
+      "Projects & Internships",
+      "Skills",
+      "Work Experience",
+      "Certifications",
+      "Interests",
+    ],
+    weights: [
+      { label: "Education", pct: 25, color: "#3B82F6" },
+      { label: "Projects", pct: 20, color: "#10B981" },
+      { label: "Skills", pct: 15, color: "#8B5CF6" },
+      { label: "Work Exp", pct: 15, color: "#F59E0B" },
+      { label: "Scholastic", pct: 15, color: "#EC4899" },
+      { label: "Other", pct: 10, color: "#9CA3AF" },
+    ],
+  },
+  {
+    id: "mid",
+    name: "Mid Career",
+    yearRange: "2–8 years",
+    description: "Experience-led. Skills and impact front and centre.",
+    callout: "Work experience dominates · Education moved to bottom",
+    sectionOrder: [
+      "Professional Summary",
+      "Professional Experience",
+      "Skills & Competencies",
+      "Education",
+      "Certifications",
+      "Interests",
+    ],
+    weights: [
+      { label: "Experience", pct: 55, color: "#3B82F6" },
+      { label: "Skills", pct: 15, color: "#8B5CF6" },
+      { label: "Summary", pct: 10, color: "#10B981" },
+      { label: "Education", pct: 8, color: "#F59E0B" },
+      { label: "Other", pct: 12, color: "#9CA3AF" },
+    ],
+  },
+  {
+    id: "senior",
+    name: "Senior / Executive",
+    yearRange: "8+ years",
+    description: "Leadership-first. Deep experience, no scholastics.",
+    callout: "Scholastics dropped · Leadership sections added · Education minimal",
+    sectionOrder: [
+      "Professional Summary",
+      "Professional Experience",
+      "Leadership & Advisory",
+      "Skills & Expertise",
+      "Education",
+    ],
+    weights: [
+      { label: "Experience", pct: 65, color: "#3B82F6" },
+      { label: "Summary", pct: 12, color: "#10B981" },
+      { label: "Leadership", pct: 10, color: "#8B5CF6" },
+      { label: "Skills", pct: 8, color: "#F59E0B" },
+      { label: "Education", pct: 5, color: "#9CA3AF" },
+    ],
+  },
+];
+
+function stageToTemplate(stage: string): Template["id"] {
+  if (stage === "fresher" || stage === "entry") return "fresher";
+  if (stage === "senior" || stage === "executive") return "senior";
+  return "mid";
+}
+
 export function StepLayout({ data, update, next, back }: Props) {
-  const [sections, setSections] = useState<string[]>(
-    data.section_order?.length ? data.section_order : DEFAULT_ORDER
-  );
+  const [selected, setSelected] = useState<Template["id"]>("mid");
+  const [loadingStage, setLoadingStage] = useState(true);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    setSections((prev) => {
-      const oldIdx = prev.indexOf(active.id as string);
-      const newIdx = prev.indexOf(over.id as string);
-      // Don't move Professional Summary (pinned first)
-      if (newIdx === 0 && prev[0] === "Professional Summary") return prev;
-      return arrayMove(prev, oldIdx, newIdx);
-    });
-  };
+  useEffect(() => {
+    fetch("/api/career/stage")
+      .then((r) => r.json())
+      .then((result) => {
+        if (result.career_stage) {
+          setSelected(stageToTemplate(result.career_stage));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingStage(false));
+  }, []);
 
   const handleConfirm = () => {
-    update({ section_order: sections });
+    const tmpl = TEMPLATES.find((t) => t.id === selected)!;
+    update({ section_order: tmpl.sectionOrder });
     next();
   };
 
-  const sectionMap = Object.fromEntries(SECTION_DEFS.map((s) => [s.id, s]));
+  const selectedTemplate = TEMPLATES.find((t) => t.id === selected)!;
 
   return (
-    <div className="space-y-8 max-w-lg">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Resume Layout</h2>
-        <p className="mt-2 text-sm text-muted">
-          Drag sections to set the order they&apos;ll appear in your resume. Professional Summary is always first.
-        </p>
-      </div>
-
-      {/* Resume page preview */}
-      <div className="rounded-xl border-2 border-border bg-white shadow-sm overflow-hidden">
-        {/* Resume header stub */}
-        <div className="px-4 py-3 border-b border-border/60 bg-primary-50/40">
-          <div className="h-3 w-32 rounded bg-primary-200 mb-1.5" />
-          <div className="h-2 w-48 rounded bg-border" />
-        </div>
-
-        {/* Sortable sections */}
-        <div className="p-3 space-y-2">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={sections} strategy={verticalListSortingStrategy}>
-              {sections.map((id, idx) => {
-                const def = sectionMap[id];
-                if (!def) return null;
-                return (
-                  <SortableItem
-                    key={id}
-                    id={id}
-                    label={def.label}
-                    heightClass={def.heightClass}
-                    pinned={def.pinned}
-                    index={idx}
-                  />
-                );
-              })}
-            </SortableContext>
-          </DndContext>
-        </div>
-      </div>
-
-      <p className="text-xs text-muted">
-        The AI may adjust spacing based on your content, but will follow this section order.
+    <div>
+      <h2 className="text-2xl font-bold text-foreground">Choose Your Template</h2>
+      <p className="mt-2 text-sm text-muted">
+        {loadingStage
+          ? "Detecting your career stage…"
+          : "We've auto-selected the best match. Click any card to change."}
       </p>
 
-      <div className="flex gap-3">
+      {/* Template cards */}
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {TEMPLATES.map((tmpl) => {
+          const isSelected = selected === tmpl.id;
+          return (
+            <button
+              key={tmpl.id}
+              type="button"
+              onClick={() => setSelected(tmpl.id)}
+              className={`relative flex flex-col rounded-2xl border-2 p-5 text-left transition-all ${
+                isSelected
+                  ? "border-accent bg-accent/5 shadow-md"
+                  : "border-border bg-surface hover:border-accent/40"
+              }`}
+            >
+              {isSelected && (
+                <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-white">
+                  ✓
+                </span>
+              )}
+
+              <p className="text-base font-semibold text-foreground pr-8">{tmpl.name}</p>
+              <p className="mt-0.5 text-xs font-medium text-muted">{tmpl.yearRange}</p>
+              <p className="mt-2 text-xs text-muted leading-relaxed">{tmpl.description}</p>
+
+              {/* Proportional bar */}
+              <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full">
+                {tmpl.weights.map((w) => (
+                  <div
+                    key={w.label}
+                    style={{ width: `${w.pct}%`, background: w.color }}
+                    title={`${w.label}: ${w.pct}%`}
+                  />
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                {tmpl.weights.map((w) => (
+                  <span key={w.label} className="flex items-center gap-1 text-[10px] text-muted">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full flex-shrink-0"
+                      style={{ background: w.color }}
+                    />
+                    {w.label} {w.pct}%
+                  </span>
+                ))}
+              </div>
+
+              <p className="mt-4 border-t border-border/60 pt-3 text-[11px] text-muted leading-relaxed">
+                {tmpl.callout}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Section order preview */}
+      <div className="mt-6 rounded-xl border border-border bg-surface/50 px-5 py-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+          Section order — {selectedTemplate.name}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {selectedTemplate.sectionOrder.map((s, i) => (
+            <span
+              key={s}
+              className="flex items-center gap-1.5 rounded-[8px] border border-border bg-white px-3 py-1 text-xs font-medium text-foreground"
+            >
+              <span className="text-muted">{i + 1}</span> {s}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8 flex gap-3">
         <button
           onClick={back}
-          className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted hover:bg-surface-hover transition-colors"
+          className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted hover:bg-surface transition-colors"
         >
           ← Back
         </button>
         <button
           onClick={handleConfirm}
-          className="flex-1 rounded-xl bg-primary-500 px-6 py-3 text-base font-semibold text-white hover:bg-primary-600 transition-colors"
+          className="flex-1 rounded-xl bg-accent px-6 py-3 text-base font-semibold text-white hover:bg-accent/90 transition-colors"
         >
           Build My Resume →
         </button>

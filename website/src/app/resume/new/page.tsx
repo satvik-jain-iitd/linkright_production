@@ -10,6 +10,8 @@ export default async function NewResumePage({
   const { job, retry_jd, job_id, discovery_id } = await searchParams;
   // [PSA5-ayd.2.1.3] Decode retry_jd param to pre-fill JD textarea on retry
   let retryJdText = retry_jd ? decodeURIComponent(retry_jd as string) : undefined;
+  let discoveryCompany: string | undefined;
+  let discoveryRole: string | undefined;
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,6 +35,8 @@ export default async function NewResumePage({
           ? `Role: ${disc.title}\nCompany: ${disc.company_name}\n\n`
           : "";
       retryJdText = `${header}${disc.jd_text}`;
+      if (disc.company_name) discoveryCompany = disc.company_name;
+      if (disc.title) discoveryRole = disc.title;
     }
   }
 
@@ -65,7 +69,7 @@ export default async function NewResumePage({
 
   return (
     <div className="min-h-screen bg-background">
-      <WizardShell userId={user.id} jobId={job} retryJdText={retryJdText} />
+      <WizardShell userId={user.id} jobId={job} retryJdText={retryJdText} discoveryCompany={discoveryCompany} discoveryRole={discoveryRole} />
     </div>
   );
 }
