@@ -139,6 +139,41 @@ function parseRequirements(text: string): JDRequirement[] {
     }));
 }
 
+// F06: token-set Jaccard similarity for semantic-dedup of JD requirements.
+function _tokenize(s: string): Set<string> {
+  return new Set(
+    s.toLowerCase().replace(/[^\w\s+]/g, "").split(/\s+/).filter((t) => t.length > 1)
+  );
+}
+
+function _jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let intersection = 0;
+  for (const x of a) if (b.has(x)) intersection += 1;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function dedupeRequirements(reqs: JDRequirement[], threshold = 0.85): JDRequirement[] {
+  const kept: JDRequirement[] = [];
+  const keptTokens: Set<string>[] = [];
+  for (const r of reqs) {
+    const t = _tokenize(r.text);
+    let isDup = false;
+    for (const prior of keptTokens) {
+      if (_jaccard(prior, t) >= threshold) {
+        isDup = true;
+        break;
+      }
+    }
+    if (!isDup) {
+      kept.push(r);
+      keptTokens.push(t);
+    }
+  }
+  return kept;
+}
+
 // ── Oracle nomic-embed-text (same model as stored nugget embeddings) ──────────
 // Nuggets are embedded by worker main.py _run_nugget_embed via Oracle /lifeos/embed
 // endpoint (nomic-embed-text, 768 dims). Must use the same model here or cosine
@@ -409,6 +444,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to analyze JD" }, { status: 500 });
   }
 
+  // F06: semantic-dedup near-duplicate requirements (e.g., LLM emitting
+  // "5+ years PM experience" as both r2 and r11). Jaccard >= 0.85 on tokenized
+  // normalized text collapses the duplicate — we keep the earliest-indexed.
+  const _reqBeforeDedup = requirements.length;
+  requirements = dedupeRequirements(requirements);
+  if (requirements.length < _reqBeforeDedup) {
+    console.info(
+      `[jd/analyze] deduped ${_reqBeforeDedup - requirements.length} requirement(s) via Jaccard >= 0.85`
+    );
+  }
+
   if (requirements.length === 0) {
     return Response.json({ error: "Could not extract requirements from JD" }, { status: 422 });
   }
@@ -467,10 +513,21 @@ export async function POST(request: Request) {
   // the walkthrough.
   const requiredYears = parseRequiredYearsFromJD(jd_text);
   const userYears = cumulativeYearsFromWorkHistory(workHistory);
+  // F08: observable log line — always emit, regardless of revocation outcome,
+  // so we can tell (from logs alone) whether the check fired or was a no-op.
+  const _yearReqIds: string[] = [];
+  for (const r of requirements) {
+    if (
+      /(\d+)\s*[+\-–]\s*(?:to\s*\d+\s*)?years?/i.test(r.text)
+      || /(\d+)\s*years?\b/i.test(r.text)
+    ) {
+      _yearReqIds.push(r.id);
+    }
+  }
+  let _yearAction: "revoked" | "no-op" | "not-applicable" = "not-applicable";
   if (requiredYears !== null && userYears < requiredYears) {
+    _yearAction = _yearReqIds.length > 0 ? "revoked" : "no-op";
     for (const r of requirements) {
-      // Revoke coverage for any requirement whose text mentions the years figure
-      // (or a higher one) — the "N+ years" semantic applies.
       const mentionsYears = /(\d+)\s*[+\-–]\s*(?:to\s*\d+\s*)?years?/i.test(r.text)
         || /(\d+)\s*years?\b/i.test(r.text);
       if (mentionsYears) {
@@ -484,6 +541,9 @@ export async function POST(request: Request) {
       }
     }
   }
+  console.info(
+    `[jd/analyze] years_check: required_years_in_jd=${requiredYears}, user_years=${userYears}, matching_req_ids=${JSON.stringify(_yearReqIds)}, action=${_yearAction}`
+  );
 
   const gaps: JDGap[] = requirements
     .filter((r) => !coveredReqs.has(r.id))

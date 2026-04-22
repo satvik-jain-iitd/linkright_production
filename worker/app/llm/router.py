@@ -62,6 +62,16 @@ def _load_oracle() -> tuple[str, str]:
     )
 
 
+def _load_openrouter_key() -> str:
+    """OpenRouter tertiary fallback (F07). Uses Llama 3.3 70B (same class as Groq primary)."""
+    return os.environ.get("OPENROUTER_API_KEY", "")
+
+
+def _load_cerebras_key() -> str:
+    """Cerebras quaternary fallback (F07). Llama 3.3 70B via OpenAI-compatible endpoint."""
+    return os.environ.get("CEREBRAS_API_KEY", "")
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Provider preference list per phase
 # Each entry: (kind, model_id) — the router hydrates into a real provider.
@@ -78,18 +88,45 @@ def _load_oracle() -> tuple[str, str]:
 #   Daily total: 400 Gemini calls (in 4500 RPD × 3 keys) ✓
 #                600 Groq calls (in 14400 RPD) ✓
 _PHASE_ROUTES: dict[str, list[tuple[str, str]]] = {
-    # Parse JD + strategy: Gemini is best at JSON + structured output
-    "phase_1_2":    [("gemini", "gemini-2.0-flash"), ("groq", "llama-3.3-70b-versatile")],
-    # Summary cleanup: quality matters (it's the first thing readers see)
-    "phase_3_5a":   [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.0-flash")],
-    # Verbose bullets: quality-critical, 1-signal-per-bullet needs good instruction following
-    "phase_4a":     [("gemini", "gemini-2.0-flash"), ("groq", "llama-3.3-70b-versatile")],
-    # Condense: needs to preserve metrics/keywords exactly — 70B is safer than Oracle 1B
-    "phase_4c":     [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.0-flash")],
-    # Bullet optimization: 70B primary (was Oracle 1B + 8B fallback — caused hangs when Oracle offline)
-    "phase_5":      [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.0-flash")],
-    # Default fallback
-    "default":      [("gemini", "gemini-2.0-flash"), ("groq", "llama-3.3-70b-versatile")],
+    # Parse JD + strategy: Gemini is best at JSON + structured output.
+    # F07 tertiary/quaternary: OpenRouter + Cerebras with Llama 3.3 70B keeps the
+    # pipeline alive when Groq + free-tier Gemini keys are both exhausted.
+    "phase_1_2":    [
+        ("gemini", "gemini-2.0-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+        ("cerebras", "llama-3.3-70b"),
+    ],
+    "phase_3_5a":   [
+        ("groq", "llama-3.3-70b-versatile"),
+        ("gemini", "gemini-2.0-flash"),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+        ("cerebras", "llama-3.3-70b"),
+    ],
+    "phase_4a":     [
+        ("gemini", "gemini-2.0-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+        ("cerebras", "llama-3.3-70b"),
+    ],
+    "phase_4c":     [
+        ("groq", "llama-3.3-70b-versatile"),
+        ("gemini", "gemini-2.0-flash"),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+        ("cerebras", "llama-3.3-70b"),
+    ],
+    "phase_5":      [
+        ("groq", "llama-3.3-70b-versatile"),
+        ("gemini", "gemini-2.0-flash"),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+        ("cerebras", "llama-3.3-70b"),
+    ],
+    "default":      [
+        ("gemini", "gemini-2.0-flash"),
+        ("groq", "llama-3.3-70b-versatile"),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct"),
+        ("cerebras", "llama-3.3-70b"),
+    ],
 }
 
 
@@ -165,6 +202,20 @@ def _make_provider(kind: str, model_id: str, api_key: str) -> Optional[LLMProvid
             return None
         from .oracle import OracleProvider
         p = OracleProvider(base_url=base_url, secret=secret, endpoint="rewrite")
+    elif kind == "openrouter":
+        if not api_key:
+            return None
+        from .openrouter import OpenRouterProvider
+        p = OpenRouterProvider(api_key=api_key, model_id=model_id)
+    elif kind == "cerebras":
+        if not api_key:
+            return None
+        from .openai_compat import OpenAICompatProvider
+        p = OpenAICompatProvider(
+            api_key=api_key,
+            model_id=model_id,
+            base_url="https://api.cerebras.ai/v1",
+        )
 
     if p is not None:
         _provider_cache[cache_key] = p
@@ -203,6 +254,9 @@ async def pick_for(
     groq_key = _load_groq_key()
     oracle_url, oracle_secret = _load_oracle()
 
+    openrouter_key = _load_openrouter_key()
+    cerebras_key = _load_cerebras_key()
+
     for kind, model in routes:
         if kind == "gemini":
             for k in gemini_keys:
@@ -214,6 +268,12 @@ async def pick_for(
             if oracle_url and oracle_secret:
                 # Oracle uses secret-as-key for bucket identity
                 expanded.append((kind, model, oracle_secret))
+        elif kind == "openrouter":
+            if openrouter_key:
+                expanded.append((kind, model, openrouter_key))
+        elif kind == "cerebras":
+            if cerebras_key:
+                expanded.append((kind, model, cerebras_key))
 
     # Fallback key as last resort if nothing wired
     if fallback_key and not expanded:

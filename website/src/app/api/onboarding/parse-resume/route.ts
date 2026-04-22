@@ -96,6 +96,7 @@ Rules:
 - ## SKILLS: comma-separated list of skills. Omit section if none.
 - ## CERTIFICATIONS: one per line. Omit section if none.
 - ### header format: Company | Role | Start | End (use "Present" if current)
+- SEPARATOR RULE (CRITICAL): every field in every ### or education header MUST be separated by a single pipe character '|' surrounded by spaces (" | "). NEVER use em-dash (—), en-dash (–), comma, slash, or any other character as a field separator, even if the source resume uses them visually. Re-format source em-dashes into pipes when you write the header.
 - bullets: exact text from resume, max 8 per role
 - **Project:** blocks inside ## EXPERIENCE: only when resume explicitly names a project under a role. Skip if none.
 - ## PROJECTS: for standalone portfolio/personal/side projects NOT under any company. Each gets a ### header with name and year.
@@ -287,7 +288,7 @@ function parseEducation(text: string): ParsedEducationRow[] {
     .map((l) => l.trim())
     .filter((l) => l.startsWith("- "))
     .map((l) => {
-      const parts = l.slice(2).split("|").map((p) => p.trim());
+      const parts = l.slice(2).split(/\s*[|—–]\s*/).map((p) => p.trim());
       return {
         degree: parts[0] ?? "",
         institution: parts[1] ?? "",
@@ -330,7 +331,7 @@ function parseExperiences(text: string): ParsedExperience[] {
   for (const block of blocks) {
     const lines = block.split("\n");
     const header = lines[0].replace(/^###\s*/, "").trim();
-    const parts = header.split("|").map((p) => p.trim());
+    const parts = header.split(/\s*[|—–]\s*/).map((p) => p.trim());
     if (parts.length < 2) continue;
 
     const [company = "", role = "", start_date = "", end_date = ""] = parts;
@@ -409,7 +410,7 @@ function parseTopLevelProjects(text: string): ParsedProject[] {
     const lines = block.split("\n");
     const header = lines[0].replace(/^###\s*/, "").trim();
     // "Project Name | Year" — year is optional
-    const [title = ""] = header.split("|").map((p) => p.trim());
+    const [title = ""] = header.split(/\s*[|—–]\s*/).map((p) => p.trim());
     if (!title) continue;
 
     const body = lines.slice(1).join("\n");

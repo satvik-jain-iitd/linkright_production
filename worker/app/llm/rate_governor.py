@@ -42,6 +42,9 @@ DEFAULT_LIMITS: dict[str, dict[str, int]] = {
     "gemini":     {"rpm": 15,  "rpd": 1500},   # per key
     "groq":       {"rpm": 30,  "rpd": 14400},  # shared across models on one key
     "openrouter": {"rpm": 20,  "rpd": 200},
+    # F07 tertiary: Cerebras Cloud free tier ≈ 30 RPM; generous RPD. Tune once
+    # real-world data lands.
+    "cerebras":   {"rpm": 30,  "rpd": 14400},
     "oracle":     {"rpm": 9999, "rpd": 9999999},  # effectively unlimited (homelab)
 }
 

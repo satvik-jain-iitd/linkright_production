@@ -56,10 +56,22 @@ def test_keyword_check_word_boundary(pipeline_ctx):
 
 
 def test_width_check_known_fills(pipeline_ctx):
-    """Feed bullets with known fill%, assert score computed correctly."""
-    # avg_fill = 93.0 (within 90-100 range → base=100)
-    # no overflow (all <=100), no underflow (all >=85)
-    # width_failures empty → score = 100
+    """Feed bullets with fills in the new 95-100 target window → score 100."""
+    # 2026-04-22: target window tightened from [90, 100] to [95, 100].
+    # avg_fill = 96.5 → in range → base=100 → score=100.
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "<b>Led</b> the team", "fill_percentage": 96},
+        {"text_html": "<b>Built</b> the platform", "fill_percentage": 97},
+    ]
+    pipeline_ctx.stats["width_failures"] = []
+    report = judge_quality(pipeline_ctx)
+    width_check = _get_check(report, "width_fill")
+    assert width_check.score == 100.0
+    assert width_check.passed is True
+
+
+def test_width_check_outside_target_loses_points(pipeline_ctx):
+    """Fills below 95 still score, just lower via distance-from-97.5 formula."""
     pipeline_ctx._optimized_bullets = [
         {"text_html": "<b>Led</b> the team", "fill_percentage": 92},
         {"text_html": "<b>Built</b> the platform", "fill_percentage": 94},
@@ -67,8 +79,8 @@ def test_width_check_known_fills(pipeline_ctx):
     pipeline_ctx.stats["width_failures"] = []
     report = judge_quality(pipeline_ctx)
     width_check = _get_check(report, "width_fill")
-    assert width_check.score == 100.0
-    assert width_check.passed is True
+    # avg = 93 → 100 - (97.5-93)*2 = 91
+    assert width_check.score == 91.0
 
 
 def test_verb_check_unique_verbs(pipeline_ctx):
@@ -169,39 +181,72 @@ def test_ats_check_with_table(pipeline_ctx):
 def _make_ctx_with_score(pipeline_ctx, target_score: float):
     """Manipulate ctx so weighted score ≈ target_score.
 
-    Strategy: set keyword_coverage to drive the score by making all
-    keywords either found or not found. We use keyword_coverage (weight 0.30)
-    and control remaining checks via ctx setup to produce a predictable total.
+    Strategy: two drivers so the full 0-100 range is reachable.
+      - keyword_coverage (weight 0.25) — match fraction of JD keywords
+      - When target_score < 75, also break page_fit + xyz + html (drops ~25 pts)
+        to bring the achievable floor down.
+
+    Post 2026-04-22 weights:
+      kw 0.25 + width 0.20 + verb 0.10 + page 0.10 + contrast 0.05 + ats 0.05
+      + bold_metrics 0.10 + keyword_highlight 0.05 + xyz 0.05 + html 0.05 = 1.00
     """
-    # Use only keyword check as driver and zero everything else out cleanly.
-    # We set theme_colors=None (contrast skipped→100), page_fit fits (→100),
-    # no ATS issues (→100), all unique verbs, fills all 92-95%.
-    # Total = kw*0.30 + width*0.25 + verb*0.15 + page*0.15 + contrast*0.10 + ats*0.05
+    # Decide whether to also break auxiliary checks (needed for grades C/D/F)
+    # With kw=0 and everything else 100, minimum is 75 (grade B boundary).
+    break_aux = target_score < 75
+    # If auxiliary checks broken: page 0 (0.10), xyz 0 (0.05), html 0 (0.05) = -20 pts
+    # So non-kw contribution becomes 55 instead of 75. kw provides 0-25.
+    # Reachable range with break_aux=True: 55 to 80 — covers C (60-74) and D (40-59
+    # via overflow). For D (40-59) we need MORE drop → also fail bold_metrics.
+    drop_more = target_score < 60
 
-    # Easiest: control number of matched keywords only, rest all 100
-    # Total = kw_score*0.30 + 100*0.70
-    # kw_score = (target_score - 70) / 0.30
-    kw_score_needed = (target_score - 70.0) / 0.30
+    non_kw_floor = 75.0  # ideal
+    if break_aux:
+        non_kw_floor -= 20.0  # page + xyz + html = 0
+    if drop_more:
+        non_kw_floor -= 10.0  # bold_metrics = 0
 
-    # Clamp to [0, 100]
+    kw_score_needed = (target_score - non_kw_floor) / 0.25
     kw_score_needed = max(0.0, min(100.0, kw_score_needed))
 
-    # Create N keywords, match kw_score_needed/100 fraction of them
     total_kw = 10
     matched_kw = round(kw_score_needed / 100 * total_kw)
 
     keywords = [f"skill{i}" for i in range(total_kw)]
-    # First `matched_kw` keywords appear in bullet text, rest do not
-    bullet_text = " ".join(keywords[:matched_kw])
-    pipeline_ctx.jd_keywords = keywords
-    pipeline_ctx._optimized_bullets = [
-        {"text_html": bullet_text or "placeholder text here", "fill_percentage": 93},
-        {"text_html": "Built the backend service here", "fill_percentage": 92},
+    matched_text = " ".join(keywords[:matched_kw]) if matched_kw else "placeholder"
+
+    # Base well-formed bullets (≥8 words each to satisfy XYZ Z-component check)
+    good_bullets = [
+        {
+            "text_html": f"Led <b>{matched_text}</b> platform team delivering <b>99%</b> uptime across AWS regions",
+            "fill_percentage": 97,
+            "company_index": 0,
+        },
+        {
+            "text_html": "Built backend service scaling to <b>100K+</b> requests across enterprise customer segments",
+            "fill_percentage": 98,
+            "company_index": 0,
+        },
     ]
-    # Ensure page fits
-    pipeline_ctx._page_fit = {"fits_one_page": True, "remaining_mm": 5.0, "recommendation": "fits"}
-    # No brand color → contrast check skipped (returns 100)
-    pipeline_ctx.theme_colors = {}
+    if drop_more:
+        # Strip <b> tags + drop verbs → bold_metrics 0, xyz 0, keyword_highlight 0
+        good_bullets = [
+            {"text_html": f"project delivering 99 uptime {matched_text}", "fill_percentage": 97, "company_index": 0},
+            {"text_html": "backend service scaling to 100K requests", "fill_percentage": 98, "company_index": 0},
+        ]
+    elif break_aux:
+        # Break HTML + xyz only (keep bold so bold_metrics check passes)
+        good_bullets = [
+            {"text_html": f"Led <b>{matched_text}</b> project <b>99%</b> <b>unclosed", "fill_percentage": 97, "company_index": 0},
+            {"text_html": "service scaling <b>100K+</b> requests", "fill_percentage": 98, "company_index": 0},  # no verb → xyz fail
+        ]
+
+    pipeline_ctx.jd_keywords = keywords
+    pipeline_ctx._optimized_bullets = good_bullets
+    if break_aux:
+        pipeline_ctx._page_fit = {"fits_one_page": False, "remaining_mm": -10.0, "recommendation": "overflow"}
+    else:
+        pipeline_ctx._page_fit = {"fits_one_page": True, "remaining_mm": 5.0, "recommendation": "fits"}
+    pipeline_ctx.theme_colors = {}  # contrast skipped → 100
     pipeline_ctx.stats["width_failures"] = []
     return pipeline_ctx
 
@@ -390,15 +435,24 @@ def test_empty_bullets_returns_na(pipeline_ctx):
         _make_raiser("_check_page_fit"),
         _make_raiser("_check_contrast"),
         _make_raiser("_check_ats_compliance"),
+        _make_raiser("_check_bold_metrics"),
+        _make_raiser("_check_keyword_highlight"),
+        _make_raiser("_check_xyz_format"),
+        _make_raiser("_check_html_integrity"),
     ]
 
-    # Patch all 6 check functions in the module with properly named raisers
+    # Patch all 10 check functions (6 original + 4 added 2026-04-22) in the
+    # module with properly named raisers.
     with mock.patch.object(qj, "_check_keyword_coverage", fake_checks[0]), \
          mock.patch.object(qj, "_check_width_fill", fake_checks[1]), \
          mock.patch.object(qj, "_check_verb_dedup", fake_checks[2]), \
          mock.patch.object(qj, "_check_page_fit", fake_checks[3]), \
          mock.patch.object(qj, "_check_contrast", fake_checks[4]), \
-         mock.patch.object(qj, "_check_ats_compliance", fake_checks[5]):
+         mock.patch.object(qj, "_check_ats_compliance", fake_checks[5]), \
+         mock.patch.object(qj, "_check_bold_metrics", fake_checks[6]), \
+         mock.patch.object(qj, "_check_keyword_highlight", fake_checks[7]), \
+         mock.patch.object(qj, "_check_xyz_format", fake_checks[8]), \
+         mock.patch.object(qj, "_check_html_integrity", fake_checks[9]):
         report = judge_quality(pipeline_ctx)
 
     assert report.grade == "N/A"
@@ -433,8 +487,8 @@ def test_single_check_exception_scores_zero(pipeline_ctx):
         pipeline_ctx.theme_colors = {"brand_primary": "#333333"}
         report = judge_quality(pipeline_ctx)
 
-    # Should still have 6 checks
-    assert len(report.checks) == 6
+    # Should still have 10 checks (6 original + 4 added 2026-04-22)
+    assert len(report.checks) == 10
     # Grade should not be N/A since not all checks failed
     assert report.grade != "N/A"
     # Contrast check should score 0
@@ -465,15 +519,16 @@ def test_full_report_has_all_fields(pipeline_ctx):
     assert isinstance(report.score, float)
     assert 0.0 <= report.score <= 100.0
     assert isinstance(report.checks, list)
-    assert len(report.checks) == 6
+    assert len(report.checks) == 10
     assert isinstance(report.suggestions, list)
     assert isinstance(report.ats_blocked, bool)
 
-    # Verify all check names present
+    # Verify all check names present (6 original + 4 added 2026-04-22)
     check_names = {c.name for c in report.checks}
     expected_names = {
         "keyword_coverage", "width_fill", "verb_dedup",
         "page_fit", "contrast", "ats_compliance",
+        "bold_metrics", "keyword_highlight", "xyz_format", "html_integrity",
     }
     assert check_names == expected_names
 
@@ -485,3 +540,133 @@ def test_full_report_has_all_fields(pipeline_ctx):
         assert hasattr(check, "passed")
         assert hasattr(check, "detail")
         assert 0.0 <= check.score <= 100.0
+
+
+# ---------------------------------------------------------------------------
+# Tests for 2026-04-22 additions: bold_metrics, keyword_highlight, xyz_format,
+# html_integrity, and per-section verb_dedup tightening.
+# ---------------------------------------------------------------------------
+
+def test_bold_metrics_all_bolded_passes(pipeline_ctx):
+    """Every bullet with a metric has it inside <b> → 100%."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "<b>Led</b> team to deliver <b>99%</b> uptime", "fill_percentage": 97},
+        {"text_html": "Scaled system to <b>100K+</b> requests", "fill_percentage": 96},
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    bm = _get_check(report, "bold_metrics")
+    assert bm.score == 100.0
+    assert bm.passed is True
+
+
+def test_bold_metrics_unbolded_fails(pipeline_ctx):
+    """A bullet with a naked metric (not in <b>) drops the score below 90."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led team delivering 99% uptime", "fill_percentage": 97},  # naked metric
+        {"text_html": "Scaled to <b>100K+</b> requests", "fill_percentage": 96},  # bolded
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    bm = _get_check(report, "bold_metrics")
+    assert bm.score == 50.0  # 1/2 bullets with metrics had bolded metric
+    assert bm.passed is False
+
+
+def test_bold_metrics_no_metrics_skipped(pipeline_ctx):
+    """Bullets without any metric don't penalize the check."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led cross-functional product strategy", "fill_percentage": 97},
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    bm = _get_check(report, "bold_metrics")
+    assert bm.score == 100.0
+    assert "check skipped" in bm.detail.lower() or "no bullets contained metrics" in bm.detail.lower()
+
+
+def test_keyword_highlight_all_have_bold(pipeline_ctx):
+    """All bullets contain at least one <b> tag → 100%."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led <b>growth</b> initiative", "fill_percentage": 97},
+        {"text_html": "Scaled <b>infra</b>", "fill_percentage": 96},
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    kh = _get_check(report, "keyword_highlight")
+    assert kh.score == 100.0
+
+
+def test_keyword_highlight_missing_bold_fails(pipeline_ctx):
+    """A bullet with no <b> at all fails the check."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led growth initiative", "fill_percentage": 97},
+        {"text_html": "Scaled <b>infra</b>", "fill_percentage": 96},
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    kh = _get_check(report, "keyword_highlight")
+    assert kh.score == 50.0
+    assert kh.passed is False
+
+
+def test_xyz_format_verb_and_metric_passes(pipeline_ctx):
+    """Bullets with verb (X), metric (Y), and ≥8 words of context (Z) score 100."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led team of 12 engineers delivering <b>99%</b> uptime across AWS regions", "fill_percentage": 97},
+        {"text_html": "Built systems at <b>100K+</b> scale for enterprise customers in 8 weeks", "fill_percentage": 96},
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    xyz = _get_check(report, "xyz_format")
+    assert xyz.score == 100.0
+
+
+def test_xyz_format_no_verb_fails(pipeline_ctx):
+    """A noun-first bullet fails xyz heuristic."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Team delivered <b>99%</b> uptime", "fill_percentage": 97},  # "Team" not a verb
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    xyz = _get_check(report, "xyz_format")
+    assert xyz.score == 0.0
+
+
+def test_html_integrity_balanced_passes(pipeline_ctx):
+    """Balanced <b>...</b> pairs score 100."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led <b>growth</b> team", "fill_percentage": 97},
+        {"text_html": "Scaled to <b>100K+</b> requests", "fill_percentage": 96},
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    hi = _get_check(report, "html_integrity")
+    assert hi.score == 100.0
+
+
+def test_html_integrity_unclosed_b_fails(pipeline_ctx):
+    """Unclosed <b> tag fails the check."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led <b>growth team", "fill_percentage": 97},  # unclosed
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    hi = _get_check(report, "html_integrity")
+    assert hi.score == 0.0
+    assert hi.passed is False
+
+
+def test_verb_dedup_per_section_isolated(pipeline_ctx):
+    """'Led' allowed across different companies but not within one."""
+    pipeline_ctx._optimized_bullets = [
+        {"text_html": "Led team at company A", "fill_percentage": 97, "company_index": 0},
+        {"text_html": "Led marketing at company A", "fill_percentage": 97, "company_index": 0},  # dup within company 0
+        {"text_html": "Led product at company B", "fill_percentage": 97, "company_index": 1},  # different company, OK
+    ]
+    pipeline_ctx.jd_keywords = []
+    report = judge_quality(pipeline_ctx)
+    vd = _get_check(report, "verb_dedup")
+    # Company 0: 1/2 unique = 50%, Company 1: 1/1 = 100%.
+    # Worst-section rule → score = 50
+    assert vd.score == 50.0

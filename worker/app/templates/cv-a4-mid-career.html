@@ -132,7 +132,8 @@
         li::before { content: "\2022"; color: var(--brand-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
         .li-content { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
         .li-content-natural { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
-        .li-content b, .li-content-natural b { color: var(--brand-primary-color); }
+        .li-content--justified { text-align: justify; text-align-last: justify; }
+        .li-content b, .li-content-natural b, .li-content--justified b { color: var(--brand-primary-color); }
         .summary-line b { color: var(--brand-primary-color); font-weight: 700; }
 
         /*
@@ -242,6 +243,18 @@
         <span class="text-line"><!-- PLACEHOLDER: Comma-separated skills --></span>
         <div class="entry-header" style="margin-top:1.5mm;"><!-- PLACEHOLDER: Skill Category --></div>
         <span class="text-line"><!-- PLACEHOLDER: Comma-separated skills --></span>
+    </div>
+
+    <!--
+        2.5. PROJECTS (optional; only populated when bullet_budget.projects > 0)
+             F-NEW-2: surfaces independent_project nuggets with BRS >= 0.6.
+    -->
+    <div class="section" data-section-order="projects">
+        <div class="section-title">Projects<div class="section-divider"></div></div>
+        <ul>
+            <li><span class="li-content-natural"><!-- PLACEHOLDER: Project bullet --></span></li>
+            <li><span class="li-content-natural"><!-- PLACEHOLDER: Project bullet --></span></li>
+        </ul>
     </div>
 
     <!--

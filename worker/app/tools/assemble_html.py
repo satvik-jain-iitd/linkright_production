@@ -765,6 +765,43 @@ def _verify_print_rules(html: str) -> list[str]:
     return warnings
 
 
+def _strip_placeholders_and_empty_shells(html: str) -> tuple[str, int]:
+    """Remove PLACEHOLDER HTML comments and empty skill-category / generic empty shells.
+
+    Targets three leakage patterns observed in run_01:
+      1. Literal `<!-- PLACEHOLDER ... -->` comments anywhere in output.
+      2. `<div class="skill-category">` with only a header/whitespace (no bullets/tags inside).
+      3. Sections (e.g., certifications, interests) whose body is only whitespace.
+
+    Returns (cleaned_html, count_of_elements_stripped). Conservative: only removes
+    elements whose inner text content (after tag + comment strip) is whitespace-only.
+    """
+    count = 0
+    # 1. PLACEHOLDER HTML comments
+    new_html, n = re.subn(r"<!--\s*PLACEHOLDER[^>]*?-->", "", html, flags=re.IGNORECASE)
+    count += n
+    html = new_html
+    # 2. Empty skill-category divs (has heading but no list items / skills / spans).
+    # Pattern is conservative: strip only when the div body contains zero non-whitespace
+    # text after stripping tags and comments.
+    def _empty_div_stripper(match: re.Match) -> str:
+        nonlocal count
+        block = match.group(0)
+        # Strip tags + comments from the block, check if anything but whitespace remains
+        inner_raw = match.group(1)
+        inner_plain = re.sub(r"<[^>]+>", "", re.sub(r"<!--.*?-->", "", inner_raw, flags=re.DOTALL))
+        if inner_plain.strip():
+            return block  # has real content
+        count += 1
+        return ""
+    html = re.sub(
+        r'<div\b[^>]*class="[^"]*skill-category[^"]*"[^>]*>([\s\S]*?)</div>',
+        _empty_div_stripper,
+        html,
+    )
+    return html, count
+
+
 async def resume_assemble_html(params: AssembleInput) -> str:
     """Assemble the final HTML resume by injecting content and colors into template.
 
@@ -832,6 +869,15 @@ async def resume_assemble_html(params: AssembleInput) -> str:
 
         # 8.5. ATS Unicode normalization (adopted from career-ops normalizeTextForATS)
         html = _normalize_ats_text(html)
+
+        # 8.75. F-NEW-3: strip residual PLACEHOLDER comments + empty skill-category shells.
+        # Even after _remove_unmatched_sections drops entire unmatched sections, matched
+        # sections may still contain extra slots whose data never filled (e.g. template
+        # has 7 skill-category divs but the bullet_budget only emitted 3). This pass
+        # cleans them up so the final HTML has zero PLACEHOLDER leakage.
+        html, strip_count = _strip_placeholders_and_empty_shells(html)
+        if strip_count:
+            warnings.append(f"Stripped {strip_count} empty placeholder element(s)")
 
         # 9. Verify print rules
         print_warnings = _verify_print_rules(html)

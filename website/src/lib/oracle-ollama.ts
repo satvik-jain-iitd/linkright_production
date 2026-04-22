@@ -1,6 +1,6 @@
-// Client for the Oracle FastAPI backend's /lifeos/generate endpoint.
-// That endpoint wraps a local Ollama (llama3.2:1b) running on Satvik's
-// Oracle Cloud VPS — free, no rate limits, no per-token cost.
+// Client for the Oracle FastAPI backend's /lifeos/generate + /lifeos/rewrite
+// endpoints. Both wrap a local Ollama gemma3:1b (as of 2026-04-22) running on
+// Satvik's Oracle Cloud VPS — free, no rate limits, no per-token cost.
 //
 // Use as the cheapest first-try for tasks where a 1B model is good enough
 // (resume parsing, bullet cleanup). Fall back to Groq / Gemini when the
@@ -20,8 +20,9 @@ function oracleSecret(): string {
 }
 
 /**
- * Call Oracle's /lifeos/generate — wraps Ollama smollm2:135m by default.
- * For JSON-shaped tasks, prefer generateLong with llama3.2:1b (below).
+ * Call Oracle's /lifeos/generate — wraps Ollama gemma3:1b.
+ * Same underlying model as /lifeos/rewrite; separate endpoint for different
+ * default temperature + token-budget profiles.
  */
 export async function oracleGenerate(
   prompt: string,
@@ -53,7 +54,7 @@ export async function oracleGenerate(
 }
 
 /**
- * Call Oracle's /lifeos/rewrite — wraps Ollama llama3.2:1b.
+ * Call Oracle's /lifeos/rewrite — wraps Ollama gemma3:1b.
  * Better than /generate for structured / longer outputs.
  */
 export async function oracleRewrite(

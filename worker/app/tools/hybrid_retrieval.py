@@ -243,6 +243,73 @@ async def _vector_query(
 
 
 # ---------------------------------------------------------------------------
+# Internal: cross-encoder rerank via Oracle /lifeos/rerank
+# ---------------------------------------------------------------------------
+
+async def _rerank_via_oracle(query: str, fused: list[dict], top_n: int = 20) -> list[dict]:
+    """Rerank top `top_n` fused candidates via Oracle /lifeos/rerank.
+
+    Gated by ENABLE_RERANKER env var. On any failure (network, 503, 404),
+    returns the input list unchanged — rerank is strictly additive.
+    """
+    if os.environ.get("ENABLE_RERANKER", "").lower() not in ("1", "true", "yes"):
+        return fused
+    if not fused:
+        return fused
+
+    oracle_url = os.environ.get("ORACLE_BACKEND_URL", "").rstrip("/")
+    oracle_secret = os.environ.get("ORACLE_BACKEND_SECRET", "")
+    if not oracle_url or not oracle_secret:
+        return fused
+
+    head = fused[:top_n]
+    tail = fused[top_n:]
+    documents = [
+        (item["data"].get("answer") or item["data"].get("nugget_text") or "")
+        for item in head
+    ]
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{oracle_url}/lifeos/rerank",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {oracle_secret}",
+                },
+                json={"query": query, "documents": documents},
+            )
+            if resp.status_code != 200:
+                logger.info("hybrid_retrieval: rerank %d — keeping RRF order", resp.status_code)
+                return fused
+            payload = resp.json()
+    except Exception as exc:
+        logger.info("hybrid_retrieval: rerank call failed (%s) — keeping RRF order", exc)
+        return fused
+
+    ranked = payload.get("ranked") or []
+    if not ranked:
+        return fused
+
+    # Blend reranker score with RRF score so both signals contribute.
+    # Reranker scores are unbounded logits — sigmoid-ish squash to [0, 1].
+    import math
+
+    def _squash(x: float) -> float:
+        return 1.0 / (1.0 + math.exp(-x))
+
+    # Apply reranker score as a multiplier on the head
+    rescored_head = list(head)
+    for item in ranked:
+        idx = int(item.get("index", -1))
+        score = float(item.get("score", 0.0))
+        if 0 <= idx < len(rescored_head):
+            rescored_head[idx]["score"] = rescored_head[idx]["score"] * (0.5 + _squash(score))
+
+    rescored_head.sort(key=lambda x: x["score"], reverse=True)
+    return rescored_head + tail
+
+
+# ---------------------------------------------------------------------------
 # Internal: scoped search combinator
 # ---------------------------------------------------------------------------
 
@@ -255,13 +322,19 @@ async def _hybrid_search(
     jina_api_key: str,
     similarity_threshold: float = 0.0,
 ) -> list[dict]:
-    """Run BM25 + vector for a single (user_id, company, query) scope and fuse."""
+    """Run BM25 + vector for a single (user_id, company, query) scope, fuse,
+    optionally rerank, then apply importance boost.
+
+    Rerank is gated by ENABLE_RERANKER env var and falls through silently on
+    any failure, so enabling it cannot make retrieval worse than disabling it.
+    """
     bm25 = _bm25_query(sb, user_id, query, company, limit * 2)
     vector = await _vector_query(
         sb, user_id, query, company, limit * 2, jina_api_key,
         similarity_threshold=similarity_threshold,
     )
     fused = _fuse_results(bm25, vector)
+    fused = await _rerank_via_oracle(query, fused, top_n=20)
     _apply_importance_boost(fused)
     return fused
 

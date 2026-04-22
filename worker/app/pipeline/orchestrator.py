@@ -489,7 +489,7 @@ async def _oracle_call_with_fallback(
 ) -> LLMResponse:
     """Call Oracle LLM directly (bypasses key_manager Groq routing), falls back to Groq on any error.
 
-    Use this instead of _llm_call when you want Oracle llama3.2:1b — _llm_call's key_manager
+    Use this instead of _llm_call when you want Oracle gemma3:1b — _llm_call's key_manager
     path ignores the llm parameter and always creates a Groq provider, bypassing Oracle.
     """
     try:
@@ -720,6 +720,57 @@ _EDUCATION_FILLER_PHRASES = (
 )
 
 
+def _compute_total_experience_years(companies: list[dict]) -> float:
+    """Sum active employment durations from companies[].date_range.
+
+    date_range format examples: "Jul 2024 – Present", "Apr 2022 – Jul 2024",
+    "Mon YYYY – Mon YYYY", "YYYY – YYYY".
+    Returns total years (sum of spans). Overlapping spans are NOT de-overlapped —
+    we assume the LLM emits in reverse-chronological non-overlapping order.
+    Returns 0.0 if parsing fails.
+    """
+    import re
+    from datetime import datetime
+    MONTHS = {m.lower(): i for i, m in enumerate(
+        ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"], 1
+    )}
+    now = datetime.utcnow()
+    total = 0.0
+    for co in companies or []:
+        dr = (co.get("date_range") or "").strip()
+        if not dr:
+            continue
+        # Split on en-dash or hyphen (accept either as range separator).
+        parts = re.split(r"\s*[\u2013\u2014\-–—]\s*", dr)
+        if len(parts) < 2:
+            continue
+        def parse_end(s: str) -> datetime | None:
+            s = s.strip()
+            if s.lower() in ("present", "current", "now", ""):
+                return now
+            m = re.match(r"([A-Za-z]+)\s*(\d{4})", s)
+            if m and m.group(1).lower()[:3] in MONTHS:
+                return datetime(int(m.group(2)), MONTHS[m.group(1).lower()[:3]], 1)
+            m = re.match(r"(\d{4})", s)
+            if m:
+                return datetime(int(m.group(1)), 1, 1)
+            return None
+        start = parse_end(parts[0])
+        end = parse_end(parts[-1])
+        if start and end and end >= start:
+            total += (end - start).days / 365.25
+    return round(total, 1)
+
+
+_CAREER_LEVEL_MIN_YEARS = {
+    "fresher": 0.0,
+    "entry": 1.0,
+    "mid": 3.0,
+    "senior": 6.0,
+    "executive": 10.0,
+}
+
+
 def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
     """Validate Phase 1+2 LLM output. Returns list of failure reasons."""
     import re
@@ -730,6 +781,30 @@ def _validate_phase_1_2(ctx: "PipelineContext") -> list[str]:
     for key, val in colors.items():
         if val and not re.match(r'^#[0-9A-Fa-f]{6}$', val):
             failures.append(f"color {key}: invalid hex {val}")
+    # F02: career_level consistency with companies[] date spans.
+    # Reject if claimed level requires more years than candidate actually has (+1 yr tolerance for rounding).
+    level = (ctx.career_level or "").strip().lower()
+    total_years = _compute_total_experience_years(ctx._parsed.get("companies", []))
+    if level in _CAREER_LEVEL_MIN_YEARS:
+        min_required = _CAREER_LEVEL_MIN_YEARS[level]
+        if total_years + 1.0 < min_required:
+            failures.append(
+                f"career_level='{level}' requires >={min_required}y but companies[] sums to "
+                f"{total_years}y (+1y tolerance) — LLM likely confused JD's target-role "
+                "seniority with candidate's actual tenure"
+            )
+    # F01: career_summary must not claim more years than candidate actually has (+1 yr tolerance).
+    # Pattern catches "N+ years", "N years of", etc. where N is an integer tenure claim.
+    career_summary = ctx._parsed.get("career_summary") or ""
+    if career_summary and total_years > 0:
+        for m in re.finditer(r"\b(\d+)\+?\s*years?\b", career_summary, flags=re.IGNORECASE):
+            claimed = int(m.group(1))
+            if claimed > total_years + 1.0:
+                failures.append(
+                    f"career_summary claims '{m.group(0)}' but candidate has only "
+                    f"{total_years}y total experience (+1y tolerance) — remove/correct the years claim"
+                )
+                break  # one violation is enough to trigger re-prompt
     # Education highlights must not contain generic filler phrases
     for i, edu in enumerate(ctx._parsed.get("education", [])):
         highlights = edu.get("highlights", "")
@@ -1368,7 +1443,22 @@ async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm)
                     new_fill = verify.get("fill_percentage", 0.0)
                     new_status = verify.get("status", "ERROR")
 
-                    if new_status == "PASS" or (88 <= new_fill <= 103):
+                    # F01 guard: reject rewrite if it introduces an inflated years claim.
+                    total_years_guard = _compute_total_experience_years(ctx._parsed.get("companies", []))
+                    years_violation = False
+                    if total_years_guard > 0:
+                        for mm in _re.finditer(r"\b(\d+)\+?\s*years?\b", rewritten, flags=_re.IGNORECASE):
+                            if int(mm.group(1)) > total_years_guard + 1.0:
+                                years_violation = True
+                                logger.warning(
+                                    f"[Phase 3.5a] sentence {idx} rewrite claims '{mm.group(0)}' "
+                                    f"but candidate has {total_years_guard}y — keeping original"
+                                )
+                                break
+
+                    if years_violation:
+                        pass  # original kept; do not overwrite optimized_sentences[idx]
+                    elif new_status == "PASS" or (88 <= new_fill <= 103):
                         optimized_sentences[idx] = rewritten
                         logger.info(f"[Phase 3.5a] sentence {idx} fixed: {fill:.1f}% → {new_fill:.1f}%")
                     else:
@@ -2121,11 +2211,11 @@ async def phase_5_width_opt(ctx: PipelineContext, sb: Client, llm):
     t0 = time.time()
     await _progress(ctx, sb, 5, "Optimizing bullet widths", 55)
 
-    # Use Oracle local LLM (llama3.2:1b) for width rewriting — free, fast, no rate limits
+    # Use Oracle local LLM (gemma3:1b) for width rewriting — free, fast, no rate limits
     # Falls back to Groq if Oracle is unavailable
     _oracle = _get_oracle_llm()
     _phase5_llm = _oracle if _oracle is not None else llm
-    logger.info(f"Job {ctx.job_id} phase 5: using {'Oracle llama3.2:1b' if _oracle else 'Groq (fallback)'} for rewriting")
+    logger.info(f"Job {ctx.job_id} phase 5: using {'Oracle gemma3:1b' if _oracle else 'Groq (fallback)'} for rewriting")
 
     # Get bullet budget numbers for prompts
     bullet_budget = ctx.template_config.get("budgets", {}).get("bullet", {})
@@ -2730,11 +2820,21 @@ def _get_section_order_map(section_order: list) -> dict:
 
 
 def _build_experience_html(bullets: list, companies: list) -> str:
-    """Build Professional Experience section HTML from optimized bullets + company metadata."""
+    """Build Professional Experience section HTML from optimized bullets + company metadata.
+
+    Width POC integration (2026-04-22): if every bullet landed in [95, 100] fill %,
+    apply `.li-content--justified` (CSS `text-align: justify`) uniformly. Mixing
+    justified + natural rows in the same column looks uneven, so the decision
+    is all-or-nothing.
+    """
     from collections import defaultdict
     html_parts = [
         '<div class="section-title">Professional Experience<div class="section-divider"></div></div>'
     ]
+
+    # Determine apply_justify flag once for the whole section
+    fills = [b.get("fill_percentage", 0) for b in bullets]
+    apply_justify = bool(fills) and all(95 <= f <= 100 for f in fills)
 
     # Group bullets by company_index
     by_company = defaultdict(list)
@@ -2775,9 +2875,14 @@ def _build_experience_html(bullets: list, companies: list) -> str:
             for b in pg_bullets:
                 text = b.get("text_html", "")
                 fill = b.get("fill_percentage", 0)
-                # Only justify when line fills ≥98% of budget — below that,
-                # word-spacing stretches visibly and looks artificial.
-                css_class = "li-content" if fill >= 98 else "li-content-natural"
+                if apply_justify:
+                    # All bullets are in 95-100% — justify the whole column for
+                    # clean edge-to-edge rendering without uneven word-spacing.
+                    css_class = "li-content li-content--justified"
+                else:
+                    # Fallback: natural alignment for any bullet below 95% to
+                    # avoid visibly stretched word-spacing on short lines.
+                    css_class = "li-content" if fill >= 98 else "li-content-natural"
                 html_parts.append(f'<li><span class="{css_class}">{text}</span></li>')
             html_parts.append("</ul>")
 

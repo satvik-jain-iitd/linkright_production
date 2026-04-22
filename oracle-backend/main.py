@@ -18,9 +18,14 @@ from fastapi import FastAPI, HTTPException, Security, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-from lifeos.embeddings import embed
+from lifeos.embeddings import embed, embed_batch
 from lifeos.ingest import ingest_atom
-from lifeos.local_llm import rewrite as llm_rewrite, generate as llm_generate
+from lifeos.local_llm import (
+    rewrite as llm_rewrite,
+    generate as llm_generate,
+    REWRITE_MODEL,
+    GENERATE_MODEL,
+)
 from lifeos.neo4j_client import (
     setup_schema,
     list_existing_atoms,
@@ -103,6 +108,16 @@ class EmbedRequest(BaseModel):
     text: str
 
 
+class EmbedBatchRequest(BaseModel):
+    texts: list[str]
+
+
+class RerankRequest(BaseModel):
+    query: str
+    documents: list[str]
+    top_k: int | None = None
+
+
 class SessionCloseRequest(BaseModel):
     token: str
     user_id: str
@@ -112,6 +127,7 @@ class RewriteRequest(BaseModel):
     prompt: str
     system: str = ""
     temperature: float = 0.2
+    model: str | None = None   # Optional per-call override; must be in _ALLOWED_REWRITE_MODELS
 
 
 class GenerateRequest(BaseModel):
@@ -185,19 +201,85 @@ def embed_text(req: EmbedRequest, token: str = Depends(verify_token)):
     return {"embedding": embedding, "model": "nomic-embed-text", "dimensions": len(embedding)}
 
 
+@app.post("/lifeos/rerank")
+def rerank_docs(req: RerankRequest, token: str = Depends(verify_token)):
+    """Cross-encoder rerank of (query, documents) pairs.
+
+    Uses bge-reranker-v2-m3 via sentence-transformers (must be installed on VPS).
+    Returns 503 if the dep is missing — callers should fall back to non-reranked order.
+    """
+    rate_limit(token, "/lifeos/rerank")
+    if len(req.documents) > 64:
+        raise HTTPException(status_code=400, detail="rerank: max 64 documents per call")
+    try:
+        from lifeos.reranker import rerank as _rerank
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=f"Reranker not available: {e}")
+    try:
+        ranked = _rerank(req.query, req.documents, top_k=req.top_k)
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=f"Reranker not installed on VPS: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Rerank failed: {e}")
+    return {
+        "ranked": [{"index": i, "score": float(s)} for i, s in ranked],
+        "model": "bge-reranker-v2-m3",
+        "count": len(ranked),
+    }
+
+
+@app.post("/lifeos/embed-batch")
+def embed_text_batch(req: EmbedBatchRequest, token: str = Depends(verify_token)):
+    """Batch-embed multiple texts in one Ollama call. Order preserved.
+
+    Used by Phase 3 nugget embedding to avoid N round-trips on a batch of N nuggets.
+    Accepts up to 64 texts per call (client should chunk larger batches).
+    """
+    rate_limit(token, "/lifeos/embed-batch")
+    if len(req.texts) > 64:
+        raise HTTPException(status_code=400, detail="embed-batch: max 64 texts per call")
+    try:
+        embeddings = embed_batch(req.texts)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Embed-batch failed: {e}")
+    return {
+        "embeddings": embeddings,
+        "model": "nomic-embed-text",
+        "dimensions": len(embeddings[0]) if embeddings else 0,
+        "count": len(embeddings),
+    }
+
+
+_ALLOWED_REWRITE_MODELS = {
+    # As of 2026-04-22 only gemma3:1b remains on the VPS — user removed all other
+    # LLMs after benchmark showed gemma3:1b as the decisive winner. Add back here
+    # if pulled again via `ollama pull <model>` on VPS.
+    "gemma3:1b",
+}
+
+
 @app.post("/lifeos/rewrite")
 def rewrite_text(req: RewriteRequest, token: str = Depends(verify_token)):
     """
-    Resume bullet rewriting via llama3.2:1b (local Ollama).
-    Called by the worker in Phase 5 (width optimization) and Phase 3.5a (summary tweaking).
-    Replaces Groq for these phases — fast, free, no rate limits.
-
-    To swap model: edit oracle-backend/lifeos/local_llm.py REWRITE_MODEL constant.
+    Resume bullet rewriting via local Ollama.
+    Default model is REWRITE_MODEL (gemma3:1b). Callers may specify any
+    allow-listed model via the `model` field; requests with disallowed models
+    return 400.
     """
     rate_limit(token, "/lifeos/rewrite")
+    if req.model and req.model not in _ALLOWED_REWRITE_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{req.model}' not allowed. Allowed: {sorted(_ALLOWED_REWRITE_MODELS)}",
+        )
     try:
-        result = llm_rewrite(req.prompt, system=req.system, temperature=req.temperature)
-        return {"text": result, "model": "llama3.2:1b"}
+        result = llm_rewrite(
+            req.prompt,
+            system=req.system,
+            temperature=req.temperature,
+            model=req.model,
+        )
+        return {"text": result, "model": req.model or REWRITE_MODEL}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Rewrite model unavailable: {e}")
 
@@ -205,7 +287,7 @@ def rewrite_text(req: RewriteRequest, token: str = Depends(verify_token)):
 @app.post("/lifeos/generate")
 def generate_text(req: GenerateRequest, token: str = Depends(verify_token)):
     """
-    Quick short generation via smollm2:135m (local Ollama).
+    Quick short generation via GENERATE_MODEL (gemma3:1b) — local Ollama.
     Called by the worker for lightweight tasks (nugget extraction helpers, quick answers).
 
     To swap model: edit oracle-backend/lifeos/local_llm.py GENERATE_MODEL constant.
@@ -213,7 +295,7 @@ def generate_text(req: GenerateRequest, token: str = Depends(verify_token)):
     rate_limit(token, "/lifeos/generate")
     try:
         result = llm_generate(req.prompt, system=req.system, temperature=req.temperature)
-        return {"text": result, "model": "smollm2:135m"}
+        return {"text": result, "model": GENERATE_MODEL}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Generate model unavailable: {e}")
 

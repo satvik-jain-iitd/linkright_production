@@ -171,12 +171,15 @@
            are acceptable; users can run click-to-compress on specific ones. */
         li { display: flex; align-items: baseline; width: 100%; margin-bottom: 1mm; }
         li::before { content: "\2022"; color: var(--brand-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
-        /* li-content: no hard justification so wrapping is clean. Phase 5 can
-           opt into justify by adding .li-content--justified (future). */
+        /* li-content: no hard justification by default — wrapping stays clean.
+           Phase 5 (width optimization) applies .li-content--justified ONLY when
+           every experience bullet in the resume lands in 95-100% of the budget.
+           Mixing justified + natural makes the column look uneven. */
         .li-content { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
         /* Natural li-content — for awards, voluntary, and other non-optimized bullets */
         .li-content-natural { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
-        .li-content b, .li-content-natural b { color: var(--brand-primary-color); }
+        .li-content--justified { text-align: justify; text-align-last: justify; }
+        .li-content b, .li-content-natural b, .li-content--justified b { color: var(--brand-primary-color); }
         .summary-line b { color: var(--brand-primary-color); font-weight: 700; }
 
     </style>

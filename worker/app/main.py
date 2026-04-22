@@ -410,32 +410,81 @@ async def _run_nugget_embed(user_id: str) -> None:
         if oracle_url:
             # ── Oracle nomic-embed-text (local model, no rate limit) ──
             # No Jina fallback — mixing models corrupts vector similarity.
-            # Local model: no batching/sleep needed — parallelize all embeddings.
-            embed_url = f"{oracle_url.rstrip('/')}/lifeos/embed"
+            # 2026-04-22: use /lifeos/embed-batch (up to 64 texts/call) — 5-8x
+            # faster than per-row calls; falls back to single-text endpoint if
+            # the batch endpoint returns 404 (older Oracle backend).
+            batch_url = f"{oracle_url.rstrip('/')}/lifeos/embed-batch"
+            single_url = f"{oracle_url.rstrip('/')}/lifeos/embed"
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {oracle_secret}",
             }
+            MAX_BATCH = 64
 
-            async def _embed_one(client: httpx.AsyncClient, row: dict) -> None:
-                nonlocal embedded_count
+            # Keep only rows with non-empty answer; preserve (row_id, text) pairs
+            pairs: list[tuple[str, str]] = []
+            for row in rows:
                 answer_text = (row.get("answer") or "").strip()
-                if not answer_text:
-                    return
-                try:
-                    resp = await client.post(embed_url, headers=headers, json={"text": answer_text})
-                    resp.raise_for_status()
-                    embedding = resp.json().get("embedding")
-                    if embedding and isinstance(embedding, list):
-                        sb.table("career_nuggets").update(
-                            {"embedding": embedding, "embedding_model": "nomic-embed-text"}
-                        ).eq("id", row["id"]).execute()
-                        embedded_count += 1
-                except Exception as exc:
-                    logger.warning("nugget_embed: Oracle embed failed for id=%s: %s", row["id"], exc)
+                if answer_text:
+                    pairs.append((row["id"], answer_text))
 
-            async with httpx.AsyncClient(timeout=15) as client:
-                await asyncio.gather(*[_embed_one(client, row) for row in rows])
+            if not pairs:
+                logger.info("nugget_embed: user=%s — no non-empty answers", user_id)
+                return
+
+            async def _embed_chunk_batch(client: httpx.AsyncClient, chunk: list[tuple[str, str]]) -> None:
+                nonlocal embedded_count
+                texts = [t for _, t in chunk]
+                try:
+                    resp = await client.post(batch_url, headers=headers, json={"texts": texts})
+                    if resp.status_code == 404:
+                        # Oracle backend hasn't shipped embed-batch yet — fall back
+                        raise NotImplementedError("embed-batch not deployed")
+                    resp.raise_for_status()
+                    embeddings = resp.json().get("embeddings") or []
+                    if len(embeddings) != len(chunk):
+                        raise ValueError(
+                            f"embed-batch returned {len(embeddings)} vectors for {len(chunk)} inputs"
+                        )
+                    # Update each nugget with its embedding (in order)
+                    for (row_id, _), emb in zip(chunk, embeddings):
+                        sb.table("career_nuggets").update(
+                            {"embedding": emb, "embedding_model": "nomic-embed-text"}
+                        ).eq("id", row_id).execute()
+                        embedded_count += 1
+                except NotImplementedError:
+                    # Fallback: per-row calls to the single-text endpoint
+                    logger.info("nugget_embed: /lifeos/embed-batch not available — falling back to per-row")
+                    for row_id, text in chunk:
+                        try:
+                            r = await client.post(single_url, headers=headers, json={"text": text})
+                            r.raise_for_status()
+                            emb = r.json().get("embedding")
+                            if emb and isinstance(emb, list):
+                                sb.table("career_nuggets").update(
+                                    {"embedding": emb, "embedding_model": "nomic-embed-text"}
+                                ).eq("id", row_id).execute()
+                                embedded_count += 1
+                        except Exception as exc:
+                            logger.warning("nugget_embed: single embed failed for id=%s: %s", row_id, exc)
+                except Exception as exc:
+                    logger.warning("nugget_embed: batch failed (%s) — per-row fallback", exc)
+                    for row_id, text in chunk:
+                        try:
+                            r = await client.post(single_url, headers=headers, json={"text": text})
+                            r.raise_for_status()
+                            emb = r.json().get("embedding")
+                            if emb and isinstance(emb, list):
+                                sb.table("career_nuggets").update(
+                                    {"embedding": emb, "embedding_model": "nomic-embed-text"}
+                                ).eq("id", row_id).execute()
+                                embedded_count += 1
+                        except Exception as e2:
+                            logger.warning("nugget_embed: single embed failed for id=%s: %s", row_id, e2)
+
+            chunks = [pairs[i:i + MAX_BATCH] for i in range(0, len(pairs), MAX_BATCH)]
+            async with httpx.AsyncClient(timeout=60) as client:
+                await asyncio.gather(*[_embed_chunk_batch(client, c) for c in chunks])
         else:
             logger.warning(
                 "nugget_embed: ORACLE_BACKEND_URL not set — skipping (no Jina fallback; mixing models breaks retrieval)"

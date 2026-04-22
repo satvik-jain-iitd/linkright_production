@@ -40,7 +40,7 @@ GEMINI_API_KEYS: list[str] = [
 GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash")
 
 # Oracle ARM — local LLM endpoint for Phase 5 width rewriting
-# Phase 5 (bullet width tweaking) + Phase 3.5a (summary width) use local llama3.2:1b
+# Phase 5 (bullet width tweaking) + Phase 3.5a (summary width) use local gemma3:1b
 # To disable local LLM and fall back to Groq: unset ORACLE_BACKEND_URL
 ORACLE_BACKEND_URL = os.getenv("ORACLE_BACKEND_URL", "")
 ORACLE_BACKEND_SECRET = os.getenv("ORACLE_BACKEND_SECRET", "")

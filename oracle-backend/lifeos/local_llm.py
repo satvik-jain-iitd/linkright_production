@@ -1,8 +1,9 @@
 """Local LLM inference via Ollama.
 
 Models:
-  llama3.2:1b  — resume bullet rewriting (fast, instruction-following)
-  smollm2:135m — quick generation / short answers
+  gemma3:1b — resume bullet rewriting + quick short generation (benchmark winner 2026-04-22:
+               100% invariant survival vs llama3.2:1b's 90%; also fixes silent JSON-parse
+               bug in /api/resume/gaps that llama3.2:1b caused).
 
 To update model assignments: change the constants below only.
 """
@@ -18,9 +19,15 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
-# Model assignments — update here to swap models globally
-REWRITE_MODEL = "llama3.2:1b"      # bullet rewriting / sentence tweaking
-GENERATE_MODEL = "smollm2:135m"    # quick short generation
+# Model assignments — update here to swap models globally.
+# Benchmark 2026-04-22: gemma3:1b wins rewrite (score 122 vs llama3.2:1b 104.8) and
+# generate (produces valid JSON where llama3.2:1b + smollm2 produced garbage).
+REWRITE_MODEL = "gemma3:1b"
+GENERATE_MODEL = "gemma3:1b"
+
+# Keep hot in VRAM for 30 minutes between calls so pipeline phases don't pay
+# cold-start latency (~8-12s). Raised from Ollama's default 5m on 2026-04-22.
+OLLAMA_KEEP_ALIVE = "30m"
 
 
 class CircuitBreaker:
@@ -66,6 +73,7 @@ def _ollama_generate(model: str, prompt: str, system: str = "", temperature: flo
         "model": model,
         "prompt": prompt,
         "stream": False,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
         "options": {"temperature": temperature},
     }
     if system:
@@ -86,11 +94,23 @@ def _ollama_generate(model: str, prompt: str, system: str = "", temperature: flo
         return ""
 
 
-def rewrite(prompt: str, system: str = "", temperature: float = 0.2) -> str:
-    """Rewrite text using llama3.2:1b — for resume bullets and sentence tweaking."""
-    return _ollama_generate(REWRITE_MODEL, prompt, system=system, temperature=temperature)
+def rewrite(
+    prompt: str,
+    system: str = "",
+    temperature: float = 0.2,
+    model: str | None = None,
+) -> str:
+    """Rewrite text via Ollama. Uses `model` if provided, else REWRITE_MODEL default.
+
+    Args:
+        model: Optional override. Callers passing a specific pulled model (e.g.,
+               "qwen3:1.7b") route to that model instead of REWRITE_MODEL.
+               Allow-list enforcement happens at the HTTP route layer.
+    """
+    chosen = model or REWRITE_MODEL
+    return _ollama_generate(chosen, prompt, system=system, temperature=temperature)
 
 
 def generate(prompt: str, system: str = "", temperature: float = 0.3) -> str:
-    """Short generation using smollm2:135m — for quick answers."""
+    """Short generation using GENERATE_MODEL (gemma3:1b) — for quick answers."""
     return _ollama_generate(GENERATE_MODEL, prompt, system=system, temperature=temperature)

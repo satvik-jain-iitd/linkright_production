@@ -92,7 +92,7 @@ leadership: none=solo, individual=drove decisions, team_lead=managed people
 tags: 2-5 lowercase labels for skills/themes
 
 RULES:
-- Every work_experience nugget MUST have company AND role set
+- Every work_experience nugget MUST have company AND role set. If the immediate source line does not name a company, scan the nearest preceding ### header or ## section heading to identify the employer. NEVER emit "none" or empty for the company field on a work_experience nugget. If truly ambiguous, classify as independent_project or skill instead.
 - answer MUST be self-contained: include company name, role, and any metric from the source
 - Each nugget is atomic — one achievement per block
 - Write ONLY ## nugget blocks, no other text\
@@ -464,6 +464,27 @@ async def extract_nuggets(
             nuggets_raw = _parse_markdown_nuggets(raw_text)
             if not nuggets_raw:
                 continue
+
+            # --- F05 validator: drop work_experience nuggets missing company tag ---
+            # Prompt already forbids null/none on work items; this is defense-in-depth
+            # for the ~22% rate observed on the diagnostic run_01.
+            _dropped_untagged = 0
+            _kept_raw = []
+            for raw in nuggets_raw:
+                if not isinstance(raw, dict):
+                    continue
+                is_work = (raw.get("section_type") or raw.get("type") or "").lower() == "work_experience"
+                company_val = (raw.get("company") or "").strip().lower()
+                if is_work and company_val in ("", "none", "null"):
+                    _dropped_untagged += 1
+                    continue
+                _kept_raw.append(raw)
+            if _dropped_untagged:
+                logger.warning(
+                    "extract_nuggets: batch %d dropped %d work_experience nugget(s) with missing company tag",
+                    batch_num, _dropped_untagged,
+                )
+            nuggets_raw = _kept_raw
 
             # --- Convert to Nugget dataclasses ---
             batch_nuggets: list[Nugget] = []

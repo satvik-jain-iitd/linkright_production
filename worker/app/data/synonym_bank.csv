@@ -1,0 +1,44 @@
+direction,original,replacement,delta
+expand,aid,facilitate,4.50
+expand,big,significant,5.20
+expand,built,developed,3.10
+expand,by,through,3.10
+expand,cut,reduced,2.30
+expand,drop,reduction,3.20
+expand,fix,remediate,4.10
+expand,for,enabling,3.90
+expand,got,acquired,3.90
+expand,grow,accelerate,4.20
+expand,key,critical,2.90
+expand,led,directed,3.50
+expand,make,develop,2.40
+expand,new,innovative,4.80
+expand,own,spearhead,4.80
+expand,ran,managed,2.80
+expand,set,established,5.80
+expand,top,premier,2.60
+expand,use,utilize,2.80
+expand,via,through,2.10
+trim,across the organization,org-wide,-6.10
+trim,approximately,approx.,-6.50
+trim,approximately,~,-7.00
+trim,comprehensive,full,-6.20
+trim,contributing to,driving,-3.40
+trim,cross-functional,interdisciplinary,+1.20
+trim,cross-functional,multi-team,-3.00
+trim,demonstrated,showed,-3.60
+trim,development,build,-6.00
+trim,development,work,-7.50
+trim,establishing,setting,-2.80
+trim,implementation,launch,-5.50
+trim,improvement,gain,-4.80
+trim,in collaboration with,with,-9.50
+trim,infrastructure,systems,-4.80
+trim,orchestrated,led,-5.20
+trim,performance,output,-3.20
+trim,resulting in,yielding,-1.80
+trim,significant,key,-5.20
+trim,stakeholders,leaders,-3.20
+trim,subsequently,then,-4.80
+trim,transformation,shift,-6.00
+trim,was responsible for,managed,-8.70

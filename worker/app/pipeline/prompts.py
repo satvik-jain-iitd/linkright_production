@@ -63,7 +63,7 @@ Return ONLY valid JSON — no markdown, no commentary:
   "contact_info": {{
     "name": "", "phone": "", "email": "", "linkedin": "", "portfolio": ""
   }},
-  "career_summary": "2-sentence career trajectory summary",
+  "career_summary": "2-sentence career trajectory summary — MUST NOT claim more total years of experience than the candidate actually has (see career_level bucket above)",
   "companies": [
     {{"name": "", "location": "city, country", "date_range": "Mon YYYY – Mon YYYY", "title": "", "team": ""}}
   ],
@@ -81,13 +81,19 @@ Return ONLY valid JSON — no markdown, no commentary:
   ],
   "section_order": ["Professional Experience", "Awards & Recognitions", "Education", "Skills", "Interests"],
   "bullet_budget": {{
-    "company_1_total": 6, "company_2_total": 4, "awards": 2, "voluntary": 2
+    "company_1_total": 6, "company_2_total": 4, "awards": 2, "voluntary": 2, "projects": 0
   }}
 }}
 
 Parsing rules:
-- Extract 15-30 JD keywords as plain strings (skills, tools, action verbs, domain terms)
-- Detect career level from years of experience and seniority signals
+- Extract 18-25 JD keywords as plain strings (skills, tools, action verbs, domain terms). When the JD names specific platform primitives verbatim (SSO, SCIM, RBAC, multi-tenancy, dashboards, audit logs, webhooks, etc.), include them VERBATIM as separate keywords — do not paraphrase or fold into broader terms.
+- career_level: MUST reflect the CANDIDATE'S total years of work experience — NEVER the JD's target-role seniority label. Compute years by summing active durations across all entries in `companies[]` (reverse-chronological). Use these buckets:
+  * 0 years (just graduated, no work) → "fresher"
+  * 1-2 years total experience → "entry"
+  * 3-5 years total experience → "mid"
+  * 6-9 years total experience → "senior"
+  * 10+ years total experience → "executive"
+  Example: a candidate with 4 years of PM work applying to a "Senior PM" JD is STILL "mid" — the JD's seniority label does not alter the candidate's actual tenure.
 - target_role: match JD exactly, not candidate's current title
 - companies: ALL roles in REVERSE chronological order (most recent first)
 - education: ALL entries — institution, degree, year, GPA, highlights
@@ -102,7 +108,7 @@ Strategy rules:
 - Pick strategy that best matches JD emphasis
 - requirements: extract 8-15 distinct JD requirements with id (r1, r2...) and importance
 - section_order: follow career level defaults, adjust for JD emphasis
-- bullet_budget: total ~12-15 bullets for one A4 page
+- bullet_budget: total ~12-15 bullets for one A4 page. Set "projects": N when the candidate has independent_project nuggets worth surfacing (e.g., open-source, portfolio, side projects with measurable outcomes) AND the JD context suggests projects matter (e.g., platform/engineering/research roles). N typically 2-4; set 0 when projects are absent or irrelevant.
 - Extract approximate dates from career context when available (years, date ranges)
 - If JD mentions specific tools or tech stack, add them to jd_keywords even if not explicit requirements"""
 
