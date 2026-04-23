@@ -1,0 +1,147 @@
+{
+  "generated_at": "2026-04-23T18:50:51.315389+00:00",
+  "target": 0.99,
+  "pillars": [
+    {
+      "name": "fetch_coverage",
+      "value": 1.0,
+      "details": {
+        "themuse": {
+          "ok": true,
+          "count": 20,
+          "elapsed_s": 0.7,
+          "optional": false
+        },
+        "remotive": {
+          "ok": true,
+          "count": 22,
+          "elapsed_s": 0.1,
+          "optional": false
+        },
+        "iimjobs": {
+          "ok": false,
+          "status": 308,
+          "elapsed_s": 0.2,
+          "optional": true
+        },
+        "wellfound": {
+          "ok": false,
+          "status": 404,
+          "elapsed_s": 0.5,
+          "optional": true
+        },
+        "adzuna": {
+          "ok": false,
+          "status": 400,
+          "elapsed_s": 0.8,
+          "optional": true
+        },
+        "jsearch": {
+          "ok": false,
+          "status": 401,
+          "elapsed_s": 0.8,
+          "optional": true
+        }
+      },
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "name": "fetch_dedup",
+      "value": 1.0,
+      "details": {
+        "total": 1,
+        "unique": 1,
+        "has_dupes": false
+      },
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "name": "enrich_accuracy",
+      "value": 1.0,
+      "details": {
+        "passed": 12,
+        "total": 12,
+        "failures": []
+      },
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "name": "score_validity",
+      "value": 1.0,
+      "details": {
+        "passed": 6,
+        "total": 6,
+        "failures": []
+      },
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "name": "rubric_parse",
+      "value": 1.0,
+      "details": {
+        "runs": [
+          {
+            "run": 0,
+            "ok": true,
+            "confidence": 0.7,
+            "weights_sum": 1.0
+          },
+          {
+            "run": 1,
+            "ok": true,
+            "confidence": 0.7,
+            "weights_sum": 1.0
+          },
+          {
+            "run": 2,
+            "ok": true,
+            "confidence": 0.7,
+            "weights_sum": 1.0
+          }
+        ]
+      },
+      "skipped": false,
+      "skip_reason": ""
+    },
+    {
+      "name": "llm_score_parse",
+      "value": 1.0,
+      "details": {
+        "runs": [
+          {
+            "run": 0,
+            "ok": true,
+            "culture": 3.0,
+            "cache_hit": false
+          },
+          {
+            "run": 1,
+            "ok": true,
+            "culture": 3.0,
+            "cache_hit": false
+          },
+          {
+            "run": 2,
+            "ok": true,
+            "culture": 3.0,
+            "cache_hit": false
+          }
+        ]
+      },
+      "skipped": false,
+      "skip_reason": ""
+    }
+  ],
+  "scorecard": {
+    "fetch_coverage": 1.0,
+    "fetch_dedup": 1.0,
+    "enrich_accuracy": 1.0,
+    "score_validity": 1.0,
+    "rubric_parse": 1.0,
+    "llm_score_parse": 1.0
+  }
+}
