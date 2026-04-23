@@ -26,6 +26,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from .rubric_builder import build_rubric, get_default_rubric
+from .llm_scorer import score_with_llm
+
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +122,19 @@ def grade_to_action(grade: str, has_blockers: bool) -> str:
     if has_blockers:
         return "skip"
     return {"A": "apply_now", "B": "worth_it", "C": "maybe", "D": "skip", "F": "skip"}[grade]
+
+
+def score_to_action(score: float, has_blockers: bool) -> str:
+    """Career-ops-style score-based recommended action (tighter thresholds than grade-based)."""
+    if has_blockers:
+        return "skip"
+    if score >= 4.5:
+        return "apply_now"
+    if score >= 4.0:
+        return "worth_it"
+    if score >= 3.5:
+        return "maybe"
+    return "skip"
 
 
 # ---------------------------------------------------------------------------
@@ -413,12 +429,23 @@ def _score_speed_to_offer(company: dict | None) -> ScoringDimension:
     )
 
 
-def _score_culture_signals() -> ScoringDimension:
-    # Without an LLM read, no reliable signal. Stay neutral so it doesn't
-    # distort ranking either direction.
+def _score_culture_signals(
+    llm_culture_score: float | None = None,
+    llm_seeking_score: float | None = None,
+    llm_reasoning: str = "",
+) -> ScoringDimension:
+    w = DIMENSION_WEIGHTS["culture_signals"]
+    if llm_culture_score is not None:
+        # Blend culture + seeking scores (equal weight)
+        seeking = llm_seeking_score if llm_seeking_score is not None else llm_culture_score
+        score = round((llm_culture_score + seeking) / 2.0, 2)
+        score = max(1.0, min(5.0, score))
+        reasoning = llm_reasoning or f"LLM culture={llm_culture_score:.1f}, seeking_fit={seeking:.1f}."
+        return ScoringDimension(score=score, weight=w, reasoning=reasoning, evidence=[])
+    # Fallback — no LLM available
     return ScoringDimension(
-        score=3.0, weight=DIMENSION_WEIGHTS["culture_signals"],
-        reasoning="Rule-based scorer: culture signals are LLM-only; neutral.",
+        score=3.0, weight=w,
+        reasoning="LLM unavailable — neutral default.",
         evidence=[],
     )
 
@@ -586,11 +613,24 @@ async def score_application(
 
     jd_title = (discovery or {}).get("title") or ""
     if not jd_title:
-        # Best-effort: first line of jd_text as title
         first_line = jd_text.strip().split("\n", 1)[0]
         jd_title = first_line[:120]
 
-    # Per-dim
+    # ── Build personalized rubric (cached per user, any career profile) ───────
+    try:
+        rubric = await build_rubric(user_id, tags, prefs)
+    except Exception as exc:
+        logger.warning("scoring: rubric_builder failed user=%s — %s", user_id, exc)
+        rubric = get_default_rubric()
+
+    # ── LLM soft-signal scoring (culture, red_flags, seeking/avoiding) ────────
+    llm = None
+    try:
+        llm = await score_with_llm(user_id=user_id, rubric=rubric, jd_text=jd_text, company=company)
+    except Exception as exc:
+        logger.warning("scoring: llm_scorer failed user=%s — %s", user_id, exc)
+
+    # ── Deterministic half (reliable, zero-API) ───────────────────────────────
     role_alignment     = _score_role_alignment(jd_title, target_roles)
     skill_match        = _score_skill_match(jd_text, tags)
     level_fit          = _score_level_fit(jd_title, target_roles)
@@ -600,9 +640,24 @@ async def score_application(
     company_reputation = _score_company_reputation(company)
     tech_stack         = _score_tech_stack(jd_text, tags)
     speed_to_offer     = _score_speed_to_offer(company)
-    culture_signals    = _score_culture_signals()
 
-    # Aggregate
+    # ── LLM half — culture_signals filled from llm result ────────────────────
+    culture_signals = _score_culture_signals(
+        llm_culture_score=llm.culture_score if llm else None,
+        llm_seeking_score=llm.seeking_score if llm else None,
+        llm_reasoning=llm.one_line_why if llm else "",
+    )
+
+    # ── Aggregate with per-user rubric weights (or fallback to defaults) ──────
+    weights = rubric.get("weights") or DIMENSION_WEIGHTS
+    # Ensure all dims present in weights — fill missing from DIMENSION_WEIGHTS
+    for dim_name in DIMENSION_WEIGHTS:
+        if dim_name not in weights:
+            weights[dim_name] = DIMENSION_WEIGHTS[dim_name]
+    # Re-normalize weights to sum to 1.0
+    w_total = sum(weights.values()) or 1.0
+    weights = {k: v / w_total for k, v in weights.items()}
+
     dims = {
         "role_alignment":     role_alignment,
         "skill_match":        skill_match,
@@ -615,16 +670,26 @@ async def score_application(
         "speed_to_offer":     speed_to_offer,
         "culture_signals":    culture_signals,
     }
-    overall = sum(d.score * DIMENSION_WEIGHTS[name] for name, d in dims.items())
+    # Update each dim's weight field to reflect rubric-derived weight
+    for dim_name, dim_obj in dims.items():
+        dim_obj.weight = round(weights.get(dim_name, DIMENSION_WEIGHTS[dim_name]), 4)
+
+    overall = sum(d.score * d.weight for d in dims.values())
     overall = round(overall, 2)
     grade = score_to_grade(overall)
 
     blockers = _hard_blockers(prefs, company)
+    # LLM-detected dealbreakers added to hard_blockers
+    if llm and llm.dealbreaker_triggered and llm.dealbreaker_evidence:
+        blockers.append(f"Dealbreaker: {llm.dealbreaker_evidence[:120]}")
+    # LLM red_flags surfaced as soft blockers (don't auto-skip but show user)
+    red_flags_list: list[str] = (llm.red_flags if llm else [])
+
     gaps = _skill_gaps(jd_text, tags)
     skill_match.gaps = gaps
     skill_match.hard_blockers = blockers
 
-    action = grade_to_action(grade, bool(blockers))
+    action = score_to_action(overall, bool(blockers))
     archetype = _detect_archetype(jd_text)
     matched = _keywords_matched(jd_text, tags)
 
@@ -644,14 +709,20 @@ async def score_application(
         role_archetype=archetype,
         recommended_action=action,
         skill_gaps=gaps,
-        hard_blockers=blockers,
+        hard_blockers=blockers + red_flags_list,
         keywords_matched=matched,
         legitimacy_tier="unknown",
     )
 
     logger.info(
-        "Scoring[rule]: %s (%.2f) archetype=%s action=%s gaps=%d blockers=%d tags=%d in %.3fs",
-        grade, overall, archetype, action, len(gaps), len(blockers), len(tags),
+        "Scoring[rule+llm]: %s (%.2f) archetype=%s action=%s gaps=%d blockers=%d "
+        "culture=%.1f red_flags=%d llm_calls=%s rubric_conf=%.2f tags=%d in %.3fs",
+        grade, overall, archetype, action, len(gaps), len(blockers),
+        llm.culture_score if llm else 3.0,
+        len(llm.red_flags) if llm else 0,
+        llm.llm_calls_made if llm else "none",
+        rubric.get("confidence", 0.0),
+        len(tags),
         time.time() - started,
     )
     return result
