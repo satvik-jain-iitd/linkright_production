@@ -27,7 +27,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 10
+BATCH_SIZE = 100
 ORACLE_URL = os.getenv("ORACLE_BACKEND_URL", "https://oracle.linkright.in")
 ORACLE_SECRET = os.getenv("ORACLE_BACKEND_SECRET", "")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
@@ -219,15 +219,31 @@ async def enrich_pending_jobs(
     if fields_to_enrich is None:
         fields_to_enrich = list(FIELD_PROMPTS.keys())
 
+    # PM jobs first — order by title containing 'product' then by recency
     rows = (
         supabase_client.table("job_discoveries")
         .select("id,title,company_name,jd_text")
         .eq("enrichment_status", "pending")
         .not_.is_("jd_text", "null")
+        .ilike("title", "%product%")
         .order("discovered_at", desc=True)
         .limit(batch_size)
         .execute()
     ).data or []
+
+    # If fewer than batch_size PM jobs, fill remainder with any pending jobs
+    if len(rows) < batch_size:
+        pm_ids = {r["id"] for r in rows}
+        extra = (
+            supabase_client.table("job_discoveries")
+            .select("id,title,company_name,jd_text")
+            .eq("enrichment_status", "pending")
+            .not_.is_("jd_text", "null")
+            .order("discovered_at", desc=True)
+            .limit(batch_size - len(rows) + 50)
+            .execute()
+        ).data or []
+        rows += [r for r in extra if r["id"] not in pm_ids][: batch_size - len(rows)]
 
     stats = {"candidates": len(rows), "enriched": 0, "skipped": 0, "errors": 0}
     if not rows:

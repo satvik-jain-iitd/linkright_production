@@ -66,19 +66,23 @@ async def _run_scan_global_loop():
 
 
 async def _run_jd_fetcher_loop():
-    """Every 10 min: backfill jd_text for discoveries missing it."""
+    """Continuous: backfill jd_text for discoveries missing it. 500/batch, 30s rest between runs."""
     from supabase import create_client
     from .pipeline.jd_fetcher import fetch_missing_jds
 
     sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     while True:
         try:
-            logger.info("internal_scheduler: running fetch_missing_jds")
-            stats = await fetch_missing_jds(sb, batch_size=50)
+            stats = await fetch_missing_jds(sb, batch_size=500)
             logger.info("internal_scheduler: fetched_jds %s", stats)
+            # If nothing left, rest longer to avoid hammering DB
+            if stats.get("candidates", 0) == 0:
+                await asyncio.sleep(300)
+            else:
+                await asyncio.sleep(30)
         except Exception as exc:
             logger.exception("internal_scheduler: fetch_jds failed: %s", exc)
-        await asyncio.sleep(600)  # 10 min
+            await asyncio.sleep(60)
 
 
 async def _run_api_scanners_loop():
@@ -124,7 +128,8 @@ async def _run_api_scanners_loop():
 
 
 async def _run_enricher_loop():
-    """Every 30 min: enrich pending jobs with Oracle local model."""
+    """Continuous: enrich pending jobs 24/7 — PM jobs first, then all others.
+    100/batch, 10s rest between batches. If nothing pending, rest 60s."""
     from supabase import create_client
     from .pipeline.scanner_global import _load_scanner_settings
     from .pipeline.jd_enricher import enrich_pending_jobs
@@ -136,13 +141,17 @@ async def _run_enricher_loop():
             if settings.get("enrichment_enabled", True):
                 stats = await enrich_pending_jobs(
                     sb,
-                    batch_size=10,
+                    batch_size=100,
                     enrichment_model=settings.get("enrichment_model", "oracle"),
                 )
                 logger.info("internal_scheduler: enricher %s", stats)
+                if stats.get("candidates", 0) == 0:
+                    await asyncio.sleep(60)   # nothing pending — check again in 1 min
+                else:
+                    await asyncio.sleep(10)   # brief pause between batches
         except Exception as exc:
             logger.exception("internal_scheduler: enricher failed: %s", exc)
-        await asyncio.sleep(1800)  # 30 min
+            await asyncio.sleep(30)
 
 
 async def _run_remotive_loop():
