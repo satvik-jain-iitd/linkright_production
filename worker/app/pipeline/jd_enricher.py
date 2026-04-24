@@ -256,23 +256,61 @@ async def _ask_cerebras(
 # Main enrichment logic
 # ──────────────────────────────────────────────────────────────────────────────
 
-_SINGLE_CALL_PROMPT = """Extract structured fields from this job description. Return ONLY valid JSON, no explanation.
+_SINGLE_CALL_PROMPT = """Extract fields from this job. Return ONLY 8 comma-separated values in this exact order:
+work_type, employment_type, experience_level, department, industry, company_stage, remote_ok, min_years_experience
+
+Allowed values:
+- work_type: remote | hybrid | onsite
+- employment_type: full_time | contract | part_time
+- experience_level: early | mid | senior | executive | cxo
+- department: product | growth | platform | data | design | other
+- industry: fintech | edtech | saas | ecommerce | health | logistics | other
+- company_stage: startup | growth | enterprise
+- remote_ok: yes | no
+- min_years_experience: integer (0 if not mentioned)
 
 Job title: {title}
 Company: {company}
-JD excerpt: {excerpt}
+JD: {excerpt}
 
-Return JSON with exactly these keys:
-{{
-  "remote_ok": true or false,
-  "work_type": "remote" | "hybrid" | "onsite",
-  "employment_type": "full_time" | "contract" | "part_time",
-  "experience_level": "early" | "mid" | "senior" | "executive" | "cxo",
-  "department": "product" | "growth" | "platform" | "data" | "design" | "other",
-  "industry": "fintech" | "edtech" | "saas" | "ecommerce" | "health" | "logistics" | "other",
-  "company_stage": "startup" | "growth" | "enterprise",
-  "min_years_experience": integer (0 if not mentioned)
-}}"""
+Return exactly like: remote,full_time,senior,product,saas,growth,yes,5"""
+
+_CSV_FIELD_ORDER = [
+    "work_type", "employment_type", "experience_level", "department",
+    "industry", "company_stage", "remote_ok", "min_years_experience",
+]
+
+_CSV_VALID = {
+    "work_type":        {"remote", "hybrid", "onsite"},
+    "employment_type":  {"full_time", "contract", "part_time"},
+    "experience_level": {"early", "mid", "senior", "executive", "cxo"},
+    "department":       {"product", "growth", "platform", "data", "design", "other"},
+    "industry":         {"fintech", "edtech", "saas", "ecommerce", "health", "logistics", "other"},
+    "company_stage":    {"startup", "growth", "enterprise"},
+}
+
+
+def _parse_csv_response(raw: str) -> dict:
+    first_line = raw.strip().split("\n")[0].strip().strip("`\"'")
+    parts = [p.strip().lower() for p in first_line.split(",")]
+    if len(parts) < len(_CSV_FIELD_ORDER):
+        return {}
+    updates: dict = {}
+    for i, field in enumerate(_CSV_FIELD_ORDER):
+        val = parts[i] if i < len(parts) else ""
+        if field == "remote_ok":
+            updates["remote_ok"] = val in ("yes", "true", "1")
+        elif field == "min_years_experience":
+            import re as _re
+            nums = _re.findall(r"\d+", val)
+            if nums:
+                mye = int(nums[0])
+                if 0 <= mye <= 50:
+                    updates["min_years_experience"] = mye
+        else:
+            if val in _CSV_VALID.get(field, set()):
+                updates[field] = val
+    return updates
 
 
 async def _enrich_one(
@@ -281,8 +319,7 @@ async def _enrich_one(
     fields_to_enrich: list[str],
     use_oracle_first: bool = True,
 ) -> dict:
-    """Return a dict of {field: value} for this job — 1 LLM call for all fields."""
-    import json as _json
+    """Return a dict of {field: value} for this job — 1 LLM call, CSV output."""
     jd_text = job.get("jd_text") or ""
     excerpt = jd_text[:1500] if jd_text else ""
     title = job.get("title", "")
@@ -298,43 +335,8 @@ async def _enrich_one(
     if not raw:
         return {}
 
-    # Parse JSON response
-    try:
-        cleaned = raw.strip()
-        for fence in ("```json", "```"):
-            if fence in cleaned:
-                cleaned = cleaned.split(fence, 1)[-1].split("```")[0]
-        parsed = _json.loads(cleaned.strip())
-        if isinstance(parsed, list) and parsed:
-            parsed = parsed[0]
-    except Exception:
-        parsed = {}
-
-    updates: dict = {}
-    for field in fields_to_enrich:
-        if field not in parsed:
-            continue
-        val = parsed[field]
-        # Validate against known values
-        if field == "remote_ok":
-            if isinstance(val, bool):
-                updates[field] = val
-            elif str(val).lower() in ("true", "yes", "1"):
-                updates[field] = True
-            elif str(val).lower() in ("false", "no", "0"):
-                updates[field] = False
-        elif field == "min_years_experience":
-            try:
-                updates[field] = int(val)
-            except (TypeError, ValueError):
-                pass
-        else:
-            _, valid_str = FIELD_PROMPTS.get(field, ("", ""))
-            valid_vals = [v.strip() for v in valid_str.split(",") if v.strip()]
-            if not valid_vals or str(val).lower() in valid_vals:
-                updates[field] = str(val).lower()
-
-    return updates
+    all_updates = _parse_csv_response(raw)
+    return {f: v for f, v in all_updates.items() if f in fields_to_enrich}
 
 
 async def enrich_pending_jobs(

@@ -9,12 +9,10 @@ Run:
 from __future__ import annotations
 
 import os
-import time
 import logging
-from collections import defaultdict
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Security, Depends, Request
+from fastapi import FastAPI, HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
@@ -48,30 +46,6 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Security(bearer_sch
         raise HTTPException(status_code=401, detail="Invalid bearer token")
     return credentials.credentials
 
-
-# ── In-memory rate limiter ───────────────────────────────────────────────────
-# 30 requests per minute per token per endpoint.
-
-RATE_LIMIT_MAX = 30
-RATE_LIMIT_WINDOW = 60  # seconds
-
-_rate_limit_store: dict[str, list[float]] = defaultdict(list)
-
-
-def rate_limit(token: str, endpoint: str) -> None:
-    """Raise 429 if token exceeds 30 requests/minute for this endpoint."""
-    key = f"{token}:{endpoint}"
-    now = time.time()
-    timestamps = _rate_limit_store[key]
-
-    # Prune entries outside the window
-    _rate_limit_store[key] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
-    timestamps = _rate_limit_store[key]
-
-    if len(timestamps) >= RATE_LIMIT_MAX:
-        raise HTTPException(status_code=429, detail="Rate limit exceeded — 30 requests per minute")
-
-    timestamps.append(now)
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -160,7 +134,6 @@ def ingest(req: IngestRequest, token: str = Depends(verify_token)):
     Embed + conflict-check + MERGE to Neo4j + mirror to Supabase.
     Custom GPT calls this after EACH confirmed answer (crash-safe).
     """
-    rate_limit(token, "/lifeos/ingest")
     result = ingest_atom(req.user_id, req.atom)
     if result.get("conflict"):
         return result  # HTTP 200 with conflict flag — GPT can inform user
@@ -197,7 +170,6 @@ def career_nodes(req: CareerNodesRequest):
 @app.post("/lifeos/embed")
 def embed_text(req: EmbedRequest, token: str = Depends(verify_token)):
     """Utility: embed arbitrary text. Called by Next.js to embed JD before career-nodes."""
-    rate_limit(token, "/lifeos/embed")
     embedding = embed(req.text)
     return {"embedding": embedding, "model": "nomic-embed-text", "dimensions": len(embedding)}
 
@@ -209,7 +181,6 @@ def rerank_docs(req: RerankRequest, token: str = Depends(verify_token)):
     Uses bge-reranker-v2-m3 via sentence-transformers (must be installed on VPS).
     Returns 503 if the dep is missing — callers should fall back to non-reranked order.
     """
-    rate_limit(token, "/lifeos/rerank")
     if len(req.documents) > 64:
         raise HTTPException(status_code=400, detail="rerank: max 64 documents per call")
     try:
@@ -236,7 +207,6 @@ def embed_text_batch(req: EmbedBatchRequest, token: str = Depends(verify_token))
     Used by Phase 3 nugget embedding to avoid N round-trips on a batch of N nuggets.
     Accepts up to 64 texts per call (client should chunk larger batches).
     """
-    rate_limit(token, "/lifeos/embed-batch")
     if len(req.texts) > 64:
         raise HTTPException(status_code=400, detail="embed-batch: max 64 texts per call")
     try:
@@ -267,7 +237,6 @@ def rewrite_text(req: RewriteRequest, token: str = Depends(verify_token)):
     allow-listed model via the `model` field; requests with disallowed models
     return 400.
     """
-    rate_limit(token, "/lifeos/rewrite")
     if req.model and req.model not in _ALLOWED_REWRITE_MODELS:
         raise HTTPException(
             status_code=400,
@@ -304,7 +273,6 @@ def generate_text(req: GenerateRequest, token: str = Depends(verify_token)):
     Quick short generation via GENERATE_MODEL (gemma3:1b) — local Ollama.
     Pass `model` to use a specific pulled model for benchmarking.
     """
-    rate_limit(token, "/lifeos/generate")
     try:
         chosen = req.model or GENERATE_MODEL
         result = llm_local._ollama_generate(chosen, req.prompt, system=req.system, temperature=req.temperature)
