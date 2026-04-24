@@ -14,7 +14,8 @@ import time
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("worker")
 
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, File, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .config import SUPABASE_SERVICE_KEY, SUPABASE_URL, WORKER_SECRET, DEFAULT_API_KEY, DEFAULT_MODEL_PROVIDER, DEFAULT_MODEL_ID
@@ -964,3 +965,51 @@ async def cron_fetch_jds(
     verify_secret(authorization)
     background_tasks.add_task(_run_jd_fetcher)
     return {"status": "scheduled", "scope": "jd_fetcher"}
+
+
+# ── Transcription (STT) ──────────────────────────────────────────────────
+# Uses Faster-Whisper to transcribe audio files sent from the browser.
+# Gated by verify_secret.
+
+class TranscriptionManager:
+    _model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls._model is None:
+            from faster_whisper import WhisperModel
+            logger.info("Loading Faster-Whisper model (base.en)...")
+            cls._model = WhisperModel("base.en", device="cpu", compute_type="int8")
+        return cls._model
+
+@app.post("/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    authorization: str | None = Header(None),
+):
+    """Transcribe an uploaded audio file using Faster-Whisper."""
+    verify_secret(authorization)
+    
+    import tempfile
+    import os
+    
+    # Save uploaded file to a temporary location
+    suffix = os.path.splitext(file.filename)[1] if file.filename else ".webm"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        model = TranscriptionManager.get_model()
+        segments, info = model.transcribe(tmp_path, beam_size=5)
+        text = "".join([s.text for s in segments]).strip()
+        
+        logger.info("Transcription complete: %d chars", len(text))
+        return {"text": text, "language": info.language}
+    except Exception as exc:
+        logger.exception("Transcription failed: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)

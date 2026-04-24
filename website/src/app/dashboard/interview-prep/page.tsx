@@ -12,6 +12,12 @@ export const metadata = {
 
 const DRILLS = [
   {
+    key: "coach",
+    title: "Interview Coach",
+    blurb: "Real-time voice mock interview. Practice STAR answers with our AI recruiter.",
+    primary: true,
+  },
+  {
     key: "product-sense",
     title: "Product sense",
     blurb: "Frame, prioritise, design. Tailored to your target roles.",
@@ -132,13 +138,20 @@ export default async function InterviewPrepHub() {
                 }}
               >
                 <span className="text-[11px]" style={{ color: "#4A5D32" }}>
-                  Tailored to you
+                  {d.key === "coach" ? "Voice active" : "Tailored to you"}
                 </span>
-                <span
-                  className="rounded-[10px] bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700"
-                >
-                  Coming soon
-                </span>
+                {d.key === "coach" ? (
+                  <a
+                    href="/dashboard/interview-prep/coach"
+                    className="rounded-[10px] bg-sage-700 px-2.5 py-1 text-[10px] font-bold text-white transition-transform hover:scale-105"
+                  >
+                    Launch Coach →
+                  </a>
+                ) : (
+                  <span className="rounded-[10px] bg-gold-500/15 px-2 py-0.5 text-[10px] font-semibold text-gold-700">
+                    Coming soon
+                  </span>
+                )}
               </div>
             </div>
           ))}
