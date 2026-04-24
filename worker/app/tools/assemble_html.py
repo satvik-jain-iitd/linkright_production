@@ -799,6 +799,34 @@ def _strip_placeholders_and_empty_shells(html: str) -> tuple[str, int]:
         _empty_div_stripper,
         html,
     )
+    # 3. Strip <li> elements whose span content is empty/whitespace only.
+    #    These appear when PLACEHOLDER comments are removed but the <li> shell remains.
+    new_html, n = re.subn(
+        r'<li>\s*<span[^>]*>\s*</span>\s*</li>',
+        "",
+        html,
+        flags=re.IGNORECASE,
+    )
+    count += n
+    html = new_html
+    # 4. Strip entire <div class="section"> blocks that have no non-whitespace text
+    #    after the section-title div (catches empty Certifications/Projects/Interests).
+    def _empty_section_stripper(match: re.Match) -> str:
+        nonlocal count
+        block = match.group(0)
+        inner_raw = match.group(1)
+        # Remove the section-title div itself before checking for content
+        body = re.sub(r'<div[^>]*class="[^"]*section-title[^"]*"[^>]*>[\s\S]*?</div>', "", inner_raw)
+        body_plain = re.sub(r"<[^>]+>", "", re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL))
+        if body_plain.strip():
+            return block  # has real content beyond the heading
+        count += 1
+        return ""
+    html = re.sub(
+        r'<div\b[^>]*class="[^"]*section[^"]*"[^>]*>([\s\S]*?)</div>(?=\s*(?:<div|</div|$))',
+        _empty_section_stripper,
+        html,
+    )
     return html, count
 
 

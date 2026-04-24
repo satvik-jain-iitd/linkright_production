@@ -1619,17 +1619,25 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
             )
             ctx.stats.setdefault("phase_4a_dropped", []).extend(rejected)
 
-        # Minimum floor: never drop ALL bullets from a company due to missing
-        # numeric signals alone — that would leave the company blank in the resume.
-        # Keep top-2 raw paragraphs as fallback only when every rejection is
-        # no_concrete_proof_signal (not fabricated IDs or banned phrases).
+        # Minimum floor: never leave a company with zero bullets in the resume.
+        # Priority rescue order:
+        #   1. Paragraphs rejected only for no_concrete_proof_signal (best fallback)
+        #   2. Paragraphs rejected only for banned_phrase (acceptable — still honest work)
+        # Hard rejections (fabricated_atom_id, missing_evidence_atom_ids) are NOT rescued.
+        _SOFT_REASONS = {"no_concrete_proof_signal", "banned_phrase"}
         if not accepted and rejected:
-            all_soft = all(r["reason"] == "no_concrete_proof_signal" for r in rejected)
-            if all_soft:
-                floor = raw_paragraphs[:2]
+            soft_rejected = [r for r in rejected if r["reason"] in _SOFT_REASONS]
+            if soft_rejected:
+                # Map reason→paragraphs by index in raw_paragraphs for ordering
+                rescue_texts = {r["text_html"][:140]: r for r in soft_rejected}
+                floor = [p for p in raw_paragraphs if (p.get("text_html") or "")[:140] in rescue_texts]
+                floor = floor[:2]
+                if not floor:
+                    floor = raw_paragraphs[:2]
                 logger.warning(
-                    f"Job {ctx.job_id}: Phase 4A {co_name} — all {len(rejected)} paragraphs "
-                    f"lacked numeric signals; keeping top-2 as floor"
+                    f"Job {ctx.job_id}: Phase 4A {co_name} — rescued {len(floor)} fallback "
+                    f"bullet(s) from {len(soft_rejected)} soft-rejected paragraphs "
+                    f"(reasons: {', '.join(sorted(set(r['reason'] for r in soft_rejected)))})"
                 )
                 accepted = floor
 
