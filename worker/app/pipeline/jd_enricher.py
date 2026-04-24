@@ -174,35 +174,83 @@ async def _ask_cerebras(
 # Main enrichment logic
 # ──────────────────────────────────────────────────────────────────────────────
 
+_SINGLE_CALL_PROMPT = """Extract structured fields from this job description. Return ONLY valid JSON, no explanation.
+
+Job title: {title}
+Company: {company}
+JD excerpt: {excerpt}
+
+Return JSON with exactly these keys:
+{{
+  "remote_ok": true or false,
+  "work_type": "remote" | "hybrid" | "onsite",
+  "employment_type": "full_time" | "contract" | "part_time",
+  "experience_level": "early" | "mid" | "senior" | "executive" | "cxo",
+  "department": "product" | "growth" | "platform" | "data" | "design" | "other",
+  "industry": "fintech" | "edtech" | "saas" | "ecommerce" | "health" | "logistics" | "other",
+  "company_stage": "startup" | "growth" | "enterprise",
+  "min_years_experience": integer (0 if not mentioned)
+}}"""
+
+
 async def _enrich_one(
     client: httpx.AsyncClient,
     job: dict,
     fields_to_enrich: list[str],
     use_oracle_first: bool = True,
 ) -> dict:
-    """Return a dict of {field: value} for this job."""
+    """Return a dict of {field: value} for this job — 1 LLM call for all fields."""
+    import json as _json
     jd_text = job.get("jd_text") or ""
-    excerpt = jd_text[:1800] if jd_text else (job.get("title", "") + " " + job.get("company_name", ""))
+    excerpt = jd_text[:1500] if jd_text else ""
+    title = job.get("title", "")
+    company = job.get("company_name", "")
+
+    prompt = _SINGLE_CALL_PROMPT.format(title=title, company=company, excerpt=excerpt)
+
+    raw: Optional[str] = None
+    if use_oracle_first:
+        raw = await _ask_oracle(client, "", prompt)
+    if raw is None:
+        raw = await _ask_cerebras(client, excerpt, prompt)
+    if not raw:
+        return {}
+
+    # Parse JSON response
+    try:
+        cleaned = raw.strip()
+        for fence in ("```json", "```"):
+            if fence in cleaned:
+                cleaned = cleaned.split(fence, 1)[-1].split("```")[0]
+        parsed = _json.loads(cleaned.strip())
+        if isinstance(parsed, list) and parsed:
+            parsed = parsed[0]
+    except Exception:
+        parsed = {}
 
     updates: dict = {}
     for field in fields_to_enrich:
-        if field not in FIELD_PROMPTS:
+        if field not in parsed:
             continue
-        question, valid = FIELD_PROMPTS[field]
-
-        raw: Optional[str] = None
-        if use_oracle_first:
-            raw = await _ask_oracle(client, excerpt, question)
-        if raw is None:
-            raw = await _ask_cerebras(client, excerpt, question)
-        if raw is None:
-            continue
-
-        value = _parse_answer(field, raw, valid)
-        if value is not None:
-            updates[field] = value
-
-        await asyncio.sleep(0.1)  # gentle pacing between field queries
+        val = parsed[field]
+        # Validate against known values
+        if field == "remote_ok":
+            if isinstance(val, bool):
+                updates[field] = val
+            elif str(val).lower() in ("true", "yes", "1"):
+                updates[field] = True
+            elif str(val).lower() in ("false", "no", "0"):
+                updates[field] = False
+        elif field == "min_years_experience":
+            try:
+                updates[field] = int(val)
+            except (TypeError, ValueError):
+                pass
+        else:
+            _, valid_str = FIELD_PROMPTS.get(field, ("", ""))
+            valid_vals = [v.strip() for v in valid_str.split(",") if v.strip()]
+            if not valid_vals or str(val).lower() in valid_vals:
+                updates[field] = str(val).lower()
 
     return updates
 
