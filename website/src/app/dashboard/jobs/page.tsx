@@ -1,10 +1,8 @@
-// Onboarding screen 3 / dashboard jobs — browse the user's match-ranked openings.
-// Default view: accordion grouped by company (best match first).
-// Toggle: flat list by jobs (shows match %).
-
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Top20Row = {
   id: string;
@@ -17,6 +15,7 @@ type Top20Row = {
     title: string;
     company_name: string;
     job_url: string;
+    location?: string;
     discovered_at: string;
     liveness_status: string;
   } | null;
@@ -29,227 +28,220 @@ type Payload = {
   daily_resume_usage: { used: number; cap: number; remaining: number };
 };
 
-type ViewMode = "accordion" | "list";
+function scoreColor(pct: number) {
+  if (pct >= 85) return { bg: "bg-accent/10", text: "text-[#09766D]" };
+  if (pct >= 75) return { bg: "bg-amber-50", text: "text-amber-700" };
+  return { bg: "bg-[#F3F4F6]", text: "text-muted" };
+}
+
+function resumeStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    queued: "Resume queued",
+    processing: "Resume generating",
+    completed: "Resume ready",
+    failed: "Resume failed",
+  };
+  return map[status] ?? status;
+}
 
 export default function JobsPage() {
+  const router = useRouter();
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<ViewMode>("accordion");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
     const r = await fetch("/api/recommendations/today");
     const body = await r.json();
-    if (!r.ok) setError(body.error ?? "failed");
+    if (!r.ok) setError(body.error ?? "Failed to load matches");
     else setData(body);
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  if (loading) {
-    return <div className="p-8 max-w-4xl mx-auto text-sm text-muted-foreground">Surfacing your best matches…</div>;
-  }
-  if (error) {
-    return <div className="p-8 max-w-4xl mx-auto text-red-600">{error}</div>;
-  }
-  if (!data) return null;
-
-  const rows = data.top20.filter((r) => r.job_discoveries);
-
-  // Group by company for accordion mode
-  const byCompany = new Map<string, Top20Row[]>();
-  for (const r of rows) {
-    const key = r.job_discoveries!.company_name;
-    if (!byCompany.has(key)) byCompany.set(key, []);
-    byCompany.get(key)!.push(r);
-  }
-  // Company ordering: best rank within company
-  const companies = Array.from(byCompany.entries()).sort(
-    (a, b) =>
-      Math.min(...a[1].map((r) => r.rank)) -
-      Math.min(...b[1].map((r) => r.rank)),
-  );
-
-  function toggle(co: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(co)) next.delete(co);
-      else next.add(co);
-      return next;
-    });
-  }
-
-  async function handleCustomize(row: Top20Row) {
+  async function handleStart(row: Top20Row) {
     if (!row.job_discoveries) return;
-    // Check embedding status to decide journey
     const r = await fetch("/api/nuggets/status");
     const body = await r.json();
     const ready = body.total_embedded > 0 && body.total_embedded / body.total_extracted >= 0.9;
-    if (ready) {
-      // Direct path
-      window.location.href = `/customize/${row.job_discoveries.id}`;
-    } else {
-      // Mind-map enrichment path
-      window.location.href = `/customize/${row.job_discoveries.id}/enrich`;
-    }
+    router.push(ready
+      ? `/customize/${row.job_discoveries.id}`
+      : `/customize/${row.job_discoveries.id}/enrich`
+    );
   }
 
-  function rowResumeStatus(row: Top20Row): string {
-    if (!row.resume_job_id) return "";
-    const job = data!.resume_jobs_by_id[row.resume_job_id];
-    if (!job) return "";
-    return job.status;
-  }
+  const rows = data?.top20.filter((r) => r.job_discoveries) ?? [];
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex justify-between items-baseline mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Your matches today</h1>
-          <p className="text-sm text-muted-foreground">
-            {rows.length} openings · {data.daily_resume_usage.remaining}/{data.daily_resume_usage.cap} resume slots left today
-          </p>
-        </div>
-        <div className="flex gap-2 border border-border rounded-lg p-1 text-sm">
-          <button
-            onClick={() => setMode("accordion")}
-            className={`px-3 py-1 rounded ${mode === "accordion" ? "bg-primary text-primary-foreground" : ""}`}
-          >
-            By company
-          </button>
-          <button
-            onClick={() => setMode("list")}
-            className={`px-3 py-1 rounded ${mode === "list" ? "bg-primary text-primary-foreground" : ""}`}
-          >
-            List
-          </button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#FAFBFC]">
+      <div className="mx-auto max-w-[1080px] px-6 py-8">
 
-      {rows.length === 0 && (
-        <div className="p-8 rounded-xl border border-border text-center">
-          <p className="text-sm text-muted-foreground">
-            No matches yet. We run the recommender every 5 min — fresh discoveries will appear here soon.
-          </p>
+        {/* Back + header */}
+        <div className="mb-6">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 text-sm text-muted transition hover:text-foreground"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Dashboard
+          </Link>
+          <div className="mt-3 flex items-end justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#09766D]">Apply · Scout</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
+                {loading ? "Loading matches…" : `${rows.length} roles matched today`}
+              </h1>
+              {data && (
+                <p className="mt-1 text-sm text-muted">
+                  {data.daily_resume_usage.remaining} of {data.daily_resume_usage.cap} resume slots left today
+                </p>
+              )}
+            </div>
+            <button
+              onClick={load}
+              className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
-      )}
 
-      {mode === "accordion" && (
-        <div className="space-y-3">
-          {companies.map(([coName, coRows]) => {
-            const isOpen = expanded.has(coName);
-            const bestRank = Math.min(...coRows.map((r) => r.rank));
-            const bestScore = Math.max(...coRows.map((r) => r.final_score));
-            return (
-              <div key={coName} className="rounded-xl border border-border bg-surface overflow-hidden">
-                <button
-                  onClick={() => toggle(coName)}
-                  className="w-full flex justify-between items-center p-4 hover:bg-muted/30"
-                >
-                  <div className="text-left">
-                    <div className="font-semibold">{coName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {coRows.length} open {coRows.length === 1 ? "role" : "roles"} · best match #{bestRank} (score {bestScore.toFixed(2)})
-                    </div>
-                  </div>
-                  <div className={`text-xl transition-transform ${isOpen ? "rotate-90" : ""}`}>›</div>
-                </button>
-                {isOpen && (
-                  <div className="border-t border-border divide-y divide-border">
-                    {coRows.map((r) => {
-                      const d = r.job_discoveries!;
-                      const status = rowResumeStatus(r);
-                      return (
-                        <div key={r.id} className="p-4 flex justify-between items-center">
-                          <div className="flex-1 pr-4">
-                            <a
-                              href={d.job_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="font-medium hover:underline"
-                            >
-                              {d.title}
-                            </a>
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              #{r.rank} · score {r.final_score.toFixed(2)}
-                              {r.reason ? ` · ${r.reason}` : ""}
-                            </div>
-                          </div>
-                          {status ? (
-                            <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                              {status}
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleCustomize(r)}
-                              className="text-sm px-3 py-1.5 rounded-lg bg-primary text-primary-foreground"
-                            >
-                              Customize resume
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+        {/* Loading skeleton */}
+        {loading && (
+          <div className="space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 rounded-xl border border-border bg-white p-4">
+                <div className="h-9 w-9 flex-shrink-0 animate-pulse rounded-lg bg-[#E2E8F0]" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 animate-pulse rounded bg-[#E2E8F0]" style={{ width: `${40 + i * 5}%` }} />
+                  <div className="h-2.5 animate-pulse rounded bg-[#EEF0F3]" style={{ width: "25%" }} />
+                </div>
+                <div className="h-7 w-16 animate-pulse rounded-full bg-[#E2E8F0]" />
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
 
-      {mode === "list" && (
-        <div className="rounded-xl border border-border bg-surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted/50">
-              <tr className="text-left">
-                <th className="py-2 px-3">#</th>
-                <th className="py-2 px-3">Role</th>
-                <th className="py-2 px-3">Company</th>
-                <th className="py-2 px-3 text-right">Match</th>
-                <th className="py-2 px-3">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const d = r.job_discoveries!;
-                const status = rowResumeStatus(r);
-                return (
-                  <tr key={r.id} className="border-b border-border/50">
-                    <td className="py-2 px-3 text-muted-foreground">{r.rank}</td>
-                    <td className="py-2 px-3">
-                      <a href={d.job_url} target="_blank" rel="noreferrer" className="hover:underline">
-                        {d.title}
-                      </a>
-                    </td>
-                    <td className="py-2 px-3">{d.company_name}</td>
-                    <td className="py-2 px-3 text-right font-mono">{r.final_score.toFixed(2)}</td>
-                    <td className="py-2 px-3">
-                      {status ? (
-                        <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                          {status}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleCustomize(r)}
-                          className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground"
-                        >
-                          Customize
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {/* Error */}
+        {!loading && error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+            <button onClick={load} type="button" className="ml-3 font-semibold underline">Retry</button>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && !error && rows.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-border bg-white p-12 text-center">
+            <p className="text-sm font-semibold text-foreground">No matches yet for today.</p>
+            <p className="mt-1 text-xs text-muted">Scout runs every few minutes — refresh to check for new roles.</p>
+          </div>
+        )}
+
+        {/* Table */}
+        {!loading && !error && rows.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-border bg-white">
+            <div className="hidden grid-cols-[56px_1fr_200px_160px_120px] gap-4 border-b border-border bg-[#FAFBFC] px-5 py-2.5 sm:grid">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Match</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Role</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Company</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Status</span>
+              <span className="text-right text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Action</span>
+            </div>
+
+            {rows.map((row, i) => {
+              const job = row.job_discoveries!;
+              const pct = Math.round(row.final_score * 100);
+              const { bg, text } = scoreColor(pct);
+              const resumeStatus = row.resume_job_id
+                ? data!.resume_jobs_by_id[row.resume_job_id]?.status
+                : null;
+              const hasResume = !!resumeStatus;
+              const isInProgress = resumeStatus && resumeStatus !== "completed" && resumeStatus !== "failed";
+
+              return (
+                <div
+                  key={row.id}
+                  className={`flex flex-col gap-3 px-5 py-4 transition hover:bg-[#FAFBFC] sm:grid sm:grid-cols-[56px_1fr_200px_160px_120px] sm:items-center sm:gap-4 sm:py-3.5 ${
+                    i < rows.length - 1 ? "border-b border-border/60" : ""
+                  } ${isInProgress ? "bg-amber-50/40" : ""}`}
+                >
+                  {/* Match % */}
+                  <div className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-[13px] font-bold ${bg} ${text}`}>
+                    {pct}
+                  </div>
+
+                  {/* Role */}
+                  <div>
+                    <a
+                      href={job.job_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[14px] font-semibold text-foreground hover:text-accent hover:underline"
+                    >
+                      {job.title}
+                    </a>
+                    {row.reason && (
+                      <p className="mt-0.5 text-[11.5px] leading-snug text-muted line-clamp-1">{row.reason}</p>
+                    )}
+                  </div>
+
+                  {/* Company · location */}
+                  <div>
+                    <div className="text-[13px] font-medium text-foreground">{job.company_name}</div>
+                    {job.location && (
+                      <div className="text-[11.5px] text-muted">{job.location}</div>
+                    )}
+                  </div>
+
+                  {/* Status */}
+                  <div className="text-[12px]">
+                    {hasResume ? (
+                      <span className={`font-medium ${isInProgress ? "text-amber-700" : resumeStatus === "completed" ? "text-[#09766D]" : "text-muted"}`}>
+                        {resumeStatusLabel(resumeStatus!)}
+                      </span>
+                    ) : (
+                      <span className="text-muted">New match · today</span>
+                    )}
+                  </div>
+
+                  {/* Action */}
+                  <div className="flex sm:justify-end">
+                    {resumeStatus === "completed" ? (
+                      <Link
+                        href="/resume/new"
+                        className="rounded-full border border-border bg-white px-3.5 py-1.5 text-[12px] font-semibold text-foreground transition hover:border-accent"
+                      >
+                        View
+                      </Link>
+                    ) : isInProgress ? (
+                      <button
+                        type="button"
+                        onClick={() => handleStart(row)}
+                        className="rounded-full bg-amber-400 px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:bg-amber-500"
+                      >
+                        Resume →
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStart(row)}
+                        className="rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-80"
+                      >
+                        Start →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
