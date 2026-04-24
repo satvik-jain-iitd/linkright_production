@@ -71,6 +71,9 @@ function reasonChips(reason: string | null): string[] {
     .slice(0, 3);
 }
 
+const MAX_POLLS = 8;
+const POLL_INTERVAL_MS = 10_000;
+
 export function FindRolesView({ embedded }: Props) {
   const router = useRouter();
   const [recs, setRecs] = useState<RecsResponse | null>(null);
@@ -83,6 +86,7 @@ export function FindRolesView({ embedded }: Props) {
   const [customJD, setCustomJD] = useState("");
   const [customSaving, setCustomSaving] = useState(false);
   const [customError, setCustomError] = useState("");
+  const [pollCount, setPollCount] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -117,6 +121,18 @@ export function FindRolesView({ embedded }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Poll every 10s (up to 80s) while top20 is empty — matches may still be computing
+  useEffect(() => {
+    const hasMatches = (recs?.top20 ?? []).filter((r) => r.job_discoveries).length > 0;
+    if (!loading && recs && !hasMatches && pollCount < MAX_POLLS) {
+      const timer = setTimeout(() => {
+        setPollCount((c) => c + 1);
+        load();
+      }, POLL_INTERVAL_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, recs, pollCount, load]);
 
   const startApplication = (jobId: string) => {
     track({ event: "resume_builder_started", properties: { job_id: jobId } });
@@ -244,37 +260,55 @@ export function FindRolesView({ embedded }: Props) {
         </div>
       )}
 
-      {/* Empty */}
+      {/* Empty — computing or timed out */}
       {!loading && !error && rows.length === 0 && !customOpen && (
         <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
-          {nuggetStatus && !nuggetStatus.ready ? (
+          {pollCount < MAX_POLLS ? (
+            // Still polling — matches are being computed
+            <>
+              <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />
+              <p className="text-sm font-semibold text-foreground">Computing your first matches…</p>
+              <p className="mt-1 text-xs text-muted">Scoring jobs against your profile. This takes about 30–60 seconds.</p>
+            </>
+          ) : nuggetStatus && !nuggetStatus.ready ? (
+            // Profile still embedding
             <>
               <p className="text-sm font-semibold text-foreground">
                 We&apos;re still building your profile ({nuggetStatus.total_embedded} of {nuggetStatus.total_extracted}).
               </p>
-              <p className="mt-1 text-xs text-muted">Come back in a few minutes — matches will appear once your highlights are ready.</p>
+              <p className="mt-1 text-xs text-muted">Matches will appear once your highlights are ready — usually a minute or two.</p>
             </>
           ) : (
+            // Polling exhausted, profile ready but no matches yet
             <>
-              <p className="text-sm font-semibold text-foreground">Nothing matched right now.</p>
-              <p className="mt-1 text-xs text-muted">Your preferences may be narrow, or we haven&apos;t finished scouting yet.</p>
+              <p className="text-sm font-semibold text-foreground">Your matches are being prepared.</p>
+              <p className="mt-1 text-xs text-muted">Check back in a few minutes, or add a job manually below.</p>
             </>
           )}
-          <div className="mt-4 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/onboarding/preferences"
-              className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
-            >
-              Tune preferences
-            </Link>
-            <button
-              type="button"
-              onClick={() => setCustomOpen(true)}
-              className="rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-            >
-              Add a custom job →
-            </button>
-          </div>
+          {pollCount >= MAX_POLLS && (
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => { setPollCount(0); load(); }}
+                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+              >
+                Refresh
+              </button>
+              <Link
+                href="/onboarding/preferences"
+                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+              >
+                Tune preferences
+              </Link>
+              <button
+                type="button"
+                onClick={() => setCustomOpen(true)}
+                className="rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+              >
+                Add a custom job →
+              </button>
+            </div>
+          )}
         </div>
       )}
 

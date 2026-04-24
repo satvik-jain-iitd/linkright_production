@@ -19,7 +19,23 @@ async function triggerInitialScan(userId: string): Promise<void> {
       body: JSON.stringify({ user_id: userId }),
     });
   } catch {
-    // Fire-and-forget — scan failure never blocks preferences save
+    // fire-and-forget
+  }
+}
+
+async function triggerRecompute(userId: string): Promise<void> {
+  if (!WORKER_URL || !WORKER_SECRET) return;
+  try {
+    await fetch(`${WORKER_URL}/cron/recompute-top-20`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${WORKER_SECRET}`,
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+  } catch {
+    // fire-and-forget
   }
 }
 
@@ -97,9 +113,10 @@ export async function PUT(request: Request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  // First time preferences saved → trigger initial job scan (fire-and-forget)
+  // First time preferences saved → scan companies + immediately score global jobs
   if (isFirstSave) {
     triggerInitialScan(user.id);
+    triggerRecompute(user.id);
   }
 
   return Response.json({ preferences: data });
