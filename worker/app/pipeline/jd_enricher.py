@@ -1,8 +1,16 @@
-"""JD enricher — extract structured fields from job descriptions using local Oracle models.
+"""JD enricher — two-phase enrichment for job_discoveries.
 
-Runs after jd_fetcher has populated jd_text. For each job with jd_text and
-enrichment_status='pending', asks Oracle (local free model) one simple question
-per field. Falls back to Cerebras if Oracle is unreachable.
+Phase 1 (rule-based, instant):
+  Runs on every pending job regardless of jd_text.
+  Extracts: experience_level, department, min_years_experience, employment_type
+  from job title using keyword rules. No LLM needed.
+
+  Rules documented in Langfuse prompt: job-enrichment-rules-v1
+
+Phase 2 (Oracle LLM, background):
+  Runs only on jobs where jd_text is populated.
+  Extracts all 8 fields using gemma3:1b via oracle.linkright.in.
+  Overwrites rule-based values with LLM-extracted values.
 
 Experience level taxonomy:
   early      — APM, Associate PM, 0-3 years
@@ -11,8 +19,7 @@ Experience level taxonomy:
   executive  — AVP, VP of Product, Group PM, 8-12 years
   cxo        — CPO, Head of Product, SVP, Chief Product Officer, 12+ years
 
-Processes in batches of 10 to avoid overwhelming Oracle.
-Runs every 30 min via internal_scheduler.
+Runs continuously via internal_scheduler (no inter-batch sleep).
 """
 from __future__ import annotations
 
@@ -28,6 +35,81 @@ import httpx
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 100
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 1: Rule-based tagging (title → fields, instant, no LLM)
+# ──────────────────────────────────────────────────────────────────────────────
+
+import re as _re
+
+def _rule_experience_level(title: str) -> str:
+    t = title.lower()
+    if any(x in t for x in ["cpo", "chief product", "chief of product", "svp", "evp", "group vp"]):
+        return "cxo"
+    if any(x in t for x in ["vp of product", "vp product", "vice president product",
+                              "head of product", "director of product", "senior director",
+                              "avp", "principal pm", "principal product"]):
+        return "executive"
+    if any(x in t for x in ["senior product", "sr. product", "sr product", "lead product",
+                              "staff product", "senior pm", "sr pm", "lead pm",
+                              "senior manager product", "product director"]):
+        return "senior"
+    if any(x in t for x in ["associate product", "apm", "associate pm", "junior product",
+                              "jr. product", "entry product", "product intern",
+                              "intern pm", "graduate pm", "new grad pm"]):
+        return "early"
+    return "mid"
+
+
+def _rule_department(title: str) -> str:
+    t = title.lower()
+    if any(x in t for x in ["growth", "acquisition", "retention", "monetization"]):
+        return "growth"
+    if any(x in t for x in ["platform", "infra", "infrastructure", "developer platform",
+                              "api product", "backend product"]):
+        return "platform"
+    if any(x in t for x in ["data product", "analytics product", "ml product",
+                              "ai product", "machine learning pm"]):
+        return "data"
+    if any(x in t for x in ["design", "ux product", "product design"]):
+        return "design"
+    if any(x in t for x in ["product manager", "product owner", " pm", "product lead",
+                              "product director", "product head"]):
+        return "product"
+    return "other"
+
+
+def _rule_min_years(title: str) -> int:
+    t = title.lower()
+    m = _re.search(r"(\d+)\+?\s*(?:yr|year)", t)
+    if m:
+        return int(m.group(1))
+    if any(x in t for x in ["senior", "sr.", "lead", "staff", "principal"]):
+        return 5
+    if any(x in t for x in ["associate", "apm", "junior", "jr."]):
+        return 0
+    if any(x in t for x in ["vp", "director", "head of", "chief", "avp"]):
+        return 8
+    return 3
+
+
+def _rule_employment_type(title: str) -> str:
+    t = title.lower()
+    if any(x in t for x in ["contract", "contractor", "freelance", "consultant",
+                              "part-time", "part time"]):
+        return "contract"
+    return "full_time"
+
+
+def tag_by_rules(job: dict) -> dict:
+    """Phase 1: extract fields from title alone. Fast, no LLM."""
+    title = job.get("title", "")
+    return {
+        "experience_level": _rule_experience_level(title),
+        "department": _rule_department(title),
+        "min_years_experience": _rule_min_years(title),
+        "employment_type": _rule_employment_type(title),
+    }
 ORACLE_URL = os.getenv("ORACLE_BACKEND_URL", "https://oracle.linkright.in")
 ORACLE_SECRET = os.getenv("ORACLE_BACKEND_SECRET", "")
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "")
@@ -261,63 +343,79 @@ async def enrich_pending_jobs(
     enrichment_model: str = "oracle",
     fields_to_enrich: Optional[list[str]] = None,
 ) -> dict[str, int]:
-    """Enrich a batch of jobs that have jd_text but enrichment_status='pending'."""
+    """Two-phase enrichment for pending jobs.
+
+    Phase 1 (rule-based): all pending jobs → instant title-based tagging.
+    Phase 2 (Oracle LLM): only jobs with jd_text → full 8-field extraction,
+      overwrites rule values with LLM values.
+    """
     started = time.time()
 
     if fields_to_enrich is None:
         fields_to_enrich = list(FIELD_PROMPTS.keys())
 
-    # PM jobs first — order by title containing 'product' then by recency
-    rows = (
+    # ── Phase 1: rule-tag all pending jobs (with or without jd_text) ──
+    all_pending = (
         supabase_client.table("job_discoveries")
         .select("id,title,company_name,jd_text")
         .eq("enrichment_status", "pending")
-        .not_.is_("jd_text", "null")
-        .ilike("title", "%product%")
         .order("discovered_at", desc=True)
         .limit(batch_size)
         .execute()
     ).data or []
 
-    # If fewer than batch_size PM jobs, fill remainder with any pending jobs
-    if len(rows) < batch_size:
-        pm_ids = {r["id"] for r in rows}
-        extra = (
-            supabase_client.table("job_discoveries")
-            .select("id,title,company_name,jd_text")
-            .eq("enrichment_status", "pending")
-            .not_.is_("jd_text", "null")
-            .order("discovered_at", desc=True)
-            .limit(batch_size - len(rows) + 50)
-            .execute()
-        ).data or []
-        rows += [r for r in extra if r["id"] not in pm_ids][: batch_size - len(rows)]
+    stats = {"candidates": len(all_pending), "enriched": 0, "skipped": 0, "errors": 0}
+    if not all_pending:
+        return stats
 
-    stats = {"candidates": len(rows), "enriched": 0, "skipped": 0, "errors": 0}
-    if not rows:
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Apply rules instantly — mark done for jobs without jd_text
+    for job in all_pending:
+        rule_updates = tag_by_rules(job)
+        has_jd = bool(job.get("jd_text"))
+        if not has_jd:
+            rule_updates["enrichment_status"] = "done"
+            rule_updates["enriched_at"] = now_iso
+            try:
+                supabase_client.table("job_discoveries").update(rule_updates).eq("id", job["id"]).execute()
+                stats["enriched"] += 1
+            except Exception as exc:
+                logger.warning("enricher: rule-tag failed %s: %s", job.get("id"), exc)
+                stats["errors"] += 1
+
+    # ── Phase 2: Oracle LLM for jobs that have jd_text ──
+    jd_jobs = [j for j in all_pending if j.get("jd_text")]
+    if not jd_jobs:
+        duration = int((time.time() - started) * 1000)
+        logger.info("jd_enricher: %s (%dms)", stats, duration)
         return stats
 
     use_oracle = enrichment_model in ("oracle", "")
-    now_iso = datetime.now(timezone.utc).isoformat()
-
     async with httpx.AsyncClient() as client:
-        for job in rows:
+        for job in jd_jobs:
             try:
-                updates = await _enrich_one(client, job, fields_to_enrich, use_oracle_first=use_oracle)
+                # Start with rule-based values as base
+                updates = tag_by_rules(job)
+                # Override with LLM values (more accurate, uses full JD)
+                llm_updates = await _enrich_one(client, job, fields_to_enrich, use_oracle_first=use_oracle)
+                updates.update(llm_updates)
                 updates["enrichment_status"] = "done"
                 updates["enriched_at"] = now_iso
 
                 supabase_client.table("job_discoveries").update(updates).eq("id", job["id"]).execute()
                 stats["enriched"] += 1
             except Exception as exc:
-                logger.warning("enricher: failed job %s: %s", job.get("id"), exc)
+                logger.warning("enricher: oracle failed %s: %s", job.get("id"), exc)
+                # Fall back to rule-based only — still mark done
                 try:
-                    supabase_client.table("job_discoveries").update(
-                        {"enrichment_status": "skipped"}
-                    ).eq("id", job["id"]).execute()
+                    rule_fallback = tag_by_rules(job)
+                    rule_fallback["enrichment_status"] = "done"
+                    rule_fallback["enriched_at"] = now_iso
+                    supabase_client.table("job_discoveries").update(rule_fallback).eq("id", job["id"]).execute()
+                    stats["enriched"] += 1
                 except Exception:
-                    pass
-                stats["errors"] += 1
+                    stats["errors"] += 1
 
     duration = int((time.time() - started) * 1000)
     logger.info("jd_enricher: %s (%dms)", stats, duration)
