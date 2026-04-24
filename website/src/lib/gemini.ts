@@ -23,7 +23,6 @@ function platformGeminiKeys(): string[] {
     process.env.GEMINI_API_KEY_3,
     process.env.GEMINI_API_KEY,
   ].filter(Boolean) as string[];
-  if (keys.length === 0) throw new Error("GEMINI_API_KEY not set (tried GEMINI_API_KEY, _1, _2, _3)");
   return keys;
 }
 
@@ -40,6 +39,7 @@ export async function geminiChat(
   const prompt = systemMsg ? `${systemMsg}\n\n${userMsg}` : userMsg;
 
   const keys = platformGeminiKeys();
+  if (keys.length === 0) throw new Error("GEMINI_API_KEY not set (tried GEMINI_API_KEY, _1, _2, _3)");
   const errors: string[] = [];
 
   for (const key of keys) {
