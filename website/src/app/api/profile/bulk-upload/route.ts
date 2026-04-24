@@ -212,7 +212,7 @@ export async function POST(request: Request) {
       alt_questions: [],
       answer: take,
       primary_layer: "A",
-      section_type: "work_experience",
+      section_type: "other",
       company: null,
       role: null,
       resume_relevance: 0.6,
@@ -225,9 +225,52 @@ export async function POST(request: Request) {
     });
   }
 
-  // Skills and certifications are intentionally skipped — they are single-word
-  // labels (e.g. "Figma", "JIRA") that don't carry highlight-level context and
-  // pollute the nugget store with empty cards.
+  // Skills: ingest as "other" so they appear in the dashboard (not silently dropped).
+  // Single-word labels get low resume_relevance so they don't pollute bullet generation.
+  for (const skill of arr(template.skills)) {
+    if (skill.length < 3) continue;
+    rows.push({
+      user_id: user.id,
+      nugget_text: skill.slice(0, 80),
+      question: "",
+      alt_questions: [],
+      answer: skill,
+      primary_layer: "C",
+      section_type: "other",
+      company: null,
+      role: null,
+      resume_relevance: 0.2,
+      importance: "P4",
+      factuality: "fact",
+      temporality: "present",
+      duration: "point_in_time",
+      leadership_signal: "none",
+      tags: ["bulk_upload", "skill"],
+    });
+  }
+
+  // Certifications: ingest as "other" so they're visible in the dashboard.
+  for (const cert of arr(template.certifications)) {
+    if (cert.length < 5) continue;
+    rows.push({
+      user_id: user.id,
+      nugget_text: cert.slice(0, 80),
+      question: "",
+      alt_questions: [],
+      answer: cert,
+      primary_layer: "B",
+      section_type: "other",
+      company: null,
+      role: null,
+      resume_relevance: 0.4,
+      importance: "P3",
+      factuality: "fact",
+      temporality: "past",
+      duration: "point_in_time",
+      leadership_signal: "none",
+      tags: ["bulk_upload", "certification"],
+    });
+  }
 
   if (rows.length === 0) {
     return Response.json(

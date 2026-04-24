@@ -287,6 +287,7 @@ const SECTION_LABEL_MAP: Record<string, string> = {
   skill: "Skill",
   publication: "Publication",
   unknown: "Uncategorized",
+  other: "Other",
 };
 
 function sectionLabel(raw: string | null): string {

@@ -247,7 +247,16 @@ def _parse_markdown_nuggets(text: str) -> Optional[list]:
         importance = raw.get("importance", "P2").upper()
         if importance not in ("P0", "P1", "P2", "P3"):
             importance = "P2"
+        _KNOWN_SECTION_TYPES = {
+            "work_experience", "education", "project", "independent_project",
+            "volunteer", "volunteer_work", "award", "certification", "skill",
+            "publication", "other", "unknown",
+            # Layer B (life domains)
+            "relationships", "health", "finance", "inner_life", "logistics", "recreation",
+        }
         section_type = raw.get("type", "work_experience").lower()
+        if section_type not in _KNOWN_SECTION_TYPES:
+            section_type = "other"
         primary_layer = "B" if section_type in ("relationships", "health", "finance", "inner_life", "logistics", "recreation") else "A"
         result.append({
             "nugget_text": answer,
