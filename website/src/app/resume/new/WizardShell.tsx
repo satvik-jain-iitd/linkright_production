@@ -86,19 +86,25 @@ function loadSaved(): { step: number; data: WizardData } | null {
 }
 
 export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, discoveryRole, isFirstResume }: { userId: string; jobId?: string; retryJdText?: string; discoveryCompany?: string; discoveryRole?: string; isFirstResume?: boolean }) {
-  const saved = typeof window !== "undefined" ? loadSaved() : null;
+  // Discovery fast-path: pre-filled company + JD means we skip Job Details + Customize.
+  // Clear any prior saved session so old state doesn't interfere.
+  const isFastPath = !!(discoveryCompany && retryJdText);
+  if (isFastPath && typeof window !== "undefined") {
+    sessionStorage.removeItem(STORAGE_KEY);
+  }
+  const saved = !isFastPath && typeof window !== "undefined" ? loadSaved() : null;
 
   // 5 steps: JobDetails=0, Customize=1, Layout=2, Build=3, Review=4
-  // From a discovery (JD + company + role pre-filled): skip directly to Build (step 3)
+  // Fast-path (discovery with pre-filled JD+company+role): jump directly to Build (step 3)
   // First-time resume with no discovery: show step 0 only, then jump to Build
   const initialStep = jobId
     ? 4
-    : saved?.data?.job_id
-      ? saved.step >= 3
-        ? saved.step
-        : 3
-      : (!saved && discoveryCompany && retryJdText)
-        ? 3
+    : isFastPath
+      ? 3
+      : saved?.data?.job_id
+        ? saved.step >= 3
+          ? saved.step
+          : 3
         : (saved?.step ?? 0);
 
   const [step, setStep] = useState(initialStep);
@@ -251,11 +257,13 @@ export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, disc
 
       {/* Sidebar + Content layout */}
       <div className="flex flex-col lg:flex-row min-h-[calc(100vh-3.5rem)]">
-        <VerticalStepper
-          steps={stepDefs}
-          currentStep={step}
-          onStepClick={(i) => { if (i < step) setStep(i); }}
-        />
+        {!isFastPath && (
+          <VerticalStepper
+            steps={stepDefs}
+            currentStep={step}
+            onStepClick={(i) => { if (i < step) setStep(i); }}
+          />
+        )}
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">

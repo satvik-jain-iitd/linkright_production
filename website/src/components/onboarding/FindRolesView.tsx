@@ -406,7 +406,7 @@ function SpotlightCard({ row, onStart }: { row: Top20Row; onStart: () => void })
           onClick={onStart}
           className="inline-flex items-center gap-2 rounded-lg bg-cta px-5 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
         >
-          Start custom application
+          Customise Resume
           <svg
             className="h-3.5 w-3.5"
             fill="none"
@@ -454,7 +454,7 @@ function RoleRow({ row, onStart }: { row: Top20Row; onStart: () => void }) {
           onClick={onStart}
           className="rounded-lg border border-border bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-cta hover:bg-cta hover:text-white"
         >
-          Start →
+          Customise →
         </button>
       </div>
     </div>

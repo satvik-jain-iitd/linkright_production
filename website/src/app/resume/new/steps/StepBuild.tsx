@@ -334,6 +334,18 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
 
   return (
     <div className="space-y-4">
+      {/* Context banner: shown when coming from a matched role */}
+      {(data.target_role || data.target_company) && (
+        <div className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-accent">Customizing for</p>
+          <p className="mt-0.5 text-base font-bold text-foreground">
+            {data.target_role}
+            {data.target_role && data.target_company && " · "}
+            {data.target_company}
+          </p>
+        </div>
+      )}
+
       {/* Progress header */}
       <div className="flex items-center gap-3">
         {phase !== "done" && (
