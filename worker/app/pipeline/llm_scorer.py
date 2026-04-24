@@ -77,6 +77,7 @@ async def _call_oracle(client: httpx.AsyncClient, prompt: str, system: str = "")
 
 
 def _parse_json(raw: str, fallback: Any = None) -> Any:
+    """Parse JSON from LLM output. If a list is returned and fallback is a dict, unwrap first element."""
     if not raw:
         return fallback
     cleaned = raw
@@ -100,7 +101,11 @@ def _parse_json(raw: str, fallback: Any = None) -> Any:
                         except json.JSONDecodeError:
                             break
     try:
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
+        # Oracle sometimes wraps object in a list — unwrap if fallback expects a dict
+        if isinstance(parsed, list) and parsed and isinstance(fallback, dict):
+            return parsed[0]
+        return parsed
     except Exception:
         return fallback
 

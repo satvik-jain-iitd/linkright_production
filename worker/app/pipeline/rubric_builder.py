@@ -105,7 +105,10 @@ def _parse_json(raw: str, fallback: Any = None) -> Any:
                         except json.JSONDecodeError:
                             break
     try:
-        return json.loads(cleaned)
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, list) and parsed and isinstance(fallback, dict):
+            return parsed[0]
+        return parsed
     except Exception:
         return fallback
 
