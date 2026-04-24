@@ -77,12 +77,10 @@ async def _run_jd_fetcher_loop():
             logger.info("internal_scheduler: fetched_jds %s", stats)
             # If nothing left, rest longer to avoid hammering DB
             if stats.get("candidates", 0) == 0:
-                await asyncio.sleep(300)
-            else:
-                await asyncio.sleep(30)
+                await asyncio.sleep(120)  # nothing to fetch — check again in 2 min
         except Exception as exc:
             logger.exception("internal_scheduler: fetch_jds failed: %s", exc)
-            await asyncio.sleep(60)
+            await asyncio.sleep(5)
 
 
 async def _run_api_scanners_loop():
@@ -146,12 +144,10 @@ async def _run_enricher_loop():
                 )
                 logger.info("internal_scheduler: enricher %s", stats)
                 if stats.get("candidates", 0) == 0:
-                    await asyncio.sleep(60)   # nothing pending — check again in 1 min
-                else:
-                    await asyncio.sleep(10)   # brief pause between batches
+                    await asyncio.sleep(60)   # queue empty — check again in 1 min
         except Exception as exc:
             logger.exception("internal_scheduler: enricher failed: %s", exc)
-            await asyncio.sleep(30)
+            await asyncio.sleep(5)
 
 
 async def _run_remotive_loop():
