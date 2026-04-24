@@ -24,4 +24,12 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: CEREBRAS_MODEL
+        value: "qwen-3-235b-a22b-instruct-2507"
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: "meta-llama/llama-3.3-70b-instruct"
     healthCheckPath: /health
