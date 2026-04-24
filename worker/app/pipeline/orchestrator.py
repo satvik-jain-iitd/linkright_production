@@ -131,6 +131,26 @@ def _get_groq_fallback_llm() -> "GroqProvider | None":
         return None
     return GroqProvider(api_key=api_key, model_id="llama-3.3-70b-versatile")
 
+
+def _get_cerebras_fallback_llm() -> "LLMProvider | None":
+    """Cerebras Qwen-235B as tertiary fallback — free tier, OpenAI-compatible."""
+    from ..llm.openai_compat import OpenAICompatProvider
+    api_key = os.environ.get("CEREBRAS_API_KEY") or ""
+    model = os.environ.get("CEREBRAS_MODEL") or "qwen-3-235b-a22b-instruct-2507"
+    if not api_key:
+        return None
+    return OpenAICompatProvider(api_key=api_key, model_id=model, base_url="https://api.cerebras.ai/v1")
+
+
+def _get_openrouter_fallback_llm() -> "LLMProvider | None":
+    """OpenRouter Llama-3.3-70B as quaternary fallback — same quality class as Groq."""
+    from ..llm.openrouter import OpenRouterProvider
+    api_key = os.environ.get("OPENROUTER_API_KEY") or ""
+    model = os.environ.get("OPENROUTER_MODEL") or "meta-llama/llama-3.3-70b-instruct"
+    if not api_key:
+        return None
+    return OpenRouterProvider(api_key=api_key, model_id=model)
+
 USE_QUALITY_JUDGE = os.getenv("USE_QUALITY_JUDGE", "true").lower() == "true"
 
 # Oracle ARM local LLM — used for Phase 5 width rewriting + Phase 3.5a summary tweaking
@@ -279,7 +299,20 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     # Wrap 70B in its own 2-tier fallback so it degrades to the user's default
     # (8B) instead of retry-looping forever.
     _groq_70b = _get_groq_fallback_llm()
-    heavy_fallback = _FallbackLLM(_groq_70b, llm) if _groq_70b else llm
+    _cerebras = _get_cerebras_fallback_llm()
+    _openrouter = _get_openrouter_fallback_llm()
+
+    # 4-tier fallback chain matching e2e diagnostic pipeline:
+    # Groq70B → Cerebras → OpenRouter → Groq8B (user default)
+    # Each tier activates only when the previous is rate-limited or fails.
+    tier_3 = _FallbackLLM(_openrouter, llm) if _openrouter else llm
+    tier_2 = _FallbackLLM(_cerebras, tier_3) if _cerebras else tier_3
+    heavy_fallback = _FallbackLLM(_groq_70b, tier_2) if _groq_70b else tier_2
+
+    if _cerebras:
+        logger.info("run_pipeline: Cerebras Qwen-235B available as tertiary fallback")
+    if _openrouter:
+        logger.info("run_pipeline: OpenRouter %s available as quaternary fallback", os.environ.get("OPENROUTER_MODEL", ""))
 
     # Quality-first LLM chains (2026-04-17). Goal: 20 high-quality resumes per
     # user per day. Oracle 1B demoted from Phase 4c/3.5a because its JSON output
