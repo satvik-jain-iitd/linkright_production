@@ -97,8 +97,20 @@ function AuthContent() {
             Your career, remembered.
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-[#5F4632]">
-            Upload a resume once. We keep it ready for every role.
+            Upload a resume once. We keep it ready for every role you apply to.
           </p>
+          <div className="mt-8 flex flex-col gap-3">
+            {[
+              "Top 20 matching roles refreshed daily",
+              "Five artefacts per application, one click",
+              "Posts drafted from your real wins",
+            ].map((t) => (
+              <div key={t} className="flex items-center gap-3 text-[13px] text-[#5F4632]">
+                <span className="text-accent">✓</span>
+                {t}
+              </div>
+            ))}
+          </div>
         </div>
         <p className="text-xs text-[#8A6E53]">Made in India 🇮🇳</p>
       </aside>

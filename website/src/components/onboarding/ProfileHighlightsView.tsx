@@ -114,6 +114,10 @@ export function ProfileHighlightsView() {
     { mode: "create"; existing: null } | { mode: "edit"; existing: EditableNugget } | null
   >(null);
   const [profileReadyToast, setProfileReadyToast] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    { ids: string[]; label: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadNuggets = useCallback(async () => {
     try {
@@ -182,6 +186,22 @@ export function ProfileHighlightsView() {
   const processedPct = total > 0 ? Math.min(100, Math.round((embedded / total) * 100)) : 0;
 
   const goToPreferences = () => router.push("/onboarding/preferences");
+
+  const confirmDelete = (ids: string[], label: string) =>
+    setDeleteConfirm({ ids, label });
+
+  const executeDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    await Promise.all(
+      deleteConfirm.ids.map((id) =>
+        fetch(`/api/nuggets/${id}`, { method: "DELETE" }),
+      ),
+    );
+    setNuggets((prev) => prev.filter((n) => !deleteConfirm.ids.includes(n.id)));
+    setDeleteConfirm(null);
+    setDeleting(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -341,9 +361,23 @@ export function ProfileHighlightsView() {
           {groupAndSortNuggets(nuggets).map((group) => (
             <div key={group.key}>
               {(group.company || group.role) && (
-                <p className="mb-2.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
-                  {[group.company, group.role].filter(Boolean).join(" · ")}
-                </p>
+                <div className="mb-2.5 flex items-center justify-between">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
+                    {[group.company, group.role].filter(Boolean).join(" · ")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      confirmDelete(
+                        group.items.map((i) => i.id),
+                        `${[group.company, group.role].filter(Boolean).join(" · ")} (${group.items.length} highlight${group.items.length === 1 ? "" : "s"})`,
+                      )
+                    }
+                    className="text-[11px] text-muted transition hover:text-red-500"
+                  >
+                    Delete group
+                  </button>
+                </div>
               )}
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
                 {group.items.map((n) => (
@@ -355,38 +389,66 @@ export function ProfileHighlightsView() {
                       <span className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}>
                         {sourceLabel(n)}
                       </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditor({
-                            mode: "edit",
-                            existing: {
-                              id: n.id,
-                              nugget_text: n.nugget_text,
-                              answer: n.answer,
-                              company: n.company,
-                              role: n.role,
-                            },
-                          });
-                        }}
-                        aria-label="Edit highlight"
-                        className="text-muted opacity-0 transition hover:text-accent group-hover:opacity-100"
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          viewBox="0 0 24 24"
+                      <div className="flex items-center gap-1.5 opacity-0 transition group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditor({
+                              mode: "edit",
+                              existing: {
+                                id: n.id,
+                                nugget_text: n.nugget_text,
+                                answer: n.answer,
+                                company: n.company,
+                                role: n.role,
+                              },
+                            });
+                          }}
+                          aria-label="Edit highlight"
+                          className="text-muted transition hover:text-accent"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
-                          />
-                        </svg>
-                      </button>
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125"
+                            />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmDelete(
+                              [n.id],
+                              shortTitle(n) || "this highlight",
+                            );
+                          }}
+                          aria-label="Delete highlight"
+                          className="text-muted transition hover:text-red-500"
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                            />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <button
                       type="button"
@@ -430,6 +492,39 @@ export function ProfileHighlightsView() {
           Upload a file →
         </Link>
       </div>
+
+      {/* Delete confirm dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-white p-6 shadow-xl">
+            <h3 className="text-sm font-semibold text-foreground">Delete highlight{deleteConfirm.ids.length > 1 ? "s" : ""}?</h3>
+            <p className="mt-2 text-xs text-muted">
+              <span className="font-medium text-foreground">{deleteConfirm.label}</span>
+              {deleteConfirm.ids.length > 1
+                ? ` — all ${deleteConfirm.ids.length} highlights will be permanently deleted.`
+                : " will be permanently deleted."}
+            </p>
+            <div className="mt-5 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                disabled={deleting}
+                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeDelete}
+                disabled={deleting}
+                className="rounded-lg bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-600 disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Follow-up modal (click card) */}
       {activeNugget && (

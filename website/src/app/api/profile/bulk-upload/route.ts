@@ -116,6 +116,9 @@ export async function POST(request: Request) {
   }
 
   // Build rows. Each highlight/project/take becomes one nugget.
+  // Skills and certifications are NOT ingested — they're labels, not highlights.
+  // Minimum 15-char answer required to filter blank/trivial entries.
+  const MIN_ANSWER_LEN = 15;
   const rows: Omit<NuggetInsert, "nugget_index">[] = [];
 
   if (Array.isArray(template.experience)) {
@@ -127,7 +130,7 @@ export async function POST(request: Request) {
         for (const h of exp.highlights) {
           const bodyParts = [str(h.one_liner), str(h.impact)].filter(Boolean);
           const answer = bodyParts.join(" ") || str(h.title);
-          if (!answer) continue;
+          if (!answer || answer.length < MIN_ANSWER_LEN) continue;
           rows.push({
             user_id: user.id,
             nugget_text: str(h.title) || answer.slice(0, 80),
@@ -151,6 +154,7 @@ export async function POST(request: Request) {
       // Back-compat: flat bullets
       if (Array.isArray(exp.bullets)) {
         for (const b of arr(exp.bullets)) {
+          if (b.length < MIN_ANSWER_LEN) continue;
           rows.push({
             user_id: user.id,
             nugget_text: b.slice(0, 80),
@@ -178,7 +182,7 @@ export async function POST(request: Request) {
     for (const p of template.projects) {
       const body = [str(p.one_liner), str(p.impact)].filter(Boolean).join(" ");
       const answer = body || str(p.title);
-      if (!answer) continue;
+      if (!answer || answer.length < MIN_ANSWER_LEN) continue;
       rows.push({
         user_id: user.id,
         nugget_text: str(p.title) || answer.slice(0, 80),
@@ -221,47 +225,9 @@ export async function POST(request: Request) {
     });
   }
 
-  for (const s of arr(template.skills)) {
-    rows.push({
-      user_id: user.id,
-      nugget_text: s.slice(0, 60),
-      question: "",
-      alt_questions: [],
-      answer: s,
-      primary_layer: "A",
-      section_type: "work_experience",
-      company: null,
-      role: null,
-      resume_relevance: 0.7,
-      importance: "P3",
-      factuality: "fact",
-      temporality: "present",
-      duration: "point_in_time",
-      leadership_signal: "none",
-      tags: ["bulk_upload", "skill"],
-    });
-  }
-
-  for (const c of arr(template.certifications)) {
-    rows.push({
-      user_id: user.id,
-      nugget_text: c.slice(0, 80),
-      question: "",
-      alt_questions: [],
-      answer: c,
-      primary_layer: "A",
-      section_type: "work_experience",
-      company: null,
-      role: null,
-      resume_relevance: 0.65,
-      importance: "P3",
-      factuality: "fact",
-      temporality: "past",
-      duration: "point_in_time",
-      leadership_signal: "none",
-      tags: ["bulk_upload", "certification"],
-    });
-  }
+  // Skills and certifications are intentionally skipped — they are single-word
+  // labels (e.g. "Figma", "JIRA") that don't carry highlight-level context and
+  // pollute the nugget store with empty cards.
 
   if (rows.length === 0) {
     return Response.json(

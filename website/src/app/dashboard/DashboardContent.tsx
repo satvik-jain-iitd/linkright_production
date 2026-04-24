@@ -108,6 +108,10 @@ export function DashboardContent({
   const [diaryStreak, setDiaryStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [pulse, setPulse] = useState<{
+    funnel: { inProgress: number; sent: number; interview: number; offer: number };
+    broadcast: { postsThisMonth: number; reactions: number; profileViews: number };
+  } | null>(null);
 
   const fetchJobs = () =>
     fetch("/api/resume/list")
@@ -129,6 +133,9 @@ export function DashboardContent({
         .then((data) => {
           if (data?.streak != null) setDiaryStreak(data.streak);
         }),
+      fetch("/api/dashboard/pulse", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { if (data) setPulse(data); }),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -213,31 +220,47 @@ export function DashboardContent({
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
           {/* Main column */}
           <div className="space-y-8">
-            {/* Today's matches */}
+            {/* Today's pipeline */}
             <section>
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-base font-semibold tracking-tight">
-                  Today&apos;s matches
-                </h2>
-                {topMatches.length > 0 && (
-                  <Link
-                    href="/dashboard/jobs"
-                    className="text-xs font-semibold text-accent hover:text-accent-hover"
-                  >
-                    See all →
-                  </Link>
-                )}
+                <div>
+                  <h2 className="text-base font-semibold tracking-tight">
+                    Today&apos;s pipeline
+                  </h2>
+                  <p className="mt-0.5 text-[12px] text-muted">
+                    Work you&apos;ve started · roles matched this morning
+                  </p>
+                </div>
+                <Link
+                  href="/dashboard/jobs"
+                  className="text-xs font-semibold text-accent hover:text-accent-hover"
+                >
+                  Open pipeline →
+                </Link>
               </div>
-              {loading ? (
-                <div className="grid gap-3 md:grid-cols-3">
-                  {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="h-36 animate-pulse rounded-2xl border border-border bg-white"
-                    />
+
+              {/* Funnel strip */}
+              {!loading && (
+                <div className="mb-3 grid grid-cols-5 divide-x divide-border overflow-hidden rounded-xl border border-border bg-white">
+                  {[
+                    { n: topMatches.length, label: "New matches", sub: "Today", color: "text-accent" },
+                    { n: pulse?.funnel.inProgress ?? jobs.filter(j => j.status === "queued" || j.status === "processing").length, label: "In progress", sub: "Drafting now", color: "text-gold-700" },
+                    { n: pulse?.funnel.sent ?? jobs.filter(j => j.status === "completed").length, label: "Sent", sub: "This week", color: "text-muted" },
+                    { n: pulse?.funnel.interview ?? 0, label: "Interview", sub: "Active", color: "text-purple-700" },
+                    { n: pulse?.funnel.offer ?? 0, label: "Offer", sub: "Deciding", color: "text-accent" },
+                  ].map((s) => (
+                    <div key={s.label} className="px-4 py-3">
+                      <div className={`text-[22px] font-bold leading-none tracking-tight ${s.color}`}>{s.n}</div>
+                      <div className="mt-1.5 text-[12px] font-semibold text-foreground">{s.label}</div>
+                      <div className="text-[10.5px] text-muted">{s.sub}</div>
+                    </div>
                   ))}
                 </div>
-              ) : topMatches.length === 0 ? (
+              )}
+
+              {loading ? (
+                <div className="h-48 animate-pulse rounded-xl border border-border bg-white" />
+              ) : topMatches.length === 0 && !inFlightJob ? (
                 <div className="rounded-2xl border border-dashed border-border bg-white p-6 text-center">
                   <p className="text-sm font-medium">No matches yet today.</p>
                   <p className="mt-1 text-xs text-muted">
@@ -251,153 +274,195 @@ export function DashboardContent({
                   </Link>
                 </div>
               ) : (
-                <div className="grid gap-3 md:grid-cols-3">
-                  {topMatches.map((r) => (
+                <div className="overflow-hidden rounded-xl border border-border bg-white">
+                  <div className="grid grid-cols-[44px_1fr_180px_160px_100px] gap-3 border-b border-border px-4 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted">
+                    <span>Match</span>
+                    <span>Role</span>
+                    <span>Company · Location</span>
+                    <span>Status</span>
+                    <span className="text-right">Action</span>
+                  </div>
+                  {inFlightJob && (
+                    <div className="grid grid-cols-[44px_1fr_180px_160px_100px] items-center gap-3 border-b border-border bg-gold-50/40 px-4 py-3 last:border-b-0">
+                      <span className="text-[15px] font-bold text-gold-700">—</span>
+                      <div>
+                        <div className="text-[13.5px] font-semibold">{jobLabel(inFlightJob)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-medium">{inFlightJob.target_company ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-medium text-[#8A6E1E]">Resume draft · {inFlightJob.progress_pct}% done</div>
+                        <div className="text-[11px] text-muted">In progress</div>
+                      </div>
+                      <div className="flex justify-end">
+                        <Link
+                          href={`/resume/new?job=${inFlightJob.id}`}
+                          className="rounded-full bg-gold-600 px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-gold-700"
+                        >
+                          Resume →
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                  {topMatches.map((r, i) => (
                     <div
                       key={r.id}
-                      className="rounded-2xl border border-border bg-white p-4 transition hover:border-accent/40 hover:shadow-sm"
+                      className={`grid grid-cols-[44px_1fr_180px_160px_100px] items-center gap-3 px-4 py-3 ${i < topMatches.length - 1 || inFlightJob ? "border-b border-border" : ""}`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="truncate text-sm font-semibold">
-                          {r.job_discoveries!.company_name}
-                        </div>
-                        <span
-                          className={`text-sm font-bold ${pct(r.final_score) >= 80 ? "text-accent" : "text-gold-700"}`}
+                      <span className={`text-[15px] font-bold ${pct(r.final_score) >= 80 ? "text-accent" : "text-gold-700"}`}>
+                        {pct(r.final_score)}%
+                      </span>
+                      <div>
+                        <div className="text-[13.5px] font-semibold leading-snug">{r.job_discoveries!.title}</div>
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-medium">{r.job_discoveries!.company_name}</div>
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-medium text-[#09766D]">New match · today</div>
+                        {r.reason && <div className="line-clamp-1 text-[11px] text-muted">{r.reason}</div>}
+                      </div>
+                      <div className="flex justify-end">
+                        <Link
+                          href={`/resume/new?job_id=${encodeURIComponent(r.job_discoveries!.id)}`}
+                          className="rounded-full border border-accent px-3 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent hover:text-white"
                         >
-                          {pct(r.final_score)}%
-                        </span>
+                          Start →
+                        </Link>
                       </div>
-                      <div className="mt-1.5 line-clamp-2 text-sm text-foreground">
-                        {r.job_discoveries!.title}
+                    </div>
+                  ))}
+                  {jobs.filter(j => j.status === "completed").slice(0, 2).map((job) => (
+                    <div
+                      key={job.id}
+                      className="grid grid-cols-[44px_1fr_180px_160px_100px] items-center gap-3 border-t border-border px-4 py-3"
+                    >
+                      <span className="text-[15px] font-bold text-muted">—</span>
+                      <div>
+                        <div className="text-[13.5px] font-semibold">{jobLabel(job)}</div>
                       </div>
-                      {r.reason && (
-                        <p className="mt-1.5 line-clamp-1 text-xs text-muted">
-                          {r.reason}
-                        </p>
-                      )}
-                      <Link
-                        href={`/resume/new?job_id=${encodeURIComponent(r.job_discoveries!.id)}`}
-                        className="mt-3 block rounded-full border border-accent bg-white py-1.5 text-center text-xs font-semibold text-accent transition hover:bg-accent hover:text-white"
-                      >
-                        Start application
-                      </Link>
+                      <div>
+                        <div className="text-[12.5px] font-medium">{job.target_company ?? "—"}</div>
+                      </div>
+                      <div>
+                        <div className="text-[12.5px] font-medium text-[#475569]">
+                          Applied · {new Date(job.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <Link
+                          href={`/resume/new?job=${job.id}`}
+                          className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent"
+                        >
+                          View
+                        </Link>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </section>
 
-            {/* Keep going */}
+            {/* Keep going — Interview prep */}
             <section>
-              <h2 className="mb-3 text-base font-semibold tracking-tight">
-                Keep going
-              </h2>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-semibold tracking-tight">
+                  Keep going — Interview prep
+                </h2>
+                <Link href="/dashboard/interview-prep" className="text-[13px] font-medium text-[#4A5D32] hover:text-[#6B8346]">
+                  Open all drills
+                </Link>
+              </div>
               <div className="space-y-2.5">
-                {inFlightJob && (
-                  <div className="flex items-center gap-3 rounded-xl border border-purple-500/30 bg-purple-500/5 p-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-700">
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                        />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">
-                        Pick up where you left off
-                      </div>
-                      <div className="text-xs text-muted">
-                        {jobLabel(inFlightJob)}
-                        {inFlightJob.target_company &&
-                          ` · ${inFlightJob.target_company}`}{" "}
-                        · {inFlightJob.progress_pct}% done
-                      </div>
-                    </div>
-                    <Link
-                      href={`/resume/new?job=${inFlightJob.id}`}
-                      className="rounded-lg bg-accent px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-accent-hover"
-                    >
-                      Resume
-                    </Link>
-                  </div>
-                )}
-
                 {status && !status.ready && status.total_extracted > 0 && (
                   <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-4">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
-                        />
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <div className="text-sm font-semibold">
-                        Your profile is still setting up
-                      </div>
-                      <div className="text-xs text-muted">
-                        {status.total_embedded}/{status.total_extracted} highlights
-                        processed
-                      </div>
+                      <div className="text-sm font-semibold">Your profile is still setting up</div>
+                      <div className="text-xs text-muted">{status.total_embedded}/{status.total_extracted} highlights processed</div>
                     </div>
-                    <Link
-                      href="/onboarding/profile"
-                      className="rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
-                    >
+                    <Link href="/onboarding/profile" className="rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent">
                       Add a few more →
                     </Link>
                   </div>
                 )}
-
-                {!inFlightJob && (status?.ready || status == null) && (
-                  <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sage-100 text-sage-700">
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.164 2.27.294 3.423.39 1.1.092 1.907 1.056 1.907 2.16v4.773l3.423-3.423a1.125 1.125 0 01.8-.33 48.31 48.31 0 005.58-.498c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
-                        />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">
-                        Practice interview questions
-                      </div>
-                      <div className="text-xs text-muted">
-                        Drills tailored to your target roles · 15 minutes
-                      </div>
-                    </div>
-                    <Link
-                      href="/dashboard/interview-prep"
-                      className="rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
-                    >
-                      Start →
-                    </Link>
+                <div className="flex items-center gap-3 rounded-xl border border-[#6B8346]/30 bg-[#6B8346]/[0.04] p-4">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[#6B8346]/10 text-[#4A5D32]">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.164 2.27.294 3.423.39 1.1.092 1.907 1.056 1.907 2.16v4.773l3.423-3.423a1.125 1.125 0 01.8-.33 48.31 48.31 0 005.58-.498c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                    </svg>
                   </div>
-                )}
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">Practice interview questions</div>
+                    <div className="text-xs text-muted">Drills tailored to your target roles · 15 minutes</div>
+                  </div>
+                  <Link href="/dashboard/interview-prep" className="rounded-full bg-[#6B8346] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#5a6e3a]">
+                    Start →
+                  </Link>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-4">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[#6B8346]/10 text-[#4A5D32]">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">Product-sense warmup · 8 questions</div>
+                    <div className="text-xs text-muted">Tailored to your work history · 12 minutes</div>
+                  </div>
+                  <Link href="/dashboard/interview-prep" className="rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent">
+                    Start
+                  </Link>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-white p-4">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[#6B8346]/10 text-[#4A5D32]">
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">Record a &ldquo;Tell me about yourself&rdquo; take</div>
+                    <div className="text-xs text-muted">Voice mock interview · transcript saved after</div>
+                  </div>
+                  <Link href="/dashboard/interview-prep/coach" className="rounded-full border border-border px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent">
+                    Record
+                  </Link>
+                </div>
+              </div>
+            </section>
+
+            {/* Broadcast pulse */}
+            <section>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-semibold tracking-tight">Broadcast pulse</h2>
+                <Link href="/dashboard/broadcast" className="text-xs font-semibold text-pink-600 hover:text-pink-700">
+                  Write a post →
+                </Link>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-border bg-white">
+                <div className="grid grid-cols-3 divide-x divide-border">
+                  {[
+                    { n: pulse?.broadcast.postsThisMonth ?? 0, label: "Posts this month" },
+                    { n: pulse?.broadcast.reactions ?? 0, label: "Reactions" },
+                    { n: pulse?.broadcast.profileViews ?? 0, label: "Profile views" },
+                  ].map((s) => (
+                    <div key={s.label} className="px-5 py-4">
+                      <div className="text-2xl font-bold tracking-tight text-foreground">{s.n}</div>
+                      <div className="mt-1 text-[12px] text-muted">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border px-5 py-3 text-[12px] text-muted">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-pink-50 px-2 py-0.5 text-[11px] font-medium text-pink-600">
+                    Coming soon
+                  </span>
+                  {" "}LinkedIn broadcast — drafts from your wins, scheduled automatically.
+                </div>
               </div>
             </section>
 
