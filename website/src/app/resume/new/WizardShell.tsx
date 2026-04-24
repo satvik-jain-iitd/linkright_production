@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppNav } from "@/components/AppNav";
 import { VerticalStepper } from "@/components/VerticalStepper";
@@ -107,6 +108,7 @@ export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, disc
           : 3
         : (saved?.step ?? 0);
 
+  const router = useRouter();
   const [step, setStep] = useState(initialStep);
   const initialData: WizardData = saved?.data ?? { ...EMPTY_DATA };
   if (retryJdText && !jobId) {
@@ -286,6 +288,7 @@ export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, disc
                 onReset={reset}
                 onRetry={retry}
                 onSubSteps={setBuildSubSteps}
+                onNeedCareer={() => router.push("/my-career?from=build")}
               />
             )}
             {step === 4 && <StepReview data={data} onNewResume={reset} />}

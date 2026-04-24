@@ -16,6 +16,7 @@ interface Props {
   onReset: () => void;
   onRetry: () => void;
   onSubSteps?: (subSteps: SubStep[]) => void;
+  onNeedCareer?: () => void;
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -65,7 +66,7 @@ function BulletItem({ text }: { text: string }) {
   );
 }
 
-export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: Props) {
+export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, onNeedCareer }: Props) {
   const [phase, setPhase] = useState("queued");
   const [progress, setProgress] = useState(0);
   const [draftHtml, setDraftHtml] = useState<string | null>(null);
@@ -156,7 +157,11 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps }: 
 
       // Pre-check: career_text is required for resume generation
       if (!data.career_text || data.career_text.trim().length < 100) {
-        setError("Career profile is missing or too short. Go to My Career page to add your experience first.");
+        if (onNeedCareer) {
+          onNeedCareer();
+        } else {
+          setError("Career profile is missing. Go to My Career page to add your experience first.");
+        }
         return;
       }
 
