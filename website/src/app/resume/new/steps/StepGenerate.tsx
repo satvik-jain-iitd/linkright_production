@@ -59,7 +59,6 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
             if (job.status === "completed") {
               setPhase("done");
               setProgress(100);
-              setTimeout(next, 500);
               return;
             } else if (job.status === "failed") {
               setError(job.error_message || "Generation failed");
@@ -135,7 +134,6 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
             if (row.status === "completed") {
               applyUpdate("done", 100, 999);
               teardown();
-              setTimeout(next, 1000);
             } else if (row.status === "failed") {
               setError((row.error_message as string) || "Generation failed");
               teardown();
@@ -207,6 +205,75 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
     );
   }
 
+  // s10a: rich complete state
+  if (phase === "done") {
+    return (
+      <div>
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[#09766D]">Resume complete</p>
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-foreground">Done. Your resume is ready for review.</h2>
+          </div>
+          <span className="rounded-full bg-accent/10 px-3 py-1.5 text-[11px] font-semibold text-[#09766D]">✓ Complete</span>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[200px_1fr_220px]">
+          {/* Phases */}
+          <div className="rounded-2xl border border-border bg-white p-4">
+            <div className="mb-3 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-muted">Phases</div>
+            <div className="space-y-2">
+              {[
+                { t: "Retrieved memory" },
+                { t: "Planned layout" },
+                { t: "Wrote bullets" },
+                { t: "Ran QA rules" },
+                { t: "Fitted page" },
+              ].map((p) => (
+                <div key={p.t} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5" style={{ background: "rgba(15,190,175,0.04)" }}>
+                  <div className="flex h-[14px] w-[14px] flex-shrink-0 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">✓</div>
+                  <span className="text-[12px] text-foreground">{p.t}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 border-t border-border pt-3 text-[11px] leading-relaxed text-muted">
+              All bullets traceable to highlights in your profile.
+            </p>
+          </div>
+
+          {/* Preview placeholder */}
+          <div className="flex min-h-[360px] items-center justify-center rounded-2xl border border-border bg-[#EEF0F3]">
+            <div className="rounded-lg bg-white px-8 py-6 text-center shadow-sm">
+              <div className="text-2xl font-bold text-foreground">Resume Ready</div>
+              <p className="mt-1 text-xs text-muted">Click &ldquo;Review &amp; download&rdquo; to continue</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-border bg-white p-4">
+              <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">Quality checks</div>
+              <div className="space-y-2">
+                {["ATS-safe structure", "0 AI-slop phrases", "Page-fill optimised", "Brand-matched accent"].map((t) => (
+                  <div key={t} className="flex items-center gap-2 text-[12px]">
+                    <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-accent/15 text-[10px] font-bold text-[#09766D]">✓</div>
+                    {t}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={next}
+              className="w-full rounded-xl bg-cta px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+            >
+              Review &amp; download →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="text-center">
       <div className="mx-auto max-w-md">
@@ -229,9 +296,7 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
         {/* Phase label */}
         <div className="mt-6 rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center justify-center gap-3">
-            {phase !== "done" && (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-            )}
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
             <span className="text-sm text-foreground">{phaseLabel}</span>
           </div>
         </div>

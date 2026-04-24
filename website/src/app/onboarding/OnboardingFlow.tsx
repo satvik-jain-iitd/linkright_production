@@ -258,6 +258,7 @@ function StepCareerBasics({
   const [uploadMode, setUploadMode] = useState<"none" | "paste" | "file">("none");
   const [resumePasteText, setResumePasteText] = useState("");
   const [parsing, setParsing] = useState(false);
+  const [parsingStep, setParsingStep] = useState(0);
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -457,6 +458,15 @@ function StepCareerBasics({
     }
   };
 
+  // s04b: animate parsing step indicator
+  useEffect(() => {
+    if (!parsing) { setParsingStep(0); return; }
+    const interval = setInterval(() => {
+      setParsingStep((s) => Math.min(s + 1, 3));
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [parsing]);
+
   const addEducation = () => {
     setEducation([...education, { institution: "", degree: "", year: "" }]);
   };
@@ -636,21 +646,36 @@ function StepCareerBasics({
       )}
 
       {/* Upload surface — shown until parsed */}
-      {!parsed && uploadMode === "none" && (
-        <div className="rounded-2xl border-2 border-dashed border-border bg-surface p-10 text-center">
-          <div className="flex flex-wrap justify-center gap-3">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-            >
-              Upload PDF / DOCX / TXT
-            </button>
-            <button
-              onClick={() => setUploadMode("paste")}
-              className="rounded-lg border border-border bg-white px-6 py-3 text-sm font-semibold text-foreground transition hover:border-accent"
-            >
-              Paste resume text
-            </button>
+      {!parsed && uploadMode === "none" && !parsing && (
+        <div>
+          <div
+            className="rounded-2xl p-14 text-center"
+            style={{
+              border: "2px dashed rgba(15,190,175,0.45)",
+              background: "linear-gradient(180deg, rgba(15,190,175,0.04) 0%, #fff 60%)",
+            }}
+          >
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10">
+              <svg className="h-8 w-8 text-accent" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+            </div>
+            <h3 className="text-[17px] font-semibold text-foreground">Drop a file here, or click to browse</h3>
+            <p className="mt-1.5 text-[13px] text-muted">PDF · DOCX · up to 5MB</p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-full bg-cta px-5 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+              >
+                Choose file
+              </button>
+              <button
+                onClick={() => setUploadMode("paste")}
+                className="rounded-full border border-border bg-white px-5 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent"
+              >
+                Paste resume text instead
+              </button>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -663,14 +688,85 @@ function StepCareerBasics({
               }}
             />
           </div>
-          {parsing && (
-            <p className="mt-4 text-sm text-accent animate-pulse">
-              Parsing your resume…
-            </p>
-          )}
-          {parseError && (
-            <p className="mt-4 text-sm text-red-600">{parseError}</p>
-          )}
+
+          <div className="mt-4 grid grid-cols-3 gap-4">
+            {[
+              { t: "What we extract", d: "Roles, projects, metrics, skills, education" },
+              { t: "What stays yours", d: "Original file. Never shared. Delete anytime." },
+              { t: "What we don't do", d: "No AI-rewriting here. Review happens next." },
+            ].map((x) => (
+              <div key={x.t} className="rounded-xl border border-border bg-white p-3.5">
+                <div className="text-xs font-semibold text-foreground">{x.t}</div>
+                <div className="mt-1 text-xs leading-relaxed text-muted">{x.d}</div>
+              </div>
+            ))}
+          </div>
+
+          {parseError && <p className="mt-3 text-sm text-red-600">{parseError}</p>}
+
+          <p className="mt-5 text-center text-xs text-muted">
+            Don&apos;t have a resume?{" "}
+            <button
+              type="button"
+              onClick={() => setUploadMode("paste")}
+              className="font-semibold text-accent hover:underline"
+            >
+              Start from scratch →
+            </button>
+          </p>
+        </div>
+      )}
+
+      {/* s04b: parsing progress checklist */}
+      {!parsed && parsing && (
+        <div className="rounded-2xl border border-border bg-white p-8 text-center" style={{ background: "linear-gradient(180deg, #FDF6F0 0%, #fff 70%)" }}>
+          <div
+            className="mx-auto mb-5"
+            style={{
+              width: 44, height: 44, borderRadius: "50%",
+              border: "3px solid rgba(15,190,175,0.25)",
+              borderTopColor: "var(--color-accent, #0FBEAF)",
+              animation: "spin 1s linear infinite",
+            }}
+          />
+          <h3 className="text-[17px] font-semibold text-foreground">Reading your resume…</h3>
+          <p className="mt-1.5 text-[13px] text-muted">This usually takes 4–8 seconds. We&apos;ll show you everything we found next.</p>
+
+          <div className="mx-auto mt-6 grid max-w-md gap-2 text-left">
+            {[
+              { t: "Extracting roles and dates" },
+              { t: "Parsing projects and metrics" },
+              { t: "Surfacing skills and tools" },
+              { t: "Drafting first-person narration" },
+            ].map((p, i) => {
+              const state = i < parsingStep ? "done" : i === parsingStep ? "active" : "pending";
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-2.5 rounded-[10px] border border-border bg-white px-3 py-2"
+                >
+                  <div
+                    style={{
+                      width: 16, height: 16, borderRadius: "50%", flexShrink: 0,
+                      background: state === "done" ? "var(--color-accent, #0FBEAF)" : state === "active" ? "rgba(15,190,175,0.2)" : "#F3F4F6",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontSize: 10,
+                      border: state === "active" ? "2px solid var(--color-accent, #0FBEAF)" : "none",
+                    }}
+                  >
+                    {state === "done" && "✓"}
+                  </div>
+                  <span className={`text-[12.5px] flex-1 ${state === "pending" ? "text-muted" : "text-foreground"} ${state === "active" ? "font-semibold" : ""}`}>
+                    {p.t}
+                  </span>
+                  {state === "active" && (
+                    <span className="text-[11px] font-semibold text-accent">in progress</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 

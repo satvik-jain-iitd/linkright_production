@@ -202,11 +202,27 @@ export default function PreferencesPage() {
 
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
-          One minute, then we show you roles.
+          Step 3 of 4 · optional, but sharpens matches
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
-          What kind of role are you actually looking for?
+          What are you actually looking for?
         </h1>
+        <p className="mt-1 text-sm text-muted">Nothing here is required. We&apos;ll infer the rest from your profile.</p>
+      </div>
+
+      {/* s07a: "Use my profile only" shortcut */}
+      <div className="flex items-center justify-between rounded-xl border border-dashed border-accent/50 bg-accent/4 px-5 py-4" style={{ background: "rgba(15,190,175,0.04)" }}>
+        <div>
+          <div className="text-[13.5px] font-semibold text-foreground">Just want us to start matching?</div>
+          <div className="mt-0.5 text-[12.5px] text-muted">We&apos;ll use your profile alone. You can add preferences later.</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => router.push("/onboarding/find")}
+          className="rounded-full border border-accent px-4 py-2 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
+        >
+          Use my profile only
+        </button>
       </div>
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm space-y-6">

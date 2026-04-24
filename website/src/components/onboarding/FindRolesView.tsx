@@ -237,16 +237,55 @@ export function FindRolesView({ embedded }: Props) {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading — s08a: 2-col calibrating state */}
       {loading && (
-        <div className="space-y-3">
-          <div className="h-40 animate-pulse rounded-2xl border border-border bg-white" />
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-xl border border-border bg-white"
-            />
-          ))}
+        <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 rounded-2xl border border-border bg-white p-4">
+                <div className="h-12 w-12 flex-shrink-0 animate-pulse rounded-xl bg-[#F3F4F6]" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 animate-pulse rounded bg-[#E2E8F0]" style={{ width: `${45 + i * 7}%` }} />
+                  <div className="h-2.5 animate-pulse rounded bg-[#E8ECF0]" style={{ width: "30%" }} />
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2].map((j) => (
+                      <div key={j} className="h-5 w-14 animate-pulse rounded-full bg-[#F3F4F6]" />
+                    ))}
+                  </div>
+                </div>
+                <div className="h-8 w-16 animate-pulse rounded-full bg-[#F3F4F6]" />
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-border bg-white p-5 self-start">
+            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#09766D]">What Scout is doing</div>
+            <div className="space-y-2.5">
+              {[
+                { t: "Scanning active listings", done: true },
+                { t: "Matching against your profile", done: true },
+                { t: "Filtering by your preferences", active: true },
+                { t: "Ranking by fit + recency", pending: true },
+                { t: "Enriching with company signals", pending: true },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <div
+                    style={{
+                      width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+                      background: s.done ? "var(--color-accent, #0FBEAF)" : s.active ? "rgba(15,190,175,0.2)" : "#F3F4F6",
+                      border: s.active ? "2px solid var(--color-accent, #0FBEAF)" : "none",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontSize: 9,
+                    }}
+                  >{s.done && "✓"}</div>
+                  <span className={`text-xs ${s.pending ? "text-muted" : "text-foreground"} ${s.active ? "font-semibold" : ""}`}>{s.t}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted">
+              Matches appear as soon as they&apos;re ready — no need to wait here.
+            </p>
+          </div>
         </div>
       )}
 
@@ -260,56 +299,101 @@ export function FindRolesView({ embedded }: Props) {
         </div>
       )}
 
-      {/* Empty — computing or timed out */}
+      {/* Empty — computing (spinner) or timed out (s08b rich empty state) */}
       {!loading && !error && rows.length === 0 && !customOpen && (
-        <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
+        <>
           {pollCount < MAX_POLLS ? (
             // Still polling — matches are being computed
-            <>
+            <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
               <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />
               <p className="text-sm font-semibold text-foreground">Computing your first matches…</p>
               <p className="mt-1 text-xs text-muted">Scoring jobs against your profile. This takes about 30–60 seconds.</p>
-            </>
-          ) : nuggetStatus && !nuggetStatus.ready ? (
-            // Profile still embedding
-            <>
-              <p className="text-sm font-semibold text-foreground">
-                We&apos;re still building your profile ({nuggetStatus.total_embedded} of {nuggetStatus.total_extracted}).
-              </p>
-              <p className="mt-1 text-xs text-muted">Matches will appear once your highlights are ready — usually a minute or two.</p>
-            </>
+            </div>
           ) : (
-            // Polling exhausted, profile ready but no matches yet
-            <>
-              <p className="text-sm font-semibold text-foreground">Your matches are being prepared.</p>
-              <p className="mt-1 text-xs text-muted">Check back in a few minutes, or add a job manually below.</p>
-            </>
-          )}
-          {pollCount >= MAX_POLLS && (
-            <div className="mt-4 flex flex-wrap justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => { setPollCount(0); load(); }}
-                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+            // s08b: rich no-matches state
+            <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
+              <div
+                className="rounded-2xl border border-border p-10 text-center"
+                style={{ background: "linear-gradient(180deg, #FDF6F0 0%, #fff 60%)" }}
               >
-                Refresh
-              </button>
-              <Link
-                href="/onboarding/preferences"
-                className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
-              >
-                Tune preferences
-              </Link>
-              <button
-                type="button"
-                onClick={() => setCustomOpen(true)}
-                className="rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-              >
-                Add a custom job →
-              </button>
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10 text-accent">
+                  <svg className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">Nothing matches today — and that&apos;s fine.</h3>
+                <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-muted">
+                  Your filters are tight. Here&apos;s how to widen the net without lowering the bar.
+                </p>
+
+                <div className="mx-auto mt-6 max-w-lg space-y-2.5 text-left">
+                  {[
+                    { t: "Widen location", d: "Include more cities or Remote-India", action: "Try it", onClick: () => {} },
+                    { t: "Include early-stage companies", d: "Seed & Series A may have more openings", action: "Try it", onClick: () => {} },
+                    { t: "Keep these filters, notify me", d: "We'll ping you the moment one lands", action: "Turn on", onClick: () => {} },
+                  ].map((s) => (
+                    <div key={s.t} className="flex items-center gap-3 rounded-xl border border-border bg-white p-3.5">
+                      <div className="flex-1">
+                        <div className="text-[13px] font-semibold text-foreground">{s.t}</div>
+                        <div className="text-[11.5px] text-muted">{s.d}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={s.onClick}
+                        className="rounded-full border border-accent px-3.5 py-1.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
+                      >
+                        {s.action}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 flex flex-wrap justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => { setPollCount(0); load(); }}
+                    className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+                  >
+                    Refresh
+                  </button>
+                  <Link
+                    href="/onboarding/preferences"
+                    className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
+                  >
+                    Tune preferences
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setCustomOpen(true)}
+                    className="rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+                  >
+                    Add a custom job →
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-white p-5 self-start">
+                <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">While you wait</div>
+                <div className="space-y-2">
+                  {[
+                    { t: "Practice an interview drill", d: "Stay sharp between applications", href: "/dashboard/interview-prep" },
+                    { t: "Add companies to watch", d: "Get pinged when they open a role", href: "/onboarding/preferences" },
+                    { t: "Log a win from today", d: "Feeds tomorrow's resume", href: "/onboarding/profile" },
+                  ].map((s) => (
+                    <Link
+                      key={s.t}
+                      href={s.href}
+                      className="block rounded-xl border border-border p-3 transition hover:border-accent"
+                    >
+                      <div className="text-[12.5px] font-semibold text-foreground">{s.t}</div>
+                      <div className="mt-0.5 text-[11px] text-muted">{s.d}</div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
-        </div>
+        </>
       )}
 
       {/* Custom job form */}

@@ -294,40 +294,36 @@ export function ProfileHighlightsView() {
         </div>
       </div>
 
-      {/* Progress strip */}
-      <div
-        className="flex items-center gap-4 rounded-xl border p-3.5"
-        style={{
-          background: "rgba(139, 92, 246, 0.05)",
-          borderColor: "rgba(139, 92, 246, 0.2)",
-        }}
-      >
-        <span className="inline-flex items-center gap-2 text-sm font-semibold text-tertiary-700">
-          <svg
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
+      {/* Progress strip — s05a: only while still embedding */}
+      {!status?.ready && (
+        <div
+          className="flex items-center gap-4 rounded-xl border p-3.5"
+          style={{
+            background: "rgba(139, 92, 246, 0.05)",
+            borderColor: "rgba(139, 92, 246, 0.2)",
+          }}
+        >
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-tertiary-700">
+            <span
+              style={{
+                width: 8, height: 8, borderRadius: "50%", background: "#8B5CF6",
+                animation: "pulse 1s ease-in-out infinite", display: "inline-block",
+              }}
             />
-          </svg>
-          Getting your profile ready
-        </span>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-tertiary-500/15">
-          <div
-            className="h-full rounded-full bg-tertiary-500 transition-all"
-            style={{ width: `${processedPct}%` }}
-          />
+            Getting your profile ready
+          </span>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-tertiary-500/15">
+            <div
+              className="h-full rounded-full bg-tertiary-500 transition-all"
+              style={{ width: `${processedPct}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted">
+            {embedded} of {total ? `~${total}` : "?"} highlights found
+          </span>
+          <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
         </div>
-        <span className="text-xs text-muted">
-          {embedded} of {total || 0} highlights processed
-        </span>
-      </div>
+      )}
 
       {/* Grid */}
       {loading ? (
