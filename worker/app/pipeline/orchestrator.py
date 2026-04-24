@@ -1115,23 +1115,29 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     _apply_career_profile_weights(ctx)
 
     # Strict 4-company cap — all career profiles.
-    # Tie-break: keep 1 most-recent company + top-3 by order (LLM already ranks
-    # companies by relevance in its output, so position = relevance proxy).
+    # Rule: Slot 1 = most-recent (guaranteed, index 0 in reverse-chron list).
+    #       Slots 2-4 = top-3 remaining sorted by bullet_budget (higher = more JD-relevant).
     _MAX_COMPANIES = 4
     _companies_raw = ctx._parsed.get("companies", [])
     if len(_companies_raw) > _MAX_COMPANIES:
-        kept = _companies_raw[:_MAX_COMPANIES]
-        dropped_names = [c.get("name", f"Co{i}") for i, c in enumerate(_companies_raw[_MAX_COMPANIES:])]
+        most_recent = _companies_raw[0]
+        rest = _companies_raw[1:]
+        budget = ctx._bullet_budget
+        rest_sorted = sorted(rest, key=lambda c: budget.get(c.get("name", ""), 0), reverse=True)
+        top_3 = rest_sorted[:3]
+        dropped = rest_sorted[3:]
+        kept = [most_recent] + top_3
         ctx._parsed["companies"] = kept
-        # Remove dropped companies from bullet_budget
-        kept_names = {c.get("name", "") for c in kept}
+        dropped_names = {c.get("name", "") for c in dropped}
         ctx._bullet_budget = {
             k: v for k, v in ctx._bullet_budget.items()
-            if k in kept_names or k in ("voluntary", "awards", "projects", "certifications")
+            if k not in dropped_names
         }
         logger.info(
-            "Job %s: capped companies from %d → %d; dropped: %s",
-            ctx.job_id, len(_companies_raw), _MAX_COMPANIES, dropped_names
+            "Job %s: 4-company cap — most-recent=%s, top-3-by-relevance=%s, dropped=%s",
+            ctx.job_id, most_recent.get("name"),
+            [c.get("name") for c in top_3],
+            list(dropped_names),
         )
 
     # Fetch relevant career chunks via full-text search
