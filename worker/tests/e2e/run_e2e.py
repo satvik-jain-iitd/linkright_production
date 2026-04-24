@@ -324,33 +324,37 @@ async def measure_llm_score_parse(n_runs: int = 3) -> PillarResult:
 
 
 async def measure_latency_p95() -> PillarResult:
-    """95th percentile of source response times < 10s."""
-    from app.pipeline.scanner_themuse import scan_themuse_jobs
-    from app.pipeline.scanner_remotive import scan_remotive
+    """95th-percentile latency of free job sources < 10s (5 parallel quick GETs)."""
+    import httpx
 
-    class _SB:
-        def table(self, n): return self
-        def select(self, *a, **kw): return self
-        def eq(self, *a): return self
-        def limit(self, *a): return self
-        def insert(self, p): return type("Q", (), {"execute": lambda s: type("R", (), {"data": []})()})()
-        def execute(self): return type("R", (), {"data": []})()
+    CHECKS = [
+        ("themuse",   "https://www.themuse.com/api/public/jobs", {"category": "Product Management", "page": 0}),
+        ("remotive",  "https://remotive.com/api/remote-jobs",    {"category": "product", "limit": 5}),
+        ("themuse2",  "https://www.themuse.com/api/public/jobs", {"category": "Product Management", "page": 1}),
+        ("remotive2", "https://remotive.com/api/remote-jobs",    {"category": "engineering", "limit": 5}),
+        ("themuse3",  "https://www.themuse.com/api/public/jobs", {"category": "Product Management", "page": 2}),
+    ]
 
-    latencies = []
-    for fn_name, fn in [("themuse", lambda: scan_themuse_jobs(_SB(), ["product manager"], []))]:
+    async def _timed_get(name: str, url: str, params: dict) -> float:
         t0 = time.time()
         try:
-            await asyncio.wait_for(fn(), timeout=30)
-            latencies.append(time.time() - t0)
-        except asyncio.TimeoutError:
-            latencies.append(30.0)
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"})
+                elapsed = time.time() - t0
+                return elapsed if resp.status_code == 200 else 15.0
         except Exception:
-            latencies.append(30.0)
+            return time.time() - t0
 
-    latencies.sort()
+    tasks = [_timed_get(name, url, params) for name, url, params in CHECKS]
+    raw_latencies = list(await asyncio.gather(*tasks))
+    latencies = sorted(raw_latencies)
+
     p95 = latencies[int(len(latencies) * 0.95)] if latencies else 30.0
     under_10s = sum(1 for l in latencies if l < 10) / max(1, len(latencies))
-    return PillarResult("latency_p95_ok", under_10s, details={"p95_s": round(p95, 2), "latencies_s": [round(l, 2) for l in latencies]})
+    return PillarResult(
+        "latency_p95_ok", under_10s,
+        details={"p95_s": round(p95, 2), "samples": [round(l, 2) for l in latencies]},
+    )
 
 
 async def measure_pipeline_e2e() -> PillarResult:

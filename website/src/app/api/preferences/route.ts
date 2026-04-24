@@ -1,8 +1,27 @@
 // User preferences CRUD.
 //   GET  /api/preferences   — read the current user's preferences (or empty defaults)
-//   PUT  /api/preferences   — upsert
+//   PUT  /api/preferences   — upsert (triggers initial job scan on first save)
 
 import { createClient } from "@/lib/supabase/server";
+
+const WORKER_URL = process.env.WORKER_URL ?? "";
+const WORKER_SECRET = process.env.WORKER_SECRET ?? "";
+
+async function triggerInitialScan(userId: string): Promise<void> {
+  if (!WORKER_URL || !WORKER_SECRET) return;
+  try {
+    await fetch(`${WORKER_URL}/jobs/scan`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${WORKER_SECRET}`,
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
+  } catch {
+    // Fire-and-forget — scan failure never blocks preferences save
+  }
+}
 
 const DEFAULTS = {
   location_preference: "any",
@@ -62,6 +81,14 @@ export async function PUT(request: Request) {
     if (allowed.has(k)) updates[k] = v;
   }
 
+  // Check if preferences already existed (to detect first-time save)
+  const { data: existing } = await supabase
+    .from("user_preferences")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isFirstSave = !existing;
+
   const { data, error } = await supabase
     .from("user_preferences")
     .upsert(updates, { onConflict: "user_id" })
@@ -69,5 +96,11 @@ export async function PUT(request: Request) {
     .single();
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  // First time preferences saved → trigger initial job scan (fire-and-forget)
+  if (isFirstSave) {
+    triggerInitialScan(user.id);
+  }
+
   return Response.json({ preferences: data });
 }
