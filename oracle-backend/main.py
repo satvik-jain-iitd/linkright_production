@@ -132,6 +132,7 @@ class RewriteRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str
+    model: str | None = None   # Optional override; must be a pulled Ollama model
     system: str = ""
     temperature: float = 0.3
 
@@ -284,18 +285,30 @@ def rewrite_text(req: RewriteRequest, token: str = Depends(verify_token)):
         raise HTTPException(status_code=503, detail=f"Rewrite model unavailable: {e}")
 
 
+@app.get("/lifeos/models")
+def list_models(token: str = Depends(verify_token)):
+    """List all models pulled on this Ollama instance."""
+    import requests as _req
+    try:
+        r = _req.get(f"{llm_local.OLLAMA_HOST}/api/tags", timeout=10)
+        r.raise_for_status()
+        models = [m["name"] for m in r.json().get("models", [])]
+        return {"models": models, "count": len(models)}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Ollama unreachable: {e}")
+
+
 @app.post("/lifeos/generate")
 def generate_text(req: GenerateRequest, token: str = Depends(verify_token)):
     """
     Quick short generation via GENERATE_MODEL (gemma3:1b) — local Ollama.
-    Called by the worker for lightweight tasks (nugget extraction helpers, quick answers).
-
-    To swap model: edit oracle-backend/lifeos/local_llm.py GENERATE_MODEL constant.
+    Pass `model` to use a specific pulled model for benchmarking.
     """
     rate_limit(token, "/lifeos/generate")
     try:
-        result = llm_generate(req.prompt, system=req.system, temperature=req.temperature)
-        return {"text": result, "model": GENERATE_MODEL}
+        chosen = req.model or GENERATE_MODEL
+        result = llm_local._ollama_generate(chosen, req.prompt, system=req.system, temperature=req.temperature)
+        return {"text": result, "model": chosen}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Generate model unavailable: {e}")
 
