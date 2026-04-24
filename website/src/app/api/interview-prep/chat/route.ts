@@ -1,10 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import { platformChatWithFallback } from "@/lib/gemini";
 
 // LinkRight Interview Coach Conversational API
-// Uses Gemini for interview logic and STAR evaluation.
-
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+// Uses Gemini/Fallback for interview logic and STAR evaluation.
 
 const INTERVIEWER_SYSTEM = `You are a senior hiring manager conducting a realistic interview.
 Your goal is to test the candidate's skills and their ability to articulate their past achievements.
@@ -47,35 +45,22 @@ ${nuggets_context}
 Let's start. Introduce yourself and ask the first question.`;
   }
 
-  // Call Gemini
+  // Prepend the system prompt so platformChatWithFallback handles it correctly
+  const chatMessages = [
+    { role: "system", content: INTERVIEWER_SYSTEM },
+    ...fullMessages
+  ];
+
+  // Call AI with robust fallback (Gemini -> Groq 70b -> OpenRouter -> Oracle)
   try {
-    const response = await fetch(
-      `${BASE_URL}/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: INTERVIEWER_SYSTEM }] },
-          contents: fullMessages.map(m => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-          })),
-          generationConfig: { temperature: 0.7 }
-        }),
-      }
-    );
+    const { text } = await platformChatWithFallback(chatMessages, {
+      taskType: "reasoning",
+      temperature: 0.7
+    });
 
-    if (!response.ok) {
-      const error = await response.text();
-      return Response.json({ error: `Gemini error: ${error}` }, { status: 502 });
-    }
-
-    const data = await response.json();
-    const aiText = data.candidates[0].content.parts[0].text;
-
-    return Response.json({ text: aiText });
-  } catch (err) {
+    return Response.json({ text });
+  } catch (err: any) {
     console.error("Interview Coach Chat Error:", err);
-    return Response.json({ error: "Failed to connect to AI" }, { status: 500 });
+    return Response.json({ error: err.message || "Failed to connect to AI" }, { status: 500 });
   }
 }
