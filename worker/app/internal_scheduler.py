@@ -163,15 +163,33 @@ async def _run_remotive_loop():
         await asyncio.sleep(86400)  # 24 hours
 
 
+async def _run_jobicy_loop():
+    """Every 2 hours: scan Jobicy for remote PM jobs (free, no auth required)."""
+    from supabase import create_client
+    from .pipeline.scanner_global import _load_scanner_settings
+    from .pipeline.scanner_jobicy import scan_jobicy
+
+    sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    while True:
+        try:
+            settings = _load_scanner_settings(sb)
+            rj = await scan_jobicy(sb, settings["positive_role_keywords"], settings["negative_role_keywords"])
+            logger.info("api_scanners: jobicy inserted=%d errors=%s", rj.inserted, rj.errors[:1])
+        except Exception as exc:
+            logger.exception("internal_scheduler: jobicy failed: %s", exc)
+        await asyncio.sleep(7200)  # 2 hours
+
+
 async def start_internal_scheduler():
     """Launch all loops as fire-and-forget tasks."""
     logger.info(
         "internal_scheduler: starting recompute (5m) + scan (15m) + fetch_jds (10m)"
-        " + api_scanners (2h) + remotive (24h) + enricher (30m)"
+        " + api_scanners (2h) + remotive (24h) + himalayas/jobicy (2h) + enricher (30m)"
     )
     asyncio.create_task(_run_recompute_loop())
     asyncio.create_task(_run_scan_global_loop())
     asyncio.create_task(_run_jd_fetcher_loop())
     asyncio.create_task(_run_api_scanners_loop())
     asyncio.create_task(_run_remotive_loop())
+    asyncio.create_task(_run_jobicy_loop())
     asyncio.create_task(_run_enricher_loop())
