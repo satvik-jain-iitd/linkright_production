@@ -1114,6 +1114,26 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     # Rebalance bullet_budget based on career-profile space weights
     _apply_career_profile_weights(ctx)
 
+    # Strict 4-company cap — all career profiles.
+    # Tie-break: keep 1 most-recent company + top-3 by order (LLM already ranks
+    # companies by relevance in its output, so position = relevance proxy).
+    _MAX_COMPANIES = 4
+    _companies_raw = ctx._parsed.get("companies", [])
+    if len(_companies_raw) > _MAX_COMPANIES:
+        kept = _companies_raw[:_MAX_COMPANIES]
+        dropped_names = [c.get("name", f"Co{i}") for i, c in enumerate(_companies_raw[_MAX_COMPANIES:])]
+        ctx._parsed["companies"] = kept
+        # Remove dropped companies from bullet_budget
+        kept_names = {c.get("name", "") for c in kept}
+        ctx._bullet_budget = {
+            k: v for k, v in ctx._bullet_budget.items()
+            if k in kept_names or k in ("voluntary", "awards", "projects", "certifications")
+        }
+        logger.info(
+            "Job %s: capped companies from %d → %d; dropped: %s",
+            ctx.job_id, len(_companies_raw), _MAX_COMPANIES, dropped_names
+        )
+
     # Fetch relevant career chunks via full-text search
     keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
     ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
@@ -3042,6 +3062,65 @@ def _build_interests_html(interests: str) -> str:
     return "\n".join(html_parts)
 
 
+def _is_meaningful(s: str) -> bool:
+    """Return True only if s is a real, non-placeholder string."""
+    s = (s or "").strip()
+    if not s or len(s) < 3 or len(s) > 200:
+        return False
+    return s.lower() not in {"none", "n/a", "na", "nil", "-", "tbd", "n.a."}
+
+
+def _build_projects_html(projects: list) -> str | None:
+    """Build Projects section. Returns None if no meaningful entries."""
+    items = []
+    for p in (projects or [])[:4]:
+        if not isinstance(p, dict):
+            continue
+        title = (p.get("title") or p.get("name") or "").strip()
+        one = (p.get("one_liner") or p.get("description") or "").strip()
+        year = str(p.get("year") or "").strip()
+        parts = []
+        if title:
+            parts.append(f"<b>{title}</b>")
+        if year:
+            parts.append(f"({year})")
+        head = " ".join(parts)
+        line = f"{head} — {one}" if head and one else (head or one)
+        if _is_meaningful(line):
+            items.append(f'<li><span class="li-content-natural">{line}</span></li>')
+    if not items:
+        return None
+    return "\n".join([
+        '<div class="section-title">Projects<div class="section-divider"></div></div>',
+        "<ul>",
+        *items,
+        "</ul>",
+    ])
+
+
+def _build_certifications_html(certs: list) -> str | None:
+    """Build Certifications section. Returns None if no meaningful entries."""
+    items = []
+    for c in (certs or [])[:3]:
+        if isinstance(c, dict):
+            name = (c.get("name") or c.get("title") or "").strip()
+            issuer = (c.get("issuer") or "").strip()
+            year = str(c.get("year") or "").strip()
+            line = ", ".join(b for b in [name, issuer, year] if b)
+        else:
+            line = str(c).strip()
+        if _is_meaningful(line):
+            items.append(f'<li><span class="li-content-natural">{line}</span></li>')
+    if not items:
+        return None
+    return "\n".join([
+        '<div class="section-title">Certifications<div class="section-divider"></div></div>',
+        "<ul>",
+        *items,
+        "</ul>",
+    ])
+
+
 # ── Phase 8: HTML Assembly (Programmatic — no LLM) ──────────────────────
 
 async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
@@ -3065,7 +3144,22 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
     sections = []
 
     # Experience: never frozen (always freshly generated per JD)
+    # Post-condense guard: drop any company that ended up with <2 bullets so the
+    # resume never shows a role header with a single weak bullet or blank entry.
     if "experience" in order_map and ctx._optimized_bullets:
+        _MIN_BULLETS = 2
+        _by_co: "defaultdict[int, list]" = defaultdict(list)
+        for _b in ctx._optimized_bullets:
+            _by_co[_b.get("company_index", 0)].append(_b)
+        _sparse = [idx for idx, _bs in _by_co.items() if len(_bs) < _MIN_BULLETS]
+        if _sparse:
+            logger.warning(
+                "Job %s: dropping %d sparse company section(s) with <2 bullets: indices %s",
+                ctx.job_id, len(_sparse), _sparse
+            )
+            ctx.stats.setdefault("sparse_role_drops", 0)
+            ctx.stats["sparse_role_drops"] += len(_sparse)
+            ctx._optimized_bullets = [b for b in ctx._optimized_bullets if b.get("company_index", 0) not in _sparse]
         sections.append(SectionContent(
             section_html=_build_experience_html(ctx._optimized_bullets, companies),
             section_order=order_map["experience"],
@@ -3120,6 +3214,22 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
                 section_html=_build_interests_html(parsed["interests"]),
                 section_order=order_map["interests"],
             ))
+
+    # Projects: dual-source (parsed_p12 → parsed_resume fallback), sanity-filtered
+    if "projects" in order_map:
+        _raw_projects = parsed.get("projects") or []
+        _projects_html = _build_projects_html(_raw_projects)
+        if _projects_html:
+            sections.append(SectionContent(section_html=_projects_html, section_order=order_map["projects"]))
+        ctx.stats["projects_populated"] = bool(_projects_html)
+
+    # Certifications: dual-source (parsed_p12 → parsed_resume fallback), sanity-filtered
+    if "certifications" in order_map:
+        _raw_certs = parsed.get("certifications") or []
+        _certs_html = _build_certifications_html(_raw_certs)
+        if _certs_html:
+            sections.append(SectionContent(section_html=_certs_html, section_order=order_map["certifications"]))
+        ctx.stats["certifications_populated"] = bool(_certs_html)
 
     # Build tool inputs
     contact = parsed.get("contact_info", {})
