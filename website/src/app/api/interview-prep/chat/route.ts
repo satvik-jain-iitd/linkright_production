@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import { oracleChat } from "@/lib/oracle-ollama";
 import { platformChatWithFallback } from "@/lib/gemini";
 
 // LinkRight Interview Coach Conversational API
-// Uses Gemini/Fallback for interview logic and STAR evaluation.
+// Prioritizes Local Gemma 3 1B (Oracle) for "Always Free" mock interviews.
 
 const INTERVIEWER_SYSTEM = `You are a senior hiring manager conducting a realistic interview.
 Your goal is to test the candidate's skills and their ability to articulate their past achievements.
@@ -45,20 +46,30 @@ ${nuggets_context}
 Let's start. Introduce yourself and ask the first question.`;
   }
 
-  // Prepend the system prompt so platformChatWithFallback handles it correctly
+  // Prepend the system prompt
   const chatMessages = [
     { role: "system", content: INTERVIEWER_SYSTEM },
     ...fullMessages
   ];
 
-  // Call AI with robust fallback (Gemini -> Groq 70b -> OpenRouter -> Oracle)
   try {
-    const { text } = await platformChatWithFallback(chatMessages, {
-      taskType: "reasoning",
-      temperature: 0.7
-    });
-
-    return Response.json({ text });
+    // TIER 1: Always Free — Local Gemma 3 1B via Oracle Backend
+    try {
+      const text = await oracleChat(chatMessages, { 
+        temperature: 0.7,
+        useRewriteModel: true 
+      });
+      return Response.json({ text });
+    } catch (oracleErr) {
+      console.warn("Local Oracle (Gemma 3 1B) failed, falling back to cloud models:", oracleErr);
+      
+      // TIER 2: Cloud Fallback (Gemini -> Groq 70b -> etc)
+      const { text } = await platformChatWithFallback(chatMessages, {
+        taskType: "reasoning",
+        temperature: 0.7
+      });
+      return Response.json({ text });
+    }
   } catch (err: any) {
     console.error("Interview Coach Chat Error:", err);
     return Response.json({ error: err.message || "Failed to connect to AI" }, { status: 500 });
