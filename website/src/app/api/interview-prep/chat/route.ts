@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { oracleChat } from "@/lib/oracle-ollama";
-import { platformChatWithFallback } from "@/lib/gemini";
 
 // LinkRight Interview Coach Conversational API
-// Prioritizes Local Gemma 3 1B (Oracle) for "Always Free" mock interviews.
+// Strictly uses Local Gemma 3 1B (Oracle) for "Always Free" mock interviews.
+// Fallbacks to cloud providers have been disabled per user request.
 
 const INTERVIEWER_SYSTEM = `You are a senior hiring manager conducting a realistic interview.
 Your goal is to test the candidate's skills and their ability to articulate their past achievements.
@@ -53,25 +53,18 @@ Let's start. Introduce yourself and ask the first question.`;
   ];
 
   try {
-    // TIER 1: Always Free — Local Gemma 3 1B via Oracle Backend
-    try {
-      const text = await oracleChat(chatMessages, { 
-        temperature: 0.7,
-        useRewriteModel: true 
-      });
-      return Response.json({ text });
-    } catch (oracleErr) {
-      console.warn("Local Oracle (Gemma 3 1B) failed, falling back to cloud models:", oracleErr);
-      
-      // TIER 2: Cloud Fallback (Gemini -> Groq 70b -> etc)
-      const { text } = await platformChatWithFallback(chatMessages, {
-        taskType: "reasoning",
-        temperature: 0.7
-      });
-      return Response.json({ text });
-    }
+    // Strictly use Local Gemma 3 1B via Oracle Backend
+    const text = await oracleChat(chatMessages, { 
+      temperature: 0.7,
+      useRewriteModel: true 
+    });
+    
+    return Response.json({ text });
   } catch (err: any) {
-    console.error("Interview Coach Chat Error:", err);
-    return Response.json({ error: err.message || "Failed to connect to AI" }, { status: 500 });
+    console.error("Interview Coach Chat Error (Oracle):", err);
+    // If local model is down, we show an error rather than using a paid fallback.
+    return Response.json({ 
+      error: "Local Interview Engine (Oracle) is currently offline. Please ensure your local model server is running." 
+    }, { status: 503 });
   }
 }
