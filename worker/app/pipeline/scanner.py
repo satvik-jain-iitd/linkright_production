@@ -15,9 +15,18 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
+import html as _html_mod
 import httpx
 
 logger = logging.getLogger(__name__)
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_EXCESS_NL_RE = re.compile(r"\n{3,}")
+
+
+def _strip_html(raw: str) -> str:
+    text = _html_mod.unescape(_HTML_TAG_RE.sub(" ", raw))
+    return _EXCESS_NL_RE.sub("\n\n", text).strip()
 
 # Max concurrent API calls (from career-ops: CONCURRENCY = 10)
 MAX_CONCURRENT = 10
@@ -29,7 +38,7 @@ FETCH_TIMEOUT = 10  # seconds per request
 # ---------------------------------------------------------------------------
 
 ATS_ENDPOINTS = {
-    "greenhouse": "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
+    "greenhouse": "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true",
     "lever": "https://api.lever.co/v0/postings/{slug}?mode=json",
     "ashby": "https://api.ashbyhq.com/posting-api/job-board/{slug}",
     "smartrecruiters": "https://api.smartrecruiters.com/v1/companies/{slug}/postings",
@@ -169,12 +178,16 @@ async def _scan_greenhouse(
         if job.get("location"):
             location_name = job["location"].get("name", "")
 
+        raw_content = job.get("content") or ""
+        jd_text = _strip_html(raw_content)[:15000] if raw_content else ""
+
         jobs.append(JobResult(
             title=title,
             company=company_name,
             job_url=job.get("absolute_url", ""),
             location=location_name,
             external_id=str(job.get("id", "")),
+            description_snippet=jd_text,
         ))
 
     return jobs
@@ -211,6 +224,11 @@ async def _scan_lever(
         hosted = job.get("hostedUrl", "")
         apply = job.get("applyUrl", "")
         remote = "remote" in location.lower() or "remote" in commitment
+        lever_desc = " ".join(filter(None, [
+            (job.get("descriptionPlain") or "").strip(),
+            _strip_html(job.get("description") or ""),
+            _strip_html(job.get("additional") or ""),
+        ]))
 
         jobs.append(JobResult(
             title=title,
@@ -223,6 +241,7 @@ async def _scan_lever(
             department=dept.lower() if dept else "",
             remote_ok=remote,
             work_type="remote" if remote else "",
+            description_snippet=lever_desc[:15000],
         ))
 
     return jobs
@@ -253,6 +272,7 @@ async def _scan_ashby(
         dept = (job.get("departmentName") or "").lower()
         job_url = job.get("jobUrl", "") or job.get("applicationUrl", "")
         apply_url = job.get("applicationUrl", "") if job.get("applicationUrl") != job_url else ""
+        ashby_desc = _strip_html(job.get("descriptionHtml") or job.get("description") or "")
 
         jobs.append(JobResult(
             title=title,
@@ -265,6 +285,7 @@ async def _scan_ashby(
             work_type="remote" if is_remote else "",
             employment_type=emp_type,
             department=dept,
+            description_snippet=ashby_desc[:15000],
         ))
 
     return jobs
@@ -709,7 +730,7 @@ async def scan_all_companies(
                     wl_id = e["id"]
                     break
 
-            rows.append({
+            row = {
                 "user_id": user_id,
                 "watchlist_id": wl_id,
                 "external_job_id": job.external_id,
@@ -718,7 +739,10 @@ async def scan_all_companies(
                 "location": job.location,
                 "job_url": job.job_url,
                 "status": "new",
-            })
+            }
+            if job.description_snippet:
+                row["jd_text"] = job.description_snippet
+            rows.append(row)
 
         try:
             supabase_client.table("job_discoveries").upsert(
