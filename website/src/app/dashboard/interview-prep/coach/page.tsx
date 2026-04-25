@@ -86,10 +86,19 @@ export default function InterviewCoachPage() {
     utterance.rate = 0.95;
     utterance.pitch = 1.0;
     
-    // Attempt to find a natural voice
+    // Attempt to find a natural English voice
     const voices = synthesisRef.current.getVoices();
-    const premiumVoice = voices.find(v => v.name.includes("Google") || v.name.includes("Enhanced"));
-    if (premiumVoice) utterance.voice = premiumVoice;
+    const englishVoices = voices.filter(v => v.lang.startsWith("en"));
+    
+    // Prioritize Indian English (en-IN) or high-quality US English (en-US)
+    const preferredVoice = 
+      englishVoices.find(v => v.lang === "en-IN" && (v.name.includes("Google") || v.name.includes("Premium") || v.name.includes("Ravi") || v.name.includes("Heera"))) || 
+      englishVoices.find(v => v.lang === "en-US" && (v.name.includes("Google") || v.name.includes("Premium") || v.name.includes("Enhanced") || v.name.includes("Samantha") || v.name.includes("Alex"))) ||
+      englishVoices.find(v => v.lang === "en-IN") ||
+      englishVoices.find(v => v.lang === "en-US") ||
+      englishVoices[0];
+
+    if (preferredVoice) utterance.voice = preferredVoice;
 
     utterance.onstart = () => setStatus("speaking");
     utterance.onend = () => setStatus("idle");

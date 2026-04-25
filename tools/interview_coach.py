@@ -7,11 +7,6 @@ Uses:
 - Kokoro-82M (TTS) for high-speed local speech generation.
 - Gemini 2.0 Flash for interview logic and evaluation.
 - LinkRight Memory Layer (hybrid_retrieval) for personalization.
-
-Setup:
-1. pip install faster-whisper kokoro-onnx sounddevice soundfile numpy httpx pydantic supabase python-dotenv
-2. Download kokoro-v0_19.onnx and voices.bin (or use the helper below).
-3. Ensure .env has SUPABASE_URL, SUPABASE_SERVICE_KEY, and GEMINI_API_KEY.
 """
 
 import os
@@ -48,7 +43,7 @@ logger = logging.getLogger("InterviewCoach")
 # Models & Configuration
 # ---------------------------------------------------------------------------
 
-STT_MODEL_SIZE = "base.en"  # "tiny.en", "base.en", "small.en", "distil-large-v3"
+STT_MODEL_SIZE = "tiny.en"  # "tiny.en" for blazing speed
 TTS_MODEL_PATH = REPO_ROOT / "tools" / "kokoro-v0_19.onnx"
 TTS_VOICES_PATH = REPO_ROOT / "tools" / "voices.bin"
 SAMPLE_RATE = 16000
@@ -70,7 +65,7 @@ class TTSManager:
         except ImportError:
             logger.warning("! kokoro-onnx not installed. Voice will be disabled.")
 
-    def speak(self, text: str, voice: str = "af_heart"):
+    def speak(self, text: str, voice: str = "am_michael"): # Default to American Male
         if not self.kokoro:
             print(f"\nAI: {text}")
             return
@@ -136,20 +131,18 @@ def record_audio(filename: str):
 # Interview Coach Logic
 # ---------------------------------------------------------------------------
 
-INTERVIEWER_SYSTEM = """You are a senior hiring manager conducting a realistic interview.
-Your goal is to test the candidate's skills and their ability to articulate their past achievements.
+INTERVIEWER_SYSTEM = """You are a tough but fair Senior Hiring Manager at a top-tier tech company.
+Your goal is to conduct a highly realistic, probing interview.
 
-CONTEXT:
-1. The target Job Description (JD) is provided.
-2. The candidate's "Career Nuggets" (their real memory layer) are provided.
-
-RULES:
-- Be professional but firm.
-- Use the STAR method (Situation, Task, Action, Result) to evaluate their answers.
-- If they miss a quantified result, ask them to provide one.
-- Reference their actual nuggets if they are being vague. e.g. "You mentioned in your profile that you improved customer happiness at Sprinklr. Can you tell me more about the 'voice-of-customer' loops you used there?"
-- Keep your responses concise (2-4 sentences max) to maintain the flow.
-- After feedback, ask exactly one follow-up question or a new behavioral question.
+CORE PRINCIPLES (Adhere strictly):
+1. ASK SHORT QUESTIONS: median 10-15 words, max 25.
+2. ONE THING AT A TIME: Never bundle questions. No "Tell me about X and how you did Y."
+3. NO PREAMBLE: Don't say "Great answer" or "Next question". Just ask.
+4. "WE vs I" DETECTION: If the candidate says "we," immediately probe what THEY personally owned.
+5. METRIC INTERROGATION: Interrogate every number dropped (Baseline? Timeframe? How measured?).
+6. DECISION PROBES: Drill into trade-offs. "Why that choice?" "What was the runner-up option?"
+7. PRESSURE TEST: Exactly once per interview, deploy a direct challenge to their weakest claim.
+8. PROFESSIONAL TONE: Warm but evaluative. Slightly skeptical. Claims need evidence. No coaching mid-interview.
 
 OUTPUT:
 Respond in plain text. You are speaking directly to the candidate."""
@@ -204,7 +197,7 @@ async def main():
         if len(chat_history) == 1:
             prompt = "Start the interview. Introduce yourself and ask the first behavioral question based on the JD."
         else:
-            prompt = f"The candidate said: {user_input_for_ai}\n\nProvide feedback on their STAR method and ask the next question."
+            prompt = f"The candidate said: {user_input_for_ai}\n\nAsk the next question or probe deeper."
 
         response = await gemini.complete(
             system=INTERVIEWER_SYSTEM,

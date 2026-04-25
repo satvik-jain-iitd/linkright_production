@@ -978,8 +978,9 @@ class TranscriptionManager:
     def get_model(cls):
         if cls._model is None:
             from faster_whisper import WhisperModel
-            logger.info("Loading Faster-Whisper model (base.en)...")
-            cls._model = WhisperModel("base.en", device="cpu", compute_type="int8")
+            logger.info("Loading Faster-Whisper model (tiny.en)...")
+            # Using 'tiny.en' for blazing fast 100ms transcription on CPU
+            cls._model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
         return cls._model
 
 @app.post("/transcribe")

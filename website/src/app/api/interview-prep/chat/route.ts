@@ -1,27 +1,34 @@
 import { createClient } from "@/lib/supabase/server";
-import { oracleChat } from "@/lib/oracle-ollama";
+import { platformChatWithFallback } from "@/lib/gemini";
 
-// LinkRight Interview Coach Conversational API
-// Strictly uses Local Gemma 3 1B (Oracle) for "Always Free" mock interviews.
-// Fallbacks to cloud providers have been disabled per user request.
+// LinkRight Interview Coach — Realistic Simulator
+// Adheres to mock-interview-simulator.skill principles.
+// Uses high-reasoning models (Gemini/Groq) for deep probing.
 
-const INTERVIEWER_SYSTEM = `You are a senior hiring manager conducting a realistic interview.
-Your goal is to test the candidate's skills and their ability to articulate their past achievements.
+const INTERVIEWER_SYSTEM = `You are a tough but fair Senior Hiring Manager at a top-tier tech company.
+Your goal is to conduct a highly realistic, probing interview.
+
+CORE PRINCIPLES (Adhere strictly):
+1. ASK SHORT QUESTIONS: median 10-15 words, max 25.
+2. ONE THING AT A TIME: Never bundle questions. No "Tell me about X and how you did Y."
+3. NO PREAMBLE: Don't say "Great answer" or "Next question". Just ask.
+4. "WE vs I" DETECTION: If the candidate says "we," immediately probe what THEY personally owned.
+5. METRIC INTERROGATION: Interrogate every number dropped (Baseline? Timeframe? How measured?).
+6. DECISION PROBES: Drill into trade-offs. "Why that choice?" "What was the runner-up option?"
+7. PRESSURE TEST: Exactly once per interview, deploy a direct challenge to their weakest claim.
+8. PROFESSIONAL TONE: Warm but evaluative. Slightly skeptical. Claims need evidence. No coaching mid-interview.
 
 CONTEXT:
-1. The target Job Description (JD) is provided by the user in the first message.
-2. The candidate's "Career Nuggets" (their real memory layer) are provided in the first message.
+1. Target JD: {jd_text}
+2. Candidate Nuggets: {nuggets_context}
 
-RULES:
-- Be professional but firm.
-- Use the STAR method (Situation, Task, Action, Result) to evaluate their answers.
-- If they miss a quantified result, ask them to provide one.
-- Reference their actual nuggets if they are being vague.
-- Keep your responses concise (2-4 sentences max) to maintain a natural spoken flow.
-- After feedback, ask exactly one follow-up question or a new behavioral question.
+RULES FOR VOICE INTERFACE:
+- No markdown, no bullet points, no bold text.
+- Use natural contractions (don't, can't, won't).
+- Varied sentence length.
+- Silence is signal; don't rescue if they stall.
 
-OUTPUT:
-Respond in plain text. You are speaking directly to the candidate.`;
+Respond in plain text only. Speak directly to the candidate.`;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -46,25 +53,27 @@ ${nuggets_context}
 Let's start. Introduce yourself and ask the first question.`;
   }
 
-  // Prepend the system prompt
+  // Inject dynamic context into system prompt
+  const systemPrompt = INTERVIEWER_SYSTEM
+    .replace("{jd_text}", jd_text || "General Role")
+    .replace("{nuggets_context}", nuggets_context || "No nuggets provided.");
+
   const chatMessages = [
-    { role: "system", content: INTERVIEWER_SYSTEM },
+    { role: "system", content: systemPrompt },
     ...fullMessages
   ];
 
   try {
-    // Strictly use Local Gemma 3 1B via Oracle Backend
-    const text = await oracleChat(chatMessages, { 
-      temperature: 0.7,
-      useRewriteModel: true 
+    // Reverted to HIGH REASONING models (Gemini 2.5 Flash / Groq 70b)
+    // The user wants the "best model possible" for realism.
+    const { text } = await platformChatWithFallback(chatMessages, {
+      taskType: "reasoning",
+      temperature: 0.7
     });
-    
+
     return Response.json({ text });
   } catch (err: any) {
-    console.error("Interview Coach Chat Error (Oracle):", err);
-    // If local model is down, we show an error rather than using a paid fallback.
-    return Response.json({ 
-      error: "Local Interview Engine (Oracle) is currently offline. Please ensure your local model server is running." 
-    }, { status: 503 });
+    console.error("Interview Coach Chat Error:", err);
+    return Response.json({ error: err.message || "Failed to connect to AI" }, { status: 500 });
   }
 }
