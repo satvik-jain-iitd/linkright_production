@@ -114,6 +114,12 @@ export function DashboardContent({
     funnel: { inProgress: number; sent: number; interview: number; offer: number };
     broadcast: { postsThisMonth: number; reactions: number; profileViews: number };
   } | null>(null);
+  const [journeyStage, setJourneyStage] = useState<{
+    current_stage: { name: string; stage_id: string } | null;
+    current_stage_index: number;
+    total_stages: number;
+    bucket: string | null;
+  } | null>(null);
 
   const fetchJobs = () =>
     fetch("/api/resume/list")
@@ -140,6 +146,9 @@ export function DashboardContent({
       fetch("/api/dashboard/pulse", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => { if (data) setPulse(data); }),
+      fetch("/api/interview-prep/classify-journey", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { if (data?.current_stage !== undefined) setJourneyStage(data); }),
     ])
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
@@ -398,11 +407,19 @@ export function DashboardContent({
             {/* Keep going — Interview prep */}
             <section>
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-base font-semibold tracking-tight">
-                  Keep going — Interview prep
-                </h2>
+                <div>
+                  <h2 className="text-base font-semibold tracking-tight">
+                    Keep going — Interview prep
+                  </h2>
+                  {journeyStage?.current_stage && (
+                    <p className="mt-0.5 text-xs text-[#4A5D32]">
+                      Current stage: <span className="font-semibold">{journeyStage.current_stage.name}</span>
+                      {" "}· {journeyStage.current_stage_index + 1}/{journeyStage.total_stages}
+                    </p>
+                  )}
+                </div>
                 <Link href="/dashboard/interview-prep" className="text-[13px] font-medium text-[#4A5D32] hover:text-[#6B8346]">
-                  Open all drills
+                  View roadmap →
                 </Link>
               </div>
               <div className="space-y-2.5">
@@ -429,8 +446,16 @@ export function DashboardContent({
                     </svg>
                   </div>
                   <div className="flex-1">
-                    <div className="text-sm font-semibold">Practice interview questions</div>
-                    <div className="text-xs text-muted">Drills tailored to your target roles · 15 minutes</div>
+                    <div className="text-sm font-semibold">
+                      {journeyStage?.current_stage
+                        ? `Prep for ${journeyStage.current_stage.name}`
+                        : "Practice interview questions"}
+                    </div>
+                    <div className="text-xs text-muted">
+                      {journeyStage?.current_stage
+                        ? "Tailored drills for your current stage"
+                        : "Drills tailored to your target roles · 15 minutes"}
+                    </div>
                   </div>
                   <Link href="/dashboard/interview-prep" className="rounded-full bg-[#6B8346] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#5a6e3a]">
                     Start →
