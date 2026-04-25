@@ -107,7 +107,9 @@ export function DashboardContent({
   const [status, setStatus] = useState<NuggetStatus | null>(null);
   const [diaryStreak, setDiaryStreak] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancelledId, setCancelledId] = useState<string | null>(null);
   const [pulse, setPulse] = useState<{
     funnel: { inProgress: number; sent: number; interview: number; offer: number };
     broadcast: { postsThisMonth: number; reactions: number; profileViews: number };
@@ -119,7 +121,9 @@ export function DashboardContent({
       .then((data) => setJobs(data.jobs || []))
       .catch(() => {});
 
-  useEffect(() => {
+  const loadDashboard = () => {
+    setLoadError(false);
+    setLoading(true);
     Promise.all([
       fetchJobs(),
       fetch("/api/recommendations/today", { cache: "no-store" })
@@ -136,7 +140,13 @@ export function DashboardContent({
       fetch("/api/dashboard/pulse", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => { if (data) setPulse(data); }),
-    ]).finally(() => setLoading(false));
+    ])
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadDashboard();
   }, []);
 
   const handleCancel = async (jobId: string, e: React.MouseEvent) => {
@@ -150,6 +160,8 @@ export function DashboardContent({
         body: JSON.stringify({ job_id: jobId }),
       });
       await fetchJobs();
+      setCancelledId(jobId);
+      setTimeout(() => setCancelledId(null), 2500);
     } finally {
       setCancellingId(null);
     }
@@ -182,6 +194,25 @@ export function DashboardContent({
   };
   const jobLabel = (job: ResumeJob) =>
     job.target_role || job.target_company || "Resume";
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen">
+        <AppNav user={user} />
+        <div className="flex flex-col items-center justify-center py-32 text-center">
+          <div className="mb-3 text-3xl">⚠️</div>
+          <p className="text-sm font-semibold text-foreground">Could not load your dashboard</p>
+          <p className="mt-1 text-xs text-muted">Check your connection and try again.</p>
+          <button
+            onClick={loadDashboard}
+            className="mt-5 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent/90"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -542,7 +573,11 @@ export function DashboardContent({
                                 disabled={cancellingId === job.id}
                                 className="rounded-full border border-red-200 px-2.5 py-1 text-[11px] text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:opacity-50"
                               >
-                                {cancellingId === job.id ? "Cancelling…" : "Cancel"}
+                                {cancellingId === job.id
+                                  ? "Cancelling…"
+                                  : cancelledId === job.id
+                                  ? "Cancelled ✓"
+                                  : "Cancel"}
                               </button>
                             </>
                           )}
@@ -560,10 +595,12 @@ export function DashboardContent({
                               Retry
                             </Link>
                           )}
-                          {job.status === "completed" && job.output_html && (
+                          {job.status === "completed" && (
                             <button
                               onClick={(e) => handleDownload(job, e)}
-                              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent"
+                              disabled={!job.output_html}
+                              title={!job.output_html ? "Resume is still being prepared" : undefined}
+                              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               Download
                             </button>

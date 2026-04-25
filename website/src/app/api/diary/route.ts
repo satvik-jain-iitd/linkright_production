@@ -53,6 +53,16 @@ export async function POST(request: Request) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
+  // Fire-and-forget: trigger SMA_v2 DiaryIngestor pipeline (non-blocking)
+  const ingestUrl = process.env.SMA_DIARY_INGEST_URL;
+  if (ingestUrl) {
+    fetch(ingestUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: user.id, content, entry_id: data.id }),
+    }).catch((err) => console.error("[diary] SMA ingest failed:", err));
+  }
+
   // Live-compute the streak via the RPC added in migration 030.
   const { data: streakData } = await supabase.rpc("diary_streak", {
     p_user_id: user.id,
