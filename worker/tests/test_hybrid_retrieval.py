@@ -141,9 +141,14 @@ def _nugget_row(
     section_type: str = "work_experience",
     role: str = "Sr Associate PM",
     tags: list | None = None,
+    user_id: str = "user-123",
 ) -> dict:
+    # user_id default matches the canonical "user-123" used across these tests;
+    # without it, FakeHybridSupabaseClient's .eq("user_id", ...) filter drops
+    # every row and downstream search returns [].
     return {
         "id": nid,
+        "user_id": user_id,
         "answer": answer,
         "nugget_text": f"text-{nid}",
         "importance": importance,
@@ -239,6 +244,12 @@ async def test_company_scoped_query(httpx_mock):
     """company='AmEx' → AmEx nugget appears in results."""
     amex_row = _nugget_row("n1", company="AmEx")
 
+    # Three Jina mocks: company-scoped pass + unscoped pass + min_floor floor
+    # pass (floor pass fires when len(results) < min_floor=3 and company is set).
+    httpx_mock.add_response(
+        url=_JINA_EMBED_URL,
+        json={"data": [{"embedding": [0.1] * 768}]},
+    )
     httpx_mock.add_response(
         url=_JINA_EMBED_URL,
         json={"data": [{"embedding": [0.1] * 768}]},
