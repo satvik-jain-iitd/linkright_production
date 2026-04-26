@@ -90,24 +90,30 @@ export async function POST(request: Request, ctx: RouteContext) {
     .filter(Boolean)
     .join("\n");
 
+  // Try 8b first (cheap, fast, plenty for prose). Fall back to 70b only if
+  // 8b errors structurally — saves the 70b daily token budget for tasks that
+  // actually need it (resume parse JSON).
   let draftContent = "";
-  try {
-    draftContent = (
-      await groqChat(
-        [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        { maxTokens: 700, temperature: 0.6 },
-      )
-    ).trim();
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Groq error";
-    return Response.json({ error: `Draft generation failed: ${msg}` }, { status: 502 });
+  let lastErr = "";
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: userPrompt },
+  ];
+  for (const model of ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]) {
+    try {
+      draftContent = (
+        await groqChat(messages, { maxTokens: 700, temperature: 0.6, model })
+      ).trim();
+      if (draftContent) break;
+      lastErr = `empty draft from ${model}`;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : "Groq error";
+      // Only retry on rate-limit / quota / network class errors.
+      if (!/429|rate.?limit|quota|TPD|TPM|timeout|ECONN|fetch failed/i.test(lastErr)) break;
+    }
   }
-
   if (!draftContent) {
-    return Response.json({ error: "Generator returned empty draft" }, { status: 502 });
+    return Response.json({ error: `Draft generation failed: ${lastErr}` }, { status: 502 });
   }
 
   // Insert draft + mark suggestion picked.
