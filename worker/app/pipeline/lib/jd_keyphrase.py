@@ -44,9 +44,17 @@ def tokenize(text: str) -> set[str]:
     plain = re.sub(r"<[^>]+>", " ", text)
     out: set[str] = set()
     for m in _TOKEN_RE.finditer(plain):
-        n = _norm(m.group(0))
-        if len(n) >= 3 and n not in _STOPWORDS:
-            out.add(n)
+        raw = _norm(m.group(0))
+        candidates = [raw]
+        # Split hyphenated/slashed compounds so a JD term like "GDPR" can match
+        # a source mention of "GDPR-compliant" without a separate stem step.
+        if "-" in raw:
+            candidates.extend(p for p in raw.split("-") if p)
+        if "/" in raw:
+            candidates.extend(p for p in raw.split("/") if p)
+        for c in candidates:
+            if len(c) >= 3 and c not in _STOPWORDS:
+                out.add(c)
     return out
 
 
