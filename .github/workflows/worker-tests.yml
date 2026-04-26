@@ -44,8 +44,12 @@ jobs:
           SUPABASE_URL: https://fake.supabase.co
           SUPABASE_KEY: fake-key
         run: |
+          # Use module-dot notation: worker/conftest.py adds worker/ to
+          # sys.path so the test imports as `app.tools.quality_judge`.
+          # File-path `worker/app/tools/quality_judge` reports 0% because
+          # coverage tracks by import name, not the file path.
           python -m pytest worker/tests/test_quality_judge.py \
-            --cov=worker/app/tools/quality_judge \
+            --cov=app.tools.quality_judge \
             --cov-fail-under=90 \
             --tb=short -q
 
