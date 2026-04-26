@@ -19,6 +19,15 @@ Env vars:
     LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL — Langfuse
 """
 
+# Tell pytest to skip collection — this file is a manual benchmark script
+# (run via `python tests/test_local_categorization.py`), not a unit-test
+# module. The `test_model` function is a parameterized async helper called
+# from the __main__ block, NOT a pytest test, and pytest's auto-discovery
+# was failing with "fixture 'model' not found".
+import pytest as _pytest
+collect_ignore_glob = ["test_local_categorization.py"]
+_pytest.skip("manual benchmark script, not a pytest module", allow_module_level=True)
+
 from __future__ import annotations
 
 import asyncio
