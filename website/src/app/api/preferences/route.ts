@@ -39,6 +39,31 @@ async function triggerRecompute(userId: string): Promise<void> {
   }
 }
 
+/** Synchronous: score 50 jobs inline so first-time user sees results on next page load.
+ *  Returns match count, or 0 on any failure (graceful degradation — fall back to cron). */
+async function scoreFirstBatchInline(userId: string): Promise<number> {
+  if (!WORKER_URL || !WORKER_SECRET) return 0;
+  try {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), 25_000); // 25s cap (Vercel function 30s limit)
+    const r = await fetch(`${WORKER_URL}/jobs/score-now`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${WORKER_SECRET}`,
+      },
+      body: JSON.stringify({ user_id: userId, limit: 50 }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timeout);
+    if (!r.ok) return 0;
+    const data = await r.json().catch(() => ({}));
+    return typeof data.matches === "number" ? data.matches : 0;
+  } catch {
+    return 0;
+  }
+}
+
 const DEFAULTS = {
   location_preference: "any",
   preferred_locations: [],
@@ -113,11 +138,16 @@ export async function PUT(request: Request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  // First time preferences saved → scan companies + immediately score global jobs
+  // First time preferences saved → scan companies (async, heavy) + score 50 jobs INLINE
+  // so the user sees real matches immediately on the next page load instead of "0 matches"
+  // for 5+ minutes while the cron catches up.
+  let initial_matches = 0;
   if (isFirstSave) {
-    triggerInitialScan(user.id);
-    triggerRecompute(user.id);
+    triggerInitialScan(user.id); // async / fire-forget — heavy company scan
+    initial_matches = await scoreFirstBatchInline(user.id); // sync — bounded 25s
+  } else {
+    triggerRecompute(user.id); // async — incremental refresh on subsequent saves
   }
 
-  return Response.json({ preferences: data });
+  return Response.json({ preferences: data, initial_matches, is_first_save: isFirstSave });
 }
