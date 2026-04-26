@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { AppNav } from "@/components/AppNav";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // Wave 4 — Interview Coach (Voice)
 // Minimalist "quiet-room" UI. Sage-green focus.
@@ -19,8 +19,11 @@ interface CoachContext {
   nuggets_context: string;
 }
 
-export default function InterviewCoachPage() {
+function InterviewCoachInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const roundType = searchParams.get("round") || "general";
+
   const [status, setStatus] = useState<"idle" | "listening" | "thinking" | "speaking" | "finished">("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcript, setTranscript] = useState("");
@@ -63,7 +66,8 @@ export default function InterviewCoachPage() {
         body: JSON.stringify({
           messages: [{ role: "user", content: "Start" }],
           jd_text: context.jd_text,
-          nuggets_context: context.nuggets_context
+          nuggets_context: context.nuggets_context,
+          round_type: roundType
         }),
       });
       const data = await res.json();
@@ -164,7 +168,8 @@ export default function InterviewCoachPage() {
         body: JSON.stringify({ 
           messages: newMessages,
           jd_text: context?.jd_text,
-          nuggets_context: context?.nuggets_context
+          nuggets_context: context?.nuggets_context,
+          round_type: roundType
         }),
       });
       const chatData = await chatRes.json();
@@ -179,6 +184,8 @@ export default function InterviewCoachPage() {
       setStatus("idle");
     }
   };
+
+  const displayRoundName = roundType.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
 
   return (
     <div className="min-h-screen bg-[#F9FBF6] selection:bg-sage-200">
@@ -231,7 +238,7 @@ export default function InterviewCoachPage() {
               {status === "idle" && messages.length === 0 ? "Ready for your mock?" : 
                status === "listening" ? "Listening..." : 
                status === "thinking" ? "Analyzing STAR..." : 
-               status === "speaking" ? "Hiring Manager" : "Your turn"}
+               status === "speaking" ? displayRoundName : "Your turn"}
             </h1>
             <p className="text-sm font-medium text-sage-500">
               {context ? `Mocking for ${context.role} at ${context.company}` : "Loading your interview profile..."}
@@ -293,7 +300,7 @@ export default function InterviewCoachPage() {
                    status === "thinking" ? "Processing..." : "Hold to answer"}
                 </p>
                 <p className="mt-1 text-xs text-sage-400">
-                  {status === "listening" ? "Release to submit" : "Talk about your STAR results"}
+                  {status === "listening" ? "Release to submit" : `Talk to your ${displayRoundName} interviewer`}
                 </p>
               </div>
             </div>
@@ -311,7 +318,7 @@ export default function InterviewCoachPage() {
               {messages.slice(-4).map((m, i) => (
                 <div key={i} className={`group flex flex-col ${m.role === "assistant" ? "items-start" : "items-end"}`}>
                   <span className="mb-1.5 text-[9px] font-bold text-sage-400 uppercase tracking-widest px-1">
-                    {m.role === "assistant" ? "Hiring Manager" : "Your Answer"}
+                    {m.role === "assistant" ? displayRoundName : "Your Answer"}
                   </span>
                   <div className={`max-w-[85%] rounded-3xl px-6 py-4 text-[14px] leading-relaxed shadow-sm ${
                     m.role === "assistant" ? "bg-white text-sage-900 rounded-tl-none border border-sage-100" : "bg-sage-700 text-white rounded-tr-none"
@@ -325,5 +332,13 @@ export default function InterviewCoachPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function InterviewCoachPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FBF6] flex items-center justify-center text-sage-500 font-bold uppercase tracking-widest text-xs">Entering Room...</div>}>
+      <InterviewCoachInner />
+    </Suspense>
   );
 }
