@@ -98,11 +98,8 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  // [BYOK-REMOVED] api_key destructured but no longer required from client
-  const { jd_text, career_text, model_provider, model_id, /* api_key, */ template_id, qa_answers, override_theme_colors, target_role, target_company, section_order } = body; // [PSA5-ayd.1.1.3]
+  const { jd_text, career_text, model_provider, model_id, template_id, qa_answers, override_theme_colors, target_role, target_company, section_order } = body;
 
-  // [BYOK-REMOVED] api_key removed from required fields — server provides the key
-  // if (!jd_text || !career_text || !model_provider || !model_id || !api_key) {
   if (!jd_text || !career_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
   }
@@ -145,30 +142,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // [BYOK-REMOVED] UUID key resolution block — server now provides the key
-  // let resolved_api_key = api_key;
-  // const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  // if (UUID_RE.test(api_key)) {
-  //   const { data: keyRow } = await supabase
-  //     .from("user_api_keys")
-  //     .select("api_key")
-  //     .eq("id", api_key)
-  //     .eq("user_id", user.id)
-  //     .single();
-  //   if (keyRow?.api_key) {
-  //     resolved_api_key = keyRow.api_key;
-  //   } else {
-  //     // Fallback: try user_settings
-  //     const { data: settings } = await supabase
-  //       .from("user_settings")
-  //       .select("api_key")
-  //       .eq("user_id", user.id)
-  //       .single();
-  //     if (settings?.api_key) {
-  //       resolved_api_key = settings.api_key;
-  //     }
-  //   }
-  // }
   const resolved_api_key = process.env.PLATFORM_GROQ_API_KEY || process.env.GROQ_API_KEY || "";
 
   // Hybrid retrieval: try Oracle ARM atoms, fall back to raw career_text
