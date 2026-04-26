@@ -60,6 +60,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
   const enrichStarted = useRef(false);
   const gapStarted = useRef(false);
   const colorFetchStarted = useRef(false);
+  const [brandColorMissing, setBrandColorMissing] = useState(false);
 
   /* ─── Silent brand color fetch on mount ──────────────────────────────── */
 
@@ -82,6 +83,8 @@ export function StepCustomize({ data, update, next, back }: Props) {
               brand_quaternary: first.brand_quaternary ?? null,
             },
           });
+        } else {
+          setBrandColorMissing(true);
         }
       })
       .catch(() => {});
@@ -313,6 +316,12 @@ export function StepCustomize({ data, update, next, back }: Props) {
           <button onClick={back} className="text-xs text-accent hover:underline">
             Edit job
           </button>
+        </div>
+      )}
+
+      {brandColorMissing && data.target_company && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          Using default colors — couldn&apos;t find brand match for {data.target_company}
         </div>
       )}
 

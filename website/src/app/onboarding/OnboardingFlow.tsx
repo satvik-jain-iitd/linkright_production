@@ -274,6 +274,7 @@ function StepCareerBasics({
   // Enriched chunk metadata — populated silently after narration stream completes.
   // Keys are ### heading strings (used for diff when user edits).
   const [enrichedChunks, setEnrichedChunks] = useState<EnrichedChunkUpload[]>([]);
+  const [narrationEnrichWarning, setNarrationEnrichWarning] = useState<string | null>(null);
 
   const startNarrationStream = async (experiences: ParsedExperience[], projects?: Array<{ title?: string; one_liner?: string; key_achievements?: string[] }>) => {
     if (!experiences || experiences.length === 0) return;
@@ -295,10 +296,17 @@ function StepCareerBasics({
         const text = accumulated;
         setOutline((prev) => prev ? { ...prev, career_summary_first_person: text } : null);
       }
-      // Silently enrich initiative chunks while user reads — stored in state only
+      // Enrich initiative chunks while user reads — stored in state.
+      // If enrichment fails, surface a soft warning so user knows their profile
+      // saved without enriched chunks instead of failing silently.
       if (accumulated.trim()) {
         const careerContext = buildCareerContext(experiences);
-        enrichNarrationChunks(accumulated, careerContext).then(setEnrichedChunks).catch(() => {});
+        enrichNarrationChunks(accumulated, careerContext)
+          .then(setEnrichedChunks)
+          .catch((e) => {
+            console.warn("[narrate-enrich] failed:", e);
+            setNarrationEnrichWarning("Couldn't enrich a few sections — proceeding without");
+          });
       }
     } catch (err) {
       console.warn("[narrate-career] Streaming failed:", err);
@@ -804,6 +812,11 @@ function StepCareerBasics({
       )}
 
       {/* Parsed outline + first-person narration (CareerOutlineView) */}
+      {narrationEnrichWarning && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          {narrationEnrichWarning}
+        </div>
+      )}
       {parsed && outline && outline.experiences.length > 0 && (
         <CareerOutlineView
           data={outline}

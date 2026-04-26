@@ -125,9 +125,11 @@ export function DashboardContent({
 
   const fetchJobs = () =>
     fetch("/api/resume/list")
-      .then((r) => r.json())
-      .then((data) => setJobs(data.jobs || []))
-      .catch(() => {});
+      .then((r) => {
+        if (!r.ok) throw new Error(`/api/resume/list: ${r.status}`);
+        return r.json();
+      })
+      .then((data) => setJobs(data.jobs || []));
 
   const loadDashboard = () => {
     setLoadError(false);
@@ -135,10 +137,16 @@ export function DashboardContent({
     Promise.all([
       fetchJobs(),
       fetch("/api/recommendations/today", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (!r.ok) throw new Error(`/api/recommendations/today: ${r.status}`);
+          return r.json();
+        })
         .then((data) => setRecs(data)),
       fetch("/api/nuggets/status", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (!r.ok) throw new Error(`/api/nuggets/status: ${r.status}`);
+          return r.json();
+        })
         .then((data) => setStatus(data)),
       fetch("/api/diary?limit=1", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
@@ -180,7 +188,11 @@ export function DashboardContent({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: jobId }),
       });
-      await fetchJobs();
+      try {
+        await fetchJobs();
+      } catch {
+        // Post-cancel refresh failed — user can manually refresh; non-blocking.
+      }
       setCancelledId(jobId);
       setTimeout(() => setCancelledId(null), 2500);
     } finally {
