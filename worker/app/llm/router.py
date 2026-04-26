@@ -230,7 +230,7 @@ async def pick_for(
     phase: str,
     *,
     fallback_key: Optional[str] = None,
-    max_wait: float = 90.0,
+    max_wait: float = 30.0,
 ) -> tuple[LLMProvider, str, str]:
     """Return (provider, kind, key_used) that has capacity for this phase.
 

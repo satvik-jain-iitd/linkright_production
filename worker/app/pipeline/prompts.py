@@ -371,16 +371,23 @@ PHASE_4C_CONDENSE_SYSTEM = """You are a resume bullet FINALIZER. Your output IS 
 no post-processing step that can fix it. Your ONLY job is to produce bullets that are
 exactly the right length for a full-width A4 resume line.
 
-# LENGTH CONSTRAINT — HIGHEST PRIORITY
+# LENGTH CONSTRAINT — HIGHEST PRIORITY (intentional overshoot; Phase 5 shrinks)
 
 Every bullet MUST satisfy ALL of:
-- MINIMUM: 95 characters of plain text (after stripping <b>...</b> tags)
-- MAXIMUM: 110 characters of plain text (after stripping <b>...</b> tags)
-- IDEAL: around 102 characters
+- MINIMUM: 108 characters of plain text (after stripping <b>...</b> tags)
+- MAXIMUM: 118 characters of plain text (after stripping <b>...</b> tags)
+- IDEAL: around 113 characters
 
-If you emit a bullet outside [95, 110]:
-- Below 95 → output is REJECTED and regenerated at extra cost
-- Above 110 → wraps to a second line in the final PDF (broken layout)
+WHY INTENTIONALLY LONG: the next pipeline step (Phase 5 width optimizer) is built
+to SHRINK bullets down to a 96-101 CU final line. LLMs are reliably good at
+shortening text — they struggle to land in tight 5-CU windows directly. So we
+deliberately OVERSHOOT by ~10-15 chars here, then let Phase 5 condense to fit.
+This is the validated strategy from `e2e_diagnostic_run/lib/width_config.py`
+(STEP12_MIN_CHARS=108, STEP12_MAX_CHARS=118, STEP12_TARGET_MIDPOINT=113).
+
+If you emit a bullet outside [108, 118]:
+- Below 108 → Phase 5 has no headroom to shrink — output is REJECTED and regenerated
+- Above 118 → too much trimming risks losing key signal during Phase 5 shrink
 
 COUNT PLAIN-TEXT CHARACTERS AS YOU WRITE. Do not estimate. Do not guess.
 The <b>...</b> tags DO NOT COUNT toward the total (they render as zero-width in plain text).
@@ -396,14 +403,14 @@ Your output IS the final resume text. It will be inserted DIRECTLY into a PDF.
 - NEVER address the user ("Hope this helps", "Let me know", etc.)
 - Output EXACTLY the JSON specified below and NOTHING else.
 
-# STRATEGY — how to hit 95-110
+# STRATEGY — how to hit 108-118
 
 Given an input paragraph:
-- If input ≥ 150 chars: TRIM filler. Start by removing: articles (the/a/an), adverbs
+- If input ≥ 160 chars: TRIM filler. Start by removing: articles (the/a/an), adverbs
   (successfully, effectively), setup clauses ("In my role as …"), redundant
   adjectives. Keep metrics, proper nouns, action verb, outcome.
-- If input 130-150 chars: mostly keep as-is, maybe trim 10-25 chars of filler.
-- If input < 130 chars (thin): PAD with the strongest supporting detail drawn
+- If input 140-160 chars: mostly keep as-is, maybe trim 5-15 chars of filler.
+- If input < 140 chars (thin): PAD with the strongest supporting detail drawn
   FROM THE PARAGRAPH (scale, geography, duration, domain acronym already mentioned).
   Do NOT invent new facts, numbers, or tools that aren't in the input.
 
@@ -421,7 +428,7 @@ Given an input paragraph:
 
 # RULES (each violation rejects the bullet)
 
-1. EXACTLY 95-110 rendered chars (plain text, no <b> tags counted). COUNT BEFORE RETURNING.
+1. EXACTLY 108-118 rendered chars (plain text, no <b> tags counted). COUNT BEFORE RETURNING.
 2. Preserve XYZ structure (MANDATORY): impact/outcome FIRST, then metric, then action.
    A bullet missing any of X, Y, Z is REJECTED. Do not emit bullets without a concrete number.
 3. Preserve every <b>...</b> tag content VERBATIM — no edits inside bold.
@@ -472,17 +479,18 @@ BAD output (40 chars — identical echo, too short):
 
 # REMINDER
 
-Count characters of PLAIN TEXT (strip <b>...</b> first). Target 102.
-If you emit a bullet under 95 chars, it will be rejected and regenerated.
-If you emit one over 110 chars, downstream trimming risks losing key info.
-This is the final step. Get the length RIGHT — slightly long is SAFE (downstream
-width-trim can shave 5-10 chars); slightly short is UNFIXABLE without inventing facts."""
+Count characters of PLAIN TEXT (strip <b>...</b> first). Target 113.
+If you emit a bullet under 108 chars, Phase 5 cannot shrink it further — it will be rejected and regenerated.
+If you emit one over 118 chars, Phase 5's trim risks losing key info.
+You are NOT the final step — Phase 5 (width optimizer) will SHRINK your output
+to fit 96-101 CU. So land deliberately HIGH (108-118): slightly long is the
+correct answer; slightly short is UNFIXABLE without inventing facts."""
 
 PHASE_4C_CONDENSE_USER = """## Paragraphs to Condense
 
 {paragraphs_section}
 
-Condense each paragraph to 95-110 rendered characters. Preserve <b> tags, verbs, and metrics exactly."""
+Condense each paragraph to 108-118 rendered characters (intentional overshoot — Phase 5 will shrink to 96-101). Preserve <b> tags, verbs, and metrics exactly."""
 
 
 # ── Phase 5 Batched: Width Optimization (single call) ───────────────��────

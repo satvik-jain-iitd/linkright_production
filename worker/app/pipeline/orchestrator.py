@@ -7,6 +7,7 @@ Each phase updates Supabase with progress for the frontend to display.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -48,6 +49,25 @@ from ..llm.gemini import GeminiProvider
 from ..llm.base import LLMProvider
 from .. import config as worker_config
 import os
+
+
+# Phase 1+2 in-memory cache. Keyed by hash of (jd_text, career_text, template_id, section_order).
+# Reuses the dict-of-(value, ts) TTL pattern from llm_scorer.py:41 — no Redis needed for
+# single-process worker. Saves the 8-15s Gemini call on resume re-iterations.
+PHASE_1_2_CACHE_TTL_DAYS = 7
+_PHASE_1_2_CACHE: dict[str, tuple[dict, float]] = {}
+
+
+def _phase_1_2_cache_key(
+    jd_text: str, career_text: str, template_id: str | None, section_order: list | None
+) -> str:
+    payload = (
+        (jd_text or "") + "||" +
+        (career_text or "") + "||" +
+        (template_id or "") + "||" +
+        json.dumps(sorted(section_order or []))
+    )
+    return hashlib.md5(payload.encode()).hexdigest()[:16]
 
 
 class _FallbackLLM(LLMProvider):
@@ -1055,6 +1075,35 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     if ctx.template_config is None:
         raise RuntimeError("Template parsing failed: template_config not set")
 
+    # Phase 1+2 cache: skip the 8-15s Gemini call when we've seen this exact
+    # (jd, career, template, section_order) before. Re-iterations on the same
+    # JD are common, so this is the single biggest win for retry latency.
+    _p12_cache_key = _phase_1_2_cache_key(
+        ctx.jd_text, ctx.career_text, ctx.template_id, ctx._section_order
+    )
+    _p12_cached = _PHASE_1_2_CACHE.get(_p12_cache_key)
+    if _p12_cached and (time.time() - _p12_cached[1]) < PHASE_1_2_CACHE_TTL_DAYS * 86400:
+        _p12_data = _p12_cached[0]
+        ctx._parsed = _p12_data
+        ctx.career_level = _p12_data.get("career_level", "senior")
+        ctx.jd_keywords = _p12_data.get("jd_keywords", [])
+        ctx.strategy = _p12_data.get("strategy", "BALANCED")
+        ctx.theme_colors = ctx.override_theme_colors or _p12_data.get("theme_colors") or {
+            "brand_primary": "#1a3a5c", "brand_secondary": "#2d6a9f",
+            "text_primary": "#1a1a1a", "text_secondary": "#4a4a4a",
+        }
+        if not ctx._section_order:
+            ctx._section_order = _p12_data.get("section_order", [])
+        ctx._bullet_budget = _p12_data.get("bullet_budget", {})
+        ctx.stats["phase_1_2_cache_hit"] = True
+        # Refetch DB-dependent chunks (user may have added new chunks even if JD unchanged)
+        _kw_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
+        ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, _kw_strs)
+        ctx._phase_timings["phase_1_2"] = int((time.time() - t0) * 1000)
+        _save_checkpoint(ctx, sb, "phase_1_2")
+        await _progress(ctx, sb, 2, f"Strategy: {ctx.strategy} (cached)", 25)
+        return
+
     qa_context = _format_qa_context(ctx)
     phase_1_2_template, _ = get_prompt("phase_1_2", prompts.PHASE_1_2_SYSTEM)
     system_msg = phase_1_2_template.format(
@@ -1175,6 +1224,10 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
     # Fetch relevant career chunks via full-text search
     keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
     ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
+
+    # Store post-processed result in Phase 1+2 cache for future re-iterations.
+    # Stored AFTER 4-company cap + edu filter so cache hit skips them too.
+    _PHASE_1_2_CACHE[_p12_cache_key] = (ctx._parsed, time.time())
 
     ctx._phase_timings["phase_1_2"] = int((time.time() - t0) * 1000)
     _save_checkpoint(ctx, sb, "phase_1_2")
@@ -2046,7 +2099,12 @@ async def phase_4b_ranking(ctx: PipelineContext, sb: Client):
 # ── Phase 4C: Condense Verbose Paragraphs to Bullets (1 LLM call) ───────
 
 async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
-    """Condense all verbose paragraphs to 95-110 char bullets in one batched LLM call."""
+    """Condense all verbose paragraphs to 108-118 char bullets (intentional overshoot).
+
+    Phase 5 (width optimizer) shrinks these to the strict 96-101 CU final window.
+    LLMs reliably shrink but struggle to land in tight 5-CU ranges directly, so we
+    overshoot here. See `e2e_diagnostic_run/lib/width_config.py` STEP12 constants.
+    """
     t0 = time.time()
     await _progress(ctx, sb, 4, "Condensing to bullet points", 59)
 

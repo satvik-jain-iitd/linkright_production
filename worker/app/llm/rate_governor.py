@@ -133,7 +133,7 @@ class RateGovernor:
         provider, kh, _, rpd_bucket = await self._ensure(provider, api_key)
         return rpd_bucket.tokens < 1 and rpd_bucket.refill_rate == 0
 
-    async def acquire(self, provider: str, api_key: str, max_wait: float = 90.0) -> bool:
+    async def acquire(self, provider: str, api_key: str, max_wait: float = 30.0) -> bool:
         """Blocks until one token is available from both buckets, then consumes it.
         Returns True on success, False if max_wait elapsed (means RPD exhausted)."""
         provider, kh, rpm_bucket, rpd_bucket = await self._ensure(provider, api_key)

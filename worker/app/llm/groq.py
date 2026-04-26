@@ -35,7 +35,7 @@ class GroqProvider(LLMProvider):
         provider rotation.
         """
         max_tokens = self._MAX_TOKENS_BY_MODEL.get(self.model_id, self._DEFAULT_MAX_TOKENS)
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=45) as client:
             for attempt in range(2):  # one initial + one 413-only retry
                 resp = await client.post(
                     f"{BASE_URL}/chat/completions",
