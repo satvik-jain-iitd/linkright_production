@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { groqChat } from "@/lib/groq";
-// TODO: Add Langfuse TypeScript SDK tracing here
 
 const SYSTEM_PROMPT = `You are a resume bullet editor. The user selected a specific element and wants a targeted edit.
 

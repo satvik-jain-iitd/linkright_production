@@ -238,7 +238,6 @@ export async function POST(request: Request) {
 
     if (isDupe) {
       duplicates++;
-      console.log(`[nuggets/upload] dedup skip: "${nugget.nugget_text.slice(0, 60)}"`);
       continue;
     }
 
@@ -288,9 +287,6 @@ export async function POST(request: Request) {
     triggerEmbedding(user.id);
   }
 
-  console.log(
-    `[nuggets/upload] user=${user.id}: inserted=${inserted}, duplicates=${duplicates}, rejected=${rejected.length}`
-  );
 
   return Response.json({
     total: nuggetsArray.length,

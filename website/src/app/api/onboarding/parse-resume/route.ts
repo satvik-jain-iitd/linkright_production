@@ -45,8 +45,6 @@ async function saveWorkHistory(userId: string, experiences: ParsedExperience[]):
     .upsert(rows, { onConflict: "user_id,company,role", ignoreDuplicates: false });
   if (error) {
     console.error("[parse-resume] saveWorkHistory error:", error.message);
-  } else {
-    console.log(`[parse-resume] saved ${rows.length} work history rows for user=${userId}`);
   }
 }
 
