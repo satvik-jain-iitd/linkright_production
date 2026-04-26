@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { jd_text, career_text, model_provider, model_id, template_id, qa_answers, override_theme_colors, target_role, target_company, section_order } = body;
+  const { jd_text, career_text, template_id, qa_answers, override_theme_colors, target_role, target_company, section_order } = body;
 
   if (!jd_text || !career_text) {
     return Response.json({ error: "Missing required fields" }, { status: 400 });
