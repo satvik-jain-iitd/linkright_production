@@ -173,3 +173,70 @@ test.describe.serial('Scout UI', () => {
     expect(real).toHaveLength(0);
   });
 });
+
+// ── Block 3: Apply + Kanban workflow (Phase 2.3) ─────────────────────────────
+// End-to-end via API: create application → update status across Kanban
+// columns → verify state persists → cleanup. No UI interaction; pure
+// contract test against /api/applications.
+
+test.describe.serial('Applications + Kanban workflow', () => {
+  let createdId: string | null = null;
+  const testCompany = `__playwright_kanban_${Date.now()}`;
+  const testRole = 'PM (test fixture)';
+
+  test('GET /api/applications — returns shape', async ({ request }) => {
+    const res = await request.get('/api/applications');
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data.applications ?? []);
+    expect(Array.isArray(list)).toBe(true);
+  });
+
+  test('POST /api/applications — creates application', async ({ request }) => {
+    const res = await request.post('/api/applications', {
+      data: {
+        company: testCompany,
+        role: testRole,
+        status: 'not_started',
+        jd_text: 'placeholder JD for kanban workflow test',
+      },
+    });
+    expect([200, 201]).toContain(res.status());
+    const body = await res.json();
+    const app = body.application ?? body;
+    expect(app.id, 'created application should have id').toBeTruthy();
+    expect(app.company).toBe(testCompany);
+    createdId = app.id as string;
+  });
+
+  test('PUT /api/applications — moves status not_started → applied → interview', async ({ request }) => {
+    test.skip(!createdId, 'Skipping — no app created in previous test');
+    if (!createdId) return;
+
+    let res = await request.put('/api/applications', {
+      data: { id: createdId, status: 'applied' },
+    });
+    expect(res.status()).toBe(200);
+
+    res = await request.put('/api/applications', {
+      data: { id: createdId, status: 'interview' },
+    });
+    expect(res.status()).toBe(200);
+
+    // Verify state persisted via re-fetch
+    const listRes = await request.get('/api/applications');
+    const data = await listRes.json();
+    const list = Array.isArray(data) ? data : (data.applications ?? []);
+    const found = list.find((a: { id: string }) => a.id === createdId);
+    expect(found, 'app should still exist after status changes').toBeTruthy();
+    expect(found.status, 'final status should be interview').toBe('interview');
+  });
+
+  test('DELETE /api/applications — cleanup test fixture', async ({ request }) => {
+    test.skip(!createdId, 'Skipping — no app to clean up');
+    if (!createdId) return;
+    const res = await request.delete(`/api/applications?id=${createdId}`);
+    // DELETE may be soft (sets status=withdrawn) or hard — accept both 200/204.
+    expect([200, 204]).toContain(res.status());
+  });
+});

@@ -185,5 +185,83 @@ test.describe('Real-world personalization — Satvik + Wing Assistant JD', () =>
     await fs.writeFile(path.join(OUT_DIR, '03-resume-generation.md'), md);
 
     expect(j.status, 'final status').toBe('completed');
+
+    // ── Phase 2.1 — Quality assertions on generated bullets ────────────────
+    // Verifies the v9 fabrication guards landed: every %/$ amount in a bullet
+    // must appear (or be in the same magnitude tier) in the source career text.
+    if (Array.isArray(bullets) && bullets.length > 0) {
+      const bulletTexts: string[] = bullets
+        .map((b: unknown) => {
+          if (typeof b === 'string') return b;
+          if (b && typeof b === 'object') {
+            const obj = b as Record<string, unknown>;
+            return String(obj.text_html ?? obj.text ?? obj.bullet ?? '');
+          }
+          return '';
+        })
+        .filter((s) => s.length > 0);
+
+      const stripHtml = (s: string) => s.replace(/<[^>]+>/g, ' ');
+      const sourceLower = careerText.toLowerCase();
+      const numericRe = /(\$\s?\d+(?:\.\d+)?\s?[KMB]?|\d+(?:\.\d+)?\s?%|\d+(?:\.\d+)?\s?x\b|\d{4,})/gi;
+
+      const fabricatedSamples: string[] = [];
+      for (const raw of bulletTexts) {
+        const text = stripHtml(raw);
+        const matches = text.match(numericRe) ?? [];
+        for (const tok of matches) {
+          const norm = tok.replace(/\s+/g, '').toLowerCase();
+          // Year free-pass
+          if (/^(19|20)\d{2}$/.test(norm)) continue;
+          // Strip unit for substring search; e.g. "30%" → "30", "$1M" → "1M"
+          const bareDigits = norm.replace(/[$%xkmb]/gi, '');
+          if (sourceLower.includes(norm) || sourceLower.includes(bareDigits)) continue;
+          fabricatedSamples.push(`bullet="${text.slice(0, 80)}…" token="${tok}"`);
+          if (fabricatedSamples.length >= 5) break;
+        }
+        if (fabricatedSamples.length >= 5) break;
+      }
+
+      if (fabricatedSamples.length > 0) {
+        await fs.writeFile(
+          path.join(OUT_DIR, '03-fabrication-flags.md'),
+          `# Possible fabricated metrics in generated bullets\n\n${fabricatedSamples
+            .map((s) => `- ${s}`)
+            .join('\n')}\n`,
+        );
+      }
+
+      // Soft-assert: ≤ 1 fabricated metric across all bullets (allow 1 false-positive
+      // from tier-aware fuzz vs strict substring match).
+      expect(
+        fabricatedSamples.length,
+        `Found ${fabricatedSamples.length} likely-fabricated metrics in bullets — see 03-fabrication-flags.md`,
+      ).toBeLessThanOrEqual(1);
+    }
+  });
+
+  // ── Phase 2.1 — Companion: assert PDF download works ─────────────────────
+  test('4. Download tailored PDF (smoke)', async ({ request }) => {
+    test.setTimeout(30_000);
+    // Re-use the most recent completed job for this user — endpoint accepts
+    // the latest finished job when no id provided.
+    const listRes = await request.get('/api/resume/recent');
+    if (listRes.status() !== 200) {
+      // No /recent endpoint? Skip — this is a smoke check only.
+      test.skip(true, 'No /api/resume/recent endpoint available — skipping PDF smoke');
+      return;
+    }
+    const list = (await listRes.json()) as { jobs?: Array<{ id: string; status: string }> };
+    const completed = (list.jobs ?? []).find((j) => j.status === 'completed');
+    if (!completed) {
+      test.skip(true, 'No completed job found for PDF smoke');
+      return;
+    }
+    const pdfRes = await request.get(`/api/resume/${completed.id}/pdf`);
+    expect(pdfRes.status(), 'PDF endpoint should respond 200').toBe(200);
+    const buf = await pdfRes.body();
+    expect(buf.length, 'PDF should be non-empty').toBeGreaterThan(1000);
+    // PDF magic bytes
+    expect(buf.slice(0, 4).toString('ascii'), 'should start with %PDF').toBe('%PDF');
   });
 });
