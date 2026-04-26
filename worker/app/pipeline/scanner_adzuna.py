@@ -112,6 +112,7 @@ async def scan_adzuna(
 
                     company = item.get("company", {}).get("display_name") or ""
                     location = item.get("location", {}).get("display_name") or ""
+                    description = (item.get("description") or "").strip()[:15000]
 
                     all_jobs.append(JobResult(
                         title=title,
@@ -123,6 +124,7 @@ async def scan_adzuna(
                         salary_max=int(item.get("salary_max") or 0),
                         salary_currency="INR" if country_code == "in" else ("AED" if country_code == "ae" else "USD"),
                         source_type="api_adzuna",
+                        description_snippet=description,
                     ))
                     seen_urls.add(job_url)
                     result.fetched += 1
@@ -150,6 +152,7 @@ async def scan_adzuna(
             "liveness_status": "active",
             "source_type": "api_adzuna",
             "enrichment_status": "pending",
+            **({"jd_text": j.description_snippet} if j.description_snippet else {}),
         }
         for j in all_jobs
     ]
