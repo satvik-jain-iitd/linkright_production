@@ -46,7 +46,7 @@ const LOGGED_IN_LINKS: NavLink[] = [
     label: "Interview prep",
     accent: "sage",
   },
-  { href: "/dashboard/broadcast", label: "Broadcast", accent: "pink" },
+  { href: "/dashboard/broadcast", label: "Broadcast", accent: "pink", badge: true },
 ];
 
 // Per-pillar underline colours. Matches design tokens in globals.css.
@@ -88,6 +88,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [scoutBadge, setScoutBadge] = useState(0);
+  const [smaPending, setSmaPending] = useState(0);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
   const [notifUnread, setNotifUnread] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -107,6 +108,11 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
       fetch("/api/admin/check")
         .then((r) => r.json())
         .then((d) => setIsAdmin(d.is_admin === true))
+        .catch(() => {});
+      // SMA pending suggestions — drives Broadcast tab badge.
+      fetch("/api/sma/suggestions?status=pending&limit=20", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => setSmaPending((d.suggestions ?? []).length))
         .catch(() => {});
     }
   }, [user, variant]);
@@ -209,7 +215,12 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                   className={cls}
                 >
                   {link.label}
-                  {link.badge && scoutBadge > 0 && (
+                  {link.badge && link.href === "/dashboard/broadcast" && smaPending > 0 && (
+                    <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-pink-500 px-1 text-[10px] font-bold text-white">
+                      {smaPending > 99 ? "99+" : smaPending}
+                    </span>
+                  )}
+                  {link.badge && link.href !== "/dashboard/broadcast" && scoutBadge > 0 && (
                     <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-lg bg-accent px-1 text-[10px] font-bold text-white">
                       {scoutBadge > 99 ? "99+" : scoutBadge}
                     </span>

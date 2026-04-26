@@ -106,6 +106,8 @@ export function DashboardContent({
   const [recs, setRecs] = useState<RecsResponse | null>(null);
   const [status, setStatus] = useState<NuggetStatus | null>(null);
   const [diaryStreak, setDiaryStreak] = useState(0);
+  const [smaPending, setSmaPending] = useState(0);
+  const [linkedinConnected, setLinkedinConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -142,6 +144,16 @@ export function DashboardContent({
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.streak != null) setDiaryStreak(data.streak);
+        }),
+      fetch("/api/sma/suggestions?status=pending&limit=20", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.suggestions) setSmaPending(data.suggestions.length);
+        }),
+      fetch("/api/broadcast/status", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data) setLinkedinConnected(data.linkedin_connected === true);
         }),
       fetch("/api/dashboard/pulse", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
@@ -253,6 +265,24 @@ export function DashboardContent({
               className="mt-3 inline-block rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
             >
               Finish onboarding →
+            </Link>
+          </div>
+        )}
+
+        {/* Post-onboarding LinkedIn nudge — turns diary entries into LinkedIn posts */}
+        {nuggetCount > 0 && linkedinConnected === false && (
+          <div className="mt-6 rounded-xl border border-pink-300 bg-pink-50 p-4">
+            <p className="text-sm font-semibold text-pink-900">
+              Connect LinkedIn to publish posts straight from your diary.
+            </p>
+            <p className="mt-1 text-sm text-pink-700">
+              We draft, you approve. Posts go out under your account.
+            </p>
+            <Link
+              href="/dashboard/broadcast/connect"
+              className="mt-3 inline-block rounded-lg bg-pink-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-pink-700"
+            >
+              Connect LinkedIn →
             </Link>
           </div>
         )}
@@ -681,6 +711,31 @@ export function DashboardContent({
                 Add more → sharpens every match
               </Link>
             </div>
+
+            {/* SMA suggestions teaser — shows when diary has produced concepts */}
+            {smaPending > 0 && (
+              <Link
+                href="/dashboard/suggestions"
+                className="block rounded-2xl border border-pink-500/40 bg-gradient-to-br from-pink-500/10 to-purple-500/5 p-4 transition hover:border-pink-500"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pink-500 text-sm font-bold text-white">
+                    {smaPending}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-pink-700">
+                      LinkedIn post{smaPending === 1 ? "" : "s"} ready
+                    </p>
+                    <p className="text-[11px] text-muted">
+                      From your recent diary
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] font-semibold text-pink-700">
+                  Pick → edit → publish →
+                </p>
+              </Link>
+            )}
 
             {/* Daily diary */}
             <DiaryQuickLog

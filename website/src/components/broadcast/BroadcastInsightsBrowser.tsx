@@ -38,15 +38,17 @@ export function BroadcastInsightsBrowser() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
+  const [smaPending, setSmaPending] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
       if (!cancelled) setLoading(true);
       const qs = filter === "All" ? "" : `?filter=${filter.toLowerCase()}`;
-      const [iRes, sRes] = await Promise.all([
+      const [iRes, sRes, smaRes] = await Promise.all([
         fetch(`/api/broadcast/insights${qs}`, { cache: "no-store" }),
         fetch("/api/broadcast/status", { cache: "no-store" }),
+        fetch("/api/sma/suggestions?status=pending&limit=20", { cache: "no-store" }),
       ]);
       if (cancelled) return;
       if (iRes.ok) {
@@ -56,6 +58,10 @@ export function BroadcastInsightsBrowser() {
       if (sRes.ok) {
         const body = await sRes.json();
         if (!cancelled) setStatus(body);
+      }
+      if (smaRes.ok) {
+        const body = await smaRes.json();
+        if (!cancelled) setSmaPending((body.suggestions ?? []).length);
       }
       if (!cancelled) setLoading(false);
     };
@@ -106,6 +112,26 @@ export function BroadcastInsightsBrowser() {
           Schedule · {queued} queued
         </Link>
       </div>
+
+      {/* SMA suggestions banner — surfaces pending diary-driven concepts */}
+      {smaPending > 0 && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-pink-500/40 bg-gradient-to-r from-pink-500/10 to-purple-500/5 p-4">
+          <div>
+            <p className="text-sm font-semibold text-pink-700">
+              {smaPending} suggestion{smaPending === 1 ? "" : "s"} ready from your diary
+            </p>
+            <p className="mt-0.5 text-xs text-muted">
+              Pick a concept, edit, publish — all in one click.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/suggestions"
+            className="rounded-lg bg-pink-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-pink-700"
+          >
+            View suggestions →
+          </Link>
+        </div>
+      )}
 
       {/* Connect banner if LinkedIn not connected */}
       {status && !status.linkedin_connected && (
