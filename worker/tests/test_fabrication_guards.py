@@ -8,11 +8,11 @@ this file just locks down the building blocks.
 
 from __future__ import annotations
 
-from worker.app.pipeline.lib.metric_extract import (
+from app.pipeline.lib.metric_extract import (
     extract_metrics,
     find_fabricated,
 )
-from worker.app.pipeline.lib.jd_keyphrase import (
+from app.pipeline.lib.jd_keyphrase import (
     extract_jd_terms,
     find_fishing,
     tokenize,

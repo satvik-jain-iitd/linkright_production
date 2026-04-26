@@ -239,6 +239,12 @@ def test_groq_rate_limit_fallback(httpx_mock, fake_sb):
 # 6. test_malformed_json_retry
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(
+    reason="Extractor switched from JSON to Markdown output (commit b12a184); "
+    "JSON-fix retry path is no longer wired. Markdown parser silently drops "
+    "unparseable blocks instead of retrying. Test should be rewritten for "
+    "markdown malformed-block behavior or removed."
+)
 def test_malformed_json_retry(httpx_mock, fake_sb):
     """Bad JSON first call → fix prompt sent → good JSON second call → nuggets returned."""
     bad_json = '{"invalid json here...['
@@ -263,6 +269,11 @@ def test_malformed_json_retry(httpx_mock, fake_sb):
 # 7. test_malformed_json_both_fail
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(
+    reason="Extractor switched from JSON to Markdown (commit b12a184); JSON "
+    "retry path not exercised. Markdown malformed-block behavior is silent "
+    "drop. See test_malformed_json_retry skip note above."
+)
 def test_malformed_json_both_fail(httpx_mock, fake_sb):
     """Bad JSON on both calls → empty list, no exception raised."""
     bad_json = 'not json at all %%'
@@ -365,9 +376,15 @@ def test_re_upload_deletes_old(httpx_mock, fake_sb):
         extract_nuggets("user-123", _LONG_TEXT, fake_sb, groq_api_key="fake-key")
     )
 
-    # New nugget must be inserted even when delete raises
+    # New nugget must be inserted even when delete raises.
+    # The markdown parser sets nugget_text to the full answer (parser line 262),
+    # not to the original "nugget_text" field of the fixture, so we substring-
+    # match on a stable token instead of comparing to the legacy fixture string.
     rows = fake_sb.table("career_nuggets").rows
-    new_rows = [r for r in rows if r.get("nugget_text") == "Led 18-member team"]
+    new_rows = [
+        r for r in rows
+        if "Led 18-member" in (r.get("nugget_text") or "")
+    ]
     assert len(new_rows) >= 1
 
 

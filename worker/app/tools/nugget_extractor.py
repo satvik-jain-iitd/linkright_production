@@ -258,6 +258,15 @@ def _parse_markdown_nuggets(text: str) -> Optional[list]:
         if section_type not in _KNOWN_SECTION_TYPES:
             section_type = "other"
         primary_layer = "B" if section_type in ("relationships", "health", "finance", "inner_life", "logistics", "recreation") else "A"
+        # Layer B nuggets must carry a life_domain; honor explicit value first,
+        # otherwise fall back to the section_type (which IS the domain for Layer B).
+        life_domain_raw = raw.get("life_domain")
+        if life_domain_raw:
+            life_domain = life_domain_raw
+        elif primary_layer == "B":
+            life_domain = section_type
+        else:
+            life_domain = None
         result.append({
             "nugget_text": answer,
             "question": "",
@@ -265,7 +274,7 @@ def _parse_markdown_nuggets(text: str) -> Optional[list]:
             "answer": answer,
             "primary_layer": primary_layer,
             "section_type": section_type,
-            "life_domain": None,
+            "life_domain": life_domain,
             "resume_relevance": {"P0": 0.9, "P1": 0.75, "P2": 0.5, "P3": 0.3}.get(importance, 0.5),
             "resume_section_target": "experience" if section_type == "work_experience" else section_type,
             "importance": importance,
