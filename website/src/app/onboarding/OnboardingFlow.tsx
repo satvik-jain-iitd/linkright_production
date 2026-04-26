@@ -18,7 +18,6 @@ import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-// [BYOK-REMOVED] type Step = 1 | 2 | 3 | 4 | 5;
 type Step = 1 | 2 | 3 | 4;
 
 const ROLE_OPTIONS = [
@@ -31,15 +30,6 @@ const ROLE_OPTIONS = [
   "Operations",
   "Other",
 ];
-
-// [BYOK-REMOVED] const PROVIDER_MODEL_MAP: Record<string, string> = {
-// [BYOK-REMOVED]   groq:        "llama-3.1-8b-instant",
-// [BYOK-REMOVED]   cerebras:    "llama3.1-8b",
-// [BYOK-REMOVED]   sambanova:   "Meta-Llama-3.1-8B-Instruct",
-// [BYOK-REMOVED]   siliconflow: "Qwen/Qwen3-8B",
-// [BYOK-REMOVED]   openrouter:  "meta-llama/llama-3.2-3b-instruct:free",
-// [BYOK-REMOVED]   gemini:      "gemini-1.5-flash-8b",
-// [BYOK-REMOVED] };
 
 interface Education {
   institution: string;
@@ -213,10 +203,6 @@ function StepWelcome({
     </div>
   );
 }
-
-// [BYOK-REMOVED] ── Step 2: API Key Setup (entire component removed) ─────────
-// [BYOK-REMOVED] StepApiKey component was here — users no longer manage API keys.
-// [BYOK-REMOVED] See git history for the full component if needed.
 
 // ── Step 3: Career Basics Form ────────────────────────────────────────────
 
