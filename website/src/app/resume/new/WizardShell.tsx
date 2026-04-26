@@ -6,11 +6,6 @@ import Link from "next/link";
 import { AppNav } from "@/components/AppNav";
 import { VerticalStepper } from "@/components/VerticalStepper";
 import { StepJobDetails } from "./steps/StepJobDetails";
-// [WIZARD-STREAMLINE] StepJDAnalysis merged into StepJobDetails — import kept for type only
-// [WIZARD-STREAMLINE] import { StepJDAnalysis } from "./steps/StepJDAnalysis";
-// [WIZARD-STREAMLINE] StepBrandColors + StepEnrich merged into StepCustomize
-// import { StepBrandColors } from "./steps/StepBrandColors";
-// import { StepEnrich } from "./steps/StepEnrich";
 import { StepCustomize } from "./steps/StepCustomize";
 import { StepLayout } from "./steps/StepLayout";
 import { StepBuild } from "./steps/StepBuild";
@@ -159,31 +154,9 @@ export function WizardShell({ userId, jobId, retryJdText, discoveryCompany, disc
         if (!resp.ok) return;
         const settings = await resp.json();
 
-        // [BYOK-REMOVED] API key fetching from user_api_keys disabled — server manages keys
-        /* [BYOK-REMOVED]
-        const provider = settings.model_provider || "groq";
-
-        // Fetch primary key from user_api_keys for this provider
-        let primaryKeyId = "";
-        try {
-          const keysResp = await fetch(`/api/user/keys?provider=${encodeURIComponent(provider)}`);
-          if (keysResp.ok) {
-            const { keys } = await keysResp.json();
-            const activeKey = (keys || []).find((k: { is_active: boolean }) => k.is_active);
-            if (activeKey) primaryKeyId = activeKey.id;
-          }
-        } catch {
-          // Keys endpoint not available — fall back to settings
-        }
-        */
-
         setData((prev) => ({
           ...prev,
           career_text: prev.career_text || settings.career_text || "",
-          // [BYOK-REMOVED] model_provider and model_id no longer loaded from settings — hardcoded
-          // model_provider: prev.model_provider || provider,
-          // model_id: prev.model_id || settings.model_id || "llama-3.1-8b-instant",
-          // api_key: prev.api_key || primaryKeyId || settings.api_key || "",
         }));
       } catch {
         // Settings not available yet — user will configure inline
