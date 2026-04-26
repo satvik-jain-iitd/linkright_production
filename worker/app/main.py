@@ -310,25 +310,38 @@ async def start_job(
 
 class NuggetRefreshRequest(BaseModel):
     user_id: str
+    force_delete: bool = False
 
 
-async def _run_nugget_refresh(user_id: str) -> None:
-    """Background task: fetch career_chunks → delete old nuggets → re-extract + re-embed."""
+async def _run_nugget_refresh(user_id: str, force_delete: bool = False) -> None:
+    """Background task: fetch career_chunks → delete old nuggets → re-extract + re-embed.
+
+    Only chunks the user has locked on the validation screen are processed.
+    Unlocked / deleted chunks are excluded from extraction so they never
+    surface as nuggets or embeddings downstream. See migration 036.
+    """
     try:
         sb = create_supabase()
         rows = (
             sb.table("career_chunks")
-            .select("chunk_text, chunk_index")
+            .select("chunk_text, chunk_index, is_locked")
             .eq("user_id", user_id)
+            .eq("is_locked", True)
             .order("chunk_index")
             .execute()
             .data or []
         )
         if not rows:
-            logger.warning("nugget_refresh: no career_chunks for user=%s", user_id)
+            logger.warning(
+                "nugget_refresh: no LOCKED career_chunks for user=%s — user may not have approved any cards yet",
+                user_id,
+            )
             return
         career_text = "\n\n".join(r["chunk_text"] for r in rows)
-        logger.info("nugget_refresh: user=%s — %d chunks, %d chars", user_id, len(rows), len(career_text))
+        logger.info(
+            "nugget_refresh: user=%s — %d locked chunks, %d chars",
+            user_id, len(rows), len(career_text),
+        )
 
         ctx = PipelineContext(
             job_id=f"nugget-refresh-{user_id[:8]}",
@@ -340,16 +353,24 @@ async def _run_nugget_refresh(user_id: str) -> None:
             api_key=None,
             template_id="cv-a4-standard",
         )
-        await phase_0_nuggets(ctx, sb, groq_api_key=os.getenv("PLATFORM_GROQ_API_KEY") or os.getenv("GROQ_API_KEY"), force=True)
+        await phase_0_nuggets(
+            ctx, sb,
+            groq_api_key=os.getenv("PLATFORM_GROQ_API_KEY") or os.getenv("GROQ_API_KEY"),
+            force=True,
+            force_delete=force_delete,
+        )
         nugget_count = len(ctx._nuggets) if ctx._nuggets else 0
-        logger.info("nugget_refresh: done user=%s, %d nuggets", user_id, nugget_count)
+        logger.info(
+            "nugget_refresh: done user=%s, %d nuggets (force_delete=%s)",
+            user_id, nugget_count, force_delete,
+        )
     except Exception as exc:
         logger.exception("nugget_refresh: failed for user=%s — %s", user_id, exc)
 
 
-async def _run_and_release_refresh(user_id: str) -> None:
+async def _run_and_release_refresh(user_id: str, force_delete: bool = False) -> None:
     try:
-        await _run_nugget_refresh(user_id)
+        await _run_nugget_refresh(user_id, force_delete=force_delete)
     finally:
         _active_refresh.discard(user_id)
 
@@ -364,7 +385,7 @@ async def refresh_nuggets(
     if req.user_id in _active_refresh:
         return {"status": "already_running", "user_id": req.user_id}
     _active_refresh.add(req.user_id)
-    background_tasks.add_task(_run_and_release_refresh, req.user_id)
+    background_tasks.add_task(_run_and_release_refresh, req.user_id, req.force_delete)
     return {"status": "processing", "user_id": req.user_id}
 
 
@@ -908,6 +929,58 @@ async def cron_recompute_top_20(
 
     background_tasks.add_task(_run_recommender_all_users)
     return {"status": "scheduled", "scope": "all_users"}
+
+
+# ── Score-now (synchronous, used by first-time preferences save) ────────
+# Unlike /cron/recompute-top-20 which is fire-and-forget, this BLOCKS until
+# done so the calling API route can return the match count to the user.
+
+class ScoreNowRequest(BaseModel):
+    user_id: str
+    limit: int = 50  # cap inline scoring to keep latency bounded
+
+
+@app.post("/jobs/score-now", status_code=200)
+async def score_now(
+    req: ScoreNowRequest,
+    authorization: str | None = Header(None),
+):
+    """Synchronous: score up to `limit` candidates for user_id, then rank top-20.
+    Returns match count immediately. Caller can show user 'X matches found'.
+
+    Use case: first-time preferences save — user must see results on next page load,
+    not 5 min later when the cron runs.
+    """
+    verify_secret(authorization)
+    try:
+        from .pipeline.recommender import (
+            score_fresh_discoveries_for_user,
+            compute_and_store_top_20,
+            _user_is_active,
+        )
+        from .llm.rate_governor import set_supabase as _wire_governor_sb
+        from supabase import create_client
+
+        sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        _wire_governor_sb(sb)
+
+        if not _user_is_active(sb, req.user_id):
+            return {"ok": False, "reason": "no_preferences", "matches": 0}
+
+        scored = await score_fresh_discoveries_for_user(sb, req.user_id, limit=req.limit)
+        ranked = compute_and_store_top_20(sb, req.user_id)
+        return {
+            "ok": True,
+            "scored": scored,
+            "matches": len(ranked),
+            "user_id": req.user_id,
+        }
+    except Exception as exc:
+        logger.exception("score-now failed: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(exc)[:200]},
+        )
 
 
 # ── Global scanner cron ─────────────────────────────────────────────────
