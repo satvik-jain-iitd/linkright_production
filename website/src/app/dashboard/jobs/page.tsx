@@ -49,6 +49,7 @@ export default function JobsPage() {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoRetried, setAutoRetried] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,6 +61,18 @@ export default function JobsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // One-shot auto-retry: when first load returns 0 matches, retry once after 20s.
+  // Handles the race where score-now timed out but the cron is still finishing.
+  useEffect(() => {
+    if (!loading && !error && data && data.top20.length === 0 && !autoRetried) {
+      const t = setTimeout(() => {
+        setAutoRetried(true);
+        load();
+      }, 20_000);
+      return () => clearTimeout(t);
+    }
+  }, [loading, error, data, autoRetried, load]);
 
   async function handleStart(row: Top20Row) {
     if (!row.job_discoveries) return;
@@ -137,8 +150,14 @@ export default function JobsPage() {
         {/* Empty state */}
         {!loading && !error && rows.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border bg-white p-12 text-center">
-            <p className="text-sm font-semibold text-foreground">No matches yet for today.</p>
-            <p className="mt-1 text-xs text-muted">Scout runs every few minutes — refresh to check for new roles.</p>
+            <p className="text-sm font-semibold text-foreground">
+              {autoRetried ? "No matches yet for today." : "Computing your matches…"}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              {autoRetried
+                ? "Scout runs every few minutes — try Refresh in a bit."
+                : "We're scoring jobs against your preferences. This usually takes 20-30 seconds. Auto-refreshing…"}
+            </p>
           </div>
         )}
 
