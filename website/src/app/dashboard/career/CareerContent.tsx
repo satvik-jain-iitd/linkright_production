@@ -63,28 +63,6 @@ export function CareerContent({ user, chunkCount, nuggetCount }: CareerContentPr
 
   return (
     <div className="min-h-screen">
-      {
-        // [NAV-REDESIGN] <nav className="flex items-center justify-between border-b border-border px-6 py-4">
-        // [NAV-REDESIGN]   <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-        // [NAV-REDESIGN]     Link<span className="text-accent">Right</span>
-        // [NAV-REDESIGN]   </Link>
-        // [NAV-REDESIGN]   <div className="flex items-center gap-4">
-        // [NAV-REDESIGN]     <Link href="/dashboard" className="text-sm text-muted transition-colors hover:text-foreground">
-        // [NAV-REDESIGN]       ← Dashboard
-        // [NAV-REDESIGN]     </Link>
-        // [NAV-REDESIGN]     <Link href="/dashboard/nuggets" className="text-sm text-muted transition-colors hover:text-foreground">
-        // [NAV-REDESIGN]       Career Highlights
-        // [NAV-REDESIGN]     </Link>
-        // [NAV-REDESIGN]     [BYOK-REMOVED] Settings link removed
-        // [NAV-REDESIGN]     <Link href="/dashboard/settings" className="text-sm text-muted transition-colors hover:text-foreground">
-        // [NAV-REDESIGN]       Settings
-        // [NAV-REDESIGN]     </Link>
-        // [NAV-REDESIGN]     <span className="text-sm text-muted">
-        // [NAV-REDESIGN]       {user.user_metadata?.full_name || user.email}
-        // [NAV-REDESIGN]     </span>
-        // [NAV-REDESIGN]   </div>
-        // [NAV-REDESIGN] </nav>
-      }
       <AppNav user={user} />
 
       <div className="mx-auto max-w-3xl px-6 py-12 space-y-10">

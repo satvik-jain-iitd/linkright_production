@@ -72,11 +72,55 @@ _SAMPLE_NUGGET_B = {
 }
 
 
+def _nugget_to_markdown(nugget: dict) -> str:
+    """Render a nugget dict as the markdown format the extractor parses
+    (matches `_parse_markdown_nuggets` in worker/app/tools/nugget_extractor.py).
+    """
+    parts = ["## nugget"]
+    # Map the test-fixture key names to the markdown keys the parser reads.
+    # `nugget_text`, `question`, `alt_questions` are NOT consumed by the
+    # markdown parser — only `type`/`section_type`, `company`, `role`,
+    # `importance`, `answer`, `tags` matter.
+    # Layer B nuggets (life domain) — derive type from life_domain when
+    # section_type is None, so the F05 work-experience-must-have-company
+    # validator doesn't drop them.
+    section_type = nugget.get("section_type") or nugget.get("type")
+    if not section_type:
+        if nugget.get("life_domain"):
+            section_type = nugget["life_domain"].lower()
+        else:
+            section_type = "work_experience"
+    parts.append(f"type: {section_type}")
+    if nugget.get("company") is not None:
+        parts.append(f"company: {nugget['company']}")
+    if nugget.get("role") is not None:
+        parts.append(f"role: {nugget['role']}")
+    parts.append(f"importance: {nugget.get('importance', 'P2')}")
+    parts.append(f"answer: {nugget.get('answer', '')}")
+    tags = nugget.get("tags") or []
+    if tags:
+        parts.append(f"tags: {', '.join(tags)}")
+    if nugget.get("life_domain"):
+        parts.append(f"life_domain: {nugget['life_domain']}")
+    if nugget.get("primary_layer"):
+        parts.append(f"primary_layer: {nugget['primary_layer']}")
+    return "\n".join(parts)
+
+
 def _groq_response(nuggets: list[dict]) -> dict:
-    """Build a minimal Groq API response envelope."""
+    """Build a minimal Groq API response envelope.
+
+    Extractor switched from JSON → Markdown output in commit b12a184
+    ("nugget extractor markdown switch"). The mocked response now emits the
+    same `## nugget` block format that the production prompt asks for and
+    that `_parse_markdown_nuggets` consumes.
+    """
+    # Keep `json` import alive for tests that mock other JSON payloads.
+    _ = json  # noqa: F841
+    markdown = "\n\n".join(_nugget_to_markdown(n) for n in nuggets)
     return {
         "choices": [
-            {"message": {"content": json.dumps(nuggets)}}
+            {"message": {"content": markdown}}
         ]
     }
 
@@ -195,6 +239,12 @@ def test_groq_rate_limit_fallback(httpx_mock, fake_sb):
 # 6. test_malformed_json_retry
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(
+    reason="Extractor switched from JSON to Markdown output (commit b12a184); "
+    "JSON-fix retry path is no longer wired. Markdown parser silently drops "
+    "unparseable blocks instead of retrying. Test should be rewritten for "
+    "markdown malformed-block behavior or removed."
+)
 def test_malformed_json_retry(httpx_mock, fake_sb):
     """Bad JSON first call → fix prompt sent → good JSON second call → nuggets returned."""
     bad_json = '{"invalid json here...['
@@ -219,6 +269,11 @@ def test_malformed_json_retry(httpx_mock, fake_sb):
 # 7. test_malformed_json_both_fail
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(
+    reason="Extractor switched from JSON to Markdown (commit b12a184); JSON "
+    "retry path not exercised. Markdown malformed-block behavior is silent "
+    "drop. See test_malformed_json_retry skip note above."
+)
 def test_malformed_json_both_fail(httpx_mock, fake_sb):
     """Bad JSON on both calls → empty list, no exception raised."""
     bad_json = 'not json at all %%'
@@ -321,9 +376,15 @@ def test_re_upload_deletes_old(httpx_mock, fake_sb):
         extract_nuggets("user-123", _LONG_TEXT, fake_sb, groq_api_key="fake-key")
     )
 
-    # New nugget must be inserted even when delete raises
+    # New nugget must be inserted even when delete raises.
+    # The markdown parser sets nugget_text to the full answer (parser line 262),
+    # not to the original "nugget_text" field of the fixture, so we substring-
+    # match on a stable token instead of comparing to the legacy fixture string.
     rows = fake_sb.table("career_nuggets").rows
-    new_rows = [r for r in rows if r.get("nugget_text") == "Led 18-member team"]
+    new_rows = [
+        r for r in rows
+        if "Led 18-member" in (r.get("nugget_text") or "")
+    ]
     assert len(new_rows) >= 1
 
 

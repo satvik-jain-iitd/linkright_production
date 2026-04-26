@@ -21,6 +21,14 @@ Env vars:
 
 from __future__ import annotations
 
+# Tell pytest to skip collection — this file is a manual benchmark script
+# (run via `python tests/test_local_categorization.py`), not a unit-test
+# module. The `test_model` function is a parameterized async helper called
+# from the __main__ block, NOT a pytest test, and pytest's auto-discovery
+# was failing with "fixture 'model' not found".
+import pytest as _pytest
+_pytest.skip("manual benchmark script, not a pytest module", allow_module_level=True)
+
 import asyncio
 import json
 import logging

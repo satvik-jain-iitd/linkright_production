@@ -217,68 +217,92 @@ export async function POST(request: Request) {
     .eq("user_id", user.id);
   let nextIndex = existingCount ?? 0;
 
-  // ── Dedup + insert each nugget one-by-one ───────────────────────────────
+  // ── Dedup checks in parallel + batch insert ─────────────────────────────
 
   let inserted = 0;
   let duplicates = 0;
   const sb = serviceSupabase(); // service client for dedup (reads all user nuggets)
 
-  for (const nugget of validated) {
-    const eventDate = normalizeDate(nugget.event_date);
+  // 1. Run all 3-gate semantic dedup checks concurrently — each is read-only.
+  const dedupResults = await Promise.all(
+    validated.map((nugget) =>
+      isDuplicateNugget(
+        sb,
+        user.id,
+        nugget.nugget_text,
+        nugget.company ?? null,
+        nugget.role ?? null,
+        normalizeDate(nugget.event_date),
+      ),
+    ),
+  );
 
-    // 3-gate semantic dedup
-    const isDupe = await isDuplicateNugget(
-      sb,
-      user.id,
-      nugget.nugget_text,
-      nugget.company ?? null,
-      nugget.role ?? null,
-      eventDate
-    );
-
-    if (isDupe) {
+  // 2. Filter fresh rows + assign sequential indices.
+  type FreshRow = { idx: number; row: Record<string, unknown> };
+  const fresh: FreshRow[] = [];
+  validated.forEach((nugget, i) => {
+    if (dedupResults[i]) {
       duplicates++;
-      console.log(`[nuggets/upload] dedup skip: "${nugget.nugget_text.slice(0, 60)}"`);
-      continue;
+      return;
     }
-
-    // Build DB row
     const tags = [...nugget.tags, "source:skill_upload"];
+    fresh.push({
+      idx: i,
+      row: {
+        user_id: user.id,
+        nugget_index: nextIndex++,
+        nugget_text: nugget.nugget_text.slice(0, 200),
+        question: nugget.question,
+        alt_questions: nugget.alt_questions,
+        answer: nugget.answer,
+        primary_layer: nugget.primary_layer,
+        section_type: nugget.section_type ?? null,
+        life_domain: nugget.life_domain ?? null,
+        resume_relevance: nugget.resume_relevance,
+        resume_section_target: nugget.resume_section_target ?? null,
+        importance: nugget.importance,
+        factuality: nugget.factuality,
+        temporality: nugget.temporality,
+        leadership_signal: nugget.leadership_signal,
+        company: nugget.company ?? null,
+        role: nugget.role ?? null,
+        event_date: normalizeDate(nugget.event_date),
+        people: nugget.people,
+        tags,
+      },
+    });
+  });
 
-    const dbRow = {
-      user_id: user.id,
-      nugget_index: nextIndex,
-      nugget_text: nugget.nugget_text.slice(0, 200),
-      question: nugget.question,
-      alt_questions: nugget.alt_questions,
-      answer: nugget.answer,
-      primary_layer: nugget.primary_layer,
-      section_type: nugget.section_type ?? null,
-      life_domain: nugget.life_domain ?? null,
-      resume_relevance: nugget.resume_relevance,
-      resume_section_target: nugget.resume_section_target ?? null,
-      importance: nugget.importance,
-      factuality: nugget.factuality,
-      temporality: nugget.temporality,
-      leadership_signal: nugget.leadership_signal,
-      company: nugget.company ?? null,
-      role: nugget.role ?? null,
-      event_date: eventDate,
-      people: nugget.people,
-      tags,
-    };
-
-    const { error } = await supabase.from("career_nuggets").insert(dbRow);
-    if (error) {
-      // Unique constraint = race condition duplicate, treat as success
-      if (error.code === "23505") {
-        duplicates++;
-      } else {
-        rejected.push({ index: validated.indexOf(nugget), error: error.message });
+  // 3. Single batch insert. On unique-constraint conflict, fall back to
+  //    per-row inserts so one race-condition dupe doesn't fail the whole batch.
+  if (fresh.length > 0) {
+    const { error } = await supabase
+      .from("career_nuggets")
+      .insert(fresh.map((f) => f.row));
+    if (!error) {
+      inserted = fresh.length;
+    } else if (error.code === "23505") {
+      // Fall back to per-row insert to identify which rows are dupes vs real failures.
+      const perRow = await Promise.all(
+        fresh.map(async (f) => {
+          const { error: e } = await supabase.from("career_nuggets").insert(f.row);
+          return { f, error: e };
+        }),
+      );
+      for (const { f, error: e } of perRow) {
+        if (!e) {
+          inserted++;
+        } else if (e.code === "23505") {
+          duplicates++;
+        } else {
+          rejected.push({ index: f.idx, error: e.message });
+        }
       }
     } else {
-      inserted++;
-      nextIndex++;
+      // Hard failure on the batch — surface to caller.
+      for (const f of fresh) {
+        rejected.push({ index: f.idx, error: error.message });
+      }
     }
   }
 
@@ -288,9 +312,6 @@ export async function POST(request: Request) {
     triggerEmbedding(user.id);
   }
 
-  console.log(
-    `[nuggets/upload] user=${user.id}: inserted=${inserted}, duplicates=${duplicates}, rejected=${rejected.length}`
-  );
 
   return Response.json({
     total: nuggetsArray.length,

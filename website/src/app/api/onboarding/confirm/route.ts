@@ -267,7 +267,6 @@ export async function POST(request: Request) {
       dbRow.event_date
     );
     if (isDupe) {
-      console.log(`[onboarding/confirm] dedup: skipping duplicate "${dbRow.nugget_text.slice(0, 60)}"`);
       // Return a "confirmed" response — from user's perspective, it's fine
       return Response.json({
         status: "confirmed",

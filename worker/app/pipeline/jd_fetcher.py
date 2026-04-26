@@ -130,8 +130,11 @@ async def fetch_missing_jds(sb, batch_size: int = BATCH_SIZE) -> dict[str, int]:
                 sb.table("job_discoveries").update(
                     {"liveness_checked_at": now_iso}
                 ).eq("id", disc["id"]).execute()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "jd_fetcher: liveness_checked_at update failed for %s: %s",
+                    disc.get("id"), exc,
+                )
             continue
         stats["fetched"] += 1
         _, jd_text = result

@@ -59,87 +59,106 @@ export async function GET(request: Request) {
   let refreshed = 0;
   let expired = 0;
 
-  for (const row of due) {
-    if (!row.refresh_token) {
-      // No refresh token — LinkedIn didn't issue one, or it's been lost.
-      // Mark expired so the user gets a reconnect nudge.
-      await sb
-        .from("user_integrations")
-        .update({
-          status: "expired",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", row.user_id)
-        .eq("provider", "linkedin");
-      await sb.from("user_notifications").insert({
-        user_id: row.user_id,
-        type: "linkedin_expired",
-        title: "Your LinkedIn connection expired",
-        body:
-          "Reconnect in your profile to keep scheduling broadcast posts. Nothing is lost — any scheduled posts will resume on reconnect.",
-        payload: {},
-      });
-      expired++;
-      continue;
-    }
+  // Collected per-row outcomes — applied in two batched DB writes at the end.
+  type Outcome =
+    | { kind: "expired"; user_id: string; reason: "no_refresh_token" | "linkedin_rejected" }
+    | { kind: "refreshed"; user_id: string; access_token: string; refresh_token: string; token_type: string; expires_at: string | null };
+  const outcomes: Outcome[] = [];
 
-    try {
-      const resp = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: row.refresh_token,
-          client_id: CLIENT_ID,
-          client_secret: CLIENT_SECRET,
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!resp.ok) {
-        // LinkedIn rejected the refresh token — treat as expired.
-        await sb
-          .from("user_integrations")
-          .update({
-            status: "expired",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", row.user_id)
-          .eq("provider", "linkedin");
-        await sb.from("user_notifications").insert({
-          user_id: row.user_id,
-          type: "linkedin_expired",
-          title: "Your LinkedIn connection expired",
-          body: "Reconnect in your profile to keep scheduling broadcast posts.",
-          payload: {},
+  // Concurrency-capped processor — LinkedIn rate-limits aggressive parallel calls.
+  const CONCURRENCY = 5;
+  let cursor = 0;
+  async function worker() {
+    while (cursor < due.length) {
+      const row = due[cursor++];
+      if (!row.refresh_token) {
+        outcomes.push({ kind: "expired", user_id: row.user_id, reason: "no_refresh_token" });
+        continue;
+      }
+      try {
+        const resp = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: row.refresh_token,
+            client_id: CLIENT_ID,
+            client_secret: CLIENT_SECRET,
+          }),
+          signal: AbortSignal.timeout(8000),
         });
-        expired++;
-        continue;
-      }
-      const tokens = (await resp.json()) as LinkedInTokenResponse;
-      if (!tokens.access_token) {
-        expired++;
-        continue;
-      }
-      const expires_at = tokens.expires_in
-        ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-        : null;
-      await sb
-        .from("user_integrations")
-        .update({
+        if (!resp.ok) {
+          outcomes.push({ kind: "expired", user_id: row.user_id, reason: "linkedin_rejected" });
+          continue;
+        }
+        const tokens = (await resp.json()) as LinkedInTokenResponse;
+        if (!tokens.access_token) {
+          outcomes.push({ kind: "expired", user_id: row.user_id, reason: "linkedin_rejected" });
+          continue;
+        }
+        outcomes.push({
+          kind: "refreshed",
+          user_id: row.user_id,
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token ?? row.refresh_token,
           token_type: tokens.token_type ?? "Bearer",
-          expires_at,
+          expires_at: tokens.expires_in
+            ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+            : null,
+        });
+      } catch {
+        // Network hiccup — leave this one for tomorrow's run (no outcome recorded).
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, due.length) }, () => worker()));
+
+  // Apply expired outcomes — single batched update + single batched notification insert.
+  const expiredIds = outcomes.filter((o) => o.kind === "expired").map((o) => o.user_id);
+  if (expiredIds.length > 0) {
+    await sb
+      .from("user_integrations")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .in("user_id", expiredIds)
+      .eq("provider", "linkedin");
+    const notifs = outcomes
+      .filter((o): o is Extract<Outcome, { kind: "expired" }> => o.kind === "expired")
+      .map((o) => ({
+        user_id: o.user_id,
+        type: "linkedin_expired" as const,
+        title: "Your LinkedIn connection expired",
+        body:
+          o.reason === "no_refresh_token"
+            ? "Reconnect in your profile to keep scheduling broadcast posts. Nothing is lost — any scheduled posts will resume on reconnect."
+            : "Reconnect in your profile to keep scheduling broadcast posts.",
+        payload: {},
+      }));
+    await sb.from("user_notifications").insert(notifs);
+    expired = expiredIds.length;
+  }
+
+  // Apply refreshed outcomes — must be per-row updates (different token values).
+  // But run them in parallel since they're all independent local DB writes.
+  const refreshedRows = outcomes.filter(
+    (o): o is Extract<Outcome, { kind: "refreshed" }> => o.kind === "refreshed",
+  );
+  await Promise.all(
+    refreshedRows.map((o) =>
+      sb
+        .from("user_integrations")
+        .update({
+          access_token: o.access_token,
+          refresh_token: o.refresh_token,
+          token_type: o.token_type,
+          expires_at: o.expires_at,
           status: "connected",
           updated_at: new Date().toISOString(),
         })
-        .eq("user_id", row.user_id)
-        .eq("provider", "linkedin");
-      refreshed++;
-    } catch {
-      // Network hiccup — leave this one for tomorrow's run.
-    }
-  }
+        .eq("user_id", o.user_id)
+        .eq("provider", "linkedin"),
+    ),
+  );
+  refreshed = refreshedRows.length;
 
   return Response.json({
     checked: due.length,

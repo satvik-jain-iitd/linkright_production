@@ -60,6 +60,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
   const enrichStarted = useRef(false);
   const gapStarted = useRef(false);
   const colorFetchStarted = useRef(false);
+  const [brandColorMissing, setBrandColorMissing] = useState(false);
 
   /* ─── Silent brand color fetch on mount ──────────────────────────────── */
 
@@ -82,6 +83,8 @@ export function StepCustomize({ data, update, next, back }: Props) {
               brand_quaternary: first.brand_quaternary ?? null,
             },
           });
+        } else {
+          setBrandColorMissing(true);
         }
       })
       .catch(() => {});
@@ -316,6 +319,12 @@ export function StepCustomize({ data, update, next, back }: Props) {
         </div>
       )}
 
+      {brandColorMissing && data.target_company && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          Using default colors — couldn&apos;t find brand match for {data.target_company}
+        </div>
+      )}
+
       <div className="mt-8 rounded-2xl border border-border bg-surface/50 p-6">
         <h3 className="text-lg font-semibold">Resume Q&A</h3>
         <p className="mt-1 text-sm text-muted">
@@ -339,7 +348,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
             {loadingGapQuestions ? (
               <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-                <span className="text-sm text-muted">Generating gap-filling questions...</span>
+                <span className="text-sm text-muted">Generating gap-filling questions... (about 10-15 seconds)</span>
               </div>
             ) : gapQuestionsError ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -433,7 +442,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
           {loading ? (
             <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-5">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
-              <span className="text-sm text-muted">Generating profile questions...</span>
+              <span className="text-sm text-muted">Generating profile questions... (about 10-15 seconds)</span>
             </div>
           ) : error ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-5">

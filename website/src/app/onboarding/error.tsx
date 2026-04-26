@@ -1,5 +1,7 @@
 "use client";
 
+import { friendlyError } from "@/lib/friendly-error";
+
 export default function OnboardingError({
   error,
   reset,
@@ -13,7 +15,7 @@ export default function OnboardingError({
         <div className="mb-3 text-3xl">⚠️</div>
         <h2 className="text-base font-semibold text-foreground">Setup hit a snag</h2>
         <p className="mt-1.5 text-sm text-muted">
-          {error?.message || "Something went wrong during onboarding. Your progress may be saved."}
+          {friendlyError(error?.message, "Something went wrong during onboarding. Your progress may be saved.")}
         </p>
         <button
           onClick={reset}

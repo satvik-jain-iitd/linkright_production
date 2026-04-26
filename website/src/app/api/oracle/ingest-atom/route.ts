@@ -202,7 +202,6 @@ async function syncAtomToNugget(
   const eventDate = sanitizeEventDate(atom.timeframe ?? atom.event_date);
   const isDupe = await isDuplicateNugget(sb, userId, nuggetText, company, role, eventDate);
   if (isDupe) {
-    console.log(`[ingest-atom] nugget dedup: skipping duplicate "${nuggetText.slice(0, 60)}…"`);
     return;
   }
 
@@ -270,7 +269,6 @@ async function syncAtomToNugget(
 
     // If it's a unique violation (duplicate), treat as success (dedup race condition)
     if (error.code === "23505") {
-      console.log(`[ingest-atom] nugget insert: duplicate key (race condition), treating as success`);
       return;
     }
 

@@ -130,7 +130,6 @@ async function createChunksFromNuggets(userId: string) {
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId);
   if ((existingChunks ?? 0) > 0) {
-    console.log("[session-close] user already has career_chunks, skipping synthesis");
     return;
   }
 
@@ -142,7 +141,6 @@ async function createChunksFromNuggets(userId: string) {
     .order("created_at", { ascending: true });
 
   if (!nuggets || nuggets.length === 0) {
-    console.log("[session-close] no nuggets found, skipping chunk creation");
     return;
   }
 
@@ -185,8 +183,6 @@ async function createChunksFromNuggets(userId: string) {
   const { error } = await sb.from("career_chunks").insert(rows);
   if (error) {
     console.error("[session-close] chunk insert failed:", error.message);
-  } else {
-    console.log(`[session-close] created ${rows.length} career_chunks for user ${userId.slice(0, 8)}…`);
   }
 }
 
@@ -199,7 +195,6 @@ async function triggerNuggetEmbedding(userId: string) {
   const workerSecret = process.env.WORKER_SECRET;
 
   if (!workerUrl || workerUrl.includes("localhost")) {
-    console.log("[session-close] WORKER_URL not set or localhost — skipping embed trigger");
     return;
   }
 
@@ -213,7 +208,6 @@ async function triggerNuggetEmbedding(userId: string) {
       body: JSON.stringify({ user_id: userId }),
       signal: AbortSignal.timeout(5000),
     });
-    console.log("[session-close] triggered nugget embedding for user", userId.slice(0, 8));
   } catch (err) {
     // Non-critical — embeddings improve JD matching but aren't required
     console.warn("[session-close] embed trigger failed (non-critical):", err instanceof Error ? err.message : err);

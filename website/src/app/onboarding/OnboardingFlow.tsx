@@ -18,7 +18,6 @@ import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-// [BYOK-REMOVED] type Step = 1 | 2 | 3 | 4 | 5;
 type Step = 1 | 2 | 3 | 4;
 
 const ROLE_OPTIONS = [
@@ -31,15 +30,6 @@ const ROLE_OPTIONS = [
   "Operations",
   "Other",
 ];
-
-// [BYOK-REMOVED] const PROVIDER_MODEL_MAP: Record<string, string> = {
-// [BYOK-REMOVED]   groq:        "llama-3.1-8b-instant",
-// [BYOK-REMOVED]   cerebras:    "llama3.1-8b",
-// [BYOK-REMOVED]   sambanova:   "Meta-Llama-3.1-8B-Instruct",
-// [BYOK-REMOVED]   siliconflow: "Qwen/Qwen3-8B",
-// [BYOK-REMOVED]   openrouter:  "meta-llama/llama-3.2-3b-instruct:free",
-// [BYOK-REMOVED]   gemini:      "gemini-1.5-flash-8b",
-// [BYOK-REMOVED] };
 
 interface Education {
   institution: string;
@@ -214,10 +204,6 @@ function StepWelcome({
   );
 }
 
-// [BYOK-REMOVED] ── Step 2: API Key Setup (entire component removed) ─────────
-// [BYOK-REMOVED] StepApiKey component was here — users no longer manage API keys.
-// [BYOK-REMOVED] See git history for the full component if needed.
-
 // ── Step 3: Career Basics Form ────────────────────────────────────────────
 
 function StepCareerBasics({
@@ -274,6 +260,7 @@ function StepCareerBasics({
   // Enriched chunk metadata — populated silently after narration stream completes.
   // Keys are ### heading strings (used for diff when user edits).
   const [enrichedChunks, setEnrichedChunks] = useState<EnrichedChunkUpload[]>([]);
+  const [narrationEnrichWarning, setNarrationEnrichWarning] = useState<string | null>(null);
 
   const startNarrationStream = async (experiences: ParsedExperience[], projects?: Array<{ title?: string; one_liner?: string; key_achievements?: string[] }>) => {
     if (!experiences || experiences.length === 0) return;
@@ -295,10 +282,17 @@ function StepCareerBasics({
         const text = accumulated;
         setOutline((prev) => prev ? { ...prev, career_summary_first_person: text } : null);
       }
-      // Silently enrich initiative chunks while user reads — stored in state only
+      // Enrich initiative chunks while user reads — stored in state.
+      // If enrichment fails, surface a soft warning so user knows their profile
+      // saved without enriched chunks instead of failing silently.
       if (accumulated.trim()) {
         const careerContext = buildCareerContext(experiences);
-        enrichNarrationChunks(accumulated, careerContext).then(setEnrichedChunks).catch(() => {});
+        enrichNarrationChunks(accumulated, careerContext)
+          .then(setEnrichedChunks)
+          .catch((e) => {
+            console.warn("[narrate-enrich] failed:", e);
+            setNarrationEnrichWarning("Couldn't enrich a few sections — proceeding without");
+          });
       }
     } catch (err) {
       console.warn("[narrate-career] Streaming failed:", err);
@@ -702,7 +696,18 @@ function StepCareerBasics({
             ))}
           </div>
 
-          {parseError && <p className="mt-3 text-sm text-red-600">{parseError}</p>}
+          {parseError && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm text-amber-700">{parseError}</p>
+              <button
+                type="button"
+                onClick={() => { setParseError(""); setUploadMode("paste"); }}
+                className="mt-2 text-xs font-semibold text-accent hover:underline"
+              >
+                Try pasting text instead →
+              </button>
+            </div>
+          )}
 
           <p className="mt-5 text-center text-xs text-muted">
             Don&apos;t have a resume?{" "}
@@ -804,6 +809,11 @@ function StepCareerBasics({
       )}
 
       {/* Parsed outline + first-person narration (CareerOutlineView) */}
+      {narrationEnrichWarning && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          {narrationEnrichWarning}
+        </div>
+      )}
       {parsed && outline && outline.experiences.length > 0 && (
         <CareerOutlineView
           data={outline}
@@ -1431,55 +1441,6 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
         >
           Skip to dashboard
         </Link>
-      </div>
-    </div>
-  );
-}
-
-// ── Progress bar ──────────────────────────────────────────────────────────
-
-// [BYOK-REMOVED] const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
-const STEP_LABELS = ["Roles", "Profile", "Experience", "Summary"];
-
-function ProgressBar({ step, onStepClick }: { step: Step; onStepClick?: (s: Step) => void }) {
-  const totalSteps = 4;
-  const currentIndex = Math.min(step - 1, totalSteps - 1);
-
-  return (
-    <div className="mb-10">
-      <div className="flex justify-between mb-2">
-        {STEP_LABELS.map((label, idx) => {
-          const isCompleted = idx < currentIndex;
-          const isCurrent = idx === currentIndex;
-          return (
-            <button
-              key={label}
-              type="button"
-              // F-14: previously `disabled={!isCompleted}` made the CURRENT step
-              // render as disabled in the a11y tree (the user is on it — it
-              // should be marked with aria-current, not disabled). Only unvisited
-              // future steps are disabled now.
-              disabled={!isCompleted && !isCurrent}
-              aria-current={isCurrent ? "step" : undefined}
-              onClick={() => isCompleted && onStepClick?.((idx + 1) as Step)}
-              className={`text-xs font-medium transition-colors ${
-                isCurrent
-                  ? "text-primary-600 font-semibold"
-                  : isCompleted
-                    ? "text-primary-600 hover:text-primary-800 cursor-pointer underline underline-offset-2"
-                    : "text-muted cursor-default"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      <div className="h-1.5 w-full rounded-full bg-border">
-        <div
-          className="h-1.5 rounded-full bg-primary-500 transition-all duration-300"
-          style={{ width: `${(currentIndex / (totalSteps - 1)) * 100}%` }}
-        />
       </div>
     </div>
   );

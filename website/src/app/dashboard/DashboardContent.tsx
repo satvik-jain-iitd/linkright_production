@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 import { GRADE_COLORS } from "@/components/QualityPanel";
 import { AppNav } from "@/components/AppNav";
 import { DiaryQuickLog } from "@/components/DiaryQuickLog";
+import { friendlyError } from "@/lib/friendly-error";
 
 interface ResumeJob {
   id: string;
@@ -58,21 +59,7 @@ type NuggetStatus = {
 };
 
 
-const ERROR_PATTERNS: Array<[RegExp, string]> = [
-  [/timed?\s*out/i, "Resume generation timed out. Please try again."],
-  [/worker\s*(un)?reachable/i, "Our servers are busy. Please try again in a moment."],
-  [/pydantic|validation|parse|schema/i, "The job description couldn't be processed. Try simplifying it."],
-  [/rate\s*limit/i, "Too many requests. Please wait a few minutes."],
-  [/api[_\s]?key|auth|unauthorized/i, "Service configuration error. Please contact support."],
-  [/token|context.*length|too\s*long/i, "The input was too long. Try shortening your job description."],
-];
-
-const friendlyError = (raw: string): string => {
-  for (const [pattern, message] of ERROR_PATTERNS) {
-    if (pattern.test(raw)) return message;
-  }
-  return "Something went wrong. Please try again.";
-};
+// friendlyError moved to @/lib/friendly-error — see import at top of file
 
 function pct(s: number | null | undefined) {
   if (s == null) return 0;
@@ -106,6 +93,8 @@ export function DashboardContent({
   const [recs, setRecs] = useState<RecsResponse | null>(null);
   const [status, setStatus] = useState<NuggetStatus | null>(null);
   const [diaryStreak, setDiaryStreak] = useState(0);
+  const [smaPending, setSmaPending] = useState(0);
+  const [linkedinConnected, setLinkedinConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -123,9 +112,11 @@ export function DashboardContent({
 
   const fetchJobs = () =>
     fetch("/api/resume/list")
-      .then((r) => r.json())
-      .then((data) => setJobs(data.jobs || []))
-      .catch(() => {});
+      .then((r) => {
+        if (!r.ok) throw new Error(`/api/resume/list: ${r.status}`);
+        return r.json();
+      })
+      .then((data) => setJobs(data.jobs || []));
 
   const loadDashboard = () => {
     setLoadError(false);
@@ -133,15 +124,31 @@ export function DashboardContent({
     Promise.all([
       fetchJobs(),
       fetch("/api/recommendations/today", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (!r.ok) throw new Error(`/api/recommendations/today: ${r.status}`);
+          return r.json();
+        })
         .then((data) => setRecs(data)),
       fetch("/api/nuggets/status", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (!r.ok) throw new Error(`/api/nuggets/status: ${r.status}`);
+          return r.json();
+        })
         .then((data) => setStatus(data)),
       fetch("/api/diary?limit=1", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.streak != null) setDiaryStreak(data.streak);
+        }),
+      fetch("/api/sma/suggestions?status=pending&limit=20", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.suggestions) setSmaPending(data.suggestions.length);
+        }),
+      fetch("/api/broadcast/status", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data) setLinkedinConnected(data.linkedin_connected === true);
         }),
       fetch("/api/dashboard/pulse", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
@@ -168,7 +175,11 @@ export function DashboardContent({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: jobId }),
       });
-      await fetchJobs();
+      try {
+        await fetchJobs();
+      } catch {
+        // Post-cancel refresh failed — user can manually refresh; non-blocking.
+      }
       setCancelledId(jobId);
       setTimeout(() => setCancelledId(null), 2500);
     } finally {
@@ -253,6 +264,24 @@ export function DashboardContent({
               className="mt-3 inline-block rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-amber-700"
             >
               Finish onboarding →
+            </Link>
+          </div>
+        )}
+
+        {/* Post-onboarding LinkedIn nudge — turns diary entries into LinkedIn posts */}
+        {nuggetCount > 0 && linkedinConnected === false && (
+          <div className="mt-6 rounded-xl border border-pink-300 bg-pink-50 p-4">
+            <p className="text-sm font-semibold text-pink-900">
+              Connect LinkedIn to publish posts straight from your diary.
+            </p>
+            <p className="mt-1 text-sm text-pink-700">
+              We draft, you approve. Posts go out under your account.
+            </p>
+            <Link
+              href="/dashboard/broadcast/connect"
+              className="mt-3 inline-block rounded-lg bg-pink-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-pink-700"
+            >
+              Connect LinkedIn →
             </Link>
           </div>
         )}
@@ -681,6 +710,31 @@ export function DashboardContent({
                 Add more → sharpens every match
               </Link>
             </div>
+
+            {/* SMA suggestions teaser — shows when diary has produced concepts */}
+            {smaPending > 0 && (
+              <Link
+                href="/dashboard/suggestions"
+                className="block rounded-2xl border border-pink-500/40 bg-gradient-to-br from-pink-500/10 to-purple-500/5 p-4 transition hover:border-pink-500"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pink-500 text-sm font-bold text-white">
+                    {smaPending}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-pink-700">
+                      LinkedIn post{smaPending === 1 ? "" : "s"} ready
+                    </p>
+                    <p className="text-[11px] text-muted">
+                      From your recent diary
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] font-semibold text-pink-700">
+                  Pick → edit → publish →
+                </p>
+              </Link>
+            )}
 
             {/* Daily diary */}
             <DiaryQuickLog

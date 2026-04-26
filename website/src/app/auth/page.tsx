@@ -125,6 +125,15 @@ function AuthContent() {
             Link<span className="text-accent">Right</span>
           </Link>
 
+          {/* Mobile-only value prop — desktop has the aside panel */}
+          <div className="mb-6 block rounded-xl px-4 py-3 lg:hidden"
+               style={{ background: "linear-gradient(180deg, #FDF6F0 0%, #F8E6D4 100%)" }}>
+            <p className="text-sm font-semibold text-foreground">Your career, remembered.</p>
+            <p className="mt-1 text-xs text-[#5F4632]">
+              Upload once. Five artefacts per application, one click.
+            </p>
+          </div>
+
           <h1 className="text-2xl font-bold tracking-tight">
             {mode === "signup" ? "Create your account" : "Welcome back"}
           </h1>

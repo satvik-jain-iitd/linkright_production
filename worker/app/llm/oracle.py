@@ -41,7 +41,7 @@ class OracleProvider(LLMProvider):
         url = f"{self.base_url}/lifeos/{self.endpoint}"
         payload = {"prompt": user, "system": system, "temperature": temperature}
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 url,
                 json=payload,

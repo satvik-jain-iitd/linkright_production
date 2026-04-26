@@ -409,8 +409,9 @@ async def _scan_bamboohr(
     # BambooHR careers/list with Accept: application/json returns JSON
     try:
         data = resp.json()
-    except Exception:
-        # Fallback: parse HTML for embedded job data
+    except ValueError:
+        # JSON parse failure (httpx wraps json.JSONDecodeError as ValueError) —
+        # fallback: parse HTML for embedded job data not implemented; skip slug.
         return []
 
     jobs = []
@@ -473,7 +474,10 @@ async def _scan_workday(
             break
         except httpx.HTTPStatusError:
             continue
-        except Exception:
+        except (httpx.RequestError, ValueError):
+            # Network failure or JSON parse failure — try next Workday instance.
+            # Tightened from blanket `except Exception` so AttributeError/KeyError
+            # from schema drift surfaces in Sentry instead of silent fallback.
             continue
     else:
         return []  # All Workday instance numbers failed
@@ -530,7 +534,8 @@ async def _scan_icims(
 
     try:
         data = resp.json()
-    except Exception:
+    except ValueError:
+        # JSON parse failure (httpx wraps json.JSONDecodeError as ValueError).
         return []
 
     jobs = []
