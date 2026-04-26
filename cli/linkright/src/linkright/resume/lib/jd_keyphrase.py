@@ -38,15 +38,24 @@ def _norm(tok: str) -> str:
 
 
 def tokenize(text: str) -> set[str]:
-    """Lowercase token set with stopwords removed. Includes acronyms (lowercased)."""
+    """Lowercase token set with stopwords removed. Includes acronyms (lowercased)
+    and yields sub-tokens for hyphenated/slashed compounds (e.g. "GDPR-compliant"
+    → {"gdpr-compliant", "gdpr", "compliant"}).
+    """
     if not text:
         return set()
     plain = re.sub(r"<[^>]+>", " ", text)
     out: set[str] = set()
     for m in _TOKEN_RE.finditer(plain):
-        n = _norm(m.group(0))
-        if len(n) >= 3 and n not in _STOPWORDS:
-            out.add(n)
+        raw = _norm(m.group(0))
+        candidates = [raw]
+        if "-" in raw:
+            candidates.extend(p for p in raw.split("-") if p)
+        if "/" in raw:
+            candidates.extend(p for p in raw.split("/") if p)
+        for c in candidates:
+            if len(c) >= 3 and c not in _STOPWORDS:
+                out.add(c)
     return out
 
 
