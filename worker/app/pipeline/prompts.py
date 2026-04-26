@@ -237,6 +237,31 @@ These templated patterns ship as AI slop and break the brand promise
   - Any paragraph lacking at least ONE concrete number, date, proper
     noun (product/company/client), or unit (%, $, ₹, hrs, week, count).
 
+# NEGATIVE PROMPTS — these patterns REJECT the bullet (common LLM failure modes)
+
+Layered on top of BANNED PHRASES above. Reject any paragraph that:
+
+  - Prefixes with "At <Company>, as a/an/the <Role>," — the company/role
+    block renders ABOVE the bullet list already; repeating wastes ~40 chars
+    and flattens verb diversity. Start the bullet with the IMPACT VERB
+    (Grew, Shipped, Cut, Led, Architected, Built, Drove, Secured, etc.).
+  - Starts with "I", "My", "We", "During my time", "In my role" — use
+    past-tense action verbs only, never first-person pronouns.
+  - Uses weak/filler verbs: "worked on", "responsible for", "involved in",
+    "helped with", "assisted with", "participated in", "contributed to".
+  - Uses adverbs: "successfully", "effectively", "significantly", "consistently".
+  - Uses passive voice: "was built", "was delivered" — always active voice.
+  - Hedges numbers: "approximately", "around", "nearly" — use exact figures.
+  - Reuses the same leading verb you already used on a prior bullet (track
+    across all paragraphs in this call AND across the {{used_verbs}} list).
+
+# XYZ format — MANDATORY, all three in EVERY bullet (NON-NEGOTIABLE)
+
+A paragraph missing X (impact), Y (a real number), or Z (action) is REJECTED.
+If you cannot find a metric (Y) for a candidate signal, do NOT write that
+paragraph at all — pick a different signal from the pool that has a real number.
+Better to emit 5 strong XYZ paragraphs than 10 with weak/missing parts.
+
 # JD keyword integration
 
 JD keywords are priority terms. Use the EXACT keyword (not a synonym) when
@@ -282,6 +307,37 @@ RULES:
 15. evidence_atom_ids: MANDATORY non-empty array of atom IDs from the Career
     Context that support THIS paragraph's facts. Hallucinated or empty
     arrays → paragraph is dropped by the validator.
+16. COMPANY SCOPING — each call is for ONE specific employer (named in the user
+    prompt). If the Career Context contains nuggets or sections labeled with a
+    different company (e.g. "## Company: <other-name>"), treat those as INVISIBLE.
+    Never attribute another employer's work to the target company. Cross-company
+    attribution is a CRITICAL FAILURE — the paragraph will be dropped by the
+    validator and the resume will be flagged as compromised.
+
+# ZERO-FABRICATION DISCIPLINE — read carefully
+
+17. NUMERIC FIDELITY — ZERO TOLERANCE: Every number, percentage, $ amount,
+    multiplier, duration in your bullet MUST appear verbatim (or rounded to
+    the same magnitude tier: 99 ≈ 99.9, $1M ≈ $1.2M) in at least one cited
+    atom. If the cited atoms have NO metric, your bullet has NO metric.
+    NEVER invent percentages like 20%, 30%, 99.9%, 100% to make a bullet
+    look quantified. Post-LLM validators will strip fabricated numbers.
+
+18. JD VOCABULARY DISCIPLINE — NO FISHING: Do NOT introduce technologies,
+    frameworks, standards, regulations, certifications (e.g. SOX, GDPR,
+    HIPAA, Kubernetes, SAFe) that the cited atoms do NOT mention. JD
+    relevance comes from REFRAMING source content with overlapping
+    vocabulary, NOT from injecting JD keywords absent from the candidate's
+    actual experience. Adding "SOX compliance" when the source has only
+    "compliance" is FABRICATION.
+
+19. NO-METRIC FALLBACK: If cited atoms have NO concrete number, produce a
+    QUALITATIVE bullet (still XYZ format, but Y = scope/scale word like
+    "across multiple teams", "spanning the platform", "for enterprise
+    clients", "throughout the release cycle") instead of inventing a number.
+    Skipping a bullet entirely is the LAST resort — only when no signal at
+    all can be honestly described from the cited atoms. Producing a strong
+    qualitative bullet is ALWAYS better than skipping or fabricating.
 
 Strategy: {{strategy}}
 Strategy emphasis: {{strategy_description}}
@@ -301,33 +357,126 @@ Team: {company_team}
 ## Relevant Career Context
 {company_chunks}
 
-Write {bullet_count} XYZ achievement paragraphs for this company. Lead with IMPACT, not action. Include verbose_context for each. ZERO verb repetition."""
+CRITICAL SCOPING RULE: Write paragraphs ONLY for {company_name}. If the context
+above contains any sections labeled "## Company: <other-name>", you MUST IGNORE
+those sections entirely. Use ONLY atoms whose nugget belongs to {company_name}.
+Crediting another employer's achievements to {company_name} is a CRITICAL FAILURE.
+
+Write {bullet_count} XYZ achievement paragraphs for {company_name} only. Lead with IMPACT, not action. Include verbose_context for each. ZERO verb repetition."""
 
 
 # ── Phase 4C: Condense Verbose Paragraphs to Bullets (batched) ─────────
 
-PHASE_4C_CONDENSE_SYSTEM = """You are a resume bullet condenser. Compress detailed XYZ paragraphs into concise, one-line resume bullets.
-Return ONLY valid JSON:
+PHASE_4C_CONDENSE_SYSTEM = """You are a resume bullet FINALIZER. Your output IS the final resume text — there is
+no post-processing step that can fix it. Your ONLY job is to produce bullets that are
+exactly the right length for a full-width A4 resume line.
+
+# LENGTH CONSTRAINT — HIGHEST PRIORITY
+
+Every bullet MUST satisfy ALL of:
+- MINIMUM: 95 characters of plain text (after stripping <b>...</b> tags)
+- MAXIMUM: 110 characters of plain text (after stripping <b>...</b> tags)
+- IDEAL: around 102 characters
+
+If you emit a bullet outside [95, 110]:
+- Below 95 → output is REJECTED and regenerated at extra cost
+- Above 110 → wraps to a second line in the final PDF (broken layout)
+
+COUNT PLAIN-TEXT CHARACTERS AS YOU WRITE. Do not estimate. Do not guess.
+The <b>...</b> tags DO NOT COUNT toward the total (they render as zero-width in plain text).
+
+This constraint is more important than any other stylistic preference.
+
+# OUTPUT PURITY — zero tolerance
+
+Your output IS the final resume text. It will be inserted DIRECTLY into a PDF.
+- NEVER emit commentary: no "Note:", no "Here's", no "Sure,", no explanations.
+- NEVER emit HTML comments: no <!-- ... -->
+- NEVER wrap output in code fences (```), quotes, or labels.
+- NEVER address the user ("Hope this helps", "Let me know", etc.)
+- Output EXACTLY the JSON specified below and NOTHING else.
+
+# STRATEGY — how to hit 95-110
+
+Given an input paragraph:
+- If input ≥ 150 chars: TRIM filler. Start by removing: articles (the/a/an), adverbs
+  (successfully, effectively), setup clauses ("In my role as …"), redundant
+  adjectives. Keep metrics, proper nouns, action verb, outcome.
+- If input 130-150 chars: mostly keep as-is, maybe trim 10-25 chars of filler.
+- If input < 130 chars (thin): PAD with the strongest supporting detail drawn
+  FROM THE PARAGRAPH (scale, geography, duration, domain acronym already mentioned).
+  Do NOT invent new facts, numbers, or tools that aren't in the input.
+
+# OUTPUT SCHEMA — return ONLY valid JSON (no prose, no code fences)
 
 {{
   "bullets": [
     {{
       "paragraph_index": 0,
-      "text_html": "<b>Impact/outcome first</b>, metric, through action",
+      "text_html": "<b>Impact first</b>, metric, through action verb",
       "verb": "Secured"
     }}
   ]
 }}
 
-RULES:
-1. Each bullet MUST be 95-110 rendered characters — one justified line on an A4 resume
-2. Preserve XYZ structure: impact/outcome FIRST, then measurement, then action
-3. Preserve the leading <b>Bold text</b> and all <b> keyword tags exactly
-4. Preserve all metrics, percentages, dollar amounts, team sizes exactly
-5. Every bullet must be a COMPLETE grammatical thought — never truncate mid-sentence
-6. Cut adjectives, adverbs, and setup clauses first. Keep metrics and outcomes.
-7. If a paragraph has multiple metrics, keep the strongest one
-8. Condense ALL {paragraph_count} paragraphs — one bullet per paragraph"""
+# RULES (each violation rejects the bullet)
+
+1. EXACTLY 95-110 rendered chars (plain text, no <b> tags counted). COUNT BEFORE RETURNING.
+2. Preserve XYZ structure (MANDATORY): impact/outcome FIRST, then metric, then action.
+   A bullet missing any of X, Y, Z is REJECTED. Do not emit bullets without a concrete number.
+3. Preserve every <b>...</b> tag content VERBATIM — no edits inside bold.
+4. Preserve every number, percentage, dollar, acronym, proper noun EXACTLY.
+5. Every bullet is a COMPLETE grammatical sentence — ends cleanly at a period or close.
+6. Condense ALL {paragraph_count} paragraphs — one bullet per paragraph.
+7. NEVER truncate mid-sentence. NEVER leave trailing preposition ("through", "by").
+
+# NEGATIVE PROMPTS — these patterns REJECT the bullet
+
+- DO NOT prefix with "At <Company>, as a/an/the <Role>," — the company + title is
+  rendered in a header block ABOVE the bullets. Repeating wastes 30-45 chars and
+  flattens verb diversity. Start with the IMPACT VERB directly.
+- DO NOT start bullets with "I ", "My ", "We " — use past-tense action verbs only.
+- DO NOT use weak verbs: "worked on", "responsible for", "involved in", "helped with",
+  "assisted with", "participated in", "contributed to".
+- DO NOT use adverbs: "successfully", "effectively", "significantly", "consistently".
+- DO NOT hedge numbers: "approximately", "around", "nearly".
+- DO NOT repeat the same leading verb across bullets (track across the whole batch).
+- DO NOT fabricate any number, tool, framework, date, title, or acronym not in input.
+- DO NOT wrap the response in code fences, quotes, or explanations.
+
+# WORKED EXAMPLES — study these
+
+INPUT (long, 200 chars):
+  "In my role as Senior Product Manager at American Express, I <b>architected an AML
+  risk engine</b> for 100M+ accounts across 40+ markets, cutting <b>speed-to-market
+  by 70%</b> through modular design patterns."
+
+GOOD output (108 chars, plain):
+  "<b>Architected AML risk engine</b> for 100M+ accounts across 40+ markets, cutting <b>speed-to-market by 70%</b>."
+
+BAD output (48 chars — TOO SHORT, rejected):
+  "<b>AML risk engine</b> with 70% faster launch."
+
+---
+
+INPUT (thin, 88 chars):
+  "<b>Built onboarding flow</b> that cut setup time by <b>40%</b> for enterprise customers."
+
+GOOD output (105 chars — padded with supporting detail from paragraph):
+  "<b>Built enterprise onboarding flow</b> cutting setup time by <b>40%</b>, eliminating 12 manual steps."
+
+BAD output (40 chars — identical echo, too short):
+  "Built onboarding flow cutting setup 40%."
+
+---
+
+# REMINDER
+
+Count characters of PLAIN TEXT (strip <b>...</b> first). Target 102.
+If you emit a bullet under 95 chars, it will be rejected and regenerated.
+If you emit one over 110 chars, downstream trimming risks losing key info.
+This is the final step. Get the length RIGHT — slightly long is SAFE (downstream
+width-trim can shave 5-10 chars); slightly short is UNFIXABLE without inventing facts."""
 
 PHASE_4C_CONDENSE_USER = """## Paragraphs to Condense
 

@@ -187,6 +187,13 @@ REVIEW_PAUSE_SECONDS = int(os.environ.get("REVIEW_PAUSE_SECONDS", "6"))
 
 import re as _re
 
+# Module-scope preamble scrubber (used by phase_4c condense + phase_8 fallback layers).
+# Strips "At <Company>, as a/an/the <Role>, [I]" pattern that LLMs sometimes emit.
+_PREFIX_RE = _re.compile(
+    r"^\s*(?:<b>\s*)?at\s+[^,<]+,\s*as\s+(?:a|an|the)\s+[^,<]+,\s*(?:</b>\s*)?(?:i\s+)?",
+    _re.IGNORECASE,
+)
+
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 # Keywords that signal a section contains professional experience or skills.
@@ -1140,6 +1147,31 @@ async def phase_1_parse_and_strategy(ctx: PipelineContext, sb: Client, llm):
             list(dropped_names),
         )
 
+    # Education-entity filter — drop universities/colleges/institutes from the
+    # Work Experience companies list (LLM occasionally classifies the user's
+    # alma mater as a "company"). Override regex via env LINKRIGHT_EDU_DENY_REGEX.
+    import os as _os_edu, re as _re_edu
+    _edu_re_str = _os_edu.environ.get(
+        "LINKRIGHT_EDU_DENY_REGEX",
+        r"\b(university|institute|college|school|academy|polytechnic|"
+        r"iit|nit|iim|bits|iisc|isb|gurukul|vidyalaya)\b",
+    )
+    _EDU_PATTERN = _re_edu.compile(_edu_re_str, _re_edu.IGNORECASE)
+    _co_list = ctx._parsed.get("companies", []) or []
+    _edu_dropped = [c for c in _co_list if _EDU_PATTERN.search((c.get("name") or "").strip())]
+    if _edu_dropped:
+        _kept = [c for c in _co_list if c not in _edu_dropped]
+        ctx._parsed["companies"] = _kept
+        _edu_dropped_names = {c.get("name", "") for c in _edu_dropped}
+        ctx._bullet_budget = {
+            k: v for k, v in ctx._bullet_budget.items()
+            if k not in _edu_dropped_names
+        }
+        logger.info(
+            "Job %s: dropped %d education entity/entities from Work Experience: %s",
+            ctx.job_id, len(_edu_dropped), list(_edu_dropped_names),
+        )
+
     # Fetch relevant career chunks via full-text search
     keyword_strs = [kw if isinstance(kw, str) else kw.get("keyword", "") for kw in ctx.jd_keywords]
     ctx._relevant_chunks = _fetch_relevant_chunks(ctx, sb, keyword_strs)
@@ -1546,6 +1578,101 @@ async def phase_3_5a_professional_summary(ctx: PipelineContext, sb: Client, llm)
 
 # ── Phase 4A: Verbose Bullets (one LLM call PER COMPANY) ────────────────
 
+def _apply_fabrication_guards_worker(ctx: PipelineContext, companies: list[dict]) -> None:
+    """v9 — post-Phase-4A metric-fidelity + JD-fishing guards.
+
+    Mirrors CLI's _apply_fabrication_guards. For each generated paragraph,
+    strips numeric tokens not supported by cited source atoms (tier-aware
+    fuzz) and JD-vocabulary tokens absent from source nuggets.
+    """
+    import re as _re_g
+    try:
+        from .lib.metric_extract import find_fabricated as _find_fab_metrics
+        from .lib.jd_keyphrase import extract_jd_terms, find_fishing
+    except Exception as _e_imp:
+        logger.warning(f"Job {ctx.job_id}: [v9-guards] import failed ({_e_imp})")
+        return
+
+    bullets = getattr(ctx, "_verbose_bullets", None) or []
+    if not bullets:
+        return
+
+    # Per-company source pool from nugget results
+    co_sources: dict[str, list[str]] = {}
+    for nr in (getattr(ctx, "_nugget_results", None) or []):
+        co_name = getattr(nr, "company", "") or ""
+        text = getattr(nr, "text", "") or getattr(nr, "content", "") or ""
+        if text:
+            co_sources.setdefault(co_name, []).append(str(text))
+
+    universal_source = [ctx.career_text or ""]
+    jd_terms = extract_jd_terms(ctx.jd_text or "")
+
+    metric_strips = 0
+    jd_strips = 0
+    bullets_touched = 0
+
+    for p in bullets:
+        if not isinstance(p, dict):
+            continue
+        text = p.get("text_html") or ""
+        if not text:
+            continue
+        original = text
+
+        # Resolve company name from index
+        co_idx = p.get("company_index", -1)
+        co_name = ""
+        if 0 <= co_idx < len(companies):
+            co_name = (companies[co_idx] or {}).get("name", "") or ""
+        co_src = co_sources.get(co_name, []) + universal_source
+
+        # Metric guard
+        for tok in _find_fab_metrics(text, co_src):
+            pat = _re_g.compile(
+                r"\s*(?:by|of|to|with|reaching|achieving)?\s*" + _re_g.escape(tok),
+                _re_g.IGNORECASE,
+            )
+            new = pat.sub("", text, count=1)
+            if new != text:
+                metric_strips += 1
+                text = new
+
+        # JD-fishing guard
+        for term in find_fishing(text, jd_terms, co_src):
+            pat = _re_g.compile(r"\b" + _re_g.escape(term) + r"\b", _re_g.IGNORECASE)
+            new = pat.sub("", text, count=1)
+            if new != text:
+                jd_strips += 1
+                text = new
+
+        if text != original:
+            text = _re_g.sub(r"\s{2,}", " ", text)
+            text = _re_g.sub(r"\s+([,.;:])", r"\1", text)
+            text = _re_g.sub(r"\(\s*\)", "", text)
+            text = text.strip(" ,;")
+            p["text_html"] = text
+            bullets_touched += 1
+
+    if not hasattr(ctx, "stats") or ctx.stats is None:
+        try:
+            ctx.stats = {}
+        except Exception:
+            pass
+    try:
+        ctx.stats["fabrication_guards"] = {
+            "bullets_touched": bullets_touched,
+            "metric_strips": metric_strips,
+            "jd_strips": jd_strips,
+        }
+    except Exception:
+        pass
+    logger.info(
+        f"Job {ctx.job_id}: [v9-guards] bullets_touched={bullets_touched} "
+        f"metric_strips={metric_strips} jd_strips={jd_strips}"
+    )
+
+
 async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
     """Write verbose 200-400 char paragraphs per company, with review gates."""
     t0 = time.time()
@@ -1690,6 +1817,12 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
             await asyncio.sleep(REVIEW_PAUSE_SECONDS)
 
     ctx._verbose_bullets = all_verbose
+
+    # v9 — strip fabricated metrics + JD-fishing terms from generated bullets
+    try:
+        _apply_fabrication_guards_worker(ctx, companies)
+    except Exception as _e_guard:
+        logger.warning(f"Job {ctx.job_id}: [v9-guards] failed ({_e_guard}) — continuing")
 
     # Guard 3.3a: validate Phase 4A verbose bullets
     p4a_failures = _validate_phase_4a(ctx._verbose_bullets)
@@ -1867,6 +2000,36 @@ async def phase_4b_ranking(ctx: PipelineContext, sb: Client):
     # appear grouped by company but the best bullets within each are first
     selected.sort(key=lambda x: (x.get("company_index", 99), -x.get("brs", 0)))
 
+    # Step 3b (v0.1.4) — defensive semantic dedup. Within each company, walk
+    # pairs in BRS-descending order; if a lower-BRS bullet near-duplicates an
+    # already-kept higher-BRS sibling, drop the lower one. Catches the
+    # Sprinklr-style "13% to 9% churn" pair that was visibly duplicated in
+    # earlier outputs. Uses the composite Jaccard + shared-metrics detector.
+    try:
+        from ._dedup import is_near_duplicate as _is_near_dup_4b
+        _selected_after_dedup: list[dict] = []
+        _kept_texts_by_co: "defaultdict[int, list[str]]" = defaultdict(list)
+        _dedup_dropped = 0
+        for _b in selected:
+            _txt = _b.get("text_html", "") or ""
+            _co_idx = _b.get("company_index", 0)
+            if any(_is_near_dup_4b(_txt, kept) for kept in _kept_texts_by_co[_co_idx]):
+                _dedup_dropped += 1
+                continue
+            _selected_after_dedup.append(_b)
+            _kept_texts_by_co[_co_idx].append(_txt)
+        if _dedup_dropped:
+            logger.info(
+                "[Phase 4b] Dedup dropped %d near-duplicate bullet(s) before condense",
+                _dedup_dropped,
+            )
+            ctx.stats.setdefault("phase_4b_dedup_drops", 0)
+            ctx.stats["phase_4b_dedup_drops"] += _dedup_dropped
+        selected = _selected_after_dedup
+    except Exception as _e_dedup:
+        # Defensive — never let dedup break the pipeline
+        logger.warning("[Phase 4b] Dedup pass skipped due to error: %s", _e_dedup)
+
     ctx._ranked_verbose_bullets = selected
     ctx.stats["phase_4b_generated_total"] = len(ctx._verbose_bullets)
     ctx.stats["phase_4b_kept"] = len(selected)
@@ -1958,6 +2121,28 @@ async def phase_4c_condense_bullets(ctx: PipelineContext, sb: Client, llm):
         all_bullets.append(bullet)
 
     ctx._raw_bullets = all_bullets
+
+    # Defensive preamble scrubber — strip "At <Company>, as a/an/the <Role>, [I]"
+    # patterns that occasionally slip through prompt negatives. Capitalize the
+    # first remaining word post-strip.
+    import re as _re_scrub
+    _PREFIX_RE = _re_scrub.compile(
+        r"^\s*(?:<b>\s*)?at\s+[^,<]+,\s*as\s+(?:a|an|the)\s+[^,<]+,\s*(?:</b>\s*)?(?:i\s+)?",
+        _re_scrub.IGNORECASE,
+    )
+    _scrubbed = 0
+    for _b in ctx._raw_bullets or []:
+        _orig = _b.get("text_html", "") or ""
+        _stripped = _PREFIX_RE.sub("", _orig, count=1).lstrip()
+        if _stripped and _stripped != _orig:
+            if _stripped[0].islower() and not _stripped.startswith("<"):
+                _stripped = _stripped[0].upper() + _stripped[1:]
+            elif _stripped.startswith("<b>") and len(_stripped) > 3 and _stripped[3].islower():
+                _stripped = _stripped[:3] + _stripped[3].upper() + _stripped[4:]
+            _b["text_html"] = _stripped
+            _scrubbed += 1
+    if _scrubbed:
+        logger.info("Job %s: phase_4c preamble scrubber stripped 'At <Co>, as <Role>' from %d bullets", ctx.job_id, _scrubbed)
 
     # Guard 3.3b: validate Phase 4C condensed bullets
     p4c_failures = _validate_phase_4c(ctx._raw_bullets)
@@ -3150,22 +3335,147 @@ async def phase_8_assembly(ctx: PipelineContext, sb: Client, llm):
     sections = []
 
     # Experience: never frozen (always freshly generated per JD)
-    # Post-condense guard: drop any company that ended up with <2 bullets so the
-    # resume never shows a role header with a single weak bullet or blank entry.
+    # 3-layer fallback (v0.1.4) — never drop a role the user actually worked at:
+    #   L1 = JD-tailored condensed bullets (Phase 4c output, in ctx._optimized_bullets)
+    #   L2 = raw career_nuggets (top by importance, scrubbed + deduped)
+    #   L3 = user_work_history table (defensive try/except in case schema differs)
+    # Only after L1+L2+L3 still produce <2 bullets does the role get dropped.
     if "experience" in order_map and ctx._optimized_bullets:
         _MIN_BULLETS = 2
         _by_co: "defaultdict[int, list]" = defaultdict(list)
         for _b in ctx._optimized_bullets:
             _by_co[_b.get("company_index", 0)].append(_b)
-        _sparse = [idx for idx, _bs in _by_co.items() if len(_bs) < _MIN_BULLETS]
-        if _sparse:
-            logger.warning(
-                "Job %s: dropping %d sparse company section(s) with <2 bullets: indices %s",
-                ctx.job_id, len(_sparse), _sparse
-            )
+
+        # Lazy-import dedup helper + scrubber regex (already defined in this file)
+        from ._dedup import is_near_duplicate as _is_near_dup_local
+
+        _l2_filled = 0
+        _l3_filled = 0
+        _final_dropped: list[int] = []
+
+        for _idx in list(_by_co.keys()):
+            if len(_by_co[_idx]) >= _MIN_BULLETS:
+                continue
+
+            # Resolve company name from companies list (parsed_p12)
+            _co_obj = companies[_idx] if _idx < len(companies) else {}
+            _co_name = (_co_obj.get("name") if isinstance(_co_obj, dict) else "") or ""
+            if not _co_name:
+                _final_dropped.append(_idx)
+                continue
+
+            # Existing bullet texts (for dedup)
+            _existing = [(b.get("text_html") or "") for b in _by_co[_idx]]
+
+            # ── L2: career_nuggets (top by importance) ──────────────────
+            try:
+                _l2_rows = (
+                    sb.table("career_nuggets")
+                    .select("id, answer, importance")
+                    .eq("user_id", ctx.user_id)
+                    .eq("company", _co_name)
+                    .order("importance")  # P0 < P1 < P2 < P3 lexicographic — best first
+                    .limit(8)
+                    .execute()
+                ).data or []
+            except Exception as _e_l2:
+                logger.warning("Job %s: L2 career_nuggets query failed for %s: %s", ctx.job_id, _co_name, _e_l2)
+                _l2_rows = []
+
+            for _n in _l2_rows:
+                _ans = (_n.get("answer") or "").strip()
+                if not _ans:
+                    continue
+                # Scrub "At <Co>, as a <Role>, [I]" preamble
+                _ans = _PREFIX_RE.sub("", _ans, count=1).lstrip()
+                if _ans and _ans[0].islower():
+                    _ans = _ans[0].upper() + _ans[1:]
+                if _ans.endswith("."):
+                    _ans = _ans[:-1]
+                if len(_ans) > 280:
+                    _ans = _ans[:277] + "…"
+                if not _ans or any(_is_near_dup_local(_ans, e) for e in _existing):
+                    continue
+                _by_co[_idx].append({
+                    "text_html": _ans,
+                    "company_index": _idx,
+                    "project_group": 0,
+                    "_fallback_layer": "L2",
+                })
+                _existing.append(_ans)
+                _l2_filled += 1
+                if len(_by_co[_idx]) >= _MIN_BULLETS:
+                    break
+
+            # ── L3: user_work_history (defensive — schema may not match) ──
+            if len(_by_co[_idx]) < _MIN_BULLETS:
+                try:
+                    _l3_rows = (
+                        sb.table("user_work_history")
+                        .select("bullets")
+                        .eq("user_id", ctx.user_id)
+                        .eq("company", _co_name)
+                        .limit(1)
+                        .execute()
+                    ).data or []
+                    _raw_bullets = []
+                    if _l3_rows:
+                        _b_field = _l3_rows[0].get("bullets")
+                        if isinstance(_b_field, list):
+                            _raw_bullets = [b for b in _b_field if isinstance(b, str)]
+                except Exception as _e_l3:
+                    logger.info("Job %s: L3 user_work_history skipped for %s: %s", ctx.job_id, _co_name, _e_l3)
+                    _raw_bullets = []
+
+                for _rb in _raw_bullets:
+                    _rb = (_rb or "").strip()
+                    if not _rb:
+                        continue
+                    _rb = _PREFIX_RE.sub("", _rb, count=1).lstrip()
+                    if _rb and _rb[0].islower():
+                        _rb = _rb[0].upper() + _rb[1:]
+                    if any(_is_near_dup_local(_rb, e) for e in _existing):
+                        continue
+                    _by_co[_idx].append({
+                        "text_html": _rb,
+                        "company_index": _idx,
+                        "project_group": 0,
+                        "_fallback_layer": "L3",
+                    })
+                    _existing.append(_rb)
+                    _l3_filled += 1
+                    if len(_by_co[_idx]) >= _MIN_BULLETS:
+                        break
+
+            # If still sparse after L2+L3 → only NOW drop (last-resort)
+            if len(_by_co[_idx]) < _MIN_BULLETS:
+                _final_dropped.append(_idx)
+
+        # Telemetry
+        if _l2_filled or _l3_filled or _final_dropped:
+            ctx.stats.setdefault("fallback_l2_bullets", 0)
+            ctx.stats.setdefault("fallback_l3_bullets", 0)
             ctx.stats.setdefault("sparse_role_drops", 0)
-            ctx.stats["sparse_role_drops"] += len(_sparse)
-            ctx._optimized_bullets = [b for b in ctx._optimized_bullets if b.get("company_index", 0) not in _sparse]
+            ctx.stats["fallback_l2_bullets"] += _l2_filled
+            ctx.stats["fallback_l3_bullets"] += _l3_filled
+            ctx.stats["sparse_role_drops"] += len(_final_dropped)
+            logger.info(
+                "Job %s: 3-layer fallback — L2 added %d, L3 added %d, final-dropped %d",
+                ctx.job_id, _l2_filled, _l3_filled, len(_final_dropped),
+            )
+
+        # Apply final drop (only roles that even L3 could not fill)
+        if _final_dropped:
+            for _idx in _final_dropped:
+                _by_co.pop(_idx, None)
+
+        # Rebuild ctx._optimized_bullets from the (now-filled) _by_co
+        ctx._optimized_bullets = [
+            b
+            for _idx in sorted(_by_co.keys())
+            for b in _by_co[_idx]
+        ]
+
         sections.append(SectionContent(
             section_html=_build_experience_html(ctx._optimized_bullets, companies),
             section_order=order_map["experience"],
