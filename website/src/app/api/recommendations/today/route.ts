@@ -107,6 +107,81 @@ async function lazyComputeTop20(
   return rows.length;
 }
 
+/**
+ * Cold-start fallback for users with ZERO existing job_scores.
+ * Returns up to 20 recent active discoveries — text-matched against user.target_roles
+ * if set, otherwise just most-recent jobs. Synthetic rank order, no LLM.
+ *
+ * Solves: "brand new user signs up → opens jobs page → sees nothing because the
+ * worker cron hasn't scored anything for them yet". Now they see fresh jobs
+ * immediately, with a "fresh match (no AI scoring yet)" reason hint.
+ */
+async function coldStartHeuristicTop20(
+  supabase: SupabaseClient,
+  userId: string,
+  today: string,
+): Promise<number> {
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("target_roles")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const targetRoles = ((prefs?.target_roles as string[] | null) ?? [])
+    .map((r) => r.toLowerCase().trim())
+    .filter(Boolean);
+
+  const since = new Date(Date.now() - RECENCY_WINDOW_DAYS * 86400_000).toISOString();
+
+  const { data: discs } = await supabase
+    .from("job_discoveries")
+    .select("id,title,company_name,discovered_at,liveness_status,status")
+    .gte("discovered_at", since)
+    .in("liveness_status", ["active", "unknown"])
+    .in("status", ["new", "saved"])
+    .order("discovered_at", { ascending: false })
+    .limit(500);
+
+  const allRecent = (discs ?? []) as DiscoveryRow[];
+  if (allRecent.length === 0) return 0;
+
+  let candidates: DiscoveryRow[];
+  if (targetRoles.length > 0) {
+    const matches = allRecent.filter((d) => {
+      const title = (d.title ?? "").toLowerCase();
+      return targetRoles.some((r) => title.includes(r));
+    });
+    candidates = matches.length > 0 ? matches : allRecent;
+  } else {
+    candidates = allRecent;
+  }
+
+  const top = candidates.slice(0, 20);
+  if (top.length === 0) return 0;
+
+  await supabase
+    .from("user_daily_top_20")
+    .delete()
+    .eq("user_id", userId)
+    .eq("date_utc", today);
+
+  const rows = top.map((d, i) => ({
+    user_id: userId,
+    job_discovery_id: d.id,
+    date_utc: today,
+    rank: i + 1,
+    final_score: 0.5,
+    reason: "fresh match (no AI scoring yet)",
+  }));
+
+  const { error } = await supabase.from("user_daily_top_20").insert(rows);
+  if (error) {
+    console.error("coldStartHeuristicTop20 insert failed:", error.message);
+    return 0;
+  }
+  return rows.length;
+}
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -138,9 +213,14 @@ export async function GET() {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  // Self-heal: if empty, try to rank from existing scores (no LLM, just SQL)
+  // Self-heal chain — never return empty if any path can surface jobs.
   if (!top20 || top20.length === 0) {
-    const computed = await lazyComputeTop20(supabase, user.id, today);
+    // Tier 1: rank from existing job_scores
+    let computed = await lazyComputeTop20(supabase, user.id, today);
+    // Tier 2: cold-start heuristic (no scores → text-match recent jobs to target_roles)
+    if (computed === 0) {
+      computed = await coldStartHeuristicTop20(supabase, user.id, today);
+    }
     if (computed > 0) {
       const reread = await supabase
         .from("user_daily_top_20")
