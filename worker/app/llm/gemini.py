@@ -48,7 +48,7 @@ class GeminiProvider(LLMProvider):
             tried += 1
             key = self._next_key()
             try:
-                async with httpx.AsyncClient(timeout=120) as client:
+                async with httpx.AsyncClient(timeout=45) as client:
                     resp = await client.post(
                         f"{BASE_URL}/models/{self.model_id}:generateContent",
                         params={"key": key},

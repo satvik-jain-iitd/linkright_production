@@ -11,7 +11,7 @@ BASE_URL = "https://openrouter.ai/api/v1"
 
 class OpenRouterProvider(LLMProvider):
     async def complete(self, system: str, user: str, temperature: float = 0.3) -> LLMResponse:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{BASE_URL}/chat/completions",
                 headers={
