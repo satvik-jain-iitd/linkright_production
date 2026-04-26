@@ -561,29 +561,6 @@ export default function NuggetsDashboard({ user }: { user?: import("@supabase/su
 
   return (
     <div className="min-h-screen">
-      {/* Navbar */}
-      {
-        // [NAV-REDESIGN] <nav className="flex items-center justify-between border-b border-border px-6 py-4">
-        // [NAV-REDESIGN]   <Link href="/dashboard" className="text-lg font-bold tracking-tight">
-        // [NAV-REDESIGN]     Link<span className="text-accent">Right</span>
-        // [NAV-REDESIGN]   </Link>
-        // [NAV-REDESIGN]   <div className="flex items-center gap-4">
-        // [NAV-REDESIGN]     <Link
-        // [NAV-REDESIGN]       href="/dashboard"
-        // [NAV-REDESIGN]       className="text-sm text-muted transition-colors hover:text-foreground"
-        // [NAV-REDESIGN]     >
-        // [NAV-REDESIGN]       &larr; Dashboard
-        // [NAV-REDESIGN]     </Link>
-        // [NAV-REDESIGN]     [BYOK-REMOVED] Settings link removed
-        // [NAV-REDESIGN]     <Link
-        // [NAV-REDESIGN]       href="/dashboard/settings"
-        // [NAV-REDESIGN]       className="text-sm text-muted transition-colors hover:text-foreground"
-        // [NAV-REDESIGN]     >
-        // [NAV-REDESIGN]       Settings
-        // [NAV-REDESIGN]     </Link>
-        // [NAV-REDESIGN]   </div>
-        // [NAV-REDESIGN] </nav>
-      }
       <AppNav user={user ?? null} />
 
       <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
