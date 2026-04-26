@@ -179,17 +179,40 @@ async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None
     return row
 
 
-async def score_fresh_discoveries_for_user(sb, user_id: str) -> int:
-    """Score any un-scored discoveries for the given user. Returns count scored."""
+def _user_has_existing_top20(sb, user_id: str) -> bool:
+    """Cold-start detection: True if user already has any top-20 entries.
+    Cold users get a higher per-run scoring budget."""
+    today = _today_utc()
+    r = (
+        sb.table("user_daily_top_20")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .eq("date_utc", today)
+        .limit(1)
+        .execute()
+    )
+    return bool(r.count and r.count > 0)
+
+
+async def score_fresh_discoveries_for_user(sb, user_id: str, limit: int | None = None) -> int:
+    """Score un-scored discoveries for the given user. Returns count scored.
+
+    If `limit` is given, cap to that. Otherwise:
+      - Cold user (no top-20 yet): score up to 50 (fast first-load)
+      - Warm user: score up to MAX_SCORES_PER_USER_PER_RUN (incremental)
+    """
     discoveries = _fetch_candidate_discoveries(sb, user_id)
     if not discoveries:
         return 0
+
+    if limit is None:
+        limit = 50 if not _user_has_existing_top20(sb, user_id) else MAX_SCORES_PER_USER_PER_RUN
 
     existing = _fetch_existing_scores(sb, user_id, [d["id"] for d in discoveries])
     to_score = [
         d for d in discoveries
         if d["id"] not in existing or _score_is_stale(existing[d["id"]])
-    ][:MAX_SCORES_PER_USER_PER_RUN]
+    ][:limit]
 
     n_scored = 0
     for d in to_score:
@@ -254,21 +277,18 @@ def _compute_final_score(score_row: dict, discovery: dict) -> float:
 
 def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
     """Compute user's top-20 for today from existing job_scores + live job_discoveries.
-    Writes to user_daily_top_20. Returns the new top rows."""
+    Writes to user_daily_top_20. Returns the new top rows.
+
+    Ranks ALL scored rows by final_score (no hard action filter). UI distinguishes
+    apply_now/worth_it/maybe via badges. Hard-filtering caused empty top-20 for
+    new users with only "maybe" jobs; relaxed to never-empty when scores exist.
+    """
     rows = _load_all_scored(sb, user_id)
     if not rows:
         return []
 
-    # Only consider recommendations worth applying to
-    actionable = [
-        r for r in rows
-        if (r["score_row"].get("recommended_action") or "") in ("apply_now", "worth_it")
-    ]
-    if not actionable:
-        actionable = rows  # fall back to all-scored if nothing labeled apply_now/worth_it
-
     ranked = sorted(
-        actionable,
+        rows,
         key=lambda r: _compute_final_score(r["score_row"], r["discovery"]),
         reverse=True,
     )[:50]  # store up to 50 for overflow; top-20 is marked via rank
