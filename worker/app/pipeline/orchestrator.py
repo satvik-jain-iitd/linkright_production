@@ -1264,6 +1264,7 @@ async def phase_2_5_vector_retrieval(ctx: PipelineContext, sb: Client):
                 company=co_name,
                 limit=8,
                 similarity_threshold=0.50,
+                min_floor=3,
             )
             all_results.extend(results)
             logger.info(f"[Phase 2.5] {co_name}: {len(results)} nuggets via {method}")

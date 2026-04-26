@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 import { GRADE_COLORS } from "@/components/QualityPanel";
 import { AppNav } from "@/components/AppNav";
 import { DiaryQuickLog } from "@/components/DiaryQuickLog";
+import { friendlyError } from "@/lib/friendly-error";
 
 interface ResumeJob {
   id: string;
@@ -58,21 +59,7 @@ type NuggetStatus = {
 };
 
 
-const ERROR_PATTERNS: Array<[RegExp, string]> = [
-  [/timed?\s*out/i, "Resume generation timed out. Please try again."],
-  [/worker\s*(un)?reachable/i, "Our servers are busy. Please try again in a moment."],
-  [/pydantic|validation|parse|schema/i, "The job description couldn't be processed. Try simplifying it."],
-  [/rate\s*limit/i, "Too many requests. Please wait a few minutes."],
-  [/api[_\s]?key|auth|unauthorized/i, "Service configuration error. Please contact support."],
-  [/token|context.*length|too\s*long/i, "The input was too long. Try shortening your job description."],
-];
-
-const friendlyError = (raw: string): string => {
-  for (const [pattern, message] of ERROR_PATTERNS) {
-    if (pattern.test(raw)) return message;
-  }
-  return "Something went wrong. Please try again.";
-};
+// friendlyError moved to @/lib/friendly-error — see import at top of file
 
 function pct(s: number | null | undefined) {
   if (s == null) return 0;

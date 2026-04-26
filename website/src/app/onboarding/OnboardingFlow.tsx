@@ -710,7 +710,18 @@ function StepCareerBasics({
             ))}
           </div>
 
-          {parseError && <p className="mt-3 text-sm text-red-600">{parseError}</p>}
+          {parseError && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm text-amber-700">{parseError}</p>
+              <button
+                type="button"
+                onClick={() => { setParseError(""); setUploadMode("paste"); }}
+                className="mt-2 text-xs font-semibold text-accent hover:underline"
+              >
+                Try pasting text instead →
+              </button>
+            </div>
+          )}
 
           <p className="mt-5 text-center text-xs text-muted">
             Don&apos;t have a resume?{" "}
@@ -1444,55 +1455,6 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
         >
           Skip to dashboard
         </Link>
-      </div>
-    </div>
-  );
-}
-
-// ── Progress bar ──────────────────────────────────────────────────────────
-
-// [BYOK-REMOVED] const STEP_LABELS = ["Roles", "API Key", "Profile", "TruthEngine", "Summary"];
-const STEP_LABELS = ["Roles", "Profile", "Experience", "Summary"];
-
-function ProgressBar({ step, onStepClick }: { step: Step; onStepClick?: (s: Step) => void }) {
-  const totalSteps = 4;
-  const currentIndex = Math.min(step - 1, totalSteps - 1);
-
-  return (
-    <div className="mb-10">
-      <div className="flex justify-between mb-2">
-        {STEP_LABELS.map((label, idx) => {
-          const isCompleted = idx < currentIndex;
-          const isCurrent = idx === currentIndex;
-          return (
-            <button
-              key={label}
-              type="button"
-              // F-14: previously `disabled={!isCompleted}` made the CURRENT step
-              // render as disabled in the a11y tree (the user is on it — it
-              // should be marked with aria-current, not disabled). Only unvisited
-              // future steps are disabled now.
-              disabled={!isCompleted && !isCurrent}
-              aria-current={isCurrent ? "step" : undefined}
-              onClick={() => isCompleted && onStepClick?.((idx + 1) as Step)}
-              className={`text-xs font-medium transition-colors ${
-                isCurrent
-                  ? "text-primary-600 font-semibold"
-                  : isCompleted
-                    ? "text-primary-600 hover:text-primary-800 cursor-pointer underline underline-offset-2"
-                    : "text-muted cursor-default"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      <div className="h-1.5 w-full rounded-full bg-border">
-        <div
-          className="h-1.5 rounded-full bg-primary-500 transition-all duration-300"
-          style={{ width: `${(currentIndex / (totalSteps - 1)) * 100}%` }}
-        />
       </div>
     </div>
   );

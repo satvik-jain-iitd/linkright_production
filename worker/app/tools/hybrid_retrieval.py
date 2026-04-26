@@ -491,6 +491,7 @@ async def hybrid_retrieve(
     company: Optional[str] = None,
     limit: int = 8,
     similarity_threshold: float = 0.50,
+    min_floor: int = 3,
 ) -> tuple[list[NuggetResult], str]:
     """Retrieve the top-k most relevant career nuggets using hybrid search.
 
@@ -498,6 +499,10 @@ async def hybrid_retrieve(
     1. Run BM25 + vector on company-scoped nuggets.
     2. Run BM25 + vector on unscoped nuggets (resume_relevance >= 0.5).
     3. Fuse both result sets with RRF, apply importance boost, dedup, take top limit.
+    4. If `company` is set and we still have fewer than `min_floor` results,
+       retry the company-scoped search with similarity_threshold=0.0 to surface
+       same-company nuggets that scored just below the calibrated cutoff
+       (vocabulary mismatch between JD and resume).
 
     Falls back through:
         hybrid  →  bm25_only  →  fts_fallback  →  ([], "raw_text_fallback")
@@ -514,6 +519,12 @@ async def hybrid_retrieve(
             cleanest HIGH/LOW separator. Values ≥ 0.60 return zero results because
             even obvious matches top out at 0.55 on this embedding model.
             Protects Phase 4a from being fed irrelevant context.
+        min_floor: when company is specified and the primary pass returns fewer
+            than this many results, automatically retry the company-scoped pass
+            with similarity_threshold=0.0 (no vector threshold) and merge —
+            guarantees companies whose nugget vocabulary diverges from the JD
+            still surface enough rows for Phase 4a instead of empty fallback.
+            Set to 0 to disable.
 
     Returns:
         Tuple of (ranked NuggetResult list, retrieval_method_used string).
@@ -553,6 +564,41 @@ async def hybrid_retrieve(
             new_neighbors = [r for r in neighbors if r.nugget_id not in seen_ids]
             slots = max(0, limit - len(initial_results))
             initial_results = initial_results + new_neighbors[:slots]
+
+        # Floor guarantee for company-scoped queries: if the primary pass came
+        # back below min_floor (typical when the company's nuggets use a
+        # different vocabulary than the JD), retry with no similarity threshold
+        # to surface same-company rows that scored just under 0.50.
+        if (
+            company
+            and min_floor > 0
+            and len(initial_results) < min_floor
+            and similarity_threshold > 0.0
+        ):
+            try:
+                floor_fused = await _hybrid_search(
+                    sb, user_id, query, company, limit, jina_api_key,
+                    similarity_threshold=0.0,
+                )
+                floor_results = _to_nugget_results(floor_fused, method)
+                seen_ids = {r.nugget_id for r in initial_results}
+                new_floor = [r for r in floor_results if r.nugget_id not in seen_ids]
+                slots = max(0, limit - len(initial_results))
+                added = new_floor[:slots]
+                if added:
+                    pre_count = len(initial_results)
+                    initial_results = initial_results + added
+                    logger.info(
+                        "hybrid_retrieval: floor pass added %d nuggets for "
+                        "company=%s (was %d, now %d, min_floor=%d)",
+                        len(added), company, pre_count,
+                        len(initial_results), min_floor,
+                    )
+            except Exception as floor_exc:
+                logger.warning(
+                    "hybrid_retrieval: floor pass failed for company=%s — %s",
+                    company, floor_exc,
+                )
 
         return initial_results, method
 
