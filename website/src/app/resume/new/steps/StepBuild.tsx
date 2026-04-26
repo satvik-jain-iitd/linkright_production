@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/friendly-error";
 import type { WizardData } from "../WizardShell";
 
 interface SubStep {
@@ -137,7 +138,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
               setTimeout(next, 500);
               return;
             } else if (job.status === "failed") {
-              setError(job.error_message || "Generation failed");
+              setError(friendlyError(job.error_message, "Generation failed"));
               return;
             }
             applyUpdate(
@@ -184,7 +185,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
         });
         const result = await resp.json();
         if (!resp.ok) {
-          setError(result.error || "Failed to start job");
+          setError(friendlyError(result.error, "Failed to start job"));
           return;
         }
         update({ job_id: result.job_id });
@@ -230,7 +231,7 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
               teardown();
               setTimeout(next, 1000);
             } else if (row.status === "failed") {
-              setError((row.error_message as string) || "Generation failed");
+              setError(friendlyError(row.error_message as string | null, "Generation failed"));
               teardown();
             }
           }

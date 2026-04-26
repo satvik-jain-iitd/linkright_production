@@ -1,5 +1,7 @@
 "use client";
 
+import { friendlyError } from "@/lib/friendly-error";
+
 export default function AuthError({
   error,
   reset,
@@ -13,7 +15,7 @@ export default function AuthError({
         <div className="mb-3 text-3xl">⚠️</div>
         <h2 className="text-base font-semibold text-foreground">Something went wrong</h2>
         <p className="mt-1.5 text-sm text-muted">
-          {error?.message || "An unexpected error occurred during sign in."}
+          {friendlyError(error?.message, "An unexpected error occurred during sign in.")}
         </p>
         <button
           onClick={reset}
