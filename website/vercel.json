@@ -5,12 +5,24 @@
       "schedule": "0 0 * * *"
     },
     {
+      "path": "/api/cron/recompute-top-20",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/cron/scan-global",
-      "schedule": "0 0 * * *"
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/scan-global",
+      "schedule": "0 16 * * *"
     },
     {
       "path": "/api/cron/fetch-jds",
-      "schedule": "0 0 * * *"
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-jds",
+      "schedule": "0 20 * * *"
     },
     {
       "path": "/api/cron/refresh-linkedin-tokens",

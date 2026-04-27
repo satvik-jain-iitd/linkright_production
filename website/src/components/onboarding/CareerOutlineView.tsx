@@ -4,7 +4,7 @@
 // Design handoff: specs/design-handoff-2026-04-18/ → screens-build.jsx Screen04.
 //
 // Shape:
-//   ┌─ step indicator (1 Resume · 2 Profile · 3 Preferences · 4 First match) ─┐
+//   ┌─ step indicator (1 Resume · 2 Profile · 3 Preferences · 4 Broadcast · 5 First match) ─┐
 //   │ eyebrow + headline + sub                                                │
 //   │ [file-chip: filename · size · parsed in Ns]   [swap resume]             │
 //   │ ┌──────────── OUTLINE ────────────┬──────── YOUR STORY ─────────────┐   │
@@ -75,7 +75,8 @@ const STEPS = [
   { n: 1, label: "Resume" },
   { n: 2, label: "Profile" },
   { n: 3, label: "Preferences" },
-  { n: 4, label: "First match" },
+  { n: 4, label: "Broadcast" },
+  { n: 5, label: "First match" },
 ] as const;
 
 export function CareerOutlineView({
@@ -186,7 +187,7 @@ export function CareerOutlineView({
       {/* Eyebrow + headline */}
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
-          Step 1 of 4 · this is the only required input
+          Step 1 of 5 · this is the only required input
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
           Here&apos;s what we understood from your resume.

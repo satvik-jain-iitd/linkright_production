@@ -1,15 +1,25 @@
 // SMA_v2 — user picks a concept, backend generates the draft.
 // POST /api/sma/suggestions/:id/pick { concept_index }
-// → calls n8n PersonalizedGenerator (sync), inserts row in sma_post_drafts.
+// → calls Groq (3-5s), inserts row in sma_post_drafts, returns draft.
 
 import { createClient } from "@/lib/supabase/server";
+import { groqChat } from "@/lib/groq";
 
 type PickBody = { concept_index?: number };
 type RouteContext = { params: Promise<{ id: string }> };
 
-const PERSONALIZE_URL = process.env.SMA_PERSONALIZE_URL ?? "";
-const SMA_TOKEN = process.env.SMA_INTERNAL_TOKEN ?? "";
-const PERSONALIZE_TIMEOUT_MS = 60_000; // gemma3:1b on Oracle ~30-45s
+const SYSTEM_PROMPT = `You are ghost-writing for a smart, busy operator who will publish this on LinkedIn under their own name. Sound like a builder, not a guru.
+
+Hard rules:
+- First person only. "I ...". Never "we did ...".
+- 120-280 words, 3-6 short paragraphs.
+- No emoji. No hashtags. No sign-off.
+- Open with the concrete moment, not a thesis. Numbers where they help.
+- Don't invent details, metrics, companies, or people not in the source.
+- Banned phrases: "unlocked potential", "step into your power", "game-changer", "synergy", "excited to share", "humbled to announce", "unleash", "paradigm".
+- End with one sharp takeaway OR one honest open question — not both.
+
+Return only the post text. No preamble. No sign-off.`;
 
 export async function POST(request: Request, ctx: RouteContext) {
   const supabase = await createClient();
@@ -64,48 +74,46 @@ export async function POST(request: Request, ctx: RouteContext) {
     diaryContext = diary?.content ?? "";
   }
 
-  // Call n8n PersonalizedGenerator. Returns { draft_content }.
-  if (!PERSONALIZE_URL || !SMA_TOKEN) {
-    return Response.json(
-      { error: "SMA_PERSONALIZE_URL or SMA_INTERNAL_TOKEN not configured" },
-      { status: 500 },
-    );
-  }
+  const postAngle = String(picked.post_angle ?? "");
+  const hookLine = String(picked.hook_line ?? "");
+  const topicTag = String(picked.topic_tag ?? "");
 
+  const userPrompt = [
+    "## Source moment (today's diary)",
+    diaryContext || "(no diary context provided)",
+    "",
+    "## Angle to take",
+    postAngle,
+    hookLine ? `\nOpening hook: ${hookLine}` : "",
+    topicTag ? `Topic: ${topicTag}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  // Try 8b first (cheap, fast, plenty for prose). Fall back to 70b only if
+  // 8b errors structurally — saves the 70b daily token budget for tasks that
+  // actually need it (resume parse JSON).
   let draftContent = "";
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), PERSONALIZE_TIMEOUT_MS);
-    const r = await fetch(PERSONALIZE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${SMA_TOKEN}`,
-      },
-      body: JSON.stringify({
-        user_id: user.id,
-        concept: picked,
-        diary_context: diaryContext,
-      }),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      return Response.json(
-        { error: `Generator failed: ${r.status} ${txt.slice(0, 200)}` },
-        { status: 502 },
-      );
+  let lastErr = "";
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: userPrompt },
+  ];
+  for (const model of ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]) {
+    try {
+      draftContent = (
+        await groqChat(messages, { maxTokens: 700, temperature: 0.6, model })
+      ).trim();
+      if (draftContent) break;
+      lastErr = `empty draft from ${model}`;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : "Groq error";
+      // Only retry on rate-limit / quota / network class errors.
+      if (!/429|rate.?limit|quota|TPD|TPM|timeout|ECONN|fetch failed/i.test(lastErr)) break;
     }
-    const out = await r.json().catch(() => ({}));
-    draftContent = (out.draft_content ?? "").toString().trim();
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "fetch error";
-    return Response.json({ error: `Generator unreachable: ${msg}` }, { status: 502 });
   }
-
   if (!draftContent) {
-    return Response.json({ error: "Generator returned empty draft" }, { status: 502 });
+    return Response.json({ error: `Draft generation failed: ${lastErr}` }, { status: 502 });
   }
 
   // Insert draft + mark suggestion picked.
