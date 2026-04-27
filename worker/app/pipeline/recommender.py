@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -214,11 +215,14 @@ async def score_fresh_discoveries_for_user(sb, user_id: str, limit: int | None =
         if d["id"] not in existing or _score_is_stale(existing[d["id"]])
     ][:limit]
 
+    t0 = time.time()
+    logger.info("score_batch start user=%s batch=%d", user_id, len(to_score))
     n_scored = 0
     for d in to_score:
         result = await _score_one_discovery(sb, user_id, d)
         if result:
             n_scored += 1
+    logger.info("score_batch done user=%s scored=%d elapsed=%.2fs", user_id, n_scored, time.time() - t0)
 
     return n_scored
 
