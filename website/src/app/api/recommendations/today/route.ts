@@ -11,8 +11,46 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const RECENCY_WINDOW_DAYS = 14;
 
+// LLM overall_score is on a 1-5 scale; final_score = overall_score * recency_decay
+// can therefore reach ~5. UIs assume 0-1 (multiply by 100 to render %). Normalize
+// at the output boundary so all consumers render a 0-100% bar consistently.
+const SCORE_MAX = 5;
+
+function normalizeFinalScore(raw: number | null | undefined): number {
+  if (raw == null) return 0;
+  // Already in 0-1 (e.g. cold-start synthetic 0.5) — pass through, clamped.
+  if (raw <= 1) return Math.max(0, Math.min(1, raw));
+  // Otherwise treat as 0-SCORE_MAX scale and scale down.
+  return Math.max(0, Math.min(1, raw / SCORE_MAX));
+}
+
 function recencyDecay(daysOld: number): number {
   return Math.max(0.1, Math.exp(-daysOld / 7.0));
+}
+
+// Stage preference → coarse company stages bias.
+// user_preferences.preferred_stages uses fine-grained labels (seed, series_a…);
+// job_discoveries.company_stage uses coarse buckets (startup, growth, enterprise).
+// Mirror of worker/app/pipeline/_stage_map.py — keep them in sync.
+const PREF_TO_COARSE: Record<string, string[]> = {
+  seed: ["startup"],
+  series_a: ["startup"],
+  series_b: ["growth"],
+  series_c: ["growth"],
+  series_d_plus: ["growth", "enterprise"],
+  public: ["enterprise"],
+  bootstrapped: ["startup", "growth"],
+};
+const STAGE_MATCH_BOOST = 1.15; // soft, not hard-filter — keeps top-20 non-empty
+
+function coarseStagesForUser(preferred: string[] | null | undefined): Set<string> {
+  const out = new Set<string>();
+  for (const s of preferred ?? []) {
+    if (!s) continue;
+    const mapped = PREF_TO_COARSE[s.trim().toLowerCase()];
+    if (mapped) for (const c of mapped) out.add(c);
+  }
+  return out;
 }
 
 type ScoreRow = {
@@ -28,6 +66,7 @@ type DiscoveryRow = {
   discovered_at: string;
   liveness_status: string;
   status: string;
+  company_stage?: string | null;
 };
 
 /**
@@ -48,12 +87,22 @@ async function lazyComputeTop20(
   const scoreRows = (scores ?? []) as ScoreRow[];
   if (scoreRows.length === 0) return 0;
 
+  // Soft stage bias from user prefs — boosts (does not filter) matching jobs.
+  const { data: prefs } = await supabase
+    .from("user_preferences")
+    .select("preferred_stages")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const preferredCoarse = coarseStagesForUser(
+    (prefs?.preferred_stages as string[] | null) ?? null,
+  );
+
   const ids = scoreRows.map((s) => s.job_discovery_id);
   const since = new Date(Date.now() - RECENCY_WINDOW_DAYS * 86400_000).toISOString();
 
   const { data: discs } = await supabase
     .from("job_discoveries")
-    .select("id,title,company_name,discovered_at,liveness_status,status")
+    .select("id,title,company_name,discovered_at,liveness_status,status,company_stage")
     .in("id", ids)
     .gte("discovered_at", since)
     .in("liveness_status", ["active", "unknown"])
@@ -71,7 +120,13 @@ async function lazyComputeTop20(
       const dt = new Date(d.discovered_at).getTime();
       const daysOld = (now - dt) / 86400_000;
       const base = s.overall_score ?? 0;
-      const finalScore = base * recencyDecay(daysOld);
+      const stageBoost =
+        preferredCoarse.size > 0 &&
+        d.company_stage &&
+        preferredCoarse.has(d.company_stage)
+          ? STAGE_MATCH_BOOST
+          : 1.0;
+      const finalScore = base * recencyDecay(daysOld) * stageBoost;
       return { score: s, discovery: d, finalScore };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -94,7 +149,7 @@ async function lazyComputeTop20(
       job_discovery_id: r.discovery.id,
       date_utc: today,
       rank: i + 1,
-      final_score: Math.round(r.finalScore * 1000) / 1000,
+      final_score: Math.round(normalizeFinalScore(r.finalScore) * 1000) / 1000,
       reason: action ? `recommended: ${action}` : "",
     };
   });
@@ -266,9 +321,19 @@ export async function GET() {
     .in("status", ["queued", "processing", "completed"])
     .gte("created_at", startOfDay);
 
+  // Output normalization: legacy rows in DB may have final_score on 0-5 scale
+  // (LLM overall_score 1-5 × recency_decay 0.1-1 ⇒ up to ~5). UIs multiply by
+  // 100 to render %, so we collapse everything to 0-1 here.
+  const normalizedTop20 = (top20 ?? []).map(
+    (row: { final_score: number | null } & Record<string, unknown>) => ({
+      ...row,
+      final_score: normalizeFinalScore(row.final_score),
+    }),
+  );
+
   return Response.json({
     date_utc: today,
-    top20: top20 ?? [],
+    top20: normalizedTop20,
     resume_jobs_by_id: resumeJobStatusById,
     daily_resume_usage: {
       used: usedToday ?? 0,

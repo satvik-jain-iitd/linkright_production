@@ -21,6 +21,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from ._stage_map import coarse_stages_for_user
 from .scoring import score_application
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ RECENCY_WINDOW_DAYS = 14         # how far back discoveries count for ranking
 SCORE_FRESHNESS_HOURS = 24       # re-score a job_discovery if its score is older than this
 DAILY_RESUME_CAP = 20            # per user
 TOP_K = 20                       # size of the daily top list (we store up to 50 for overflow)
+STAGE_MATCH_BOOST = 1.15         # soft boost for jobs matching user's preferred stages
 # With 5-min cron cadence (288 runs/day) we cap per-user per-run at 10 so no
 # single user monopolises a run's Gemini budget. Un-scored discoveries roll
 # over to the next run, finishing within ~1 hour for typical inflow.
@@ -242,9 +244,10 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
 
     ids = [s["job_discovery_id"] for s in scores]
     # Load BOTH per-user discoveries AND global ones (user_id IS NULL)
+    # company_stage pulled so compute_and_store_top_20 can apply stage soft-boost.
     discoveries = (
         sb.table("job_discoveries")
-        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,user_id")
+        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,company_stage,user_id")
         .in_("id", ids)
         .gte("discovered_at", since)
         .in_("liveness_status", ["active", "unknown"])
@@ -265,14 +268,37 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
     return rows
 
 
-def _compute_final_score(score_row: dict, discovery: dict) -> float:
+def _compute_final_score(
+    score_row: dict,
+    discovery: dict,
+    coarse_stages: set[str] | None = None,
+) -> float:
     base = float(score_row.get("overall_score") or 0.0)
     try:
         dt = datetime.fromisoformat(discovery["discovered_at"].replace("Z", "+00:00"))
     except Exception:
         dt = datetime.now(timezone.utc)
     days_old = (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
-    return base * _recency_decay(days_old)
+    score = base * _recency_decay(days_old)
+    # Soft stage bias — never filters, just nudges matching jobs up the rank.
+    if coarse_stages and discovery.get("company_stage") in coarse_stages:
+        score *= STAGE_MATCH_BOOST
+    return score
+
+
+def _user_coarse_stages(sb, user_id: str) -> set[str]:
+    """Fetch user's preferred_stages and translate to coarse buckets. Empty set
+    means 'no stage preference'."""
+    pref = (
+        sb.table("user_preferences")
+        .select("preferred_stages")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not pref:
+        return set()
+    return coarse_stages_for_user(pref[0].get("preferred_stages") or [])
 
 
 def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
@@ -287,9 +313,11 @@ def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
     if not rows:
         return []
 
+    coarse_stages = _user_coarse_stages(sb, user_id)
+
     ranked = sorted(
         rows,
-        key=lambda r: _compute_final_score(r["score_row"], r["discovery"]),
+        key=lambda r: _compute_final_score(r["score_row"], r["discovery"], coarse_stages),
         reverse=True,
     )[:50]  # store up to 50 for overflow; top-20 is marked via rank
 
@@ -298,7 +326,7 @@ def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
     # Wipe today's entries and rewrite — simplest correctness
     sb.table("user_daily_top_20").delete().eq("user_id", user_id).eq("date_utc", today).execute()
     for i, r in enumerate(ranked, start=1):
-        final = _compute_final_score(r["score_row"], r["discovery"])
+        final = _compute_final_score(r["score_row"], r["discovery"], coarse_stages)
         reason = _build_reason(r["score_row"])
         new_rows.append({
             "user_id": user_id,
