@@ -16,12 +16,15 @@ un-scored discovery pool another day — no failure surfaced to user).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .scoring import score_application
+from ._stage_map import coarse_stages_for_user
+from .scoring import _fetch_nugget_tags, _fetch_user_preferences, score_application
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,7 @@ RECENCY_WINDOW_DAYS = 14         # how far back discoveries count for ranking
 SCORE_FRESHNESS_HOURS = 24       # re-score a job_discovery if its score is older than this
 DAILY_RESUME_CAP = 20            # per user
 TOP_K = 20                       # size of the daily top list (we store up to 50 for overflow)
+STAGE_MATCH_BOOST = 1.15         # soft boost for jobs matching user's preferred stages
 # With 5-min cron cadence (288 runs/day) we cap per-user per-run at 10 so no
 # single user monopolises a run's Gemini budget. Un-scored discoveries roll
 # over to the next run, finishing within ~1 hour for typical inflow.
@@ -138,9 +142,19 @@ def _score_is_stale(score_row: dict) -> bool:
     return (datetime.now(timezone.utc) - created_dt) > timedelta(hours=SCORE_FRESHNESS_HOURS)
 
 
-async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None:
+async def _score_one_discovery(
+    sb,
+    user_id: str,
+    discovery: dict,
+    prefs: dict | None = None,
+    nugget_tags: list[str] | None = None,
+) -> dict | None:
     """Run scoring.score_application for a single discovery. Persists to job_scores.
-    Returns the inserted row dict or None if scoring failed."""
+    Returns the inserted row dict or None if scoring failed.
+
+    `prefs` and `nugget_tags`, when supplied, skip per-job DB reads inside
+    score_application (they are user-level and constant within a batch).
+    """
     jd_text = discovery.get("jd_text") or f"{discovery.get('title','')}\n{discovery.get('company_name','')}"
     if not jd_text.strip():
         return None
@@ -150,6 +164,8 @@ async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None
             jd_text=jd_text,
             supabase_client=sb,
             discovery=discovery,
+            prefs=prefs,
+            nugget_tags=nugget_tags,
         )
     except Exception as exc:
         logger.warning(
@@ -214,11 +230,27 @@ async def score_fresh_discoveries_for_user(sb, user_id: str, limit: int | None =
         if d["id"] not in existing or _score_is_stale(existing[d["id"]])
     ][:limit]
 
-    n_scored = 0
-    for d in to_score:
-        result = await _score_one_discovery(sb, user_id, d)
-        if result:
-            n_scored += 1
+    # Hoist user-level reads out of per-job scope: prefs + nugget_tags are
+    # the same for every discovery in this batch. 50 jobs × 2 reads → 2 reads.
+    prefs = _fetch_user_preferences(sb, user_id)
+    nugget_tags = _fetch_nugget_tags(sb, user_id)
+
+    t0 = time.time()
+    logger.info("score_batch start user=%s batch=%d", user_id, len(to_score))
+
+    # Bounded concurrency across jobs. Each job spawns its own httpx client +
+    # parallel Oracle calls (see llm_scorer._score_fresh); 5 is a conservative
+    # cap that keeps Oracle and Supabase happy.
+    sem = asyncio.Semaphore(5)
+
+    async def _bounded_score(d: dict) -> dict | None:
+        async with sem:
+            return await _score_one_discovery(sb, user_id, d, prefs=prefs, nugget_tags=nugget_tags)
+
+    results = await asyncio.gather(*[_bounded_score(d) for d in to_score])
+    n_scored = sum(1 for r in results if r)
+
+    logger.info("score_batch done user=%s scored=%d elapsed=%.2fs", user_id, n_scored, time.time() - t0)
 
     return n_scored
 
@@ -242,9 +274,10 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
 
     ids = [s["job_discovery_id"] for s in scores]
     # Load BOTH per-user discoveries AND global ones (user_id IS NULL)
+    # company_stage pulled so compute_and_store_top_20 can apply stage soft-boost.
     discoveries = (
         sb.table("job_discoveries")
-        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,user_id")
+        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,company_stage,user_id")
         .in_("id", ids)
         .gte("discovered_at", since)
         .in_("liveness_status", ["active", "unknown"])
@@ -265,14 +298,37 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
     return rows
 
 
-def _compute_final_score(score_row: dict, discovery: dict) -> float:
+def _compute_final_score(
+    score_row: dict,
+    discovery: dict,
+    coarse_stages: set[str] | None = None,
+) -> float:
     base = float(score_row.get("overall_score") or 0.0)
     try:
         dt = datetime.fromisoformat(discovery["discovered_at"].replace("Z", "+00:00"))
     except Exception:
         dt = datetime.now(timezone.utc)
     days_old = (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
-    return base * _recency_decay(days_old)
+    score = base * _recency_decay(days_old)
+    # Soft stage bias — never filters, just nudges matching jobs up the rank.
+    if coarse_stages and discovery.get("company_stage") in coarse_stages:
+        score *= STAGE_MATCH_BOOST
+    return score
+
+
+def _user_coarse_stages(sb, user_id: str) -> set[str]:
+    """Fetch user's preferred_stages and translate to coarse buckets. Empty set
+    means 'no stage preference'."""
+    pref = (
+        sb.table("user_preferences")
+        .select("preferred_stages")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not pref:
+        return set()
+    return coarse_stages_for_user(pref[0].get("preferred_stages") or [])
 
 
 def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
@@ -287,9 +343,11 @@ def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
     if not rows:
         return []
 
+    coarse_stages = _user_coarse_stages(sb, user_id)
+
     ranked = sorted(
         rows,
-        key=lambda r: _compute_final_score(r["score_row"], r["discovery"]),
+        key=lambda r: _compute_final_score(r["score_row"], r["discovery"], coarse_stages),
         reverse=True,
     )[:50]  # store up to 50 for overflow; top-20 is marked via rank
 
@@ -298,7 +356,7 @@ def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
     # Wipe today's entries and rewrite — simplest correctness
     sb.table("user_daily_top_20").delete().eq("user_id", user_id).eq("date_utc", today).execute()
     for i, r in enumerate(ranked, start=1):
-        final = _compute_final_score(r["score_row"], r["discovery"])
+        final = _compute_final_score(r["score_row"], r["discovery"], coarse_stages)
         reason = _build_reason(r["score_row"])
         new_rows.append({
             "user_id": user_id,
