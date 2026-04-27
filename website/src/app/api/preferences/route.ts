@@ -88,6 +88,8 @@ const DEFAULTS = {
   visa_status: "unknown",
   target_roles: [],
   min_comp_usd: null,
+  max_comp_usd: null,
+  notice_period_days: null,
   ui_prefs: {},
 };
 
@@ -129,6 +131,8 @@ export async function PUT(request: Request) {
     "visa_status",
     "target_roles",
     "min_comp_usd",
+    "max_comp_usd",
+    "notice_period_days",
     "ui_prefs",
   ]);
   const updates: Record<string, unknown> = { user_id: user.id };
