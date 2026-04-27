@@ -62,6 +62,7 @@ async def _call_oracle(client: httpx.AsyncClient, prompt: str, system: str = "")
     payload: dict[str, Any] = {"prompt": prompt, "temperature": 0.1}
     if system:
         payload["system"] = system
+    t0 = time.time()
     try:
         resp = await client.post(
             f"{ORACLE_URL}/lifeos/generate",
@@ -70,8 +71,11 @@ async def _call_oracle(client: httpx.AsyncClient, prompt: str, system: str = "")
             timeout=ORACLE_TIMEOUT,
         )
         resp.raise_for_status()
-        return (resp.json().get("text") or "").strip()
+        text = (resp.json().get("text") or "").strip()
+        logger.info("oracle_call elapsed=%.2fs ok=True prompt_len=%d", time.time() - t0, len(prompt))
+        return text
     except Exception as exc:
+        logger.info("oracle_call elapsed=%.2fs ok=False prompt_len=%d err=%s", time.time() - t0, len(prompt), type(exc).__name__)
         logger.debug("llm_scorer oracle error: %s", exc)
         return ""
 

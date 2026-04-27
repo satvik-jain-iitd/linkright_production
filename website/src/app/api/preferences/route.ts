@@ -43,6 +43,7 @@ async function triggerRecompute(userId: string): Promise<void> {
  *  Returns match count, or 0 on any failure (graceful degradation — fall back to cron). */
 async function scoreFirstBatchInline(userId: string): Promise<number> {
   if (!WORKER_URL || !WORKER_SECRET) return 0;
+  const t0 = Date.now();
   try {
     const ctrl = new AbortController();
     const timeout = setTimeout(() => ctrl.abort(), 25_000); // 25s cap (Vercel function 30s limit)
@@ -56,10 +57,23 @@ async function scoreFirstBatchInline(userId: string): Promise<number> {
       signal: ctrl.signal,
     });
     clearTimeout(timeout);
-    if (!r.ok) return 0;
-    const data = await r.json().catch(() => ({}));
-    return typeof data.matches === "number" ? data.matches : 0;
-  } catch {
+    if (!r.ok) {
+      console.info("[prefs] inline_score elapsed=%dms ok=false status=%d", Date.now() - t0, r.status);
+      return 0;
+    }
+    const data = await r.json().catch(() => ({} as { matches?: number; elapsed_ms?: number; score_ms?: number; rank_ms?: number }));
+    const matches = typeof data.matches === "number" ? data.matches : 0;
+    console.info(
+      "[prefs] inline_score elapsed=%dms matches=%d worker_total_ms=%d worker_score_ms=%d worker_rank_ms=%d",
+      Date.now() - t0,
+      matches,
+      data.elapsed_ms ?? -1,
+      data.score_ms ?? -1,
+      data.rank_ms ?? -1,
+    );
+    return matches;
+  } catch (e) {
+    console.info("[prefs] inline_score elapsed=%dms ok=false err=%s", Date.now() - t0, (e as Error).name);
     return 0;
   }
 }
