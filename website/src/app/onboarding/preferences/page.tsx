@@ -203,7 +203,7 @@ export default function PreferencesPage() {
 
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
-          Step 3 of 4 · optional, but sharpens matches
+          Step 3 of 5 · optional, but sharpens matches
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
           What are you actually looking for?

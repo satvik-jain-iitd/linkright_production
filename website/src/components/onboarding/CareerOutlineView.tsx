@@ -187,7 +187,7 @@ export function CareerOutlineView({
       {/* Eyebrow + headline */}
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
-          Step 1 of 4 · this is the only required input
+          Step 1 of 5 · this is the only required input
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
           Here&apos;s what we understood from your resume.
