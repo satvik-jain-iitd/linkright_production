@@ -306,7 +306,7 @@ function StepCareerBasics({
     setFileMeta(null);
     setParsed(false);
     setStreamingNarration(false);
-    setUploadMode("file");
+    setUploadMode("none");
   };
 
   const applyParsed = (data: Record<string, unknown>) => {
