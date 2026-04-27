@@ -32,7 +32,8 @@ const STEPS = [
   { n: 1, label: "Resume", state: "done" as const },
   { n: 2, label: "Profile", state: "done" as const },
   { n: 3, label: "Preferences", state: "active" as const },
-  { n: 4, label: "First match", state: "todo" as const },
+  { n: 4, label: "Broadcast", state: "todo" as const },
+  { n: 5, label: "First match", state: "todo" as const },
 ];
 
 const LOCATION_OPTIONS = [
@@ -152,7 +153,7 @@ export default function PreferencesPage() {
       alert(`Save failed: ${body.error ?? r.status}`);
       return;
     }
-    if (proceedToBrowse) router.push("/onboarding/find");
+    if (proceedToBrowse) router.push("/onboarding/broadcast");
   }
 
   const roleSuggestions = useMemo(
@@ -193,7 +194,7 @@ export default function PreferencesPage() {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/onboarding/find")}
+          onClick={() => router.push("/onboarding/broadcast")}
           className="text-xs text-muted transition hover:text-foreground"
         >
           I&apos;ll decide later →
@@ -218,7 +219,7 @@ export default function PreferencesPage() {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/onboarding/find")}
+          onClick={() => router.push("/onboarding/broadcast")}
           className="rounded-full border border-accent px-4 py-2 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
         >
           Use my profile only
