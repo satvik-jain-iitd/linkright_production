@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getPrompt } from "@/lib/langfuse-prompts";
-import { geminiChatStream, platformChatWithFallback } from "@/lib/gemini";
+import { platformChatWithFallback } from "@/lib/gemini";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const CAREER_NARRATION_FALLBACK = `You are writing embeddable knowledge chunks from a person's career history.
@@ -84,6 +86,18 @@ At CRED, as PM, on the Returns Flow: Owned the end-to-end redesign that reduced.
 ### CRED Payments Work
 Led UPI launch AND redesigned returns flow AND managed the team...`;
 
+const MIN_NARRATION_CHARS = 200;
+
+function streamText(text: string): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(enc.encode(text));
+      controller.close();
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -108,6 +122,33 @@ export async function POST(request: Request) {
     return Response.json({ error: "No experiences provided" }, { status: 400 });
   }
 
+  // ── Cache lookup ──────────────────────────────────────────────────────────
+  // Same experiences+projects → same narration. SHA256 keyed, global.
+  const cacheInput = JSON.stringify({
+    experiences,
+    projects: Array.isArray(projects) ? projects : [],
+  });
+  const narrationHash = createHash("sha256").update(cacheInput).digest("hex");
+  const admin = createServiceClient();
+
+  try {
+    const { data: cached } = await admin
+      .from("llm_cache_career_narration")
+      .select("narration_text")
+      .eq("narration_hash", narrationHash)
+      .maybeSingle();
+
+    if (cached?.narration_text && cached.narration_text.length >= MIN_NARRATION_CHARS) {
+      console.log("[narrate-career] cache HIT");
+      return new Response(streamText(cached.narration_text), {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+  } catch (cacheErr) {
+    console.warn("[narrate-career] cache lookup failed:", (cacheErr as Error).message);
+  }
+
+  // ── Cache miss — generate ────────────────────────────────────────────────
   const systemPrompt = await getPrompt("career-narration", CAREER_NARRATION_FALLBACK);
   const expContent = formatExperiences(experiences);
   const projContent = Array.isArray(projects) && projects.length > 0
@@ -115,46 +156,48 @@ export async function POST(request: Request) {
     : "";
   const userContent = expContent + projContent;
 
-  // Try Gemini streaming first
+  // Use non-streaming fallback chain (Gemini → Groq 70b → OpenRouter → Oracle).
+  // Streaming was dropped because Gemini's stream occasionally returns 0 chunks
+  // silently — UI then shows "No narration generated yet". Non-streaming has
+  // proper per-provider retry + observable failure modes.
   try {
-    const stream = await geminiChatStream(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
-      { maxTokens: 8000, temperature: 0.7 }
-    );
-    return new Response(stream, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
-  } catch (streamErr) {
-    console.warn(
-      "[narrate-career] Gemini stream failed, using non-streaming fallback:",
-      (streamErr as Error).message
-    );
-  }
-
-  // Non-streaming fallback — wrap result in a stream for uniform client handling
-  try {
-    const { text } = await platformChatWithFallback(
+    const { text, provider } = await platformChatWithFallback(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
       { maxTokens: 8000, temperature: 0.7, taskType: "reasoning" }
     );
-    const enc = new TextEncoder();
-    return new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(enc.encode(text));
-          controller.close();
-        },
-      }),
-      { headers: { "Content-Type": "text/plain; charset=utf-8" } }
-    );
-  } catch (fallbackErr) {
-    console.error("[narrate-career] All providers failed:", (fallbackErr as Error).message);
+
+    if (!text || text.length < MIN_NARRATION_CHARS) {
+      console.error(
+        `[narrate-career] ${provider} returned suspiciously short text (${text?.length ?? 0} chars)`
+      );
+      return Response.json(
+        { error: "Narration too short — please retry" },
+        { status: 502 }
+      );
+    }
+
+    // Best-effort cache write — never block response on this.
+    admin
+      .from("llm_cache_career_narration")
+      .upsert({
+        narration_hash: narrationHash,
+        narration_text: text,
+        llm_model: provider,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.warn("[narrate-career] cache write failed:", error.message);
+        }
+      });
+
+    return new Response(streamText(text), {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch (err) {
+    console.error("[narrate-career] all providers failed:", (err as Error).message);
     return Response.json({ error: "Narration generation failed" }, { status: 500 });
   }
 }
