@@ -16,6 +16,7 @@ un-scored discovery pool another day — no failure surfaced to user).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
@@ -23,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ._stage_map import coarse_stages_for_user
-from .scoring import score_application
+from .scoring import _fetch_nugget_tags, _fetch_user_preferences, score_application
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +142,19 @@ def _score_is_stale(score_row: dict) -> bool:
     return (datetime.now(timezone.utc) - created_dt) > timedelta(hours=SCORE_FRESHNESS_HOURS)
 
 
-async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None:
+async def _score_one_discovery(
+    sb,
+    user_id: str,
+    discovery: dict,
+    prefs: dict | None = None,
+    nugget_tags: list[str] | None = None,
+) -> dict | None:
     """Run scoring.score_application for a single discovery. Persists to job_scores.
-    Returns the inserted row dict or None if scoring failed."""
+    Returns the inserted row dict or None if scoring failed.
+
+    `prefs` and `nugget_tags`, when supplied, skip per-job DB reads inside
+    score_application (they are user-level and constant within a batch).
+    """
     jd_text = discovery.get("jd_text") or f"{discovery.get('title','')}\n{discovery.get('company_name','')}"
     if not jd_text.strip():
         return None
@@ -153,6 +164,8 @@ async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None
             jd_text=jd_text,
             supabase_client=sb,
             discovery=discovery,
+            prefs=prefs,
+            nugget_tags=nugget_tags,
         )
     except Exception as exc:
         logger.warning(
@@ -217,13 +230,26 @@ async def score_fresh_discoveries_for_user(sb, user_id: str, limit: int | None =
         if d["id"] not in existing or _score_is_stale(existing[d["id"]])
     ][:limit]
 
+    # Hoist user-level reads out of per-job scope: prefs + nugget_tags are
+    # the same for every discovery in this batch. 50 jobs × 2 reads → 2 reads.
+    prefs = _fetch_user_preferences(sb, user_id)
+    nugget_tags = _fetch_nugget_tags(sb, user_id)
+
     t0 = time.time()
     logger.info("score_batch start user=%s batch=%d", user_id, len(to_score))
-    n_scored = 0
-    for d in to_score:
-        result = await _score_one_discovery(sb, user_id, d)
-        if result:
-            n_scored += 1
+
+    # Bounded concurrency across jobs. Each job spawns its own httpx client +
+    # parallel Oracle calls (see llm_scorer._score_fresh); 5 is a conservative
+    # cap that keeps Oracle and Supabase happy.
+    sem = asyncio.Semaphore(5)
+
+    async def _bounded_score(d: dict) -> dict | None:
+        async with sem:
+            return await _score_one_discovery(sb, user_id, d, prefs=prefs, nugget_tags=nugget_tags)
+
+    results = await asyncio.gather(*[_bounded_score(d) for d in to_score])
+    n_scored = sum(1 for r in results if r)
+
     logger.info("score_batch done user=%s scored=%d elapsed=%.2fs", user_id, n_scored, time.time() - t0)
 
     return n_scored
