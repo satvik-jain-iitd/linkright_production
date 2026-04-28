@@ -157,7 +157,7 @@ export function FindRolesView({ embedded }: Props) {
         setCustomError(data.error ?? "Couldn't save. Try again.");
         return;
       }
-      router.push(`/resume/new?application_id=${encodeURIComponent(data.id)}`);
+      router.push(`/resume/new?application_id=${encodeURIComponent(data.application.id)}`);
     } catch {
       setCustomError("Network error — try again.");
     } finally {
