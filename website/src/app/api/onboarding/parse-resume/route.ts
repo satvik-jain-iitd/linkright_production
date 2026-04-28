@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { regexExtract } from "@/lib/resume-regex-extract";
@@ -187,6 +188,30 @@ export async function POST(request: Request) {
   // Truncate to avoid token limits (~8000 chars ≈ ~2000 tokens)
   const truncated = resumeText.slice(0, 8000);
 
+  // SHA256 of the truncated text used as cache key — consistent across all
+  // upload types (PDF, DOCX, txt, paste). Covers re-upload of same resume.
+  const sha256 = createHash("sha256").update(truncated).digest("hex");
+
+  // Cache check — hit returns instantly (~50ms), skips LLM entirely.
+  const sbAdmin = createServiceClient();
+  const { data: cacheHit } = await sbAdmin
+    .from("parse_resume_cache")
+    .select("parsed_json")
+    .eq("sha256", sha256)
+    .maybeSingle();
+
+  if (cacheHit?.parsed_json) {
+    console.log("[parse-resume] cache hit", sha256.slice(0, 8));
+    const cached = cacheHit.parsed_json as Record<string, unknown>;
+    // Still fire-and-forget save of work history so DB stays fresh on re-upload
+    if (Array.isArray(cached.experiences) && cached.experiences.length > 0) {
+      saveWorkHistory(user.id, cached.experiences as ParsedExperience[]).catch((err) =>
+        console.error("[parse-resume] saveWorkHistory (cache) failed:", err)
+      );
+    }
+    return Response.json({ parsed: cached });
+  }
+
   // Phase 1 — regex extractors (contact, education, skills). Deterministic,
   // zero token cost, zero hallucination risk.
   const regex = regexExtract(truncated);
@@ -203,12 +228,14 @@ export async function POST(request: Request) {
   try {
     // Pass the AbortSignal directly so every in-flight provider fetch cancels
     // cleanly when the 30s budget fires — no token leak, no ghost completions.
+    // tryOracle: false — Oracle (gemma3:1b on VPS) can't reliably parse full
+    // resumes in 30 s. Use Groq → Cerebras → Gemini → OpenRouter chain only.
     const { text: rawText } = await platformChatWithFallback(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 4000, temperature: 0, taskType: "structured", signal: controller.signal }
+      { maxTokens: 4000, temperature: 0, taskType: "structured", signal: controller.signal, tryOracle: false }
     );
 
     clearTimeout(timeoutId);
@@ -247,6 +274,19 @@ export async function POST(request: Request) {
         console.error("[parse-resume] saveWorkHistory failed:", err)
       );
     }
+
+    // Cache write — best-effort; never fail the request if insert errors.
+    // Wrapped in Promise.resolve() so .catch() is available (Supabase returns PromiseLike).
+    void Promise.resolve(
+      sbAdmin
+        .from("parse_resume_cache")
+        .insert({ sha256, parsed_json: parsed })
+    ).then(({ error }: { error: { code: string; message: string } | null }) => {
+      if (error && error.code !== "23505") {
+        // 23505 = unique_violation (race between two concurrent uploads of same PDF)
+        console.warn("[parse-resume] cache write failed:", error.message);
+      }
+    }).catch((err: unknown) => console.warn("[parse-resume] cache write exception:", err));
 
     return Response.json({ parsed });
   } catch (err) {

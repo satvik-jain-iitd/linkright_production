@@ -96,6 +96,8 @@ export async function platformChatWithFallback(
     taskType?: "structured" | "reasoning";
     /** Set false to skip Oracle as last-resort attempt. */
     tryOracle?: boolean;
+    /** Per-call Oracle timeout in ms (default 45 000). Pass 20_000 for fail-fast paths like enrich-chunk. */
+    oracleTimeoutMs?: number;
     /** Optional AbortSignal — threaded into every provider fetch so in-flight requests cancel cleanly. */
     signal?: AbortSignal;
   } = {}
@@ -187,7 +189,7 @@ export async function platformChatWithFallback(
   // Final tier — Oracle local Ollama (free, no rate limits, weaker model)
   if (options.tryOracle !== false) {
     try {
-      const text = await oracleChat(messages, { temperature: options.temperature, signal: options.signal });
+      const text = await oracleChat(messages, { temperature: options.temperature, signal: options.signal, timeoutMs: options.oracleTimeoutMs });
       return { text, provider: "oracle" };
     } catch (err) {
       errors.push(`Oracle: ${sanitize(err)}`);
