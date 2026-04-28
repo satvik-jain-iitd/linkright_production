@@ -27,8 +27,9 @@ function oracleSecret(): string {
  */
 export async function oracleGenerate(
   prompt: string,
-  options: { system?: string; temperature?: number; signal?: AbortSignal } = {}
+  options: { system?: string; temperature?: number; signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<string> {
+  const timeoutMs = options.timeoutMs ?? ORACLE_TIMEOUT_MS;
   const resp = await fetch(oracleUrl("/lifeos/generate"), {
     method: "POST",
     headers: {
@@ -40,7 +41,7 @@ export async function oracleGenerate(
       system: options.system ?? "",
       temperature: options.temperature ?? 0.3,
     }),
-    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   });
 
   if (!resp.ok) {
@@ -60,8 +61,9 @@ export async function oracleGenerate(
  */
 export async function oracleRewrite(
   prompt: string,
-  options: { system?: string; temperature?: number; signal?: AbortSignal } = {}
+  options: { system?: string; temperature?: number; signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<string> {
+  const timeoutMs = options.timeoutMs ?? ORACLE_TIMEOUT_MS;
   const resp = await fetch(oracleUrl("/lifeos/rewrite"), {
     method: "POST",
     headers: {
@@ -73,7 +75,7 @@ export async function oracleRewrite(
       system: options.system ?? "",
       temperature: options.temperature ?? 0.2,
     }),
-    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
   });
 
   if (!resp.ok) {
@@ -90,10 +92,13 @@ export async function oracleRewrite(
 /**
  * Chat-style wrapper that accepts OpenAI-shaped messages and returns the
  * assistant text. Collapses system+user messages into Oracle's prompt shape.
+ *
+ * @param options.timeoutMs  Override per-call timeout (default 45 s).
+ *                           Pass 20_000 for enrich-chunk to fail-fast.
  */
 export async function oracleChat(
   messages: { role: string; content: string }[],
-  options: { temperature?: number; useRewriteModel?: boolean; signal?: AbortSignal } = {}
+  options: { temperature?: number; useRewriteModel?: boolean; signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<string> {
   const system = messages.find((m) => m.role === "system")?.content ?? "";
   const user = messages
@@ -101,5 +106,5 @@ export async function oracleChat(
     .map((m) => m.content)
     .join("\n\n");
   const fn = options.useRewriteModel === false ? oracleGenerate : oracleRewrite;
-  return fn(user, { system, temperature: options.temperature, signal: options.signal });
+  return fn(user, { system, temperature: options.temperature, signal: options.signal, timeoutMs: options.timeoutMs });
 }

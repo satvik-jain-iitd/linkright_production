@@ -96,7 +96,7 @@ export async function POST(request: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
-      { maxTokens: 150, temperature: 0.1, taskType: "structured" }
+      { maxTokens: 150, temperature: 0.1, taskType: "structured", oracleTimeoutMs: 20_000 }
     );
 
     const parsed = parseEnrichmentResponse(text);
