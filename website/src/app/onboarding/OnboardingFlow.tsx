@@ -345,6 +345,7 @@ function StepCareerBasics({
     setFileMeta(null);
     setParsed(false);
     setStreamingNarration(false);
+    setEnrichProgress(null);
     setUploadMode("none");
   };
 
