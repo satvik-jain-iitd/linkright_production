@@ -14,7 +14,7 @@ function platformCerebrasKeys(): string[] {
 
 export async function cerebrasChat(
   messages: { role: string; content: string }[],
-  options: { maxTokens?: number; temperature?: number; model?: string } = {}
+  options: { maxTokens?: number; temperature?: number; model?: string; signal?: AbortSignal } = {}
 ): Promise<string> {
   const keys = platformCerebrasKeys();
   const errors: string[] = [];
@@ -32,7 +32,7 @@ export async function cerebrasChat(
         max_tokens: options.maxTokens ?? 1000,
         temperature: options.temperature ?? 0.3,
       }),
-      signal: AbortSignal.timeout(CEREBRAS_TIMEOUT_MS),
+      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(CEREBRAS_TIMEOUT_MS)]) : AbortSignal.timeout(CEREBRAS_TIMEOUT_MS),
     });
 
     if (resp.status === 429 || resp.status === 503) {

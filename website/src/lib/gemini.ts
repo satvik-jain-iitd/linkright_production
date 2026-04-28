@@ -28,7 +28,7 @@ function platformGeminiKeys(): string[] {
 
 export async function geminiChat(
   messages: { role: string; content: string }[],
-  options: { maxTokens?: number; temperature?: number; model?: string } = {}
+  options: { maxTokens?: number; temperature?: number; model?: string; signal?: AbortSignal } = {}
 ): Promise<string> {
   const model = options.model ?? GEMINI_MODEL;
   const systemMsg = messages.find((m) => m.role === "system")?.content ?? "";
@@ -54,7 +54,7 @@ export async function geminiChat(
           maxOutputTokens: options.maxTokens ?? 1000,
         },
       }),
-      signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(GEMINI_TIMEOUT_MS)]) : AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
 
     if (resp.status === 429 || resp.status === 503) {
@@ -95,6 +95,8 @@ export async function platformChatWithFallback(
     taskType?: "structured" | "reasoning";
     /** Set false to skip Oracle as last-resort attempt. */
     tryOracle?: boolean;
+    /** Optional AbortSignal — threaded into every provider fetch so in-flight requests cancel cleanly. */
+    signal?: AbortSignal;
   } = {}
 ): Promise<{ text: string; provider: Provider }> {
   const taskType = options.taskType ?? "structured";
@@ -108,6 +110,7 @@ export async function platformChatWithFallback(
       const text = await geminiChat(messages, {
         ...options,
         model: options.model ?? GEMINI_MODEL_REASONING,
+        signal: options.signal,
       });
       return { text, provider: "gemini" };
     } catch (err) {
@@ -118,7 +121,7 @@ export async function platformChatWithFallback(
 
     // Tier 2 — Groq 70b (strong, but rate-limited)
     try {
-      const text = await groqChat(messages, { ...options, model: "llama-3.3-70b-versatile" });
+      const text = await groqChat(messages, { ...options, model: "llama-3.3-70b-versatile", signal: options.signal });
       return { text, provider: "groq" };
     } catch (err) {
       const msg = sanitize(err);
@@ -128,7 +131,7 @@ export async function platformChatWithFallback(
 
     // Tier 3 — OpenRouter (reasoning model)
     try {
-      const text = await openrouterChat(messages, { ...options, taskType: "reasoning" });
+      const text = await openrouterChat(messages, { ...options, taskType: "reasoning", signal: options.signal });
       return { text, provider: "openrouter" };
     } catch (err) {
       const msg = sanitize(err);
@@ -141,7 +144,7 @@ export async function platformChatWithFallback(
 
     // Tier 1 — Groq 8b (fast, cheap, good for structured JSON)
     try {
-      const text = await groqChat(messages, { ...options, model: "llama-3.1-8b-instant" });
+      const text = await groqChat(messages, { ...options, model: "llama-3.1-8b-instant", signal: options.signal });
       return { text, provider: "groq" };
     } catch (err) {
       const msg = sanitize(err);
@@ -151,7 +154,7 @@ export async function platformChatWithFallback(
 
     // Tier 2 — Cerebras 8b (ultra-fast, separate rate limits)
     try {
-      const text = await cerebrasChat(messages, options);
+      const text = await cerebrasChat(messages, { ...options, signal: options.signal });
       return { text, provider: "cerebras" };
     } catch (err) {
       const msg = sanitize(err);
@@ -161,7 +164,7 @@ export async function platformChatWithFallback(
 
     // Tier 3 — Gemini flash-lite (reliable, handles complex JSON)
     try {
-      const text = await geminiChat(messages, options);
+      const text = await geminiChat(messages, { ...options, signal: options.signal });
       return { text, provider: "gemini" };
     } catch (err) {
       const msg = sanitize(err);
@@ -171,7 +174,7 @@ export async function platformChatWithFallback(
 
     // Tier 4 — OpenRouter (free-tier small model, multiple keys)
     try {
-      const text = await openrouterChat(messages, { ...options, taskType: "structured" });
+      const text = await openrouterChat(messages, { ...options, taskType: "structured", signal: options.signal });
       return { text, provider: "openrouter" };
     } catch (err) {
       const msg = sanitize(err);
@@ -183,7 +186,7 @@ export async function platformChatWithFallback(
   // Final tier — Oracle local Ollama (free, no rate limits, weaker model)
   if (options.tryOracle !== false) {
     try {
-      const text = await oracleChat(messages, { temperature: options.temperature });
+      const text = await oracleChat(messages, { temperature: options.temperature, signal: options.signal });
       return { text, provider: "oracle" };
     } catch (err) {
       errors.push(`Oracle: ${sanitize(err)}`);

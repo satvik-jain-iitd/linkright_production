@@ -201,22 +201,15 @@ export async function POST(request: Request) {
   const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    // Race the LLM chain against the abort signal so the route returns within 30s.
-    const llmPromise = platformChatWithFallback(
+    // Pass the AbortSignal directly so every in-flight provider fetch cancels
+    // cleanly when the 30s budget fires — no token leak, no ghost completions.
+    const { text: rawText } = await platformChatWithFallback(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 4000, temperature: 0, taskType: "structured" }
+      { maxTokens: 4000, temperature: 0, taskType: "structured", signal: controller.signal }
     );
-    const abortPromise = new Promise<never>((_, reject) => {
-      controller.signal.addEventListener("abort", () => {
-        const e = new Error("parse-resume 30s budget exceeded");
-        e.name = "AbortError";
-        reject(e);
-      });
-    });
-    const { text: rawText } = await Promise.race([llmPromise, abortPromise]);
 
     clearTimeout(timeoutId);
 
