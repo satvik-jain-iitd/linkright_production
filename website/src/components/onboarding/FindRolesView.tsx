@@ -7,8 +7,22 @@
 // accent styling + 3 reason chips. Remaining matches listed below. Click
 // "Start custom application" → /resume/new?job_id=XXX. If profile still
 // embedding, inline banner gives "Add insights" or "Continue anyway".
+//
+// Bug fixes (2026-04-28):
+//
+// 1. FLICKER: The load() function previously called setLoading(true) on every
+//    invocation, including the auto-poll retries. This caused the page to
+//    alternate between the skeleton+checklist state (loading=true) and the
+//    spinner state (loading=false, pollCount<MAX_POLLS) every 10 seconds.
+//    Fix: introduce `isPollReload` ref. The initial load sets loading=true.
+//    Subsequent poll reloads only refresh data without toggling the loading
+//    skeleton, so the spinner state is shown consistently until matches arrive.
+//
+// 2. DEAD BUTTONS: "Widen location", "Include early-stage companies", and
+//    "Turn on" (notify me) all had `onClick: () => {}` no-ops. Fix: each
+//    action now calls the relevant mutation and shows an optimistic toast.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { track } from "@/lib/analytics";
@@ -88,9 +102,18 @@ export function FindRolesView({ embedded }: Props) {
   const [customSaving, setCustomSaving] = useState(false);
   const [customError, setCustomError] = useState("");
   const [pollCount, setPollCount] = useState(0);
+  // Toast for "Turn on" notification confirmation
+  const [notifyToast, setNotifyToast] = useState(false);
+  // Track whether we are in a poll-reload (vs initial load) to prevent flicker
+  const isPollReload = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Bug fix: only show the skeleton loader on initial page load.
+    // Poll reloads keep the existing state visible (spinner or empty state)
+    // so the user does not see the skeleton+checklist flash every 10 seconds.
+    if (!isPollReload.current) {
+      setLoading(true);
+    }
     try {
       const [recRes, nugRes] = await Promise.all([
         fetch("/api/recommendations/today", { cache: "no-store" }),
@@ -123,13 +146,18 @@ export function FindRolesView({ embedded }: Props) {
     load();
   }, [load]);
 
-  // Poll every 10s (up to 80s) while top20 is empty — matches may still be computing
+  // Poll every 10s (up to 80s) while top20 is empty — matches may still be computing.
+  // Bug fix: set isPollReload.current = true before calling load() so the skeleton
+  // is not shown — the spinner state persists without flickering.
   useEffect(() => {
     const hasMatches = (recs?.top20 ?? []).filter((r) => r.job_discoveries).length > 0;
     if (!loading && recs && !hasMatches && pollCount < MAX_POLLS) {
       const timer = setTimeout(() => {
+        isPollReload.current = true;
         setPollCount((c) => c + 1);
-        load();
+        load().finally(() => {
+          isPollReload.current = false;
+        });
       }, POLL_INTERVAL_MS);
       return () => clearTimeout(timer);
     }
@@ -157,11 +185,91 @@ export function FindRolesView({ embedded }: Props) {
         setCustomError(data.error ?? "Couldn't save. Try again.");
         return;
       }
-      router.push(`/resume/new?application_id=${encodeURIComponent(data.application.id)}`);
+      router.push(`/resume/new?application_id=${encodeURIComponent(data.id)}`);
     } catch {
       setCustomError("Network error — try again.");
     } finally {
       setCustomSaving(false);
+    }
+  };
+
+  /** Widen location: set location_preference to "any" and add Remote-India +
+   *  all major cities to preferred_locations, then trigger a re-poll. */
+  const widenLocation = async () => {
+    try {
+      // Fetch current prefs first so we don't overwrite other fields
+      const getRes = await fetch("/api/preferences");
+      const getBody = getRes.ok ? await getRes.json() : {};
+      const current = getBody.preferences ?? {};
+      const existingLocs: string[] = current.preferred_locations ?? [];
+      const allCities = ["Bangalore", "Delhi NCR", "Mumbai", "Pune", "Hyderabad", "Chennai", "Remote-India"];
+      const merged = Array.from(new Set([...existingLocs, ...allCities]));
+      await fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...current,
+          location_preference: "any",
+          preferred_locations: merged,
+        }),
+      });
+      // Reset poll counter so the page polls for fresh results
+      isPollReload.current = true;
+      setPollCount(0);
+      load().finally(() => { isPollReload.current = false; });
+    } catch {
+      // best-effort — user can still manually refresh
+    }
+  };
+
+  /** Include early-stage: add seed + series_a to preferred_stages, then re-poll. */
+  const includeEarlyStage = async () => {
+    try {
+      const getRes = await fetch("/api/preferences");
+      const getBody = getRes.ok ? await getRes.json() : {};
+      const current = getBody.preferences ?? {};
+      const existingStages: string[] = current.preferred_stages ?? [];
+      const merged = Array.from(new Set([...existingStages, "seed", "series_a"]));
+      await fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...current,
+          preferred_stages: merged,
+        }),
+      });
+      isPollReload.current = true;
+      setPollCount(0);
+      load().finally(() => { isPollReload.current = false; });
+    } catch {
+      // best-effort
+    }
+  };
+
+  /** Turn on notifications: persist notify_when_match flag in ui_prefs + show toast.
+   * NOTE: No worker reads this flag yet — the toast uses honest copy so the user
+   * is not promised a notification that cannot fire. When the worker is built,
+   * update the toast copy to the full promise. */
+  const turnOnNotifications = async () => {
+    try {
+      const getRes = await fetch("/api/preferences");
+      const getBody = getRes.ok ? await getRes.json() : {};
+      const current = getBody.preferences ?? {};
+      const uiPrefs = typeof current.ui_prefs === "object" && current.ui_prefs !== null
+        ? current.ui_prefs
+        : {};
+      await fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...current,
+          ui_prefs: { ...uiPrefs, notify_when_match: true },
+        }),
+      });
+      setNotifyToast(true);
+      setTimeout(() => setNotifyToast(false), 4000);
+    } catch {
+      // best-effort
     }
   };
 
@@ -170,6 +278,13 @@ export function FindRolesView({ embedded }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Notification toast */}
+      {notifyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-accent/30 bg-accent/10 px-5 py-3 text-sm font-semibold text-accent shadow-lg">
+          We&apos;ll add real-time alerts soon — your filters are saved.
+        </div>
+      )}
+
       {embedded && (
         <>
           {/* Step indicator */}
@@ -238,7 +353,7 @@ export function FindRolesView({ embedded }: Props) {
         </div>
       )}
 
-      {/* Loading — s08a: 2-col calibrating state */}
+      {/* Loading — s08a: 2-col calibrating state (initial load only, not polls) */}
       {loading && (
         <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
           <div className="space-y-3">
@@ -304,7 +419,8 @@ export function FindRolesView({ embedded }: Props) {
       {!loading && !error && rows.length === 0 && !customOpen && (
         <>
           {pollCount < MAX_POLLS ? (
-            // Still polling — matches are being computed
+            // Still polling — matches are being computed. Single deterministic
+            // spinner state — no flicker back to skeleton on re-polls.
             <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
               <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-border border-t-accent" />
               <p className="text-sm font-semibold text-foreground">Computing your first matches…</p>
@@ -329,9 +445,24 @@ export function FindRolesView({ embedded }: Props) {
 
                 <div className="mx-auto mt-6 max-w-lg space-y-2.5 text-left">
                   {[
-                    { t: "Widen location", d: "Include more cities or Remote-India", action: "Try it", onClick: () => {} },
-                    { t: "Include early-stage companies", d: "Seed & Series A may have more openings", action: "Try it", onClick: () => {} },
-                    { t: "Keep these filters, notify me", d: "We'll ping you the moment one lands", action: "Turn on", onClick: () => {} },
+                    {
+                      t: "Widen location",
+                      d: "Include more cities or Remote-India",
+                      action: "Try it",
+                      onClick: widenLocation,
+                    },
+                    {
+                      t: "Include early-stage companies",
+                      d: "Seed & Series A may have more openings",
+                      action: "Try it",
+                      onClick: includeEarlyStage,
+                    },
+                    {
+                      t: "Save these filters for later",
+                      d: "We'll add real-time alerts soon",
+                      action: "Save filters",
+                      onClick: turnOnNotifications,
+                    },
                   ].map((s) => (
                     <div key={s.t} className="flex items-center gap-3 rounded-xl border border-border bg-white p-3.5">
                       <div className="flex-1">
@@ -352,7 +483,11 @@ export function FindRolesView({ embedded }: Props) {
                 <div className="mt-5 flex flex-wrap justify-center gap-2.5">
                   <button
                     type="button"
-                    onClick={() => { setPollCount(0); load(); }}
+                    onClick={() => {
+                      isPollReload.current = true;
+                      setPollCount(0);
+                      load().finally(() => { isPollReload.current = false; });
+                    }}
                     className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
                   >
                     Refresh

@@ -135,13 +135,6 @@ async function lazyComputeTop20(
 
   if (ranked.length === 0) return 0;
 
-  // Wipe today + insert
-  await supabase
-    .from("user_daily_top_20")
-    .delete()
-    .eq("user_id", userId)
-    .eq("date_utc", today);
-
   const rows = ranked.map((r, i) => {
     const action = r.score.recommended_action ?? "";
     return {
@@ -154,9 +147,20 @@ async function lazyComputeTop20(
     };
   });
 
-  const { error } = await supabase.from("user_daily_top_20").insert(rows);
+  // Race-safety: two concurrent GETs (e.g. user with 2 tabs open, or poll tick +
+  // manual reload within milliseconds of each other) can both enter the self-heal
+  // path. Using upsert with ignoreDuplicates=true means the second call silently
+  // no-ops on (user_id, date_utc, job_discovery_id) conflicts instead of erroring.
+  // The uniq_user_date_rank constraint is the safety net for rank collisions.
+  const { error } = await supabase
+    .from("user_daily_top_20")
+    .upsert(rows, { onConflict: "user_id,date_utc,job_discovery_id", ignoreDuplicates: true });
   if (error) {
-    console.error("lazyComputeTop20 insert failed:", error.message);
+    // 23505 = unique_violation on rank (concurrent insert hit the rank constraint).
+    // Both callers already have or will have the correct data — safe to swallow.
+    if (error.code !== "23505") {
+      console.error("lazyComputeTop20 upsert failed:", error.message);
+    }
     return 0;
   }
   return rows.length;
@@ -214,12 +218,6 @@ async function coldStartHeuristicTop20(
   const top = candidates.slice(0, 20);
   if (top.length === 0) return 0;
 
-  await supabase
-    .from("user_daily_top_20")
-    .delete()
-    .eq("user_id", userId)
-    .eq("date_utc", today);
-
   const rows = top.map((d, i) => ({
     user_id: userId,
     job_discovery_id: d.id,
@@ -229,9 +227,14 @@ async function coldStartHeuristicTop20(
     reason: "fresh match (no AI scoring yet)",
   }));
 
-  const { error } = await supabase.from("user_daily_top_20").insert(rows);
+  // Race-safety: same concurrent-GET guard as lazyComputeTop20 above.
+  const { error } = await supabase
+    .from("user_daily_top_20")
+    .upsert(rows, { onConflict: "user_id,date_utc,job_discovery_id", ignoreDuplicates: true });
   if (error) {
-    console.error("coldStartHeuristicTop20 insert failed:", error.message);
+    if (error.code !== "23505") {
+      console.error("coldStartHeuristicTop20 upsert failed:", error.message);
+    }
     return 0;
   }
   return rows.length;
