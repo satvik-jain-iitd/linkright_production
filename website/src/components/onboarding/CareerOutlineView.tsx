@@ -14,7 +14,7 @@
 //   │ [explainer]                                    [Save and continue →]    │
 //   └──────────────────────────────────────────────────────────────────────────┘
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { track } from "@/lib/analytics";
 
 export interface ParsedProject {
@@ -112,14 +112,20 @@ export function CareerOutlineView({
 
   const initiativeCards = useMemo(() => parseInitiativeCards(narration), [narration]);
 
+  // Ref to track active toast timeout for cleanup.
+  const approveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const approveCard = useCallback((i: number) => {
     setApprovedSet((prev) => new Set([...prev, i]));
     const company = data.experiences[0]?.company ?? "";
     track({ event: "initiative_approved", properties: { company } });
     // Show a brief inline toast that disappears after 2.5 seconds.
-    // Gives the user confidence that "Approve" staged the story for save.
+    // Clear any previous timer so rapid clicks don't stack.
+    if (approveToastTimer.current) clearTimeout(approveToastTimer.current);
     setApproveToast(i);
-    setTimeout(() => setApproveToast((prev) => (prev === i ? null : prev)), 2500);
+    approveToastTimer.current = setTimeout(() => {
+      setApproveToast(null);
+      approveToastTimer.current = null;
+    }, 2500);
   }, [data.experiences]);
 
   function patchExperience(idx: number, patch: Partial<ParsedExperience>) {
