@@ -79,7 +79,10 @@ type SyncEvent =
   | { event: "job_match_viewed"; properties: { job_id: string } }
   | { event: "resume_builder_started"; properties: { job_id: string } }
   | { event: "nugget_extraction_incomplete"; properties: { extracted: number; total: number } }
-  | { event: "job_search_empty"; properties: { reason: "no_matches" | "profile_incomplete" } };
+  | { event: "job_search_empty"; properties: { reason: "no_matches" | "profile_incomplete" } }
+  // Resume step lock/unlock model (PR #26)
+  | { event: "story_locked"; properties: { index: number } }
+  | { event: "story_unlocked"; properties: { index: number } };
 
 export function track(eventData: SyncEvent) {
   if (typeof window !== "undefined" && posthog.__loaded) {
