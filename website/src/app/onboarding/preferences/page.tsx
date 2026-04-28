@@ -2,6 +2,13 @@
 // Design handoff: specs/design-handoff-v2-2026-04-18 → screens-build.jsx Screen07.
 // Chip-based multi-select for target roles, location, cities, company stage.
 // Notice period + compensation range (no work authorisation per v2 audit).
+//
+// Bug fix (2026-04-28): split shared `saving` bool into two independent flags
+// (`savingQuiet` for the "Save" button, `savingForward` for "Find roles →").
+// Previously a single `saving` state caused BOTH buttons to show "Saving…"
+// simultaneously, freezing the user on the page for up to 27 seconds.
+// Also: the API PUT now returns immediately (fire-and-forget scoring), so the
+// 27s freeze is gone at the API layer too. See /api/preferences/route.ts.
 
 "use client";
 
@@ -126,7 +133,11 @@ export default function PreferencesPage() {
   const router = useRouter();
   const [prefs, setPrefs] = useState<Prefs>(EMPTY);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  // Bug fix: two independent loading flags — one per action button.
+  // Previously a single `saving` caused both "Save" and "Find roles →" to show
+  // "Saving…" simultaneously. Now each button only reflects its own action.
+  const [savingQuiet, setSavingQuiet] = useState(false);   // "Save" button
+  const [savingForward, setSavingForward] = useState(false); // "Find roles →" button
   const [roleInput, setRoleInput] = useState("");
   const [cityInput, setCityInput] = useState("");
 
@@ -181,11 +192,14 @@ export default function PreferencesPage() {
     setCityInput("");
   }
 
+  // `proceedToBrowse=true`  → "Find roles →" button  (uses savingForward)
+  // `proceedToBrowse=false` → "Save" button           (uses savingQuiet)
   async function save(proceedToBrowse: boolean) {
     if (proceedToBrowse && prefs.target_roles.length === 0) {
       alert("Pick at least one target role so we know what to find.");
       return;
     }
+    const setSaving = proceedToBrowse ? setSavingForward : setSavingQuiet;
     setSaving(true);
     const r = await fetch("/api/preferences", {
       method: "PUT",
@@ -550,18 +564,18 @@ export default function PreferencesPage() {
           <button
             type="button"
             onClick={() => save(false)}
-            disabled={saving}
+            disabled={savingQuiet || savingForward}
             className="rounded-full border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {savingQuiet ? "Saving…" : "Save"}
           </button>
           <button
             type="button"
             onClick={() => save(true)}
-            disabled={saving}
+            disabled={savingQuiet || savingForward}
             className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Find roles →"}
+            {savingForward ? "Saving…" : "Find roles →"}
           </button>
         </div>
       </div>

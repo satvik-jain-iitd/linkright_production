@@ -1,6 +1,13 @@
 // User preferences CRUD.
 //   GET  /api/preferences   — read the current user's preferences (or empty defaults)
 //   PUT  /api/preferences   — upsert (triggers initial job scan on first save)
+//
+// Bug fix (2026-04-28): removed `await scoreFirstBatchInline()` from the PUT
+// hot path. Previously this caused a ~27 second response time (25s cap + DB
+// overhead) which held the browser's fetch open and kept the "Saving…" UI
+// frozen. All worker triggers are now fire-and-forget. The /onboarding/find
+// page already polls for matches every 10s (up to 80s), so users see results
+// as soon as they are ready without the preferences page blocking them.
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -39,43 +46,21 @@ async function triggerRecompute(userId: string): Promise<void> {
   }
 }
 
-/** Synchronous: score 50 jobs inline so first-time user sees results on next page load.
- *  Returns match count, or 0 on any failure (graceful degradation — fall back to cron). */
-async function scoreFirstBatchInline(userId: string): Promise<number> {
-  if (!WORKER_URL || !WORKER_SECRET) return 0;
-  const t0 = Date.now();
-  try {
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 25_000); // 25s cap (Vercel function 30s limit)
-    const r = await fetch(`${WORKER_URL}/jobs/score-now`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${WORKER_SECRET}`,
-      },
-      body: JSON.stringify({ user_id: userId, limit: 50 }),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timeout);
-    if (!r.ok) {
-      console.info("[prefs] inline_score elapsed=%dms ok=false status=%d", Date.now() - t0, r.status);
-      return 0;
-    }
-    const data = await r.json().catch(() => ({} as { matches?: number; elapsed_ms?: number; score_ms?: number; rank_ms?: number }));
-    const matches = typeof data.matches === "number" ? data.matches : 0;
-    console.info(
-      "[prefs] inline_score elapsed=%dms matches=%d worker_total_ms=%d worker_score_ms=%d worker_rank_ms=%d",
-      Date.now() - t0,
-      matches,
-      data.elapsed_ms ?? -1,
-      data.score_ms ?? -1,
-      data.rank_ms ?? -1,
-    );
-    return matches;
-  } catch (e) {
-    console.info("[prefs] inline_score elapsed=%dms ok=false err=%s", Date.now() - t0, (e as Error).name);
-    return 0;
-  }
+/** Fire-and-forget: kick off scoring without blocking the HTTP response.
+ *  The /onboarding/find page polls for results, so there is no need to await
+ *  this before returning 200 to the browser. */
+function triggerScoreNow(userId: string): void {
+  if (!WORKER_URL || !WORKER_SECRET) return;
+  fetch(`${WORKER_URL}/jobs/score-now`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${WORKER_SECRET}`,
+    },
+    body: JSON.stringify({ user_id: userId, limit: 50 }),
+  }).catch(() => {
+    // fire-and-forget — ignore errors
+  });
 }
 
 const DEFAULTS = {
@@ -156,16 +141,15 @@ export async function PUT(request: Request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  // First time preferences saved → scan companies (async, heavy) + score 50 jobs INLINE
-  // so the user sees real matches immediately on the next page load instead of "0 matches"
-  // for 5+ minutes while the cron catches up.
-  let initial_matches = 0;
+  // Kick off all worker operations fire-and-forget — do NOT await them.
+  // This keeps the PUT response time at ~100–200ms (pure DB latency) instead
+  // of the previous ~27s that was caused by awaiting scoreFirstBatchInline.
   if (isFirstSave) {
-    triggerInitialScan(user.id); // async / fire-forget — heavy company scan
-    initial_matches = await scoreFirstBatchInline(user.id); // sync — bounded 25s
+    triggerInitialScan(user.id);
+    triggerScoreNow(user.id);
   } else {
-    triggerRecompute(user.id); // async — incremental refresh on subsequent saves
+    triggerRecompute(user.id);
   }
 
-  return Response.json({ preferences: data, initial_matches, is_first_save: isFirstSave });
+  return Response.json({ preferences: data, is_first_save: isFirstSave });
 }
