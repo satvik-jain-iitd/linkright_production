@@ -272,12 +272,29 @@ export async function GET() {
   }
 
   // Self-heal chain — never return empty if any path can surface jobs.
+  // scoring_pending: set true when Tier 1 (existing scores) returns 0 AND Tier 2
+  // (cold-start heuristic) also returns 0. This means the user is brand-new with no
+  // scored data yet — the worker scoring job is still running. The frontend uses this
+  // flag to show an honest "We're scoring your roles" message instead of "No matches."
+  let scoringPending = false;
   if (!top20 || top20.length === 0) {
     // Tier 1: rank from existing job_scores
-    let computed = await lazyComputeTop20(supabase, user.id, today);
+    const tier1 = await lazyComputeTop20(supabase, user.id, today);
     // Tier 2: cold-start heuristic (no scores → text-match recent jobs to target_roles)
-    if (computed === 0) {
-      computed = await coldStartHeuristicTop20(supabase, user.id, today);
+    const tier2 = tier1 === 0 ? await coldStartHeuristicTop20(supabase, user.id, today) : 0;
+    const computed = tier1 + tier2;
+    // If both tiers returned 0, check whether the user has ANY job_scores rows.
+    // Two distinct cases:
+    //   (a) Zero job_scores rows → truly fresh user, worker scoring not yet run → pending.
+    //   (b) Has job_scores rows but all associated discoveries are stale/expired →
+    //       returning user whose matches aged out. Show "nothing matches today", NOT
+    //       "scoring in progress" — their scoring already happened.
+    if (tier1 === 0 && tier2 === 0) {
+      const { count: scoredJobsCount } = await supabase
+        .from("job_scores")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      scoringPending = (scoredJobsCount ?? 0) === 0;
     }
     if (computed > 0) {
       const reread = await supabase
@@ -343,5 +360,9 @@ export async function GET() {
       cap: 20,
       remaining: Math.max(0, 20 - (usedToday ?? 0)),
     },
+    // True only when this is a brand-new user with zero job_scores and the cold-start
+    // heuristic also returned nothing. The worker scoring job is still running.
+    // Frontend uses this to show "We're scoring your roles" vs "No matches today".
+    scoring_pending: scoringPending,
   });
 }
