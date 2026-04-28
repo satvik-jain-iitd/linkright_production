@@ -25,6 +25,22 @@ export async function PATCH(
   }
 
   const { id } = await params;
+
+  // Guard: reject edits after profile is submitted (Bug 8)
+  const { data: current } = await supabase
+    .from("career_nuggets")
+    .select("profile_submitted_at, locked_at")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (current?.profile_submitted_at) {
+    return Response.json(
+      { error: "Profile already submitted — nuggets are locked." },
+      { status: 409 }
+    );
+  }
+
   const body = (await request.json().catch(() => ({}))) as PatchableFields;
 
   const patch: Record<string, unknown> = {};
@@ -44,10 +60,10 @@ export async function PATCH(
     return Response.json({ error: "No editable fields provided" }, { status: 400 });
   }
 
-  // Edits invalidate the embedding — clear it so the re-embed worker picks it up.
-  // (career_nuggets doesn't have an updated_at column; embedding reset is
-  // the signal the re-embed worker watches for.)
+  // Edits invalidate the embedding — clear it so re-lock re-embeds.
+  // Also clear locked_at so the user must explicitly re-lock after editing.
   patch.embedding = null;
+  patch.locked_at = null;
 
   const { data, error } = await supabase
     .from("career_nuggets")
@@ -81,6 +97,21 @@ export async function DELETE(
   }
 
   const { id } = await params;
+
+  // Guard: reject delete after profile is submitted (Bug 8)
+  const { data: current } = await supabase
+    .from("career_nuggets")
+    .select("profile_submitted_at")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (current?.profile_submitted_at) {
+    return Response.json(
+      { error: "Profile already submitted — nuggets are locked." },
+      { status: 409 }
+    );
+  }
 
   const { error } = await supabase
     .from("career_nuggets")

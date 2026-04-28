@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   let query = supabase
     .from("career_nuggets")
     .select(
-      "id, nugget_text, answer, company, role, event_date, section_type, importance, resume_relevance, tags, created_at, primary_layer, life_domain, leadership_signal",
+      "id, nugget_text, answer, company, role, event_date, section_type, importance, resume_relevance, tags, created_at, primary_layer, life_domain, leadership_signal, locked_at, profile_submitted_at",
       { count: "exact" }
     )
     .eq("user_id", user.id)
