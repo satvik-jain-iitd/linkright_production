@@ -51,6 +51,7 @@ type RecsResponse = {
   top20: Top20Row[];
   resume_jobs_by_id: Record<string, ResumeJobStatus>;
   daily_resume_usage: { used: number; cap: number; remaining: number };
+  scoring_pending?: boolean;
 };
 
 type NuggetStatus = {
@@ -104,6 +105,10 @@ export function FindRolesView({ embedded }: Props) {
   const [pollCount, setPollCount] = useState(0);
   // Toast for "Turn on" notification confirmation
   const [notifyToast, setNotifyToast] = useState(false);
+  // pollExhausted: set true when MAX_POLLS reached with no matches — shows honest exit UI
+  const [pollExhausted, setPollExhausted] = useState(false);
+  // emailToast: 4s confirmation after clicking "Email me when ready"
+  const [emailToast, setEmailToast] = useState(false);
   // Track whether we are in a poll-reload (vs initial load) to prevent flicker
   const isPollReload = useRef(false);
 
@@ -149,19 +154,29 @@ export function FindRolesView({ embedded }: Props) {
   // Poll every 10s (up to 80s) while top20 is empty — matches may still be computing.
   // Bug fix: set isPollReload.current = true before calling load() so the skeleton
   // is not shown — the spinner state persists without flickering.
+  // Bug 3 fix: at MAX_POLLS exhaustion with no matches, set pollExhausted=true and
+  // stop the silent polling loop. User sees an honest exit state with clear CTAs.
   useEffect(() => {
     const hasMatches = (recs?.top20 ?? []).filter((r) => r.job_discoveries).length > 0;
-    if (!loading && recs && !hasMatches && pollCount < MAX_POLLS) {
-      const timer = setTimeout(() => {
-        isPollReload.current = true;
-        setPollCount((c) => c + 1);
-        load().finally(() => {
-          isPollReload.current = false;
-        });
-      }, POLL_INTERVAL_MS);
-      return () => clearTimeout(timer);
+    if (!loading && recs && !hasMatches) {
+      if (pollCount >= MAX_POLLS) {
+        // Stop polling — surface honest exit state
+        setPollExhausted(true);
+        return;
+      }
+      // Only poll if not yet exhausted
+      if (!pollExhausted) {
+        const timer = setTimeout(() => {
+          isPollReload.current = true;
+          setPollCount((c) => c + 1);
+          load().finally(() => {
+            isPollReload.current = false;
+          });
+        }, POLL_INTERVAL_MS);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [loading, recs, pollCount, load]);
+  }, [loading, recs, pollCount, pollExhausted, load]);
 
   const startApplication = (jobId: string) => {
     track({ event: "resume_builder_started", properties: { job_id: jobId } });
@@ -258,7 +273,7 @@ export function FindRolesView({ embedded }: Props) {
       const uiPrefs = typeof current.ui_prefs === "object" && current.ui_prefs !== null
         ? current.ui_prefs
         : {};
-      await fetch("/api/preferences", {
+      const putRes = await fetch("/api/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -266,10 +281,43 @@ export function FindRolesView({ embedded }: Props) {
           ui_prefs: { ...uiPrefs, notify_when_match: true },
         }),
       });
+      if (!putRes.ok) {
+        setError("Couldn't save your notification preference — please try again.");
+        return;
+      }
       setNotifyToast(true);
       setTimeout(() => setNotifyToast(false), 4000);
     } catch {
-      // best-effort
+      setError("Couldn't save your notification preference — please try again.");
+    }
+  };
+
+  /** Email me when ready: persist notify_when_match + show 4s toast.
+   *  Does NOT navigate — user stays on page with the honest exit state visible. */
+  const emailMeWhenReady = async () => {
+    try {
+      const getRes = await fetch("/api/preferences");
+      const getBody = getRes.ok ? await getRes.json() : {};
+      const current = getBody.preferences ?? {};
+      const uiPrefs = typeof current.ui_prefs === "object" && current.ui_prefs !== null
+        ? current.ui_prefs
+        : {};
+      const putRes = await fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...current,
+          ui_prefs: { ...uiPrefs, notify_when_match: true },
+        }),
+      });
+      if (!putRes.ok) {
+        setError("Couldn't save your notification preference — please try again.");
+        return;
+      }
+      setEmailToast(true);
+      setTimeout(() => setEmailToast(false), 4000);
+    } catch {
+      setError("Couldn't save your notification preference — please try again.");
     }
   };
 
@@ -282,6 +330,12 @@ export function FindRolesView({ embedded }: Props) {
       {notifyToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-accent/30 bg-accent/10 px-5 py-3 text-sm font-semibold text-accent shadow-lg">
           We&apos;ll add real-time alerts soon — your filters are saved.
+        </div>
+      )}
+      {/* Email-me toast (honest exit state) */}
+      {emailToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-accent/30 bg-accent/10 px-5 py-3 text-sm font-semibold text-accent shadow-lg">
+          We&apos;ll email you when matches are ready.
         </div>
       )}
 
@@ -418,10 +472,10 @@ export function FindRolesView({ embedded }: Props) {
         </div>
       )}
 
-      {/* Empty — computing (spinner) or timed out (s08b rich empty state) */}
+      {/* Empty — computing (spinner) or timed out */}
       {!loading && !error && rows.length === 0 && !customOpen && (
         <>
-          {pollCount < MAX_POLLS ? (
+          {pollCount < MAX_POLLS && !pollExhausted ? (
             // Still polling — matches are being computed. Single deterministic
             // spinner state — no flicker back to skeleton on re-polls.
             <div className="rounded-2xl border border-dashed border-border bg-white p-10 text-center">
@@ -429,8 +483,58 @@ export function FindRolesView({ embedded }: Props) {
               <p className="text-sm font-semibold text-foreground">Computing your first matches…</p>
               <p className="mt-1 text-xs text-muted">Scoring jobs against your profile. This takes about 30–60 seconds.</p>
             </div>
+          ) : pollExhausted && recs?.scoring_pending ? (
+            // Bug 3 fix: honest exit state for fresh users whose scoring hasn't finished.
+            // API returned scoring_pending=true → worker is still running. Show a
+            // holding screen that explains the delay, gives email CTA and dashboard escape.
+            <div className="rounded-2xl border border-dashed border-accent/30 bg-accent/5 p-10 text-center">
+              <div className="mx-auto mb-4 text-4xl leading-none" aria-hidden="true">⏳</div>
+              <h3 className="text-lg font-semibold text-foreground">
+                We&apos;re scoring fresh roles for you
+              </h3>
+              <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-muted">
+                Typically 1–2 mins. We&apos;re matching your profile against live listings — you
+                can come back when it&apos;s done.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={emailMeWhenReady}
+                  className="inline-flex items-center gap-2 rounded-lg border border-accent bg-white px-5 py-2.5 text-sm font-semibold text-accent transition hover:bg-accent/5"
+                >
+                  <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                  </svg>
+                  Email me when ready
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  className="inline-flex items-center gap-2 rounded-lg bg-cta px-5 py-2.5 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
+                >
+                  Take me to dashboard
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                  </svg>
+                </button>
+              </div>
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPollExhausted(false);
+                    setPollCount(0);
+                    isPollReload.current = true;
+                    load().finally(() => { isPollReload.current = false; });
+                  }}
+                  className="text-xs font-semibold text-muted underline underline-offset-2 transition hover:text-foreground"
+                >
+                  Try refresh
+                </button>
+              </div>
+            </div>
           ) : (
-            // s08b: rich no-matches state
+            // s08b: rich no-matches state — user has been around but today's filters returned nothing.
             <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
               <div
                 className="rounded-2xl border border-border p-10 text-center"
@@ -489,6 +593,7 @@ export function FindRolesView({ embedded }: Props) {
                     onClick={() => {
                       isPollReload.current = true;
                       setPollCount(0);
+                      setPollExhausted(false);
                       load().finally(() => { isPollReload.current = false; });
                     }}
                     className="rounded-lg border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"

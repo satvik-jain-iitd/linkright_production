@@ -17,7 +17,7 @@ const WORKER_SECRET = process.env.WORKER_SECRET ?? "";
 async function triggerInitialScan(userId: string): Promise<void> {
   if (!WORKER_URL || !WORKER_SECRET) return;
   try {
-    await fetch(`${WORKER_URL}/jobs/scan`, {
+    const res = await fetch(`${WORKER_URL}/jobs/scan`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -25,15 +25,18 @@ async function triggerInitialScan(userId: string): Promise<void> {
       },
       body: JSON.stringify({ user_id: userId }),
     });
-  } catch {
-    // fire-and-forget
+    if (!res.ok) {
+      console.error(`[preferences] triggerInitialScan non-2xx: ${res.status} ${res.statusText} user=${userId}`);
+    }
+  } catch (err) {
+    console.error(`[preferences] triggerInitialScan fetch error user=${userId}:`, err);
   }
 }
 
 async function triggerRecompute(userId: string): Promise<void> {
   if (!WORKER_URL || !WORKER_SECRET) return;
   try {
-    await fetch(`${WORKER_URL}/cron/recompute-top-20`, {
+    const res = await fetch(`${WORKER_URL}/cron/recompute-top-20`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -41,8 +44,11 @@ async function triggerRecompute(userId: string): Promise<void> {
       },
       body: JSON.stringify({ user_id: userId }),
     });
-  } catch {
-    // fire-and-forget
+    if (!res.ok) {
+      console.error(`[preferences] triggerRecompute non-2xx: ${res.status} ${res.statusText} user=${userId}`);
+    }
+  } catch (err) {
+    console.error(`[preferences] triggerRecompute fetch error user=${userId}:`, err);
   }
 }
 
@@ -58,9 +64,15 @@ function triggerScoreNow(userId: string): void {
       Authorization: `Bearer ${WORKER_SECRET}`,
     },
     body: JSON.stringify({ user_id: userId, limit: 50 }),
-  }).catch(() => {
-    // fire-and-forget — ignore errors
-  });
+  })
+    .then((res) => {
+      if (!res.ok) {
+        console.error(`[preferences] triggerScoreNow non-2xx: ${res.status} ${res.statusText} user=${userId}`);
+      }
+    })
+    .catch((err) => {
+      console.error(`[preferences] triggerScoreNow fetch error user=${userId}:`, err);
+    });
 }
 
 const DEFAULTS = {
