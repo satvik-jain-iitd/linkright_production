@@ -1,3 +1,4 @@
+import { abortSignalAny } from "./abort-signal-any";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // Default model upgraded to 70b: 8b was consistently emitting truncated /
 // malformed JSON on complex structured-output tasks (parse-resume, draft
@@ -16,7 +17,7 @@ function platformKey(): string {
  */
 export async function groqChat(
   messages: { role: string; content: string }[],
-  options: { maxTokens?: number; temperature?: number; model?: string } = {}
+  options: { maxTokens?: number; temperature?: number; model?: string; signal?: AbortSignal } = {}
 ): Promise<string> {
   const resp = await fetch(GROQ_URL, {
     method: "POST",
@@ -30,7 +31,7 @@ export async function groqChat(
       max_tokens: options.maxTokens ?? 1000,
       temperature: options.temperature ?? 0.3,
     }),
-    signal: AbortSignal.timeout(GROQ_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(GROQ_TIMEOUT_MS)]) : AbortSignal.timeout(GROQ_TIMEOUT_MS),
   });
 
   if (!resp.ok) {

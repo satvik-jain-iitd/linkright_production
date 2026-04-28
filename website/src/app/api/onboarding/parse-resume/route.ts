@@ -196,14 +196,22 @@ export async function POST(request: Request) {
   // RESUME_PARSE_FALLBACK if Langfuse is unavailable.
   const systemPrompt = await getPrompt("resume-parse-structured", RESUME_PARSE_FALLBACK);
 
+  // 30-second budget for the entire LLM chain — prevents users waiting >47s on slow providers.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+
   try {
+    // Pass the AbortSignal directly so every in-flight provider fetch cancels
+    // cleanly when the 30s budget fires — no token leak, no ghost completions.
     const { text: rawText } = await platformChatWithFallback(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: truncated },
       ],
-      { maxTokens: 4000, temperature: 0, taskType: "structured" }
+      { maxTokens: 4000, temperature: 0, taskType: "structured", signal: controller.signal }
     );
+
+    clearTimeout(timeoutId);
 
     const llmParsed = markdownToJson(rawText);
 
@@ -242,9 +250,22 @@ export async function POST(request: Request) {
 
     return Response.json({ parsed });
   } catch (err) {
-    console.error("parse-resume error:", err);
+    clearTimeout(timeoutId);
+    const isAbort = err instanceof Error && (err.name === "AbortError" || controller.signal.aborted);
+    console.error("[parse-resume] error:", {
+      name: (err as Error)?.name,
+      message: (err as Error)?.message,
+      cause: (err as Error)?.cause,
+      aborted: controller.signal.aborted,
+    });
+    if (isAbort) {
+      return Response.json(
+        { error: "Resume parsing timed out — please try again or enter manually.", retryable: true },
+        { status: 504 }
+      );
+    }
     return Response.json(
-      { error: "Parse failed. Please enter your details manually." },
+      { error: "Parse failed. Please enter your details manually.", retryable: true },
       { status: 500 }
     );
   }

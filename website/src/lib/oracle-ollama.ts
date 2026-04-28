@@ -1,3 +1,4 @@
+import { abortSignalAny } from "./abort-signal-any";
 // Client for the Oracle FastAPI backend's /lifeos/generate + /lifeos/rewrite
 // endpoints. Both wrap a local Ollama gemma3:1b (as of 2026-04-22) running on
 // Satvik's Oracle Cloud VPS — free, no rate limits, no per-token cost.
@@ -26,7 +27,7 @@ function oracleSecret(): string {
  */
 export async function oracleGenerate(
   prompt: string,
-  options: { system?: string; temperature?: number } = {}
+  options: { system?: string; temperature?: number; signal?: AbortSignal } = {}
 ): Promise<string> {
   const resp = await fetch(oracleUrl("/lifeos/generate"), {
     method: "POST",
@@ -39,7 +40,7 @@ export async function oracleGenerate(
       system: options.system ?? "",
       temperature: options.temperature ?? 0.3,
     }),
-    signal: AbortSignal.timeout(ORACLE_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
   });
 
   if (!resp.ok) {
@@ -59,7 +60,7 @@ export async function oracleGenerate(
  */
 export async function oracleRewrite(
   prompt: string,
-  options: { system?: string; temperature?: number } = {}
+  options: { system?: string; temperature?: number; signal?: AbortSignal } = {}
 ): Promise<string> {
   const resp = await fetch(oracleUrl("/lifeos/rewrite"), {
     method: "POST",
@@ -72,7 +73,7 @@ export async function oracleRewrite(
       system: options.system ?? "",
       temperature: options.temperature ?? 0.2,
     }),
-    signal: AbortSignal.timeout(ORACLE_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
   });
 
   if (!resp.ok) {
@@ -92,7 +93,7 @@ export async function oracleRewrite(
  */
 export async function oracleChat(
   messages: { role: string; content: string }[],
-  options: { temperature?: number; useRewriteModel?: boolean } = {}
+  options: { temperature?: number; useRewriteModel?: boolean; signal?: AbortSignal } = {}
 ): Promise<string> {
   const system = messages.find((m) => m.role === "system")?.content ?? "";
   const user = messages
@@ -100,5 +101,5 @@ export async function oracleChat(
     .map((m) => m.content)
     .join("\n\n");
   const fn = options.useRewriteModel === false ? oracleGenerate : oracleRewrite;
-  return fn(user, { system, temperature: options.temperature });
+  return fn(user, { system, temperature: options.temperature, signal: options.signal });
 }
