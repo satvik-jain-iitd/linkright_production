@@ -1,3 +1,16 @@
+// POST /api/career/upload
+// Stores career_chunks rows from the onboarding flow.
+//
+// NOTE (Bug 1 / Lock UX redesign):
+// nuggets/refresh is NOT triggered here anymore. Under the new Lock model,
+// nugget extraction is triggered ONLY when the user explicitly clicks Lock on
+// a story card (POST /api/onboarding/stories/lock). This makes Lock the
+// explicit quality gate — no enrichment happens before user confirms the narrative.
+//
+// This fixes the silent correctness bug where enrich-chunk auto-fired after
+// narrate-career completed, extracting nuggets from possibly-hallucinated text
+// before the user had a chance to review or edit.
+
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -61,22 +74,8 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .not("id", "in", `(${newIds.join(",")})`);
 
-
-  // Trigger nugget re-extraction in background (fire-and-forget)
-  const workerUrl = process.env.WORKER_URL;
-  const workerSecret = process.env.WORKER_SECRET;
-  if (workerUrl && workerSecret) {
-    fetch(`${workerUrl}/nuggets/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${workerSecret}`,
-      },
-      body: JSON.stringify({ user_id: user.id }),
-    }).catch((err: Error) => {
-      console.warn("[career/upload] nuggets/refresh trigger failed:", err.message);
-    });
-  }
+  // nuggets/refresh intentionally NOT triggered here.
+  // Lock click (POST /api/onboarding/stories/lock) is the only trigger.
 
   return Response.json({
     chunk_count: chunks.length,

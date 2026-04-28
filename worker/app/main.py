@@ -419,7 +419,7 @@ async def _run_nugget_embed(user_id: str, nugget_id: str | None = None) -> None:
         # un-embedded nuggets for the user.
         query = (
             sb.table("career_nuggets")
-            .select("id, answer, tags")
+            .select("id, answer, tags, source_chunk_id")
             .eq("user_id", user_id)
             .is_("embedding", "null")
         )
@@ -434,6 +434,48 @@ async def _run_nugget_embed(user_id: str, nugget_id: str | None = None) -> None:
         if not rows:
             logger.info("nugget_embed: no un-embedded nuggets for user=%s", user_id)
             return
+
+        # Blocker 3 fix: check cancelled_at on the source chunk before embedding.
+        # If the user unlocked a card mid-pipeline, cancelled_at is set — skip those nuggets.
+        # Fetch all unique source_chunk_ids so we can do one bulk check.
+        chunk_ids = list({
+            row["source_chunk_id"]
+            for row in rows
+            if row.get("source_chunk_id")
+        })
+        cancelled_chunk_ids: set[str] = set()
+        if chunk_ids:
+            try:
+                chunks_res = (
+                    sb.table("career_chunks")
+                    .select("id, cancelled_at")
+                    .in_("id", chunk_ids)
+                    .execute()
+                )
+                cancelled_chunk_ids = {
+                    c["id"]
+                    for c in (chunks_res.data or [])
+                    if c.get("cancelled_at") is not None
+                }
+                if cancelled_chunk_ids:
+                    logger.info(
+                        "nugget_embed: user=%s — %d cancelled chunk(s) will be skipped",
+                        user_id,
+                        len(cancelled_chunk_ids),
+                    )
+            except Exception as exc:
+                # cancelled_at column may not exist yet (migration 050 not run) — proceed without filter
+                logger.warning("nugget_embed: cancelled_at check failed (migration 050 not run?): %s", exc)
+
+        # Filter out nuggets whose source chunk was cancelled
+        active_rows = [
+            row for row in rows
+            if row.get("source_chunk_id") not in cancelled_chunk_ids
+        ]
+        if not active_rows:
+            logger.info("nugget_embed: user=%s — all nuggets belong to cancelled chunks, skipping", user_id)
+            return
+        rows = active_rows
 
         logger.info("nugget_embed: user=%s — %d nuggets to embed", user_id, len(rows))
 
