@@ -34,7 +34,7 @@ export async function GET() {
   );
 
   const dbQuery = (async () => {
-    const [totalRes, lockedRes, embeddedRes, latestRes] = await Promise.all([
+    const [totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes] = await Promise.all([
       supabase
         .from("career_nuggets")
         .select("id", { count: "exact", head: true })
@@ -49,6 +49,13 @@ export async function GET() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .not("embedding", "is", null),
+      // Numerator for profileReady: locked AND embedded
+      supabase
+        .from("career_nuggets")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .not("locked_at", "is", null)
+        .not("embedding", "is", null),
       supabase
         .from("career_nuggets")
         .select("created_at")
@@ -57,7 +64,7 @@ export async function GET() {
         .limit(1)
         .maybeSingle(),
     ]);
-    return { totalRes, lockedRes, embeddedRes, latestRes };
+    return { totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes };
   })();
 
   const result = await Promise.race([dbQuery, timeout]);
@@ -79,17 +86,24 @@ export async function GET() {
     );
   }
 
-  const { totalRes, lockedRes, embeddedRes, latestRes } = result;
+  const { totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes } = result;
   const totalExtracted = totalRes.count ?? 0;
   const totalLocked = lockedRes.count ?? 0;
   const totalEmbedded = embeddedRes.count ?? 0;
+  // Count of nuggets that are BOTH locked AND have an embedding.
+  // This is the only correct numerator for profileReady — it is immune to
+  // pre-existing embeddings from before the lock model was introduced.
+  const lockedAndEmbedded = lockedEmbeddedRes.count ?? 0;
 
   // Legacy ready — preserves existing dashboard/jobs/enrich page semantics
   const ratio = totalExtracted > 0 ? totalEmbedded / totalExtracted : 0;
   const ready = totalExtracted > 0 && ratio >= 0.9;
 
-  // Profile-step ready — new semantic: all locked nuggets are embedded
-  const profileReady = totalLocked > 0 && totalEmbedded >= totalLocked;
+  // Profile-step ready — correct semantic:
+  //   true  iff  every locked nugget has been embedded (ratio == 1.0)
+  //   false when totalLocked == 0 (nothing locked yet)
+  //   false when a user has pre-existing embeddings but new locked ones aren't done yet
+  const profileReady = totalLocked > 0 && lockedAndEmbedded >= totalLocked;
 
   return Response.json({
     total_extracted: totalExtracted,
