@@ -255,6 +255,7 @@ export function CareerOutlineView({
 
   function commitCardEdit() {
     if (editingCardIdx === null) return;
+    internalMutationRef.current = true; // prevent useEffect from resetting all card states
     const updated = replaceCardInNarration(narration, editingCardIdx, editingCardHeading, editingCardBody);
     onChange({ ...data, career_summary_first_person: updated });
     // Edit auto-unlocks + marks stale (re-lock required to re-enrich)

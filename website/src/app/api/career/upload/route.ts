@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   const { data: inserted, error: insertError } = await supabase
     .from("career_chunks")
     .insert(rows)
-    .select("id");
+    .select("id, chunk_index");
 
   if (insertError || !inserted?.length) {
     // Insert failed — old chunks still intact, nothing lost
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
   // Only delete old chunks AFTER new ones are safely written
   // Exclude the IDs we just inserted so we never delete what we just wrote
-  const newIds = inserted.map((r: { id: string }) => r.id);
+  const newIds = inserted.map((r: { id: string; chunk_index: number }) => r.id);
   await supabase
     .from("career_chunks")
     .delete()
@@ -78,7 +78,10 @@ export async function POST(request: Request) {
     });
   }
 
-  return Response.json({ chunk_count: chunks.length });
+  return Response.json({
+    chunk_count: chunks.length,
+    chunks: inserted.map((r: { id: string; chunk_index: number }) => ({ id: r.id, chunk_index: r.chunk_index })),
+  });
 }
 
 interface Chunk {

@@ -14,6 +14,7 @@ import {
   type ParsedExperience,
   type ParsedEducation,
   getLockedChunks,
+  storeLockedChunks,
 } from "@/components/onboarding/CareerOutlineView";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
@@ -392,6 +393,10 @@ function StepCareerBasics({
     setEnrichedChunks([]);
     // Clear any enrichment warning from Resume A so it doesn't bleed into Resume B's session.
     setNarrationEnrichWarning(null);
+    // Clear module-level locked chunks store so Resume A's lock state cannot contaminate
+    // Resume B's save payload. Must be called here (not just in CareerOutlineView) because
+    // storeLockedChunks() is the shared write path between the two components.
+    storeLockedChunks([]);
   };
 
   const applyParsed = (data: Record<string, unknown>) => {
@@ -693,9 +698,54 @@ function StepCareerBasics({
           return;
         }
 
-        // Stamp resume_submitted_at on all career_chunks (best-effort — non-blocking)
-        // so subsequent lock/unlock mutations get 409 after this point.
-        fetch("/api/onboarding/stories/submit-resume", { method: "POST" }).catch(() => {});
+        // Parse the chunk IDs returned by career/upload so we can stamp server-side lock state.
+        // This makes the 409 guard in /api/onboarding/stories/lock real — locked_at is set
+        // in DB, and resume_submitted_at gates all future mutations.
+        let uploadedChunks: { id: string; chunk_index: number }[] = [];
+        try {
+          const uploadData = await uploadRes.json();
+          if (Array.isArray(uploadData.chunks)) {
+            uploadedChunks = uploadData.chunks;
+          }
+        } catch {
+          // json() may fail if already consumed — proceed without server-lock wiring
+        }
+
+        // For each locally locked card (by index), stamp locked_at server-side via
+        // POST /api/onboarding/stories/lock. This makes the 409 guard functional.
+        // Best-effort: failure here is non-blocking (client-side lock state is the
+        // source of truth for the upload payload; server lock is the durable record).
+        if (uploadedChunks.length > 0) {
+          const lockedChunks = getLockedChunks();
+          // lockedChunks is ordered by card index (matching chunk_index).
+          // Use chunk_index as the mapping key.
+          const lockPromises = lockedChunks.map((_, cardIdx) => {
+            const dbChunk = uploadedChunks.find((c) => c.chunk_index === cardIdx);
+            if (!dbChunk) return Promise.resolve();
+            return fetch("/api/onboarding/stories/lock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chunk_id: dbChunk.id }),
+            }).catch(() => {});
+          });
+          await Promise.all(lockPromises);
+        }
+
+        // Await submit-resume — navigation is gated on success so the 409 guard is real.
+        // Route returns 200 for both success and graceful degradation (migration 046 not run).
+        // 5xx = real DB failure → show error, don't navigate.
+        const submitRes = await fetch("/api/onboarding/stories/submit-resume", { method: "POST" });
+        if (!submitRes.ok) {
+          const submitData = await submitRes.json().catch(() => ({}));
+          // Real server failure — show error, don't navigate
+          setError(submitData.error ?? "Failed to finalise stories. Please try again.");
+          return;
+        }
+        // 200 with degraded=true means migration 046 not run — log and proceed
+        const submitData = await submitRes.json().catch(() => ({}));
+        if (submitData.degraded) {
+          console.warn("[onboarding] submit-resume degraded — migration 046 not yet run");
+        }
       }
 
       onNext();
