@@ -140,8 +140,14 @@ async function enrichNarrationChunks(
       });
       const data = res.ok ? await res.json() : {};
       return { text: chunk.text, metadata: { ...base, ...data } };
-    } catch {
-      return { text: chunk.text, metadata: base };
+    } catch (err) {
+      // Re-throw AbortError so the concurrency runner exits cleanly on resume swap.
+      // All other failures (network, 5xx, parse) return fallback with degraded:true
+      // so the UI can surface a soft warning and the telemetry can distinguish
+      // "enrichment ran" from "enrichment silently failed".
+      if ((err as { name?: string })?.name === "AbortError") throw err;
+      console.warn(`[enrich-chunk] failed for chunk`, err);
+      return { text: chunk.text, metadata: { ...base, degraded: true } };
     }
   });
   // Limit to 3 concurrent requests — Oracle Ollama gemma3:1b is single-threaded;
@@ -340,6 +346,17 @@ function StepCareerBasics({
             if (ctrl.signal.aborted) return; // resume was swapped — discard
             setEnrichedChunks(result);
             setEnrichProgress(null);
+            // Surface a non-blocking banner if any chunks came back degraded
+            // (API failure, network error, parse error). User sees real chunks
+            // vs fallback-only; can edit manually.
+            const degradedCount = result.filter((c) => (c.metadata as Record<string, unknown>).degraded).length;
+            if (degradedCount > 0) {
+              setNarrationEnrichWarning(
+                degradedCount === result.length
+                  ? "Couldn't enrich highlights — you can edit them manually before saving"
+                  : `${degradedCount} highlight${degradedCount === 1 ? '' : 's'} couldn't be enriched — you can edit them manually`
+              );
+            }
           })
           .catch((e) => {
             if ((e as { name?: string }).name === "AbortError") return; // clean cancel
@@ -366,6 +383,11 @@ function StepCareerBasics({
     setStreamingNarration(false);
     setEnrichProgress(null);
     setUploadMode("none");
+    // Clear enrichedChunks — must be reset so Resume B cannot inherit
+    // any cached metadata from Resume A via buildFinalChunks' cachedByText map.
+    setEnrichedChunks([]);
+    // Clear any enrichment warning from Resume A so it doesn't bleed into Resume B's session.
+    setNarrationEnrichWarning(null);
   };
 
   const applyParsed = (data: Record<string, unknown>) => {
