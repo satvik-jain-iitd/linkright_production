@@ -3,14 +3,15 @@
 // Wave 2 / Screen 04 — Resume upload review + first-person narration.
 // Design handoff: specs/design-handoff-2026-04-18/ → screens-build.jsx Screen04.
 //
-// LOCK/UNLOCK MODEL (v3 — PR #26):
+// LOCK/UNLOCK MODEL (v4 — Bug 1 redesign):
 //   - Each initiative card has Lock / Unlock / Edit / Delete actions.
-//   - Lock → fires enrich-chunk immediately for that card, marks it enriched.
-//   - Unlock → card becomes editable; enrichment cleared.
-//   - Edit when unlocked → inline textarea, Save re-queues enrichment.
+//   - Lock (client-side only): marks card as locked. Enrichment + nugget creation +
+//     embedding are triggered server-side in POST /api/onboarding/stories/lock
+//     which is called on Save (after career/upload creates chunk IDs).
+//   - Unlock → card becomes editable; server deletes nuggets via source_chunk_id.
+//   - Edit when unlocked → inline textarea. Save re-locks to re-enrich.
 //   - Delete only when unlocked.
-//   - Save & Continue enabled when ≥1 card locked. Calls submit-resume then
-//     career/upload, then navigates to Profile step.
+//   - Save & Continue enabled when ≥1 card locked.
 //
 // Shape:
 //   ┌─ step indicator (1 Resume · 2 Profile · 3 Preferences · 4 Broadcast · 5 First match) ─┐
@@ -181,36 +182,16 @@ export function CareerOutlineView({
     [cardStates],
   );
 
-  // Lock a card: fire enrichment, mark locked
+  // Lock a card: optimistic UI only.
+  // Enrichment + nugget creation + embedding are triggered server-side when
+  // /api/onboarding/stories/lock is called on Save (after career/upload).
   const lockCard = useCallback(
-    async (i: number) => {
-      const card = initiativeCards[i];
-      if (!card) return;
-      // Optimistic: mark locked + enriching immediately
-      setCardState(i, { locked: true, status: "enriching" });
+    (i: number) => {
+      if (!initiativeCards[i]) return;
+      setCardState(i, { locked: true, status: "ready" });
       track({ event: "story_locked", properties: { index: i } });
-
-      // Build career context from experiences
-      const careerContext = buildCareerContext(data.experiences);
-      const chunkText = `${card.heading}\n\n${card.body}`;
-
-      try {
-        const res = await fetch("/api/onboarding/enrich-chunk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chunk_text: chunkText,
-            career_context: careerContext,
-          }),
-        });
-        const enriched = res.ok ? await res.json() : { importance: "P2", tags: [], leadership: "none" };
-        setCardState(i, { locked: true, status: "ready", enrichedMeta: enriched });
-      } catch {
-        // Enrichment failed — card stays locked but with null meta
-        setCardState(i, { locked: true, status: "ready", enrichedMeta: null });
-      }
     },
-    [initiativeCards, data.experiences, setCardState],
+    [initiativeCards, setCardState],
   );
 
   // Unlock a card: clear enrichment, mark editable
@@ -282,7 +263,7 @@ export function CareerOutlineView({
   }
 
   // Build enriched chunks array from locked cards for final upload
-  function buildLockedChunks(): { heading: string; text: string; meta: Record<string, unknown> }[] {
+  function buildLockedChunks(): { heading: string; text: string; meta: Record<string, unknown>; originalIndex: number }[] {
     return initiativeCards
       .map((card, i) => {
         const cs = getCardState(i);
@@ -297,6 +278,7 @@ export function CareerOutlineView({
           heading: card.heading,
           text: chunkText,
           meta: { ...base, ...(cs.enrichedMeta ?? {}) },
+          originalIndex: i,
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
@@ -402,9 +384,6 @@ export function CareerOutlineView({
           </svg>
           <p className="text-xs font-medium text-tertiary-700">
             {lockedCount} of {initiativeCards.length} stor{lockedCount === 1 ? "y" : "ies"} locked
-            {Object.values(cardStates).some((s) => s.locked && s.status === "enriching") && (
-              <span className="ml-1 text-tertiary-500">· enriching…</span>
-            )}
           </p>
         </div>
       )}
@@ -793,12 +772,6 @@ function StoryCard({
         </h4>
         <div className="flex shrink-0 items-center gap-1.5">
           {/* Status badge */}
-          {locked && status === "enriching" && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-              <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
-              Enriching
-            </span>
-          )}
           {locked && status === "ready" && (
             <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">
               ✓ Ready
@@ -831,7 +804,6 @@ function StoryCard({
             <button
               type="button"
               onClick={onUnlock}
-              disabled={status === "enriching"}
               className="inline-flex items-center gap-1.5 rounded-lg border border-tertiary-500 bg-tertiary-500/10 px-2.5 py-1 text-xs font-semibold text-tertiary-700 transition hover:bg-tertiary-500/20 disabled:opacity-60"
               title="Click to unlock and edit"
             >
@@ -871,16 +843,6 @@ function StoryCard({
             <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
           ))}
       </div>
-      {/* Enrichment tags — shown when ready */}
-      {locked && status === "ready" && cardState.enrichedMeta?.tags && cardState.enrichedMeta.tags.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {cardState.enrichedMeta.tags.slice(0, 4).map((tag: string, t: number) => (
-            <span key={t} className="rounded-[8px] bg-tertiary-100 px-2 py-0.5 text-[10px] font-medium text-tertiary-700">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -888,7 +850,7 @@ function StoryCard({
 // ── Module-level locked chunks store (avoids prop threading) ─────────────────
 // OnboardingFlow reads this before calling /api/career/upload
 
-let _lockedChunksStore: { heading: string; text: string; meta: Record<string, unknown> }[] = [];
+let _lockedChunksStore: { heading: string; text: string; meta: Record<string, unknown>; originalIndex: number }[] = [];
 
 export function storeLockedChunks(chunks: typeof _lockedChunksStore) {
   _lockedChunksStore = chunks;

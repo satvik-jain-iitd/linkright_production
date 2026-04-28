@@ -45,146 +45,6 @@ interface ConversationTurn {
   confirmed: boolean;
 }
 
-// ── Silent Enrichment Types + Helpers ────────────────────────────────────────
-
-interface EnrichedChunkUpload {
-  text: string;
-  metadata: Record<string, unknown>;
-}
-
-// Concurrency-limited runner: processes tasks at most `concurrency` at a time.
-// Keeps Oracle Ollama from being hammered with 14 simultaneous requests.
-// signal: optional AbortSignal — throws AbortError on abort, allowing callers to bail.
-async function runWithConcurrency<T>(
-  tasks: (() => Promise<T>)[],
-  concurrency: number,
-  onProgress?: (done: number, total: number) => void,
-  signal?: AbortSignal
-): Promise<T[]> {
-  const results: T[] = new Array(tasks.length);
-  let nextIndex = 0;
-  let done = 0;
-  const total = tasks.length;
-
-  async function worker() {
-    while (nextIndex < total) {
-      if (signal?.aborted) throw new DOMException("Enrichment aborted", "AbortError");
-      const i = nextIndex++;
-      results[i] = await tasks[i]();
-      done++;
-      onProgress?.(done, total);
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(concurrency, total) }, () => worker());
-  await Promise.all(workers);
-  return results;
-}
-
-function parseNarrationChunks(narration: string): { heading: string; text: string }[] {
-  if (!narration || !/^## /m.test(narration)) return [];
-  const chunks: { heading: string; text: string }[] = [];
-  const roleSections = narration.split(/(?=^## )/m).filter((s) => s.trim());
-  for (const roleSection of roleSections) {
-    const lines = roleSection.trimStart().split("\n");
-    const roleHeader = lines[0].trim();
-    const parts = roleSection.split(/(?=^### )/m);
-    const initiativeParts = parts.filter((p) => p.trimStart().startsWith("### "));
-    if (initiativeParts.length === 0) {
-      chunks.push({ heading: roleHeader, text: roleSection.trim() });
-      continue;
-    }
-    for (const part of initiativeParts) {
-      const partLines = part.trimStart().split("\n");
-      const heading = partLines[0].trim().replace(/^### /, "");
-      const body = partLines.slice(1).join("\n").trim();
-      if (!body) continue;
-      chunks.push({ heading, text: `${roleHeader}\n\n${partLines.join("\n").trim()}` });
-    }
-  }
-  return chunks;
-}
-
-function extractChunkMeta(chunk: { heading: string; text: string }): Record<string, unknown> {
-  const roleMatch = chunk.text.match(/^## ([^—–]+)[—–]\s*([^(\n]+)/m);
-  return {
-    company: roleMatch ? roleMatch[1].trim() : "",
-    role: roleMatch ? roleMatch[2].trim() : "",
-    initiative: chunk.heading,
-  };
-}
-
-function buildCareerContext(experiences: ParsedExperience[]): string {
-  if (!experiences?.length) return "";
-  const current = experiences[0];
-  const prev = experiences.slice(1, 3).map((e) => e.company).filter(Boolean);
-  let ctx = `${current.role} at ${current.company}`;
-  if (prev.length > 0) ctx += `, prev ${prev.join(", ")}`;
-  return ctx;
-}
-
-async function enrichNarrationChunks(
-  narration: string,
-  careerContext: string,
-  onProgress?: (done: number, total: number) => void,
-  signal?: AbortSignal
-): Promise<EnrichedChunkUpload[]> {
-  const chunks = parseNarrationChunks(narration);
-  if (chunks.length === 0) return [];
-  const tasks = chunks.map((chunk) => async () => {
-    const base = extractChunkMeta(chunk);
-    try {
-      const res = await fetch("/api/onboarding/enrich-chunk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
-        signal,
-      });
-      const data = res.ok ? await res.json() : {};
-      return { text: chunk.text, metadata: { ...base, ...data } };
-    } catch (err) {
-      // Re-throw AbortError so the concurrency runner exits cleanly on resume swap.
-      // All other failures (network, 5xx, parse) return fallback with degraded:true
-      // so the UI can surface a soft warning and the telemetry can distinguish
-      // "enrichment ran" from "enrichment silently failed".
-      if ((err as { name?: string })?.name === "AbortError") throw err;
-      console.warn(`[enrich-chunk] failed for chunk`, err);
-      return { text: chunk.text, metadata: { ...base, degraded: true } };
-    }
-  });
-  // Limit to 3 concurrent requests — Oracle Ollama gemma3:1b is single-threaded;
-  // 14 parallel calls queue server-side and each waits ~47s. 3 in flight at a time
-  // reduces perceived latency to ~3x per-call-time instead of 14x.
-  return runWithConcurrency(tasks, 3, onProgress, signal);
-}
-
-// On Save: diff final chunks against pre-enriched state — re-enrich only changed chunks
-async function buildFinalChunks(
-  finalChunks: { heading: string; text: string }[],
-  cached: EnrichedChunkUpload[],
-  careerContext: string
-): Promise<EnrichedChunkUpload[]> {
-  const cachedByText = new Map(cached.map((c) => [c.text, c.metadata]));
-  const tasks = finalChunks.map((chunk) => async () => {
-    const existing = cachedByText.get(chunk.text);
-    if (existing) return { text: chunk.text, metadata: existing };
-    const base = extractChunkMeta(chunk);
-    try {
-      const res = await fetch("/api/onboarding/enrich-chunk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
-      });
-      const data = res.ok ? await res.json() : {};
-      return { text: chunk.text, metadata: { ...base, ...data } };
-    } catch {
-      return { text: chunk.text, metadata: base };
-    }
-  });
-  // Same 3-concurrency cap as enrichNarrationChunks — re-enriched chunks on Save
-  // are typically 0-2 (only changed ones), so this rarely matters in practice.
-  return runWithConcurrency(tasks, 3);
-}
 
 // ── Step 1: Welcome + Target Roles ────────────────────────────────────────
 
@@ -280,9 +140,6 @@ function StepCareerBasics({
   const [skills, setSkills] = useState<string[]>([]);
   const [certifications, setCertifications] = useState("");
   const [saving, setSaving] = useState(false);
-  // Bug 12 fix: show which phase the Save is in so the user knows it's
-  // working (not frozen). Phases: 'enriching' → 'uploading' → done.
-  const [savePhase, setSavePhase] = useState<"enriching" | "uploading" | null>(null);
   const [error, setError] = useState("");
 
   // Resume upload / paste state
@@ -293,9 +150,6 @@ function StepCareerBasics({
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // AbortController for in-flight enrichNarrationChunks — cancelled on resume swap
-  // so stale enrichment results from resume A can never write into resume B's state.
-  const enrichAbortRef = useRef<AbortController | null>(null);
 
   // Wave 2 Sub-phase 2A: outline-view holds the structured companies tree.
   // Populated from parse-resume; narration streamed separately via narrate-career.
@@ -305,12 +159,6 @@ function StepCareerBasics({
   // S04 design: show file metadata chip inside CareerOutlineView.
   const [fileMeta, setFileMeta] = useState<{ filename: string; sizeKB: number; parsedSec?: number } | null>(null);
 
-  // Enriched chunk metadata — populated silently after narration stream completes.
-  // Keys are ### heading strings (used for diff when user edits).
-  const [enrichedChunks, setEnrichedChunks] = useState<EnrichedChunkUpload[]>([]);
-  const [narrationEnrichWarning, setNarrationEnrichWarning] = useState<string | null>(null);
-  // Progress indicator for enrich-chunk requests (done/total). Null = not running.
-  const [enrichProgress, setEnrichProgress] = useState<{ done: number; total: number } | null>(null);
 
   const startNarrationStream = async (experiences: ParsedExperience[], projects?: Array<{ title?: string; one_liner?: string; key_achievements?: string[] }>) => {
     if (!experiences || experiences.length === 0) return;
@@ -332,44 +180,6 @@ function StepCareerBasics({
         const text = accumulated;
         setOutline((prev) => prev ? { ...prev, career_summary_first_person: text } : null);
       }
-      // Enrich initiative chunks while user reads — stored in state.
-      // If enrichment fails, surface a soft warning so user knows their profile
-      // saved without enriched chunks instead of failing silently.
-      if (accumulated.trim()) {
-        const chunks = parseNarrationChunks(accumulated);
-        if (chunks.length > 0) setEnrichProgress({ done: 0, total: chunks.length });
-        const careerContext = buildCareerContext(experiences);
-        // Create a fresh AbortController for this enrichment run.
-        // If the user swaps resume mid-flight, handleSwapResume calls abort()
-        // and the .then() guard below drops stale results.
-        const ctrl = new AbortController();
-        enrichAbortRef.current = ctrl;
-        enrichNarrationChunks(accumulated, careerContext, (done, total) => {
-          if (!ctrl.signal.aborted) setEnrichProgress({ done, total });
-        }, ctrl.signal)
-          .then((result) => {
-            if (ctrl.signal.aborted) return; // resume was swapped — discard
-            setEnrichedChunks(result);
-            setEnrichProgress(null);
-            // Surface a non-blocking banner if any chunks came back degraded
-            // (API failure, network error, parse error). User sees real chunks
-            // vs fallback-only; can edit manually.
-            const degradedCount = result.filter((c) => (c.metadata as Record<string, unknown>).degraded).length;
-            if (degradedCount > 0) {
-              setNarrationEnrichWarning(
-                degradedCount === result.length
-                  ? "Couldn't enrich highlights — you can edit them manually before saving"
-                  : `${degradedCount} highlight${degradedCount === 1 ? '' : 's'} couldn't be enriched — you can edit them manually`
-              );
-            }
-          })
-          .catch((e) => {
-            if ((e as { name?: string }).name === "AbortError") return; // clean cancel
-            console.warn("[narrate-enrich] failed:", e);
-            setEnrichProgress(null);
-            setNarrationEnrichWarning("Couldn't enrich a few sections — proceeding without");
-          });
-      }
     } catch (err) {
       console.warn("[narrate-career] Streaming failed:", err);
     } finally {
@@ -378,24 +188,13 @@ function StepCareerBasics({
   };
 
   const handleSwapResume = () => {
-    // Cancel any in-flight enrichment so stale results from the old resume
-    // cannot overwrite the state of the newly-uploaded resume.
-    enrichAbortRef.current?.abort();
-    enrichAbortRef.current = null;
     setOutline(null);
     setFileMeta(null);
     setParsed(false);
     setStreamingNarration(false);
-    setEnrichProgress(null);
     setUploadMode("none");
-    // Clear enrichedChunks — must be reset so Resume B cannot inherit
-    // any cached metadata from Resume A via buildFinalChunks' cachedByText map.
-    setEnrichedChunks([]);
-    // Clear any enrichment warning from Resume A so it doesn't bleed into Resume B's session.
-    setNarrationEnrichWarning(null);
     // Clear module-level locked chunks store so Resume A's lock state cannot contaminate
-    // Resume B's save payload. Must be called here (not just in CareerOutlineView) because
-    // storeLockedChunks() is the shared write path between the two components.
+    // Resume B's save payload.
     storeLockedChunks([]);
   };
 
@@ -673,43 +472,29 @@ function StepCareerBasics({
       }
 
       if (careerText.trim().length >= 200) {
-        // v3 (PR #26): Use locked chunks from CareerOutlineView instead of
-        // batch-enriching all chunks synchronously on Save. Locked chunks were
-        // already enriched individually when the user clicked Lock — so we just
-        // assemble them here, no extra LLM calls needed.
-        const lockedChunks = getLockedChunks();
-        const chunksToUpload: EnrichedChunkUpload[] | undefined =
-          lockedChunks.length > 0
-            ? lockedChunks.map((c) => ({ text: c.text, metadata: c.meta }))
-            : undefined;
-
-        setSavePhase("uploading");
+        // v4 (Bug 1): Upload chunks without pre-enriched metadata.
+        // Enrichment + nugget creation + embedding are triggered server-side
+        // when stories/lock is called per locked chunk (see below).
         const uploadRes = await fetch("/api/career/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            career_text: careerText,
-            ...(chunksToUpload?.length ? { enriched_chunks: chunksToUpload } : {}),
-          }),
+          body: JSON.stringify({ career_text: careerText }),
         });
+        // Blocker 1 fix: read body ONCE — Response body is a one-shot stream.
+        // Second .json() call would throw and be swallowed, leaving uploadedChunks = [].
+        const uploadJson = await uploadRes.json().catch(() => ({}));
         if (!uploadRes.ok) {
-          const data = await uploadRes.json().catch(() => ({}));
-          setError(data.error ?? "Failed to save career details. Please try again.");
+          setError((uploadJson as { error?: string }).error ?? "Failed to save career details. Please try again.");
           return;
         }
 
         // Parse the chunk IDs returned by career/upload so we can stamp server-side lock state.
         // This makes the 409 guard in /api/onboarding/stories/lock real — locked_at is set
         // in DB, and resume_submitted_at gates all future mutations.
-        let uploadedChunks: { id: string; chunk_index: number }[] = [];
-        try {
-          const uploadData = await uploadRes.json();
-          if (Array.isArray(uploadData.chunks)) {
-            uploadedChunks = uploadData.chunks;
-          }
-        } catch {
-          // json() may fail if already consumed — proceed without server-lock wiring
-        }
+        const uploadedChunks: { id: string; chunk_index: number }[] =
+          Array.isArray((uploadJson as { chunks?: unknown[] }).chunks)
+            ? ((uploadJson as { chunks: { id: string; chunk_index: number }[] }).chunks)
+            : [];
 
         // For each locally locked card (by index), stamp locked_at server-side via
         // POST /api/onboarding/stories/lock. This makes the 409 guard functional.
@@ -719,8 +504,11 @@ function StepCareerBasics({
           const lockedChunks = getLockedChunks();
           // lockedChunks is ordered by card index (matching chunk_index).
           // Use chunk_index as the mapping key.
-          const lockPromises = lockedChunks.map((_, cardIdx) => {
-            const dbChunk = uploadedChunks.find((c) => c.chunk_index === cardIdx);
+          // Blocker 2 fix: use originalIndex (the card's position in the full set)
+          // not the iteration index (which re-numbers after filtering unlocked cards).
+          // e.g. cards 0,2,4 locked → lockedChunks[0,1,2] but DB has chunk_index 0,2,4.
+          const lockPromises = lockedChunks.map((lockedCard) => {
+            const dbChunk = uploadedChunks.find((c) => c.chunk_index === lockedCard.originalIndex);
             if (!dbChunk) return Promise.resolve();
             return fetch("/api/onboarding/stories/lock", {
               method: "POST",
@@ -753,7 +541,6 @@ function StepCareerBasics({
       setError("Network error. Please try again.");
     } finally {
       setSaving(false);
-      setSavePhase(null);
     }
   };
 
@@ -949,33 +736,6 @@ function StepCareerBasics({
       )}
 
       {/* Parsed outline + first-person narration (CareerOutlineView) */}
-      {narrationEnrichWarning && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-          {narrationEnrichWarning}
-        </div>
-      )}
-      {/* Enrich-chunk progress: shown while background classification is running */}
-      {enrichProgress && enrichProgress.total > 0 && (
-        <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5">
-          <div
-            className="animate-spin"
-            style={{
-              width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
-              border: "2px solid rgba(15,190,175,0.3)",
-              borderTopColor: "var(--color-accent, #0FBEAF)",
-            }}
-          />
-          <span className="text-xs text-muted">
-            Tagging highlights… {enrichProgress.done}/{enrichProgress.total}
-          </span>
-          <div className="ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-border">
-            <div
-              className="h-full rounded-full bg-accent transition-all"
-              style={{ width: `${Math.round((enrichProgress.done / enrichProgress.total) * 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
       {parsed && outline && outline.experiences.length > 0 && (
         <CareerOutlineView
           data={outline}
@@ -985,13 +745,7 @@ function StepCareerBasics({
           onContinue={handleSave}
           streamingNarration={streamingNarration}
           busy={saving}
-          continueLabel={
-            saving
-              ? savePhase === "uploading"
-                ? "Uploading…"
-                : "Saving…"
-              : "Save and continue"
-          }
+          continueLabel={saving ? "Saving…" : "Save and continue"}
         />
       )}
 

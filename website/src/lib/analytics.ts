@@ -82,7 +82,8 @@ type SyncEvent =
   | { event: "job_search_empty"; properties: { reason: "no_matches" | "profile_incomplete" } }
   // Resume step lock/unlock model (PR #26)
   | { event: "story_locked"; properties: { index: number } }
-  | { event: "story_unlocked"; properties: { index: number } };
+  | { event: "story_unlocked"; properties: { index: number } }
+  | { event: "profile_nugget_embedded"; properties: { count: number } };
 
 export function track(eventData: SyncEvent) {
   if (typeof window !== "undefined" && posthog.__loaded) {
