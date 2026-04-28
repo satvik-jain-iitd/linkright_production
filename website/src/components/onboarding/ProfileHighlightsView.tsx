@@ -484,6 +484,7 @@ export function ProfileHighlightsView() {
         </div>
         <Link
           href="/dashboard/profile#bulk-upload"
+          prefetch={false}
           className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
         >
           Upload a file →

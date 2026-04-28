@@ -211,6 +211,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={false}
                   className={cls}
                 >
                   {link.label}
@@ -297,6 +298,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                   </div>
                   <Link
                     href="/dashboard/profile"
+                    prefetch={false}
                     onClick={() => setDropdownOpen(false)}
                     className="block w-full px-4 py-2.5 text-left text-sm text-muted transition-colors hover:bg-background hover:text-foreground"
                   >

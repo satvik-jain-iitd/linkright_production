@@ -50,6 +50,35 @@ interface EnrichedChunkUpload {
   metadata: Record<string, unknown>;
 }
 
+// Concurrency-limited runner: processes tasks at most `concurrency` at a time.
+// Keeps Oracle Ollama from being hammered with 14 simultaneous requests.
+// signal: optional AbortSignal — throws AbortError on abort, allowing callers to bail.
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number,
+  onProgress?: (done: number, total: number) => void,
+  signal?: AbortSignal
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let nextIndex = 0;
+  let done = 0;
+  const total = tasks.length;
+
+  async function worker() {
+    while (nextIndex < total) {
+      if (signal?.aborted) throw new DOMException("Enrichment aborted", "AbortError");
+      const i = nextIndex++;
+      results[i] = await tasks[i]();
+      done++;
+      onProgress?.(done, total);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, total) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 function parseNarrationChunks(narration: string): { heading: string; text: string }[] {
   if (!narration || !/^## /m.test(narration)) return [];
   const chunks: { heading: string; text: string }[] = [];
@@ -94,27 +123,37 @@ function buildCareerContext(experiences: ParsedExperience[]): string {
 
 async function enrichNarrationChunks(
   narration: string,
-  careerContext: string
+  careerContext: string,
+  onProgress?: (done: number, total: number) => void,
+  signal?: AbortSignal
 ): Promise<EnrichedChunkUpload[]> {
   const chunks = parseNarrationChunks(narration);
   if (chunks.length === 0) return [];
-  const results = await Promise.all(
-    chunks.map(async (chunk) => {
-      const base = extractChunkMeta(chunk);
-      try {
-        const res = await fetch("/api/onboarding/enrich-chunk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
-        });
-        const data = res.ok ? await res.json() : {};
-        return { text: chunk.text, metadata: { ...base, ...data } };
-      } catch {
-        return { text: chunk.text, metadata: base };
-      }
-    })
-  );
-  return results;
+  const tasks = chunks.map((chunk) => async () => {
+    const base = extractChunkMeta(chunk);
+    try {
+      const res = await fetch("/api/onboarding/enrich-chunk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
+        signal,
+      });
+      const data = res.ok ? await res.json() : {};
+      return { text: chunk.text, metadata: { ...base, ...data } };
+    } catch (err) {
+      // Re-throw AbortError so the concurrency runner exits cleanly on resume swap.
+      // All other failures (network, 5xx, parse) return fallback with degraded:true
+      // so the UI can surface a soft warning and the telemetry can distinguish
+      // "enrichment ran" from "enrichment silently failed".
+      if ((err as { name?: string })?.name === "AbortError") throw err;
+      console.warn(`[enrich-chunk] failed for chunk`, err);
+      return { text: chunk.text, metadata: { ...base, degraded: true } };
+    }
+  });
+  // Limit to 3 concurrent requests — Oracle Ollama gemma3:1b is single-threaded;
+  // 14 parallel calls queue server-side and each waits ~47s. 3 in flight at a time
+  // reduces perceived latency to ~3x per-call-time instead of 14x.
+  return runWithConcurrency(tasks, 3, onProgress, signal);
 }
 
 // On Save: diff final chunks against pre-enriched state — re-enrich only changed chunks
@@ -124,24 +163,25 @@ async function buildFinalChunks(
   careerContext: string
 ): Promise<EnrichedChunkUpload[]> {
   const cachedByText = new Map(cached.map((c) => [c.text, c.metadata]));
-  return Promise.all(
-    finalChunks.map(async (chunk) => {
-      const existing = cachedByText.get(chunk.text);
-      if (existing) return { text: chunk.text, metadata: existing };
-      const base = extractChunkMeta(chunk);
-      try {
-        const res = await fetch("/api/onboarding/enrich-chunk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
-        });
-        const data = res.ok ? await res.json() : {};
-        return { text: chunk.text, metadata: { ...base, ...data } };
-      } catch {
-        return { text: chunk.text, metadata: base };
-      }
-    })
-  );
+  const tasks = finalChunks.map((chunk) => async () => {
+    const existing = cachedByText.get(chunk.text);
+    if (existing) return { text: chunk.text, metadata: existing };
+    const base = extractChunkMeta(chunk);
+    try {
+      const res = await fetch("/api/onboarding/enrich-chunk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
+      });
+      const data = res.ok ? await res.json() : {};
+      return { text: chunk.text, metadata: { ...base, ...data } };
+    } catch {
+      return { text: chunk.text, metadata: base };
+    }
+  });
+  // Same 3-concurrency cap as enrichNarrationChunks — re-enriched chunks on Save
+  // are typically 0-2 (only changed ones), so this rarely matters in practice.
+  return runWithConcurrency(tasks, 3);
 }
 
 // ── Step 1: Welcome + Target Roles ────────────────────────────────────────
@@ -248,6 +288,9 @@ function StepCareerBasics({
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // AbortController for in-flight enrichNarrationChunks — cancelled on resume swap
+  // so stale enrichment results from resume A can never write into resume B's state.
+  const enrichAbortRef = useRef<AbortController | null>(null);
 
   // Wave 2 Sub-phase 2A: outline-view holds the structured companies tree.
   // Populated from parse-resume; narration streamed separately via narrate-career.
@@ -261,6 +304,8 @@ function StepCareerBasics({
   // Keys are ### heading strings (used for diff when user edits).
   const [enrichedChunks, setEnrichedChunks] = useState<EnrichedChunkUpload[]>([]);
   const [narrationEnrichWarning, setNarrationEnrichWarning] = useState<string | null>(null);
+  // Progress indicator for enrich-chunk requests (done/total). Null = not running.
+  const [enrichProgress, setEnrichProgress] = useState<{ done: number; total: number } | null>(null);
 
   const startNarrationStream = async (experiences: ParsedExperience[], projects?: Array<{ title?: string; one_liner?: string; key_achievements?: string[] }>) => {
     if (!experiences || experiences.length === 0) return;
@@ -286,11 +331,37 @@ function StepCareerBasics({
       // If enrichment fails, surface a soft warning so user knows their profile
       // saved without enriched chunks instead of failing silently.
       if (accumulated.trim()) {
+        const chunks = parseNarrationChunks(accumulated);
+        if (chunks.length > 0) setEnrichProgress({ done: 0, total: chunks.length });
         const careerContext = buildCareerContext(experiences);
-        enrichNarrationChunks(accumulated, careerContext)
-          .then(setEnrichedChunks)
+        // Create a fresh AbortController for this enrichment run.
+        // If the user swaps resume mid-flight, handleSwapResume calls abort()
+        // and the .then() guard below drops stale results.
+        const ctrl = new AbortController();
+        enrichAbortRef.current = ctrl;
+        enrichNarrationChunks(accumulated, careerContext, (done, total) => {
+          if (!ctrl.signal.aborted) setEnrichProgress({ done, total });
+        }, ctrl.signal)
+          .then((result) => {
+            if (ctrl.signal.aborted) return; // resume was swapped — discard
+            setEnrichedChunks(result);
+            setEnrichProgress(null);
+            // Surface a non-blocking banner if any chunks came back degraded
+            // (API failure, network error, parse error). User sees real chunks
+            // vs fallback-only; can edit manually.
+            const degradedCount = result.filter((c) => (c.metadata as Record<string, unknown>).degraded).length;
+            if (degradedCount > 0) {
+              setNarrationEnrichWarning(
+                degradedCount === result.length
+                  ? "Couldn't enrich highlights — you can edit them manually before saving"
+                  : `${degradedCount} highlight${degradedCount === 1 ? '' : 's'} couldn't be enriched — you can edit them manually`
+              );
+            }
+          })
           .catch((e) => {
+            if ((e as { name?: string }).name === "AbortError") return; // clean cancel
             console.warn("[narrate-enrich] failed:", e);
+            setEnrichProgress(null);
             setNarrationEnrichWarning("Couldn't enrich a few sections — proceeding without");
           });
       }
@@ -302,11 +373,21 @@ function StepCareerBasics({
   };
 
   const handleSwapResume = () => {
+    // Cancel any in-flight enrichment so stale results from the old resume
+    // cannot overwrite the state of the newly-uploaded resume.
+    enrichAbortRef.current?.abort();
+    enrichAbortRef.current = null;
     setOutline(null);
     setFileMeta(null);
     setParsed(false);
     setStreamingNarration(false);
+    setEnrichProgress(null);
     setUploadMode("none");
+    // Clear enrichedChunks — must be reset so Resume B cannot inherit
+    // any cached metadata from Resume A via buildFinalChunks' cachedByText map.
+    setEnrichedChunks([]);
+    // Clear any enrichment warning from Resume A so it doesn't bleed into Resume B's session.
+    setNarrationEnrichWarning(null);
   };
 
   const applyParsed = (data: Record<string, unknown>) => {
@@ -726,12 +807,11 @@ function StepCareerBasics({
       {!parsed && parsing && (
         <div className="rounded-2xl border border-border bg-white p-8 text-center" style={{ background: "linear-gradient(180deg, #FDF6F0 0%, #fff 70%)" }}>
           <div
-            className="mx-auto mb-5"
+            className="mx-auto mb-5 animate-spin"
             style={{
               width: 44, height: 44, borderRadius: "50%",
               border: "3px solid rgba(15,190,175,0.25)",
               borderTopColor: "var(--color-accent, #0FBEAF)",
-              animation: "spin 1s linear infinite",
             }}
           />
           <h3 className="text-[17px] font-semibold text-foreground">Reading your resume…</h3>
@@ -771,7 +851,7 @@ function StepCareerBasics({
               );
             })}
           </div>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          {/* animate-spin (Tailwind built-in) handles @keyframes globally */}
         </div>
       )}
 
@@ -812,6 +892,28 @@ function StepCareerBasics({
       {narrationEnrichWarning && (
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
           {narrationEnrichWarning}
+        </div>
+      )}
+      {/* Enrich-chunk progress: shown while background classification is running */}
+      {enrichProgress && enrichProgress.total > 0 && (
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5">
+          <div
+            className="animate-spin"
+            style={{
+              width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+              border: "2px solid rgba(15,190,175,0.3)",
+              borderTopColor: "var(--color-accent, #0FBEAF)",
+            }}
+          />
+          <span className="text-xs text-muted">
+            Tagging highlights… {enrichProgress.done}/{enrichProgress.total}
+          </span>
+          <div className="ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-border">
+            <div
+              className="h-full rounded-full bg-accent transition-all"
+              style={{ width: `${Math.round((enrichProgress.done / enrichProgress.total) * 100)}%` }}
+            />
+          </div>
         </div>
       )}
       {parsed && outline && outline.experiences.length > 0 && (
