@@ -12,6 +12,9 @@ type Prefs = {
   location_preference: string;
   preferred_locations: string[];
   preferred_stages: string[];
+  preferred_tier_flags: string[];
+  industries_target: string[];
+  visa_status: string;
   target_roles: string[];
   min_comp_usd: number | null;
   max_comp_usd: number | null;
@@ -22,6 +25,9 @@ const EMPTY: Prefs = {
   location_preference: "any",
   preferred_locations: [],
   preferred_stages: [],
+  preferred_tier_flags: [],
+  industries_target: [],
+  visa_status: "unknown",
   target_roles: [],
   min_comp_usd: null,
   max_comp_usd: null,
@@ -32,7 +38,8 @@ const STEPS = [
   { n: 1, label: "Resume", state: "done" as const },
   { n: 2, label: "Profile", state: "done" as const },
   { n: 3, label: "Preferences", state: "active" as const },
-  { n: 4, label: "First match", state: "todo" as const },
+  { n: 4, label: "Broadcast", state: "todo" as const },
+  { n: 5, label: "First match", state: "todo" as const },
 ];
 
 const LOCATION_OPTIONS = [
@@ -70,6 +77,37 @@ const NOTICE_PERIOD_OPTIONS = [
   { v: 90, label: "90 days" },
 ];
 
+const INDUSTRY_OPTIONS = [
+  { v: "ai_ml", label: "AI / ML" },
+  { v: "fintech", label: "FinTech" },
+  { v: "healthtech", label: "HealthTech" },
+  { v: "edtech", label: "EdTech" },
+  { v: "saas_b2b", label: "SaaS / B2B" },
+  { v: "consumer", label: "Consumer / B2C" },
+  { v: "ecommerce", label: "E-commerce" },
+  { v: "marketplace", label: "Marketplace" },
+  { v: "devtools", label: "DevTools" },
+  { v: "crypto_web3", label: "Crypto / Web3" },
+  { v: "gaming", label: "Gaming" },
+  { v: "climate", label: "Climate" },
+];
+
+const TIER_OPTIONS = [
+  { v: "faang", label: "FAANG / Big Tech" },
+  { v: "unicorn", label: "Unicorn ($1B+)" },
+  { v: "yc_backed", label: "YC-backed" },
+  { v: "well_funded", label: "Series B+" },
+  { v: "early_stage", label: "Early stage" },
+  { v: "bootstrapped", label: "Bootstrapped" },
+];
+
+const VISA_OPTIONS = [
+  { v: "unknown", label: "Prefer not to say" },
+  { v: "citizen", label: "Citizen / PR (no sponsorship needed)" },
+  { v: "has_work_auth", label: "Have work authorisation" },
+  { v: "needs_sponsorship", label: "Need sponsorship" },
+];
+
 const SUGGESTED_ROLES = [
   "Senior Product Manager",
   "Principal Product Manager",
@@ -103,7 +141,15 @@ export default function PreferencesPage() {
     })();
   }, []);
 
-  function toggleArrayItem(key: "preferred_stages" | "preferred_locations" | "target_roles", value: string) {
+  function toggleArrayItem(
+    key:
+      | "preferred_stages"
+      | "preferred_locations"
+      | "preferred_tier_flags"
+      | "industries_target"
+      | "target_roles",
+    value: string,
+  ) {
     setPrefs((p) => {
       const current = p[key] ?? [];
       const next = current.includes(value)
@@ -152,7 +198,7 @@ export default function PreferencesPage() {
       alert(`Save failed: ${body.error ?? r.status}`);
       return;
     }
-    if (proceedToBrowse) router.push("/onboarding/find");
+    if (proceedToBrowse) router.push("/onboarding/broadcast");
   }
 
   const roleSuggestions = useMemo(
@@ -193,7 +239,7 @@ export default function PreferencesPage() {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/onboarding/find")}
+          onClick={() => router.push("/onboarding/broadcast")}
           className="text-xs text-muted transition hover:text-foreground"
         >
           I&apos;ll decide later →
@@ -202,7 +248,7 @@ export default function PreferencesPage() {
 
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
-          Step 3 of 4 · optional, but sharpens matches
+          Step 3 of 5 · optional, but sharpens matches
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
           What are you actually looking for?
@@ -218,7 +264,7 @@ export default function PreferencesPage() {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/onboarding/find")}
+          onClick={() => router.push("/onboarding/broadcast")}
           className="rounded-full border border-accent px-4 py-2 text-[12px] font-semibold text-accent transition hover:bg-accent/10"
         >
           Use my profile only
@@ -427,6 +473,67 @@ export default function PreferencesPage() {
               }
               className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none"
             />
+          </div>
+        </div>
+
+        {/* Industries */}
+        <div>
+          <label className="text-sm font-semibold text-foreground">Industries</label>
+          <p className="mt-0.5 text-xs text-muted">Multi-select. Roles outside these still appear, just ranked lower.</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {INDUSTRY_OPTIONS.map((opt) => (
+              <button
+                key={opt.v}
+                type="button"
+                onClick={() => toggleArrayItem("industries_target", opt.v)}
+                className={
+                  prefs.industries_target.includes(opt.v)
+                    ? "rounded-[10px] bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                    : "rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-foreground transition hover:border-accent"
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          {/* Company tier */}
+          <div>
+            <label className="text-sm font-semibold text-foreground">Company tier</label>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {TIER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => toggleArrayItem("preferred_tier_flags", opt.v)}
+                  className={
+                    prefs.preferred_tier_flags.includes(opt.v)
+                      ? "rounded-[10px] bg-primary-500/10 px-3 py-1 text-xs font-medium text-primary-700"
+                      : "rounded-full border border-border bg-white px-3 py-1 text-xs font-medium text-foreground transition hover:border-accent"
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Visa status */}
+          <div>
+            <label className="text-sm font-semibold text-foreground">Work authorisation</label>
+            <select
+              value={prefs.visa_status}
+              onChange={(e) => setPrefs({ ...prefs, visa_status: e.target.value })}
+              className="mt-2 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            >
+              {VISA_OPTIONS.map((opt) => (
+                <option key={opt.v} value={opt.v}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

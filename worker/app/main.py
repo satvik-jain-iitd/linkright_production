@@ -952,6 +952,7 @@ async def score_now(
     not 5 min later when the cron runs.
     """
     verify_secret(authorization)
+    t_start = time.time()
     try:
         from .pipeline.recommender import (
             score_fresh_discoveries_for_user,
@@ -965,21 +966,35 @@ async def score_now(
         _wire_governor_sb(sb)
 
         if not _user_is_active(sb, req.user_id):
-            return {"ok": False, "reason": "no_preferences", "matches": 0}
+            return {"ok": False, "reason": "no_preferences", "matches": 0, "elapsed_ms": int((time.time() - t_start) * 1000)}
 
+        t_score = time.time()
         scored = await score_fresh_discoveries_for_user(sb, req.user_id, limit=req.limit)
+        score_ms = int((time.time() - t_score) * 1000)
+
+        t_rank = time.time()
         ranked = compute_and_store_top_20(sb, req.user_id)
+        rank_ms = int((time.time() - t_rank) * 1000)
+
+        elapsed_ms = int((time.time() - t_start) * 1000)
+        logger.info(
+            "score_now done user=%s scored=%d top20=%d score_ms=%d rank_ms=%d total_ms=%d",
+            req.user_id, scored, len(ranked), score_ms, rank_ms, elapsed_ms,
+        )
         return {
             "ok": True,
             "scored": scored,
             "matches": len(ranked),
             "user_id": req.user_id,
+            "elapsed_ms": elapsed_ms,
+            "score_ms": score_ms,
+            "rank_ms": rank_ms,
         }
     except Exception as exc:
         logger.exception("score-now failed: %s", exc)
         return JSONResponse(
             status_code=500,
-            content={"ok": False, "error": str(exc)[:200]},
+            content={"ok": False, "error": str(exc)[:200], "elapsed_ms": int((time.time() - t_start) * 1000)},
         )
 
 

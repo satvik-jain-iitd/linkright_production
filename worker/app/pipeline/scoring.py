@@ -587,6 +587,8 @@ async def score_application(
     supabase_client,
     career_graph: dict | None = None,
     discovery: dict | None = None,
+    prefs: dict | None = None,
+    nugget_tags: list[str] | None = None,
 ) -> JobScore:
     """Rule-based job scoring.
 
@@ -598,10 +600,14 @@ async def score_application(
             user_preferences.target_roles is empty. Other fields ignored.
         discovery: optional full job_discoveries row. When present we read
             `title` and `company_slug` for better dim signals.
+        prefs: optional pre-fetched user_preferences row. Skips per-job DB read
+            when caller batches. Falls back to fetching when None.
+        nugget_tags: optional pre-fetched nugget tag list. Same rationale.
     """
     started = time.time()
 
-    prefs = _fetch_user_preferences(supabase_client, user_id)
+    if prefs is None:
+        prefs = _fetch_user_preferences(supabase_client, user_id)
     target_roles: list[str] = list(prefs.get("target_roles") or [])
     if not target_roles and career_graph:
         target_roles = list(career_graph.get("target_roles") or [])
@@ -609,7 +615,7 @@ async def score_application(
     company_slug = (discovery or {}).get("company_slug")
     company = _fetch_company(supabase_client, company_slug)
 
-    tags = _fetch_nugget_tags(supabase_client, user_id)
+    tags = nugget_tags if nugget_tags is not None else _fetch_nugget_tags(supabase_client, user_id)
 
     jd_title = (discovery or {}).get("title") or ""
     if not jd_title:

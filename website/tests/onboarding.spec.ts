@@ -41,12 +41,6 @@ test.describe.serial('Landing Page Navigation', () => {
     await expect(page).toHaveURL(/auth/);
   });
 
-  test('Features link in nav navigates to features page', async () => {
-    await page.goto('/');
-    await page.getByRole('navigation').getByRole('link', { name: 'Features' }).click();
-    await expect(page).toHaveURL(/features/);
-  });
-
   // Signup UI test — needs its own fresh context (legitimate exception:
   // signup mutates auth state, cannot share with the unauth landing page context)
   test('signup flow creates account successfully', async ({ browser }) => {

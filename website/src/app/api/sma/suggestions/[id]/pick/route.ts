@@ -83,8 +83,7 @@ export async function POST(request: Request, ctx: RouteContext) {
     diaryContext = diary?.content ?? "";
   }
 
-  // Blocker #3 — cap diary context to ~1000 tokens (4000 chars) so we never
-  // blow past a model's context window on unusually long diary entries.
+  // Cap diary to ~1000 tokens (4000 chars) so we never overflow model context.
   const DIARY_CHAR_LIMIT = 4000;
   if (diaryContext.length > DIARY_CHAR_LIMIT) {
     diaryContext = diaryContext.slice(0, DIARY_CHAR_LIMIT) + "… [truncated]";
@@ -106,8 +105,9 @@ export async function POST(request: Request, ctx: RouteContext) {
     .filter(Boolean)
     .join("\n");
 
-  // Blocker #1 — try 8b first (cheap/fast); on 429-class errors fall back to
-  // 70b so Groq free-tier rate limits don't become hard 502s for the user.
+  // Try 8b first (cheap, fast). On 429-class errors fall back to 70b so
+  // Groq free-tier rate limits don't become hard 502s. Saves 70b daily budget
+  // for tasks that actually need it.
   let draftContent = "";
   let lastErr = "";
   const messages = [
@@ -123,7 +123,7 @@ export async function POST(request: Request, ctx: RouteContext) {
       lastErr = `empty draft from ${model}`;
     } catch (e) {
       lastErr = e instanceof Error ? e.message : "Groq error";
-      // Only continue to next model on rate-limit / quota / network class errors.
+      // Only retry on rate-limit / quota / network class errors.
       if (!/429|rate.?limit|quota|TPD|TPM|timeout|ECONN|fetch failed/i.test(lastErr)) break;
     }
   }

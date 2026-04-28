@@ -71,7 +71,8 @@ const STEPS = [
   { n: 1, label: "Resume", state: "done" },
   { n: 2, label: "Profile", state: "active" },
   { n: 3, label: "Preferences", state: "todo" },
-  { n: 4, label: "First match", state: "todo" },
+  { n: 4, label: "Broadcast", state: "todo" },
+  { n: 5, label: "First match", state: "todo" },
 ] as const;
 
 // v2 design rule: highlight cards are monochrome. The page eyebrow already

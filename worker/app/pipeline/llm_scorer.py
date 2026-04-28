@@ -21,6 +21,7 @@ All failures produce neutral defaults — pipeline never breaks.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -62,6 +63,7 @@ async def _call_oracle(client: httpx.AsyncClient, prompt: str, system: str = "")
     payload: dict[str, Any] = {"prompt": prompt, "temperature": 0.1}
     if system:
         payload["system"] = system
+    t0 = time.time()
     try:
         resp = await client.post(
             f"{ORACLE_URL}/lifeos/generate",
@@ -70,8 +72,11 @@ async def _call_oracle(client: httpx.AsyncClient, prompt: str, system: str = "")
             timeout=ORACLE_TIMEOUT,
         )
         resp.raise_for_status()
-        return (resp.json().get("text") or "").strip()
+        text = (resp.json().get("text") or "").strip()
+        logger.info("oracle_call elapsed=%.2fs ok=True prompt_len=%d", time.time() - t0, len(prompt))
+        return text
     except Exception as exc:
+        logger.info("oracle_call elapsed=%.2fs ok=False prompt_len=%d err=%s", time.time() - t0, len(prompt), type(exc).__name__)
         logger.debug("llm_scorer oracle error: %s", exc)
         return ""
 
@@ -163,89 +168,106 @@ async def _score_fresh(
     seeking_str = ", ".join(seeking) or "not specified"
     avoiding_str = ", ".join(avoiding) or "not specified"
 
+    # Calls 1-6 are independent. Only Call 7 (synth) depends on their outputs.
+    # Run 1-6 concurrently with a small semaphore to avoid hammering the
+    # single-tenant Oracle (gemma3:1b on Ollama). Was 7 sequential round-trips
+    # (~14s wall-clock) → now 2 (~3-4s).
+    sem = asyncio.Semaphore(3)
+
+    async def _bounded(client, prompt: str) -> str:
+        async with sem:
+            return await _call_oracle(client, prompt)
+
+    prompt1 = (
+        f"Extract key facts from this job description.\n\nJD:\n{jd_excerpt}\n\n"
+        "Respond with ONLY a JSON object: "
+        '{"role_title": "...", "seniority_hint": "entry|mid|senior|lead|executive", '
+        '"remote_policy": "remote|hybrid|onsite|unknown", '
+        '"comp_mentioned": true/false, '
+        '"company_culture_keywords": ["word1", "word2", ... max 5]}'
+    )
+    prompt2 = (
+        f"Candidate must-have skills: {must_have_str}\n\nJob description:\n{jd_excerpt}\n\n"
+        "Which of the candidate's must-have skills/requirements appear in this job description?\n"
+        "Respond with ONLY a JSON object: "
+        '{"matched": ["skill1", ...], "missing": ["skill1", ...], "match_rate": 0.0-1.0}'
+    )
+    prompt3: str | None = None
+    if dealbreakers:
+        db_str = "; ".join(f"{d.get('type','?')}: {d.get('description','?')}" for d in dealbreakers[:4])
+        prompt3 = (
+            f"Candidate dealbreakers: {db_str}\n\nJob description:\n{jd_excerpt}\n"
+            + (f"\nCompany info: {company_meta}" if company_meta else "") + "\n\n"
+            "Are any of these dealbreakers triggered by this job? Be strict — only flag clear violations.\n"
+            "Respond with ONLY a JSON object: "
+            '{"triggered": true/false, "evidence": "brief reason or empty string"}'
+        )
+    prompt4 = (
+        f"Job description:\n{jd_excerpt}\n"
+        + (f"\nCompany info: {company_meta}" if company_meta else "") + "\n\n"
+        "Analyze the work environment and culture signals in this job posting.\n"
+        "Consider: team dynamics, autonomy, growth culture, communication style, values alignment.\n"
+        "Respond with ONLY a JSON object: "
+        '{"culture_score": 1-5, "positive_signals": ["signal1", ...], "concerns": ["concern1", ...]}'
+        " where 5=excellent culture, 1=red flag culture, 3=neutral/unclear."
+    )
+    prompt5 = (
+        f"Candidate is seeking: {seeking_str}\n"
+        f"Candidate is avoiding: {avoiding_str}\n\n"
+        f"Job description:\n{jd_excerpt}\n\n"
+        "How well does this role match what the candidate seeks vs. what they want to avoid?\n"
+        "Respond with ONLY a JSON object: "
+        '{"seeking_score": 1-5, "avoiding_score": 1-5}'
+        " where seeking_score=5 means role has everything they seek, "
+        "avoiding_score=5 means role has none of the things they want to avoid."
+    )
+    prompt6 = (
+        f"Job description:\n{jd_excerpt}\n\n"
+        "Identify any red flags in this job posting that a job seeker should know about.\n"
+        "Look for: unrealistic requirements, vague compensation, excessive demands, "
+        "signs of instability, conflicting role descriptions, bait-and-switch language.\n"
+        "Respond with ONLY a JSON object: "
+        '{"red_flags": ["flag1", ...] or [], "severity": 0.0-1.0}'
+        " — only include genuine red flags, not normal job requirements."
+    )
+
     async with httpx.AsyncClient() as client:
 
-        # ── Call 1: JD normalizer ─────────────────────────────────────────────
-        raw1 = await _call_oracle(client,
-            f"Extract key facts from this job description.\n\nJD:\n{jd_excerpt}\n\n"
-            "Respond with ONLY a JSON object: "
-            '{"role_title": "...", "seniority_hint": "entry|mid|senior|lead|executive", '
-            '"remote_policy": "remote|hybrid|onsite|unknown", '
-            '"comp_mentioned": true/false, '
-            '"company_culture_keywords": ["word1", "word2", ... max 5]}'
+        # ── Calls 1-6 in parallel (independent) ───────────────────────────────
+        raw1, raw2, raw3, raw4, raw5, raw6 = await asyncio.gather(
+            _bounded(client, prompt1),
+            _bounded(client, prompt2),
+            _bounded(client, prompt3) if prompt3 else asyncio.sleep(0, result=""),
+            _bounded(client, prompt4),
+            _bounded(client, prompt5),
+            _bounded(client, prompt6),
         )
+
         call1 = _parse_json(raw1, {})
         culture_keywords = call1.get("company_culture_keywords") or []
         result.llm_calls_made += 1
         logger.debug("llm_scorer call1 user=%s keywords=%s", user_id, culture_keywords[:3])
 
-        # ── Call 2: Must-have coverage ────────────────────────────────────────
-        raw2 = await _call_oracle(client,
-            f"Candidate must-have skills: {must_have_str}\n\nJob description:\n{jd_excerpt}\n\n"
-            "Which of the candidate's must-have skills/requirements appear in this job description?\n"
-            "Respond with ONLY a JSON object: "
-            '{"matched": ["skill1", ...], "missing": ["skill1", ...], "match_rate": 0.0-1.0}'
-        )
         call2 = _parse_json(raw2, {})
         result.llm_calls_made += 1
 
-        # ── Call 3: Dealbreaker scan ──────────────────────────────────────────
-        if dealbreakers:
-            db_str = "; ".join(f"{d.get('type','?')}: {d.get('description','?')}" for d in dealbreakers[:4])
-            raw3 = await _call_oracle(client,
-                f"Candidate dealbreakers: {db_str}\n\nJob description:\n{jd_excerpt}\n"
-                + (f"\nCompany info: {company_meta}" if company_meta else "") + "\n\n"
-                "Are any of these dealbreakers triggered by this job? Be strict — only flag clear violations.\n"
-                "Respond with ONLY a JSON object: "
-                '{"triggered": true/false, "evidence": "brief reason or empty string"}'
-            )
+        if prompt3:
             call3 = _parse_json(raw3, {"triggered": False, "evidence": ""})
             result.dealbreaker_triggered = bool(call3.get("triggered"))
             result.dealbreaker_evidence = str(call3.get("evidence") or "")
         result.llm_calls_made += 1
 
-        # ── Call 4: Culture signals ───────────────────────────────────────────
-        raw4 = await _call_oracle(client,
-            f"Job description:\n{jd_excerpt}\n"
-            + (f"\nCompany info: {company_meta}" if company_meta else "") + "\n\n"
-            "Analyze the work environment and culture signals in this job posting.\n"
-            "Consider: team dynamics, autonomy, growth culture, communication style, values alignment.\n"
-            "Respond with ONLY a JSON object: "
-            '{"culture_score": 1-5, "positive_signals": ["signal1", ...], "concerns": ["concern1", ...]}'
-            " where 5=excellent culture, 1=red flag culture, 3=neutral/unclear."
-        )
         call4 = _parse_json(raw4, {})
         result.culture_score = _clamp(call4.get("culture_score", 3.0))
         result.llm_calls_made += 1
         logger.debug("llm_scorer call4 user=%s culture=%.1f", user_id, result.culture_score)
 
-        # ── Call 5: Seeking/avoiding fit ──────────────────────────────────────
-        raw5 = await _call_oracle(client,
-            f"Candidate is seeking: {seeking_str}\n"
-            f"Candidate is avoiding: {avoiding_str}\n\n"
-            f"Job description:\n{jd_excerpt}\n\n"
-            "How well does this role match what the candidate seeks vs. what they want to avoid?\n"
-            "Respond with ONLY a JSON object: "
-            '{"seeking_score": 1-5, "avoiding_score": 1-5}'
-            " where seeking_score=5 means role has everything they seek, "
-            "avoiding_score=5 means role has none of the things they want to avoid."
-        )
         call5 = _parse_json(raw5, {})
         result.seeking_score = _clamp(call5.get("seeking_score", 3.0))
         result.avoiding_score = _clamp(call5.get("avoiding_score", 3.0))
         result.llm_calls_made += 1
         logger.debug("llm_scorer call5 user=%s seeking=%.1f avoiding=%.1f", user_id, result.seeking_score, result.avoiding_score)
 
-        # ── Call 6: Red flags ─────────────────────────────────────────────────
-        raw6 = await _call_oracle(client,
-            f"Job description:\n{jd_excerpt}\n\n"
-            "Identify any red flags in this job posting that a job seeker should know about.\n"
-            "Look for: unrealistic requirements, vague compensation, excessive demands, "
-            "signs of instability, conflicting role descriptions, bait-and-switch language.\n"
-            "Respond with ONLY a JSON object: "
-            '{"red_flags": ["flag1", ...] or [], "severity": 0.0-1.0}'
-            " — only include genuine red flags, not normal job requirements."
-        )
         call6 = _parse_json(raw6, {"red_flags": [], "severity": 0.0})
         raw_flags = call6.get("red_flags") or []
         result.red_flags = [str(f) for f in raw_flags if f][:5]
@@ -256,7 +278,7 @@ async def _score_fresh(
         result.llm_calls_made += 1
         logger.debug("llm_scorer call6 user=%s red_flags=%d severity=%.1f", user_id, len(result.red_flags), severity)
 
-        # ── Call 7: Synthesizer ───────────────────────────────────────────────
+        # ── Call 7: Synthesizer (depends on prior calls) ──────────────────────
         match_rate = float((call2 or {}).get("match_rate") or 0.5)
         blocker_note = f"dealbreaker triggered: {result.dealbreaker_evidence}" if result.dealbreaker_triggered else "no dealbreakers"
         raw7 = await _call_oracle(client,

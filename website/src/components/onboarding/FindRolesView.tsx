@@ -54,7 +54,8 @@ const STEPS = [
   { n: 1, label: "Resume", state: "done" },
   { n: 2, label: "Profile", state: "done" },
   { n: 3, label: "Preferences", state: "done" },
-  { n: 4, label: "First match", state: "active" },
+  { n: 4, label: "Broadcast", state: "done" },
+  { n: 5, label: "First match", state: "active" },
 ] as const;
 
 function pct(score: number | null | undefined): number {
