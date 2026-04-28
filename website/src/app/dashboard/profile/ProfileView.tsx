@@ -5,6 +5,7 @@
 // upload added. Identity card + connected accounts + danger zone.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type ProfileStats = {
@@ -42,7 +43,11 @@ export function ProfileView({
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     const [nRes, dRes, bRes] = await Promise.all([
@@ -111,6 +116,21 @@ export function ProfileView({
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/auth";
+  }
+
+  async function handleConfirmedDelete() {
+    if (confirmText !== "DELETE" || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/profile/delete-account", { method: "POST" });
+      if (!res.ok) throw new Error("Delete failed");
+      router.push("/auth?deleted=true");
+    } catch {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      setConfirmText("");
+      setUploadError("Couldn't delete account — please try again.");
+    }
   }
 
   const totalHighlights = stats?.total_extracted ?? 0;
@@ -334,23 +354,13 @@ export function ProfileView({
         <button
           type="button"
           onClick={() => {
-            if (
-              confirm(
-                "This will permanently delete your account and everything in it. Are you sure?",
-              )
-            ) {
-              if (
-                confirm("Really delete? Type-through confirmation: one more click.")
-              ) {
-                fetch("/api/profile/delete-account", { method: "POST" })
-                  .then(() => (window.location.href = "/"))
-                  .catch(() =>
-                    alert("Couldn't delete — contact hello@linkright.in."),
-                  );
-              }
+            if (!isDeleting) {
+              setConfirmText("");
+              setShowDeleteModal(true);
             }
           }}
-          className="mt-3 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition"
+          disabled={showDeleteModal || isDeleting}
+          className="mt-3 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             borderColor: "rgba(255, 87, 51, 0.3)",
             color: "#B3341C",
@@ -359,6 +369,113 @@ export function ProfileView({
           Delete account
         </button>
       </section>
+      {showDeleteModal && (
+        <DeleteAccountModal
+          confirmText={confirmText}
+          onConfirmTextChange={setConfirmText}
+          isDeleting={isDeleting}
+          onConfirm={handleConfirmedDelete}
+          onClose={() => {
+            if (!isDeleting) {
+              setShowDeleteModal(false);
+              setConfirmText("");
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteAccountModal({
+  confirmText,
+  onConfirmTextChange,
+  isDeleting,
+  onConfirm,
+  onClose,
+}: {
+  confirmText: string;
+  onConfirmTextChange: (v: string) => void;
+  isDeleting: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  // ESC key closes modal (unless deleting)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !isDeleting) {
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isDeleting, onClose]);
+
+  const canConfirm = confirmText === "DELETE" && !isDeleting;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop — click outside closes modal */}
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onClose}
+      />
+      {/* Dialog */}
+      <div
+        className="relative z-10 w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-modal-title"
+      >
+        <h3
+          id="delete-modal-title"
+          className="text-lg font-semibold text-[#B3341C]"
+        >
+          Delete account?
+        </h3>
+        <p className="mt-2 text-sm text-muted">
+          This will permanently delete your account and all data. This cannot
+          be undone.
+        </p>
+        <div className="mt-4">
+          <label
+            htmlFor="delete-confirm-input"
+            className="block text-xs font-medium text-foreground mb-1.5"
+          >
+            Type <span className="font-mono font-bold">DELETE</span> to
+            confirm
+          </label>
+          <input
+            id="delete-confirm-input"
+            type="text"
+            value={confirmText}
+            onChange={(e) => onConfirmTextChange(e.target.value)}
+            disabled={isDeleting}
+            autoComplete="off"
+            autoFocus
+            placeholder="DELETE"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono outline-none focus:border-red-400 disabled:opacity-50"
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted transition-colors hover:bg-background disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isDeleting ? "Deleting…" : "Confirm delete"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
