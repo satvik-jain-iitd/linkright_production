@@ -1,3 +1,4 @@
+import { abortSignalAny } from "./abort-signal-any";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 // Free-tier small model — fast, no cost, good for structured JSON tasks.
 const OPENROUTER_MODEL_STRUCTURED = "meta-llama/llama-3.1-8b-instruct:free";
@@ -43,7 +44,7 @@ export async function openrouterChat(
         max_tokens: options.maxTokens ?? 1000,
         temperature: options.temperature ?? 0.3,
       }),
-      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(OPENROUTER_TIMEOUT_MS)]) : AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+      signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(OPENROUTER_TIMEOUT_MS)]) : AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
     });
 
     if (resp.status === 429 || resp.status === 503) {

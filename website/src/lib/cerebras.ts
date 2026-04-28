@@ -1,3 +1,4 @@
+import { abortSignalAny } from "./abort-signal-any";
 const CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions";
 const CEREBRAS_MODEL = "llama3.1-8b";
 const CEREBRAS_TIMEOUT_MS = 30_000;
@@ -32,7 +33,7 @@ export async function cerebrasChat(
         max_tokens: options.maxTokens ?? 1000,
         temperature: options.temperature ?? 0.3,
       }),
-      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(CEREBRAS_TIMEOUT_MS)]) : AbortSignal.timeout(CEREBRAS_TIMEOUT_MS),
+      signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(CEREBRAS_TIMEOUT_MS)]) : AbortSignal.timeout(CEREBRAS_TIMEOUT_MS),
     });
 
     if (resp.status === 429 || resp.status === 503) {

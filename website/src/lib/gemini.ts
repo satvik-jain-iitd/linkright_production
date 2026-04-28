@@ -1,3 +1,4 @@
+import { abortSignalAny } from "./abort-signal-any";
 // Platform LLM router — multi-provider fallback chain.
 //
 // Structured tasks (default): Groq 8b → Cerebras 8b → Gemini → OpenRouter → Oracle
@@ -54,7 +55,7 @@ export async function geminiChat(
           maxOutputTokens: options.maxTokens ?? 1000,
         },
       }),
-      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(GEMINI_TIMEOUT_MS)]) : AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+      signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(GEMINI_TIMEOUT_MS)]) : AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
 
     if (resp.status === 429 || resp.status === 503) {

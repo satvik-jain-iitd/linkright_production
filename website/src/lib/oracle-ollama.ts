@@ -1,3 +1,4 @@
+import { abortSignalAny } from "./abort-signal-any";
 // Client for the Oracle FastAPI backend's /lifeos/generate + /lifeos/rewrite
 // endpoints. Both wrap a local Ollama gemma3:1b (as of 2026-04-22) running on
 // Satvik's Oracle Cloud VPS — free, no rate limits, no per-token cost.
@@ -39,7 +40,7 @@ export async function oracleGenerate(
       system: options.system ?? "",
       temperature: options.temperature ?? 0.3,
     }),
-    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
   });
 
   if (!resp.ok) {
@@ -72,7 +73,7 @@ export async function oracleRewrite(
       system: options.system ?? "",
       temperature: options.temperature ?? 0.2,
     }),
-    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
+    signal: options.signal ? abortSignalAny([options.signal!, AbortSignal.timeout(ORACLE_TIMEOUT_MS)]) : AbortSignal.timeout(ORACLE_TIMEOUT_MS),
   });
 
   if (!resp.ok) {
