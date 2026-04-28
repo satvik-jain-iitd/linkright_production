@@ -113,7 +113,7 @@ export async function POST(request: Request, ctx: RouteContext) {
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: userPrompt },
-  ] as const;
+  ];
   for (const model of ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]) {
     try {
       draftContent = (
