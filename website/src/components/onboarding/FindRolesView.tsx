@@ -246,7 +246,10 @@ export function FindRolesView({ embedded }: Props) {
     }
   };
 
-  /** Turn on notifications: persist notify_when_match flag in ui_prefs + show toast. */
+  /** Turn on notifications: persist notify_when_match flag in ui_prefs + show toast.
+   * NOTE: No worker reads this flag yet — the toast uses honest copy so the user
+   * is not promised a notification that cannot fire. When the worker is built,
+   * update the toast copy to the full promise. */
   const turnOnNotifications = async () => {
     try {
       const getRes = await fetch("/api/preferences");
@@ -278,7 +281,7 @@ export function FindRolesView({ embedded }: Props) {
       {/* Notification toast */}
       {notifyToast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-xl border border-accent/30 bg-accent/10 px-5 py-3 text-sm font-semibold text-accent shadow-lg">
-          You&apos;ll be notified when a match lands.
+          We&apos;ll add real-time alerts soon — your filters are saved.
         </div>
       )}
 
@@ -455,9 +458,9 @@ export function FindRolesView({ embedded }: Props) {
                       onClick: includeEarlyStage,
                     },
                     {
-                      t: "Keep these filters, notify me",
-                      d: "We'll ping you the moment one lands",
-                      action: "Turn on",
+                      t: "Save these filters for later",
+                      d: "We'll add real-time alerts soon",
+                      action: "Save filters",
                       onClick: turnOnNotifications,
                     },
                   ].map((s) => (

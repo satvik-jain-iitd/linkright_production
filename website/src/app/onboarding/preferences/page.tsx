@@ -194,25 +194,34 @@ export default function PreferencesPage() {
 
   // `proceedToBrowse=true`  → "Find roles →" button  (uses savingForward)
   // `proceedToBrowse=false` → "Save" button           (uses savingQuiet)
+  //
+  // try/finally ensures setSaving(false) always runs — even on network drop,
+  // Vercel cold-start abort, or 30s function timeout — preventing a frozen
+  // "Saving…" button. Pattern from FindRolesView.tsx line 140.
   async function save(proceedToBrowse: boolean) {
     if (proceedToBrowse && prefs.target_roles.length === 0) {
       alert("Pick at least one target role so we know what to find.");
       return;
     }
     const setSaving = proceedToBrowse ? setSavingForward : setSavingQuiet;
-    setSaving(true);
-    const r = await fetch("/api/preferences", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(prefs),
-    });
-    setSaving(false);
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      alert(`Save failed: ${body.error ?? r.status}`);
-      return;
+    try {
+      setSaving(true);
+      const r = await fetch("/api/preferences", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(prefs),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        alert(`Couldn't save preferences — please try again. (${body.error ?? r.status})`);
+        return;
+      }
+      if (proceedToBrowse) router.push("/onboarding/broadcast");
+    } catch {
+      alert("Couldn't save preferences — please try again.");
+    } finally {
+      setSaving(false);
     }
-    if (proceedToBrowse) router.push("/onboarding/broadcast");
   }
 
   const roleSuggestions = useMemo(
