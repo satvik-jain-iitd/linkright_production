@@ -12,33 +12,26 @@ export default async function OnboardingPage() {
     redirect("/auth");
   }
 
-  // Check onboarding status: does user have career data?
-  // [BYOK-REMOVED] const [{ count: keyCount }, { count: chunkCount }] = await Promise.all([
-  // [BYOK-REMOVED]   supabase
-  // [BYOK-REMOVED]     .from("user_api_keys")
-  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
-  // [BYOK-REMOVED]     .eq("user_id", user.id)
-  // [BYOK-REMOVED]     .eq("is_active", true),
-  // [BYOK-REMOVED]   supabase
-  // [BYOK-REMOVED]     .from("career_chunks")
-  // [BYOK-REMOVED]     .select("*", { count: "exact", head: true })
-  // [BYOK-REMOVED]     .eq("user_id", user.id),
-  // [BYOK-REMOVED] ]);
-  const [{ count: chunkCount }, { count: nuggetCount }] = await Promise.all([
-    supabase
-      .from("career_chunks")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id),
-    supabase
-      .from("career_nuggets")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id),
-  ]);
+  // Onboarding is considered "completed" only when the user has explicitly
+  // submitted their resume (Lock + Save and continue) — indicated by
+  // resume_submitted_at being set on at least one career_chunk.
+  //
+  // Old predicate: `chunkCount > 0 || nuggetCount > 0` — this caused a
+  // redirect loop for users who uploaded a resume but never clicked
+  // Save and continue (chunks exist, resume_submitted_at is null, nuggets = 0).
+  // Those users were bounced dashboard → onboarding → dashboard infinitely.
+  //
+  // Fix: redirect to dashboard ONLY when the story step was explicitly
+  // submitted (resume_submitted_at IS NOT NULL on at least one chunk).
+  const { count: submittedChunkCount } = await supabase
+    .from("career_chunks")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .not("resume_submitted_at", "is", null);
 
-  const hasCareerData = (chunkCount ?? 0) > 0 || (nuggetCount ?? 0) > 0;
-
-  // Already onboarded → go to dashboard
-  if (hasCareerData) {
+  // Story step submitted → user has completed onboarding past the story screen.
+  // Redirect to dashboard to continue (profile / preferences / find-roles).
+  if ((submittedChunkCount ?? 0) > 0) {
     redirect("/dashboard");
   }
 
