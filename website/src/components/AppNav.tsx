@@ -20,7 +20,6 @@ interface AppNavProps {
 /* ---------- Nav link definitions ---------- */
 
 const LOGGED_OUT_LINKS = [
-  { href: "/#features", label: "Features" },
   { href: "/pricing", label: "Pricing" },
 ];
 
