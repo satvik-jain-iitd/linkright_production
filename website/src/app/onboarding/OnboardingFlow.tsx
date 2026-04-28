@@ -52,10 +52,12 @@ interface EnrichedChunkUpload {
 
 // Concurrency-limited runner: processes tasks at most `concurrency` at a time.
 // Keeps Oracle Ollama from being hammered with 14 simultaneous requests.
+// signal: optional AbortSignal — throws AbortError on abort, allowing callers to bail.
 async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
   concurrency: number,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  signal?: AbortSignal
 ): Promise<T[]> {
   const results: T[] = new Array(tasks.length);
   let nextIndex = 0;
@@ -64,6 +66,7 @@ async function runWithConcurrency<T>(
 
   async function worker() {
     while (nextIndex < total) {
+      if (signal?.aborted) throw new DOMException("Enrichment aborted", "AbortError");
       const i = nextIndex++;
       results[i] = await tasks[i]();
       done++;
@@ -121,7 +124,8 @@ function buildCareerContext(experiences: ParsedExperience[]): string {
 async function enrichNarrationChunks(
   narration: string,
   careerContext: string,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  signal?: AbortSignal
 ): Promise<EnrichedChunkUpload[]> {
   const chunks = parseNarrationChunks(narration);
   if (chunks.length === 0) return [];
@@ -132,6 +136,7 @@ async function enrichNarrationChunks(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chunk_text: chunk.text, career_context: careerContext }),
+        signal,
       });
       const data = res.ok ? await res.json() : {};
       return { text: chunk.text, metadata: { ...base, ...data } };
@@ -142,7 +147,7 @@ async function enrichNarrationChunks(
   // Limit to 3 concurrent requests — Oracle Ollama gemma3:1b is single-threaded;
   // 14 parallel calls queue server-side and each waits ~47s. 3 in flight at a time
   // reduces perceived latency to ~3x per-call-time instead of 14x.
-  return runWithConcurrency(tasks, 3, onProgress);
+  return runWithConcurrency(tasks, 3, onProgress, signal);
 }
 
 // On Save: diff final chunks against pre-enriched state — re-enrich only changed chunks
@@ -277,6 +282,9 @@ function StepCareerBasics({
   const [parseError, setParseError] = useState("");
   const [parsed, setParsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // AbortController for in-flight enrichNarrationChunks — cancelled on resume swap
+  // so stale enrichment results from resume A can never write into resume B's state.
+  const enrichAbortRef = useRef<AbortController | null>(null);
 
   // Wave 2 Sub-phase 2A: outline-view holds the structured companies tree.
   // Populated from parse-resume; narration streamed separately via narrate-career.
@@ -320,14 +328,21 @@ function StepCareerBasics({
         const chunks = parseNarrationChunks(accumulated);
         if (chunks.length > 0) setEnrichProgress({ done: 0, total: chunks.length });
         const careerContext = buildCareerContext(experiences);
+        // Create a fresh AbortController for this enrichment run.
+        // If the user swaps resume mid-flight, handleSwapResume calls abort()
+        // and the .then() guard below drops stale results.
+        const ctrl = new AbortController();
+        enrichAbortRef.current = ctrl;
         enrichNarrationChunks(accumulated, careerContext, (done, total) => {
-          setEnrichProgress({ done, total });
-        })
+          if (!ctrl.signal.aborted) setEnrichProgress({ done, total });
+        }, ctrl.signal)
           .then((result) => {
+            if (ctrl.signal.aborted) return; // resume was swapped — discard
             setEnrichedChunks(result);
             setEnrichProgress(null);
           })
           .catch((e) => {
+            if ((e as { name?: string }).name === "AbortError") return; // clean cancel
             console.warn("[narrate-enrich] failed:", e);
             setEnrichProgress(null);
             setNarrationEnrichWarning("Couldn't enrich a few sections — proceeding without");
@@ -341,6 +356,10 @@ function StepCareerBasics({
   };
 
   const handleSwapResume = () => {
+    // Cancel any in-flight enrichment so stale results from the old resume
+    // cannot overwrite the state of the newly-uploaded resume.
+    enrichAbortRef.current?.abort();
+    enrichAbortRef.current = null;
     setOutline(null);
     setFileMeta(null);
     setParsed(false);
@@ -766,12 +785,11 @@ function StepCareerBasics({
       {!parsed && parsing && (
         <div className="rounded-2xl border border-border bg-white p-8 text-center" style={{ background: "linear-gradient(180deg, #FDF6F0 0%, #fff 70%)" }}>
           <div
-            className="mx-auto mb-5"
+            className="mx-auto mb-5 animate-spin"
             style={{
               width: 44, height: 44, borderRadius: "50%",
               border: "3px solid rgba(15,190,175,0.25)",
               borderTopColor: "var(--color-accent, #0FBEAF)",
-              animation: "spin 1s linear infinite",
             }}
           />
           <h3 className="text-[17px] font-semibold text-foreground">Reading your resume…</h3>
@@ -811,7 +829,7 @@ function StepCareerBasics({
               );
             })}
           </div>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          {/* animate-spin (Tailwind built-in) handles @keyframes globally */}
         </div>
       )}
 
@@ -858,11 +876,11 @@ function StepCareerBasics({
       {enrichProgress && enrichProgress.total > 0 && (
         <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5">
           <div
+            className="animate-spin"
             style={{
               width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
               border: "2px solid rgba(15,190,175,0.3)",
               borderTopColor: "var(--color-accent, #0FBEAF)",
-              animation: "spin 1s linear infinite",
             }}
           />
           <span className="text-xs text-muted">
