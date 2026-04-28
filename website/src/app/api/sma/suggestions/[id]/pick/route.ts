@@ -22,6 +22,15 @@ Hard rules:
 Return only the post text. No preamble. No sign-off.`;
 
 export async function POST(request: Request, ctx: RouteContext) {
+  // Blocker #2 — fail fast on missing API key so misconfiguration is visible
+  // immediately on the first request, not buried inside groqChat.
+  if (!process.env.PLATFORM_GROQ_API_KEY) {
+    return Response.json(
+      { error: "Personalization unavailable: server config missing" },
+      { status: 503 },
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -74,6 +83,12 @@ export async function POST(request: Request, ctx: RouteContext) {
     diaryContext = diary?.content ?? "";
   }
 
+  // Cap diary to ~1000 tokens (4000 chars) so we never overflow model context.
+  const DIARY_CHAR_LIMIT = 4000;
+  if (diaryContext.length > DIARY_CHAR_LIMIT) {
+    diaryContext = diaryContext.slice(0, DIARY_CHAR_LIMIT) + "… [truncated]";
+  }
+
   const postAngle = String(picked.post_angle ?? "");
   const hookLine = String(picked.hook_line ?? "");
   const topicTag = String(picked.topic_tag ?? "");
@@ -90,15 +105,15 @@ export async function POST(request: Request, ctx: RouteContext) {
     .filter(Boolean)
     .join("\n");
 
-  // Try 8b first (cheap, fast, plenty for prose). Fall back to 70b only if
-  // 8b errors structurally — saves the 70b daily token budget for tasks that
-  // actually need it (resume parse JSON).
+  // Try 8b first (cheap, fast). On 429-class errors fall back to 70b so
+  // Groq free-tier rate limits don't become hard 502s. Saves 70b daily budget
+  // for tasks that actually need it.
   let draftContent = "";
   let lastErr = "";
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: userPrompt },
-  ];
+  ] as const;
   for (const model of ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]) {
     try {
       draftContent = (
