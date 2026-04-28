@@ -14,7 +14,7 @@
 //   │ [explainer]                                    [Save and continue →]    │
 //   └──────────────────────────────────────────────────────────────────────────┘
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { track } from "@/lib/analytics";
 
 export interface ParsedProject {
@@ -127,6 +127,18 @@ export function CareerOutlineView({
       approveToastTimer.current = null;
     }, 2500);
   }, [data.experiences]);
+
+  // Blocker 3 fix (2026-04-28): clear the timer on unmount so that if the user
+  // clicks Approve then immediately navigates away (unmounting CareerOutlineView),
+  // the 2500ms setTimeout does not fire setApproveToast on an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (approveToastTimer.current) {
+        clearTimeout(approveToastTimer.current);
+        approveToastTimer.current = null;
+      }
+    };
+  }, []);
 
   function patchExperience(idx: number, patch: Partial<ParsedExperience>) {
     const next = data.experiences.map((e, i) => (i === idx ? { ...e, ...patch } : e));

@@ -2,25 +2,72 @@
 
 // Bug 11 fix: client component that locks the "Connect LinkedIn" button
 // after the user clicks it, preventing double-clicks and giving clear
-// in-flight feedback. Once clicked, the button is disabled and the Skip
-// link is hidden until the OAuth round-trip completes (page reload).
+// in-flight feedback.
+//
+// Blocker 2 fix (2026-04-28): The header "Skip for now →" is now rendered
+// inside BroadcastConnectSection — the same client boundary that owns
+// `connecting` state. This means when connecting=true, the Skip link in
+// the header is hidden, preventing mid-OAuth navigation.
+//
+// BroadcastConnectSection is the exported name used by page.tsx.
+// It accepts children (the static icon/headline/error block from the server
+// component) and renders them between the header and the connect buttons.
 
 import Link from "next/link";
 import { useState } from "react";
+import type { ReactNode } from "react";
+import { BroadcastPageHeader } from "./BroadcastPageHeader";
 
 interface Props {
   justConnected: boolean;
   oauthConfigured: boolean;
   oauthStartUrl: string;
+  children?: ReactNode;
 }
 
-export function BroadcastConnectButton({
+export function BroadcastConnectSection({
   justConnected,
   oauthConfigured,
   oauthStartUrl,
+  children,
 }: Props) {
   const [connecting, setConnecting] = useState(false);
 
+  return (
+    <>
+      {/* Step indicator — hides Skip link when connecting=true */}
+      <BroadcastPageHeader connecting={connecting} />
+
+      {/* Static content (icon, headline, sub, error/success banners) from page.tsx */}
+      {children}
+
+      {/* Dynamic button row */}
+      <ConnectButtons
+        justConnected={justConnected}
+        oauthConfigured={oauthConfigured}
+        oauthStartUrl={oauthStartUrl}
+        connecting={connecting}
+        setConnecting={setConnecting}
+      />
+    </>
+  );
+}
+
+interface ButtonProps {
+  justConnected: boolean;
+  oauthConfigured: boolean;
+  oauthStartUrl: string;
+  connecting: boolean;
+  setConnecting: (v: boolean) => void;
+}
+
+function ConnectButtons({
+  justConnected,
+  oauthConfigured,
+  oauthStartUrl,
+  connecting,
+  setConnecting,
+}: ButtonProps) {
   if (justConnected) {
     return (
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
@@ -50,8 +97,9 @@ export function BroadcastConnectButton({
   return (
     <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
       {connecting ? (
-        // Locked state: user has clicked "Connect LinkedIn" — disable both
-        // buttons so they cannot double-trigger the OAuth flow or navigate away.
+        // Locked state: user has clicked "Connect LinkedIn" — show spinner,
+        // prevent any further interaction. The header Skip link is also hidden
+        // (controlled by BroadcastConnectSection → BroadcastPageHeader).
         <div className="inline-flex items-center gap-2 rounded-lg bg-cta/60 px-6 py-3 text-sm font-semibold text-white cursor-not-allowed select-none">
           <svg
             className="h-4 w-4 animate-spin"

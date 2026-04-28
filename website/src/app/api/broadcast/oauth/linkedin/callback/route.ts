@@ -19,30 +19,50 @@ function redirectTo(requestUrl: string, path: string, errorMessage?: string): Re
   return Response.redirect(target.toString(), 302);
 }
 
+// Validate a return URL: must be a same-origin path (starts with /, no protocol).
+// Prevents open-redirect attacks where stateObj.rt could be poisoned.
+function sanitizeReturnUrl(rt: string | undefined): string {
+  if (!rt) return "/dashboard/broadcast/connect";
+  // Must start with / and must not start with // (protocol-relative) or contain a protocol.
+  if (rt.startsWith("/") && !rt.startsWith("//") && !rt.includes("://")) {
+    return rt;
+  }
+  return "/dashboard/broadcast/connect";
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
-  if (error) {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", error);
-  }
-  if (!code || !state) {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", "missing_code");
-  }
-  if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", "not_configured");
+  // When state is missing/invalid, we cannot trust any return URL — use dashboard fallback.
+  // Try to parse state early so we can use rt for all error paths below.
+  let stateObj: { uid?: string; nonce?: string; rt?: string } = {};
+  let returnUrl = "/dashboard/broadcast/connect";
+
+  if (state) {
+    try {
+      stateObj = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
+      // Extract and sanitise return URL immediately — before any error branch.
+      returnUrl = sanitizeReturnUrl(stateObj.rt);
+    } catch {
+      // state is present but undecodable — keep dashboard fallback.
+    }
   }
 
-  let stateObj: { uid?: string; nonce?: string; rt?: string } = {};
-  try {
-    stateObj = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
-  } catch {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", "bad_state");
+  if (error) {
+    return redirectTo(request.url, returnUrl, error);
   }
+  if (!code || !state) {
+    return redirectTo(request.url, returnUrl, "missing_code");
+  }
+  if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
+    return redirectTo(request.url, returnUrl, "not_configured");
+  }
+
   if (!stateObj.uid) {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", "bad_state");
+    return redirectTo(request.url, returnUrl, "bad_state");
   }
 
   // Exchange code for tokens
@@ -61,7 +81,7 @@ export async function GET(request: Request) {
     },
   );
   if (!tokenRes.ok) {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", "token_exchange_failed");
+    return redirectTo(request.url, returnUrl, "token_exchange_failed");
   }
   const tokens = (await tokenRes.json()) as {
     access_token?: string;
@@ -71,7 +91,7 @@ export async function GET(request: Request) {
     token_type?: string;
   };
   if (!tokens.access_token) {
-    return redirectTo(request.url, "/dashboard/broadcast/connect", "no_access_token");
+    return redirectTo(request.url, returnUrl, "no_access_token");
   }
 
   // Fetch /userinfo for handle + avatar
