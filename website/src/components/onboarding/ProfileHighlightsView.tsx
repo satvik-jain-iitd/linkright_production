@@ -239,6 +239,8 @@ export function ProfileHighlightsView() {
 
   // Track known nugget IDs so we can animate new arrivals
   const knownIds = useRef(new Set<string>());
+  // Guard: prevent multiple profile_ready toast fires and leaked ticks
+  const profileReadyRef = useRef(false);
 
   const loadNuggets = useCallback(async () => {
     try {
@@ -293,6 +295,9 @@ export function ProfileHighlightsView() {
 
     // Poll both list and status together
     const tick = async () => {
+      // If profile is already ready, skip this tick — interval cleanup may be in flight
+      if (profileReadyRef.current) return;
+
       const [listRes, statusRes] = await Promise.all([
         fetch("/api/nuggets/list?limit=48", { cache: "no-store" }).catch(
           () => null
@@ -327,8 +332,14 @@ export function ProfileHighlightsView() {
         const s: NuggetStatus = await statusRes.json();
         setStatus(s);
         if (s.profile_ready ?? s.ready) {
-          setProfileReadyToast(true);
-          track({ event: "profile_fully_processed", properties: {} });
+          if (!profileReadyRef.current) {
+            profileReadyRef.current = true;
+            setProfileReadyToast(true);
+            track({ event: "profile_fully_processed", properties: {} });
+            // Stop polling immediately — no need to keep ticking
+            clearInterval(intervalId);
+            clearTimeout(timeoutId);
+          }
         }
       }
     };
@@ -367,7 +378,12 @@ export function ProfileHighlightsView() {
     if (lockedCount === 0 || saving || submitted) return;
     setSaving(true);
     try {
-      await fetch("/api/nuggets/submit-profile", { method: "POST" });
+      const res = await fetch("/api/nuggets/submit-profile", { method: "POST" });
+      if (!res.ok) {
+        // Surface the failure — do not navigate; let user retry
+        setSaving(false);
+        return;
+      }
       setSubmitted(true);
       track({ event: "career_profile_saved", properties: {} });
       router.push("/onboarding/preferences");
@@ -383,11 +399,18 @@ export function ProfileHighlightsView() {
   const executeDelete = async () => {
     if (!deleteConfirm) return;
     setDeleting(true);
-    await Promise.all(
+    const responses = await Promise.all(
       deleteConfirm.ids.map((id) =>
         fetch(`/api/nuggets/${id}`, { method: "DELETE" })
       )
     );
+    const allOk = responses.every((r) => r.ok);
+    if (!allOk) {
+      // At least one delete failed on the backend — do not mutate local state.
+      // Next poll will reconcile actual DB state.
+      setDeleting(false);
+      return;
+    }
     setNuggets((prev) => prev.filter((n) => !deleteConfirm.ids.includes(n.id)));
     setDeleteConfirm(null);
     setDeleting(false);

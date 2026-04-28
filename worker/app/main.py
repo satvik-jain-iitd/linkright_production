@@ -311,6 +311,9 @@ async def start_job(
 class NuggetRefreshRequest(BaseModel):
     user_id: str
     force_delete: bool = False
+    # When set, embed exactly this one nugget (must be locked + un-embedded).
+    # If None, fall back to user-sweep for backward-compat (legacy callers).
+    nugget_id: str | None = None
 
 
 async def _run_nugget_refresh(user_id: str, force_delete: bool = False) -> None:
@@ -395,7 +398,7 @@ async def refresh_nuggets(
 # it only generates Jina embeddings for nuggets already in the DB.
 # Called by session-close after TruthEngine interview completes.
 
-async def _run_nugget_embed(user_id: str) -> None:
+async def _run_nugget_embed(user_id: str, nugget_id: str | None = None) -> None:
     """Background task: embed career_nuggets where embedding IS NULL.
 
     Uses Oracle's nomic-embed-text model (local, free, fast) for embeddings.
@@ -407,16 +410,26 @@ async def _run_nugget_embed(user_id: str) -> None:
 
         sb = create_supabase()
 
-        # Fetch nuggets without embeddings — only TruthEngine/onboarding interviews.
-        # Resume-parsed structured data (user_work_history) never gets embeddings.
-        result = (
+        # Fetch nuggets to embed.
+        # When nugget_id is provided (lock-triggered): embed ONLY that one nugget,
+        # and only if it is already locked (locked_at IS NOT NULL) and not yet
+        # embedded (embedding IS NULL). This prevents a sweep of all un-embedded
+        # nuggets every time a user locks one card.
+        # When nugget_id is None (legacy / session-close path): sweep all
+        # un-embedded nuggets for the user.
+        query = (
             sb.table("career_nuggets")
             .select("id, answer, tags")
             .eq("user_id", user_id)
             .is_("embedding", "null")
-            .overlaps("tags", ["source:truthengine", "source:onboarding", "source:skill_upload"])
-            .execute()
         )
+        if nugget_id is not None:
+            # Targeted embed: only this nugget, only if locked
+            query = query.eq("id", nugget_id).not_.is_("locked_at", "null")
+        else:
+            # Legacy sweep: filter by source tags
+            query = query.overlaps("tags", ["source:truthengine", "source:onboarding", "source:skill_upload"])
+        result = query.execute()
         rows = result.data or []
         if not rows:
             logger.info("nugget_embed: no un-embedded nuggets for user=%s", user_id)
@@ -524,7 +537,7 @@ async def embed_nuggets_endpoint(
     authorization: str | None = Header(None),
 ):
     verify_secret(authorization)
-    background_tasks.add_task(_run_nugget_embed, req.user_id)
+    background_tasks.add_task(_run_nugget_embed, req.user_id, req.nugget_id)
     return {"status": "processing", "user_id": req.user_id}
 
 
