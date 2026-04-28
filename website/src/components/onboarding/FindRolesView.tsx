@@ -309,9 +309,12 @@ export function FindRolesView({ embedded }: Props) {
             </div>
             <Link
               href="/onboarding/preferences"
-              className="text-xs text-muted transition hover:text-foreground"
+              className="inline-flex items-center gap-1 text-xs font-medium text-muted transition hover:text-foreground"
             >
-              ← Tune preferences
+              <svg className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+              Tune preferences
             </Link>
           </div>
 
