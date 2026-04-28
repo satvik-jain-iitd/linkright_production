@@ -94,6 +94,9 @@ export function CareerOutlineView({
   const [editBuffer, setEditBuffer] = useState<string | null>(null);
   const editing = editBuffer !== null;
   const [approvedSet, setApprovedSet] = useState<Set<number>>(new Set());
+  // Bug 12 fix: after clicking Approve, show a brief inline confirmation so
+  // the user knows the story is staged for the Save action (not yet persisted).
+  const [approveToast, setApproveToast] = useState<number | null>(null);
   const [editingCardIdx, setEditingCardIdx] = useState<number | null>(null);
   const [editingCardHeading, setEditingCardHeading] = useState("");
   const [editingCardBody, setEditingCardBody] = useState("");
@@ -113,6 +116,10 @@ export function CareerOutlineView({
     setApprovedSet((prev) => new Set([...prev, i]));
     const company = data.experiences[0]?.company ?? "";
     track({ event: "initiative_approved", properties: { company } });
+    // Show a brief inline toast that disappears after 2.5 seconds.
+    // Gives the user confidence that "Approve" staged the story for save.
+    setApproveToast(i);
+    setTimeout(() => setApproveToast((prev) => (prev === i ? null : prev)), 2500);
   }, [data.experiences]);
 
   function patchExperience(idx: number, patch: Partial<ParsedExperience>) {
@@ -489,7 +496,7 @@ export function CareerOutlineView({
                               </button>
                             )}
                             {approved ? (
-                              <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-primary-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
                                 ✓ Approved
                               </span>
                             ) : (
@@ -545,6 +552,28 @@ export function CareerOutlineView({
           )}
         </div>
       </div>
+
+      {/* Bug 12 fix: show an approved-count banner whenever at least one story
+          has been approved. Makes it clear that "Approve" stages the story —
+          clicking Save below will lock all of them in. Shown even when
+          onContinue is not passed (parent handles the Save button). */}
+      {approvedSet.size > 0 && initiativeCards.length > 0 && (
+        <div className="flex items-center gap-2 rounded-[10px] border border-primary-200 bg-primary-50 px-4 py-2.5">
+          <span className="text-sm font-semibold text-primary-700">
+            {approvedSet.size} of {initiativeCards.length} stor{approvedSet.size === 1 ? "y" : "ies"} approved
+          </span>
+          <span className="text-xs text-primary-600">— click Save below to lock them in</span>
+        </div>
+      )}
+
+      {/* Inline toast: confirms the just-approved story is staged for save */}
+      {approveToast !== null && (
+        <div className="flex items-center gap-2 rounded-[10px] border border-primary-200 bg-primary-50 px-4 py-2.5 animate-pulse">
+          <span className="text-sm text-primary-700">
+            ✓ Story approved — will save when you click &ldquo;Save and continue&rdquo;
+          </span>
+        </div>
+      )}
 
       {/* Bottom row */}
       {onContinue && (

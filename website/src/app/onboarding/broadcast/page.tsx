@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { BroadcastConnectButton } from "./BroadcastConnectButton";
 
 export const metadata = {
   title: "Connect LinkedIn — LinkRight",
@@ -122,44 +123,21 @@ export default async function OnboardingBroadcastPage({
           </div>
         )}
 
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
-          {justConnected ? (
-            <Link
-              href="/onboarding/find"
-              className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-            >
-              Continue to your matches →
-            </Link>
-          ) : oauthConfigured ? (
-            <>
-              <a
-                href={oauthStartUrl}
-                className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-              >
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 3a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14zM8.339 18.337V9.75H5.667v8.587h2.672zM7.003 8.575a1.548 1.548 0 100-3.097 1.548 1.548 0 000 3.097zm11.334 9.762V13.67c0-2.31-.494-4.087-3.193-4.087-1.297 0-2.167.712-2.523 1.387h-.036V9.75h-2.566v8.587h2.672v-4.248c0-1.121.212-2.206 1.601-2.206 1.369 0 1.387 1.281 1.387 2.278v4.176h2.658z" />
-                </svg>
-                Connect LinkedIn
-              </a>
-              <Link
-                href="/onboarding/find"
-                className="rounded-full border border-border bg-white px-5 py-3 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
-              >
-                Skip for now
-              </Link>
-            </>
-          ) : (
-            <Link
-              href="/onboarding/find"
-              className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
-            >
-              Continue →
-            </Link>
-          )}
-        </div>
+        {/* Bug 11 fix: BroadcastConnectButton is a client component that
+            locks itself after the user clicks "Connect LinkedIn", preventing
+            double-clicks and giving clear in-flight feedback. Once committed,
+            the button disables and shows "Connecting…" until the OAuth round-
+            trip completes. The "Skip" link is also hidden while connecting so
+            the user cannot navigate away mid-flow. */}
+        <BroadcastConnectButton
+          justConnected={justConnected}
+          oauthConfigured={oauthConfigured}
+          oauthStartUrl={oauthStartUrl}
+        />
+
         {!justConnected && oauthConfigured && (
           <p className="mt-3 text-xs text-muted">
-            Opens LinkedIn in a popup · 20 seconds
+            Opens LinkedIn · 20 seconds
           </p>
         )}
       </div>

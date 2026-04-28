@@ -278,6 +278,9 @@ function StepCareerBasics({
   const [skills, setSkills] = useState<string[]>([]);
   const [certifications, setCertifications] = useState("");
   const [saving, setSaving] = useState(false);
+  // Bug 12 fix: show which phase the Save is in so the user knows it's
+  // working (not frozen). Phases: 'enriching' → 'uploading' → done.
+  const [savePhase, setSavePhase] = useState<"enriching" | "uploading" | null>(null);
   const [error, setError] = useState("");
 
   // Resume upload / paste state
@@ -671,9 +674,11 @@ function StepCareerBasics({
         let chunksToUpload: EnrichedChunkUpload[] | undefined;
         if (finalChunks.length > 0) {
           const careerContext = buildCareerContext(outline?.experiences ?? []);
+          setSavePhase("enriching");
           chunksToUpload = await buildFinalChunks(finalChunks, enrichedChunks, careerContext);
         }
 
+        setSavePhase("uploading");
         const uploadRes = await fetch("/api/career/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -694,6 +699,7 @@ function StepCareerBasics({
       setError("Network error. Please try again.");
     } finally {
       setSaving(false);
+      setSavePhase(null);
     }
   };
 
@@ -939,7 +945,13 @@ function StepCareerBasics({
               disabled={saving}
               className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
             >
-              {saving ? "Saving…" : "Save and continue →"}
+              {saving
+                ? savePhase === "enriching"
+                  ? "Enriching stories…"
+                  : savePhase === "uploading"
+                    ? "Uploading…"
+                    : "Saving…"
+                : "Save and continue →"}
             </button>
             <button
               onClick={onSkip}

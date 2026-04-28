@@ -8,18 +8,15 @@ const CLIENT_ID = process.env.LINKEDIN_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.LINKEDIN_CLIENT_SECRET ?? "";
 const REDIRECT_URI = process.env.LINKEDIN_REDIRECT_URI ?? "";
 
-function redirectTo(path: string, errorMessage?: string): Response {
-  const target = new URL(
-    path,
-    "https://placeholder.invalid" /* replaced below */,
-  );
+// Bug fix (2026-04-28): Response.redirect() requires an absolute URL per the
+// Fetch API spec. Previously used a relative path which works in Node.js but
+// fails on Vercel Edge Runtime. Now derives origin from the incoming request.
+function redirectTo(requestUrl: string, path: string, errorMessage?: string): Response {
+  const origin = new URL(requestUrl).origin;
+  const target = new URL(path, origin);
   if (errorMessage) target.searchParams.set("linkedin_error", errorMessage);
   else target.searchParams.set("linkedin", "connected");
-  // We don't know the absolute origin inside a route file without a request,
-  // so the returned location is relative — Next/Node will honour it.
-  const rel =
-    target.pathname + (target.search ? target.search : "") + (target.hash || "");
-  return Response.redirect(rel, 302);
+  return Response.redirect(target.toString(), 302);
 }
 
 export async function GET(request: Request) {
@@ -29,23 +26,23 @@ export async function GET(request: Request) {
   const error = url.searchParams.get("error");
 
   if (error) {
-    return redirectTo("/dashboard/broadcast/connect", error);
+    return redirectTo(request.url, "/dashboard/broadcast/connect", error);
   }
   if (!code || !state) {
-    return redirectTo("/dashboard/broadcast/connect", "missing_code");
+    return redirectTo(request.url, "/dashboard/broadcast/connect", "missing_code");
   }
   if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
-    return redirectTo("/dashboard/broadcast/connect", "not_configured");
+    return redirectTo(request.url, "/dashboard/broadcast/connect", "not_configured");
   }
 
   let stateObj: { uid?: string; nonce?: string; rt?: string } = {};
   try {
     stateObj = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
   } catch {
-    return redirectTo("/dashboard/broadcast/connect", "bad_state");
+    return redirectTo(request.url, "/dashboard/broadcast/connect", "bad_state");
   }
   if (!stateObj.uid) {
-    return redirectTo("/dashboard/broadcast/connect", "bad_state");
+    return redirectTo(request.url, "/dashboard/broadcast/connect", "bad_state");
   }
 
   // Exchange code for tokens
@@ -64,7 +61,7 @@ export async function GET(request: Request) {
     },
   );
   if (!tokenRes.ok) {
-    return redirectTo("/dashboard/broadcast/connect", "token_exchange_failed");
+    return redirectTo(request.url, "/dashboard/broadcast/connect", "token_exchange_failed");
   }
   const tokens = (await tokenRes.json()) as {
     access_token?: string;
@@ -74,7 +71,7 @@ export async function GET(request: Request) {
     token_type?: string;
   };
   if (!tokens.access_token) {
-    return redirectTo("/dashboard/broadcast/connect", "no_access_token");
+    return redirectTo(request.url, "/dashboard/broadcast/connect", "no_access_token");
   }
 
   // Fetch /userinfo for handle + avatar
@@ -118,5 +115,5 @@ export async function GET(request: Request) {
     { onConflict: "user_id,provider" },
   );
 
-  return redirectTo(stateObj.rt ?? "/dashboard/broadcast");
+  return redirectTo(request.url, stateObj.rt ?? "/dashboard/broadcast");
 }
