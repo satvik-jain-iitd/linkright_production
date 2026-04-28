@@ -13,6 +13,7 @@ import {
   type CareerOutlineData,
   type ParsedExperience,
   type ParsedEducation,
+  getLockedChunks,
 } from "@/components/onboarding/CareerOutlineView";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
@@ -667,16 +668,15 @@ function StepCareerBasics({
       }
 
       if (careerText.trim().length >= 200) {
-        // Build final enriched chunks: diff against silently pre-enriched state.
-        // Chunks whose text hasn't changed reuse cached metadata; changed or new
-        // chunks are enriched synchronously here before upload.
-        const finalChunks = parseNarrationChunks(careerText);
-        let chunksToUpload: EnrichedChunkUpload[] | undefined;
-        if (finalChunks.length > 0) {
-          const careerContext = buildCareerContext(outline?.experiences ?? []);
-          setSavePhase("enriching");
-          chunksToUpload = await buildFinalChunks(finalChunks, enrichedChunks, careerContext);
-        }
+        // v3 (PR #26): Use locked chunks from CareerOutlineView instead of
+        // batch-enriching all chunks synchronously on Save. Locked chunks were
+        // already enriched individually when the user clicked Lock — so we just
+        // assemble them here, no extra LLM calls needed.
+        const lockedChunks = getLockedChunks();
+        const chunksToUpload: EnrichedChunkUpload[] | undefined =
+          lockedChunks.length > 0
+            ? lockedChunks.map((c) => ({ text: c.text, metadata: c.meta }))
+            : undefined;
 
         setSavePhase("uploading");
         const uploadRes = await fetch("/api/career/upload", {
@@ -692,6 +692,10 @@ function StepCareerBasics({
           setError(data.error ?? "Failed to save career details. Please try again.");
           return;
         }
+
+        // Stamp resume_submitted_at on all career_chunks (best-effort — non-blocking)
+        // so subsequent lock/unlock mutations get 409 after this point.
+        fetch("/api/onboarding/stories/submit-resume", { method: "POST" }).catch(() => {});
       }
 
       onNext();
@@ -928,40 +932,20 @@ function StepCareerBasics({
           onChange={setOutline}
           fileMeta={fileMeta ?? undefined}
           onSwap={handleSwapResume}
+          onContinue={handleSave}
           streamingNarration={streamingNarration}
+          busy={saving}
+          continueLabel={
+            saving
+              ? savePhase === "uploading"
+                ? "Uploading…"
+                : "Saving…"
+              : "Save and continue"
+          }
         />
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-
-      {parsed && (
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-          <p className="text-xs text-muted">
-            We&apos;ll keep processing in the background. You can continue now.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
-            >
-              {saving
-                ? savePhase === "enriching"
-                  ? "Enriching stories…"
-                  : savePhase === "uploading"
-                    ? "Uploading…"
-                    : "Saving…"
-                : "Save and continue →"}
-            </button>
-            <button
-              onClick={onSkip}
-              className="rounded-lg border border-border bg-white px-4 py-3 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
-            >
-              Skip
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
