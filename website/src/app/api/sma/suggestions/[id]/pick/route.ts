@@ -22,6 +22,15 @@ Hard rules:
 Return only the post text. No preamble. No sign-off.`;
 
 export async function POST(request: Request, ctx: RouteContext) {
+  // Blocker #2 — fail fast on missing API key so misconfiguration is visible
+  // immediately on the first request, not buried inside groqChat.
+  if (!process.env.PLATFORM_GROQ_API_KEY) {
+    return Response.json(
+      { error: "Personalization unavailable: server config missing" },
+      { status: 503 },
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -74,6 +83,13 @@ export async function POST(request: Request, ctx: RouteContext) {
     diaryContext = diary?.content ?? "";
   }
 
+  // Blocker #3 — cap diary context to ~1000 tokens (4000 chars) so we never
+  // blow past a model's context window on unusually long diary entries.
+  const DIARY_CHAR_LIMIT = 4000;
+  if (diaryContext.length > DIARY_CHAR_LIMIT) {
+    diaryContext = diaryContext.slice(0, DIARY_CHAR_LIMIT) + "… [truncated]";
+  }
+
   const postAngle = String(picked.post_angle ?? "");
   const hookLine = String(picked.hook_line ?? "");
   const topicTag = String(picked.topic_tag ?? "");
@@ -90,24 +106,29 @@ export async function POST(request: Request, ctx: RouteContext) {
     .filter(Boolean)
     .join("\n");
 
+  // Blocker #1 — try 8b first (cheap/fast); on 429-class errors fall back to
+  // 70b so Groq free-tier rate limits don't become hard 502s for the user.
   let draftContent = "";
-  try {
-    draftContent = (
-      await groqChat(
-        [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        { maxTokens: 700, temperature: 0.6 },
-      )
-    ).trim();
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Groq error";
-    return Response.json({ error: `Draft generation failed: ${msg}` }, { status: 502 });
+  let lastErr = "";
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: userPrompt },
+  ] as const;
+  for (const model of ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]) {
+    try {
+      draftContent = (
+        await groqChat(messages, { maxTokens: 700, temperature: 0.6, model })
+      ).trim();
+      if (draftContent) break;
+      lastErr = `empty draft from ${model}`;
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : "Groq error";
+      // Only continue to next model on rate-limit / quota / network class errors.
+      if (!/429|rate.?limit|quota|TPD|TPM|timeout|ECONN|fetch failed/i.test(lastErr)) break;
+    }
   }
-
   if (!draftContent) {
-    return Response.json({ error: "Generator returned empty draft" }, { status: 502 });
+    return Response.json({ error: `Draft generation failed: ${lastErr}` }, { status: 502 });
   }
 
   // Insert draft + mark suggestion picked.
