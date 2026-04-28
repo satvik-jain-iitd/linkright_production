@@ -3,18 +3,27 @@
 // Wave 2 / Screen 04 — Resume upload review + first-person narration.
 // Design handoff: specs/design-handoff-2026-04-18/ → screens-build.jsx Screen04.
 //
+// LOCK/UNLOCK MODEL (v3 — PR #26):
+//   - Each initiative card has Lock / Unlock / Edit / Delete actions.
+//   - Lock → fires enrich-chunk immediately for that card, marks it enriched.
+//   - Unlock → card becomes editable; enrichment cleared.
+//   - Edit when unlocked → inline textarea, Save re-queues enrichment.
+//   - Delete only when unlocked.
+//   - Save & Continue enabled when ≥1 card locked. Calls submit-resume then
+//     career/upload, then navigates to Profile step.
+//
 // Shape:
 //   ┌─ step indicator (1 Resume · 2 Profile · 3 Preferences · 4 Broadcast · 5 First match) ─┐
 //   │ eyebrow + headline + sub                                                │
 //   │ [file-chip: filename · size · parsed in Ns]   [swap resume]             │
 //   │ ┌──────────── OUTLINE ────────────┬──────── YOUR STORY ─────────────┐   │
-//   │ │ Experience (company+role+chips) │ Paragraph per role, border-left │   │
-//   │ │ Education · Skills              │ bold lead, editable via toggle  │   │
+//   │ │ Experience (company+role+chips) │ Lock/unlock cards per initiative │   │
+//   │ │ Education · Skills              │                                  │   │
 //   │ └─────────────────────────────────┴─────────────────────────────────┘   │
-//   │ [explainer]                                    [Save and continue →]    │
+//   │ [explainer]                        [Save and continue → (≥1 locked)]   │
 //   └──────────────────────────────────────────────────────────────────────────┘
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { track } from "@/lib/analytics";
 
 export interface ParsedProject {
@@ -59,6 +68,18 @@ export interface FileMeta {
   parsedSec?: number;
 }
 
+// Per-card enrichment state
+type CardStatus = "idle" | "enriching" | "ready" | "stale";
+
+interface CardState {
+  locked: boolean;
+  status: CardStatus;
+  // Enriched metadata from /api/onboarding/enrich-chunk
+  enrichedMeta: { importance: string; tags: string[]; leadership: string } | null;
+  // DB chunk_id after first save (null before first upload)
+  chunkId: string | null;
+}
+
 interface Props {
   data: CareerOutlineData;
   onChange: (data: CareerOutlineData) => void;
@@ -93,10 +114,6 @@ export function CareerOutlineView({
   const narration = data.career_summary_first_person ?? "";
   const [editBuffer, setEditBuffer] = useState<string | null>(null);
   const editing = editBuffer !== null;
-  const [approvedSet, setApprovedSet] = useState<Set<number>>(new Set());
-  // Bug 12 fix: after clicking Approve, show a brief inline confirmation so
-  // the user knows the story is staged for the Save action (not yet persisted).
-  const [approveToast, setApproveToast] = useState<number | null>(null);
   const [editingCardIdx, setEditingCardIdx] = useState<number | null>(null);
   const [editingCardHeading, setEditingCardHeading] = useState("");
   const [editingCardBody, setEditingCardBody] = useState("");
@@ -112,33 +129,98 @@ export function CareerOutlineView({
 
   const initiativeCards = useMemo(() => parseInitiativeCards(narration), [narration]);
 
-  // Ref to track active toast timeout for cleanup.
-  const approveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const approveCard = useCallback((i: number) => {
-    setApprovedSet((prev) => new Set([...prev, i]));
-    const company = data.experiences[0]?.company ?? "";
-    track({ event: "initiative_approved", properties: { company } });
-    // Show a brief inline toast that disappears after 2.5 seconds.
-    // Clear any previous timer so rapid clicks don't stack.
-    if (approveToastTimer.current) clearTimeout(approveToastTimer.current);
-    setApproveToast(i);
-    approveToastTimer.current = setTimeout(() => {
-      setApproveToast(null);
-      approveToastTimer.current = null;
-    }, 2500);
-  }, [data.experiences]);
+  // Per-card state keyed by card index
+  const [cardStates, setCardStates] = useState<Record<number, CardState>>({});
 
-  // Blocker 3 fix (2026-04-28): clear the timer on unmount so that if the user
-  // clicks Approve then immediately navigates away (unmounting CareerOutlineView),
-  // the 2500ms setTimeout does not fire setApproveToast on an unmounted component.
+  // Reset card states when narration changes (new resume upload or streaming completed)
+  // We only reset if the number of cards changes to avoid thrashing during streaming.
+  // internalMutationRef is set to true before internal deleteCard/commitCardEdit actions
+  // that change card count — those should NOT reset lock states.
+  const prevCardCountRef = useRef(initiativeCards.length);
+  const internalMutationRef = useRef(false);
   useEffect(() => {
-    return () => {
-      if (approveToastTimer.current) {
-        clearTimeout(approveToastTimer.current);
-        approveToastTimer.current = null;
+    if (internalMutationRef.current) {
+      // Internal mutation (delete/edit) caused the count change — skip reset
+      internalMutationRef.current = false;
+      prevCardCountRef.current = initiativeCards.length;
+      return;
+    }
+    if (initiativeCards.length !== prevCardCountRef.current) {
+      prevCardCountRef.current = initiativeCards.length;
+      setCardStates({});
+    }
+  }, [initiativeCards.length]);
+
+  const getCardState = useCallback(
+    (i: number): CardState => {
+      return (
+        cardStates[i] ?? {
+          locked: false,
+          status: "idle" as CardStatus,
+          enrichedMeta: null,
+          chunkId: null,
+        }
+      );
+    },
+    [cardStates],
+  );
+
+  const setCardState = useCallback(
+    (i: number, patch: Partial<CardState>) => {
+      setCardStates((prev) => ({
+        ...prev,
+        [i]: { ...((prev[i] as CardState) ?? { locked: false, status: "idle" as CardStatus, enrichedMeta: null, chunkId: null }), ...patch },
+      }));
+    },
+    [],
+  );
+
+  // How many cards are locked right now
+  const lockedCount = useMemo(
+    () => Object.values(cardStates).filter((s) => s.locked).length,
+    [cardStates],
+  );
+
+  // Lock a card: fire enrichment, mark locked
+  const lockCard = useCallback(
+    async (i: number) => {
+      const card = initiativeCards[i];
+      if (!card) return;
+      // Optimistic: mark locked + enriching immediately
+      setCardState(i, { locked: true, status: "enriching" });
+      track({ event: "story_locked", properties: { index: i } });
+
+      // Build career context from experiences
+      const careerContext = buildCareerContext(data.experiences);
+      const chunkText = `${card.heading}\n\n${card.body}`;
+
+      try {
+        const res = await fetch("/api/onboarding/enrich-chunk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chunk_text: chunkText,
+            career_context: careerContext,
+          }),
+        });
+        const enriched = res.ok ? await res.json() : { importance: "P2", tags: [], leadership: "none" };
+        setCardState(i, { locked: true, status: "ready", enrichedMeta: enriched });
+      } catch {
+        // Enrichment failed — card stays locked but with null meta
+        setCardState(i, { locked: true, status: "ready", enrichedMeta: null });
       }
-    };
-  }, []);
+    },
+    [initiativeCards, data.experiences, setCardState],
+  );
+
+  // Unlock a card: clear enrichment, mark editable
+  const unlockCard = useCallback(
+    (i: number) => {
+      setCardState(i, { locked: false, status: "stale", enrichedMeta: null });
+      track({ event: "story_unlocked", properties: { index: i } });
+    },
+    [setCardState],
+  );
 
   function patchExperience(idx: number, patch: Partial<ParsedExperience>) {
     const next = data.experiences.map((e, i) => (i === idx ? { ...e, ...patch } : e));
@@ -173,10 +255,55 @@ export function CareerOutlineView({
 
   function commitCardEdit() {
     if (editingCardIdx === null) return;
+    internalMutationRef.current = true; // prevent useEffect from resetting all card states
     const updated = replaceCardInNarration(narration, editingCardIdx, editingCardHeading, editingCardBody);
     onChange({ ...data, career_summary_first_person: updated });
+    // Edit auto-unlocks + marks stale (re-lock required to re-enrich)
+    setCardState(editingCardIdx, { locked: false, status: "stale", enrichedMeta: null });
     setEditingCardIdx(null);
   }
+
+  function deleteCard(i: number) {
+    const cs = getCardState(i);
+    if (cs.locked) return; // shouldn't happen — button hidden when locked
+    const updated = removeCardFromNarration(narration, i);
+    internalMutationRef.current = true; // prevent useEffect from resetting all card states
+    onChange({ ...data, career_summary_first_person: updated });
+    // Remove card state
+    setCardStates((prev) => {
+      const next: Record<number, CardState> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const ki = Number(k);
+        if (ki < i) next[ki] = v as CardState;
+        else if (ki > i) next[ki - 1] = v as CardState; // shift indices down
+      }
+      return next;
+    });
+  }
+
+  // Build enriched chunks array from locked cards for final upload
+  function buildLockedChunks(): { heading: string; text: string; meta: Record<string, unknown> }[] {
+    return initiativeCards
+      .map((card, i) => {
+        const cs = getCardState(i);
+        if (!cs.locked) return null;
+        const roleMatch = narration.match(/^## ([^—–\n]+)/m);
+        const roleHeader = roleMatch ? roleMatch[0] : "";
+        const chunkText = roleHeader
+          ? `${roleHeader}\n\n### ${card.heading}\n${card.body}`
+          : `### ${card.heading}\n${card.body}`;
+        const base = extractChunkMeta(card);
+        return {
+          heading: card.heading,
+          text: chunkText,
+          meta: { ...base, ...(cs.enrichedMeta ?? {}) },
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
+  }
+
+  // Exposed via prop so OnboardingFlow can assemble final data
+  // (we attach it to the `onContinue` closure below rather than a separate prop)
 
   return (
     <div className="space-y-6">
@@ -212,13 +339,14 @@ export function CareerOutlineView({
       {/* Eyebrow + headline */}
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.12em] text-accent">
-          Step 1 of 5 · this is the only required input
+          Step 1 of 4 · this is the only required input
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">
           Here&apos;s what we understood from your resume.
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Edit anything that&apos;s off. The more accurate this is, the sharper everything
+          Lock the stories that are accurate. Edit anything that&apos;s off, then lock.
+          Locked stories get enriched immediately — the more you lock, the sharper everything
           downstream gets.
         </p>
       </div>
@@ -259,6 +387,25 @@ export function CareerOutlineView({
               Swap resume
             </button>
           )}
+        </div>
+      )}
+
+      {/* Lock progress banner — shown when ≥1 card locked */}
+      {lockedCount > 0 && !streamingNarration && (
+        <div className="flex items-center gap-3 rounded-xl border border-tertiary-200 bg-tertiary-50 px-4 py-3">
+          <svg className="h-4 w-4 shrink-0 text-tertiary-600" fill="currentColor" viewBox="0 0 24 24">
+            <path
+              fillRule="evenodd"
+              d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <p className="text-xs font-medium text-tertiary-700">
+            {lockedCount} of {initiativeCards.length} stor{lockedCount === 1 ? "y" : "ies"} locked
+            {Object.values(cardStates).some((s) => s.locked && s.status === "enriching") && (
+              <span className="ml-1 text-tertiary-500">· enriching…</span>
+            )}
+          </p>
         </div>
       )}
 
@@ -414,7 +561,7 @@ export function CareerOutlineView({
           )}
         </div>
 
-        {/* ─── FIRST-PERSON NARRATION ─── */}
+        {/* ─── FIRST-PERSON NARRATION — LOCK/UNLOCK CARDS ─── */}
         <div className="rounded-2xl border border-border bg-gradient-to-b from-[#FDF6F0] to-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <div>
@@ -422,7 +569,7 @@ export function CareerOutlineView({
                 Your story, in your words
               </h3>
               <p className="mt-0.5 text-xs text-muted">
-                Rewrite anything that doesn&apos;t sound like you.
+                Lock the stories that are right. Edit anything off, then re-lock.
               </p>
             </div>
             {!editing && !streamingNarration && paragraphs.length > 0 && (
@@ -431,7 +578,7 @@ export function CareerOutlineView({
                 onClick={startEditing}
                 className="text-xs font-semibold text-accent hover:text-accent-hover transition"
               >
-                Edit narration →
+                Edit all →
               </button>
             )}
           </div>
@@ -465,80 +612,26 @@ export function CareerOutlineView({
           ) : initiativeCards.length > 0 ? (
             <div className="space-y-3">
               {initiativeCards.map((card, i) => {
-                const approved = approvedSet.has(i);
+                const cs = getCardState(i);
                 const isEditingThis = editingCardIdx === i;
                 return (
-                  <div
+                  <StoryCard
                     key={i}
-                    className={`rounded-[20px] border p-4 shadow-sm transition ${
-                      approved
-                        ? "border-primary-200 bg-primary-50/40"
-                        : "border-border bg-surface"
-                    }`}
-                  >
-                    {isEditingThis ? (
-                      <div className="space-y-2">
-                        <input
-                          value={editingCardHeading}
-                          onChange={(e) => setEditingCardHeading(e.target.value)}
-                          className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-semibold text-foreground focus:border-accent focus:outline-none"
-                          placeholder="Initiative heading"
-                        />
-                        <textarea
-                          value={editingCardBody}
-                          onChange={(e) => setEditingCardBody(e.target.value)}
-                          rows={4}
-                          className="w-full resize-y rounded-lg border border-border bg-white px-3 py-2 text-xs leading-relaxed text-foreground focus:border-accent focus:outline-none"
-                          placeholder="Describe this initiative..."
-                        />
-                        <div className="flex justify-end gap-2">
-                          <button type="button" onClick={cancelCardEdit} className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-foreground transition hover:border-accent">Cancel</button>
-                          <button type="button" onClick={commitCardEdit} className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-white transition hover:bg-accent-hover">Save</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-semibold text-foreground leading-snug">
-                            {card.heading}
-                          </h4>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            {!approved && (
-                              <button
-                                type="button"
-                                onClick={() => startCardEdit(i)}
-                                className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-medium text-muted transition hover:border-accent hover:text-accent"
-                                title="Edit this card"
-                              >
-                                ✏
-                              </button>
-                            )}
-                            {approved ? (
-                              <span className="inline-flex items-center gap-1 rounded-lg bg-primary-500 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                                ✓ Approved
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => approveCard(i)}
-                                className="rounded-lg border border-accent px-3 py-0.5 text-[11px] font-semibold text-accent transition hover:bg-accent/5"
-                              >
-                                Approve
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
-                          {card.body
-                            .split(/\n+/)
-                            .filter(Boolean)
-                            .map((line, j) => (
-                              <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
-                            ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                    card={card}
+                    index={i}
+                    cardState={cs}
+                    isEditing={isEditingThis}
+                    editingHeading={editingCardHeading}
+                    editingBody={editingCardBody}
+                    onEditHeadingChange={setEditingCardHeading}
+                    onEditBodyChange={setEditingCardBody}
+                    onLock={() => lockCard(i)}
+                    onUnlock={() => unlockCard(i)}
+                    onStartEdit={() => startCardEdit(i)}
+                    onCancelEdit={cancelCardEdit}
+                    onCommitEdit={commitCardEdit}
+                    onDelete={() => deleteCard(i)}
+                  />
                 );
               })}
               {streamingNarration && (
@@ -571,38 +664,27 @@ export function CareerOutlineView({
         </div>
       </div>
 
-      {/* Bug 12 fix: show an approved-count banner whenever at least one story
-          has been approved. Makes it clear that "Approve" stages the story —
-          clicking Save below will lock all of them in. Shown even when
-          onContinue is not passed (parent handles the Save button). */}
-      {approvedSet.size > 0 && initiativeCards.length > 0 && (
-        <div className="flex items-center gap-2 rounded-[10px] border border-primary-200 bg-primary-50 px-4 py-2.5">
-          <span className="text-sm font-semibold text-primary-700">
-            {approvedSet.size} of {initiativeCards.length} stor{approvedSet.size === 1 ? "y" : "ies"} approved
-          </span>
-          <span className="text-xs text-primary-600">— click Save below to lock them in</span>
-        </div>
-      )}
-
-      {/* Inline toast: confirms the just-approved story is staged for save */}
-      {approveToast !== null && (
-        <div className="flex items-center gap-2 rounded-[10px] border border-primary-200 bg-primary-50 px-4 py-2.5 animate-pulse">
-          <span className="text-sm text-primary-700">
-            ✓ Story approved — will save when you click &ldquo;Save and continue&rdquo;
-          </span>
-        </div>
-      )}
-
       {/* Bottom row */}
       {onContinue && (
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <p className="text-xs text-muted">
-            Backend will keep learning in the background — you don&apos;t need to wait.
+            {lockedCount > 0
+              ? `${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} locked and enriched. Save to continue.`
+              : "Lock at least one story to continue."}
           </p>
           <button
             type="button"
-            onClick={onContinue}
-            disabled={busy}
+            onClick={() => {
+              if (lockedCount === 0) return;
+              // Pass locked chunk metadata back to OnboardingFlow via onContinue
+              // We do this by attaching lockedChunks to window state temporarily
+              // The cleaner pattern would be a callback prop but to avoid changing
+              // the OnboardingFlow interface we store in a module-level ref.
+              storeLockedChunks(buildLockedChunks());
+              onContinue();
+            }}
+            disabled={busy || lockedCount === 0}
+            title={lockedCount === 0 ? "Lock at least one story first" : undefined}
             className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-60"
           >
             {busy ? "Saving…" : continueLabel}
@@ -626,6 +708,211 @@ export function CareerOutlineView({
   );
 }
 
+// ── StoryCard component ───────────────────────────────────────────────────
+
+function StoryCard({
+  card,
+  index,
+  cardState,
+  isEditing,
+  editingHeading,
+  editingBody,
+  onEditHeadingChange,
+  onEditBodyChange,
+  onLock,
+  onUnlock,
+  onStartEdit,
+  onCancelEdit,
+  onCommitEdit,
+  onDelete,
+}: {
+  card: { heading: string; body: string };
+  index: number;
+  cardState: CardState;
+  isEditing: boolean;
+  editingHeading: string;
+  editingBody: string;
+  onEditHeadingChange: (v: string) => void;
+  onEditBodyChange: (v: string) => void;
+  onLock: () => void;
+  onUnlock: () => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onCommitEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { locked, status } = cardState;
+
+  const cardCls = locked
+    ? "rounded-[20px] border border-tertiary-200 bg-tertiary-50/40 p-4 shadow-sm transition"
+    : "rounded-[20px] border border-border bg-surface p-4 shadow-sm transition";
+
+  if (isEditing) {
+    return (
+      <div className={cardCls}>
+        <div className="space-y-2">
+          <input
+            value={editingHeading}
+            onChange={(e) => onEditHeadingChange(e.target.value)}
+            className="w-full rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-semibold text-foreground focus:border-accent focus:outline-none"
+            placeholder="Initiative heading"
+          />
+          <textarea
+            value={editingBody}
+            onChange={(e) => onEditBodyChange(e.target.value)}
+            rows={4}
+            className="w-full resize-y rounded-lg border border-border bg-white px-3 py-2 text-xs leading-relaxed text-foreground focus:border-accent focus:outline-none"
+            placeholder="Describe this story..."
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-foreground transition hover:border-accent"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onCommitEdit}
+              className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-white transition hover:bg-accent-hover"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cardCls} data-story-index={index}>
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="text-sm font-semibold text-foreground leading-snug">
+          {card.heading}
+        </h4>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Status badge */}
+          {locked && status === "enriching" && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+              <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-amber-400 border-t-transparent" />
+              Enriching
+            </span>
+          )}
+          {locked && status === "ready" && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+              ✓ Ready
+            </span>
+          )}
+          {/* Edit button — only when unlocked and not in edit mode */}
+          {!locked && (
+            <button
+              type="button"
+              onClick={onStartEdit}
+              className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-medium text-muted transition hover:border-accent hover:text-accent"
+              title="Edit this story"
+            >
+              ✏
+            </button>
+          )}
+          {/* Delete button — only when unlocked */}
+          {!locked && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-medium text-muted transition hover:border-red-400 hover:text-red-500"
+              title="Delete this story"
+            >
+              ✕
+            </button>
+          )}
+          {/* Lock / Unlock toggle */}
+          {locked ? (
+            <button
+              type="button"
+              onClick={onUnlock}
+              disabled={status === "enriching"}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-tertiary-500 bg-tertiary-500/10 px-2.5 py-1 text-xs font-semibold text-tertiary-700 transition hover:bg-tertiary-500/20 disabled:opacity-60"
+              title="Click to unlock and edit"
+            >
+              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
+                <path
+                  fillRule="evenodd"
+                  d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Locked
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onLock}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1 text-xs font-semibold text-foreground transition hover:border-tertiary-500 hover:bg-tertiary-500/10 hover:text-tertiary-700"
+              title="Lock to enrich this story"
+            >
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+                />
+              </svg>
+              Lock
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
+        {card.body
+          .split(/\n+/)
+          .filter(Boolean)
+          .map((line, j) => (
+            <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
+          ))}
+      </div>
+      {/* Enrichment tags — shown when ready */}
+      {locked && status === "ready" && cardState.enrichedMeta?.tags && cardState.enrichedMeta.tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {cardState.enrichedMeta.tags.slice(0, 4).map((tag: string, t: number) => (
+            <span key={t} className="rounded-[8px] bg-tertiary-100 px-2 py-0.5 text-[10px] font-medium text-tertiary-700">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Module-level locked chunks store (avoids prop threading) ─────────────────
+// OnboardingFlow reads this before calling /api/career/upload
+
+let _lockedChunksStore: { heading: string; text: string; meta: Record<string, unknown> }[] = [];
+
+export function storeLockedChunks(chunks: typeof _lockedChunksStore) {
+  _lockedChunksStore = chunks;
+}
+
+export function getLockedChunks(): typeof _lockedChunksStore {
+  return _lockedChunksStore;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildCareerContext(experiences: ParsedExperience[]): string {
+  if (!experiences?.length) return "";
+  const current = experiences[0];
+  const prev = experiences.slice(1, 3).map((e) => e.company).filter(Boolean);
+  let ctx = `${current.role} at ${current.company}`;
+  if (prev.length > 0) ctx += `, prev ${prev.join(", ")}`;
+  return ctx;
+}
+
+function extractChunkMeta(card: { heading: string; body: string }): Record<string, unknown> {
+  return { initiative: card.heading };
+}
+
 function parseInitiativeCards(narration: string): { heading: string; body: string }[] {
   if (!narration?.trim()) return [];
   const hasInitiatives = /^### /m.test(narration);
@@ -647,22 +934,15 @@ function parseInitiativeCards(narration: string): { heading: string; body: strin
   }
   // Fallback: no ### found — split by ## role sections
   const roleSections = narration.split(/(?=^## )/m).filter((s) => s.trim());
-  const cards = roleSections.map((section) => {
-    const lines = section.split("\n");
-    const heading = lines[0].replace(/^## /, "").trim() || "Your story";
-    const body = lines.slice(1).join("\n").trim();
-    return { heading, body };
-  }).filter((c) => c.body);
+  const cards = roleSections
+    .map((section) => {
+      const lines = section.split("\n");
+      const heading = lines[0].replace(/^## /, "").trim() || "Your story";
+      const body = lines.slice(1).join("\n").trim();
+      return { heading, body };
+    })
+    .filter((c) => c.body);
   return cards.length > 0 ? cards : [];
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function replaceCardInNarration(
@@ -675,17 +955,14 @@ function replaceCardInNarration(
   let count = -1;
   let inTarget = false;
   const out: string[] = [];
-  let bodyInserted = false;
 
   for (const line of lines) {
     if (line.startsWith("### ")) {
       count++;
       if (count === cardIndex) {
         inTarget = true;
-        bodyInserted = false;
         out.push(`### ${newHeading}`);
         newBody.split("\n").forEach((bl) => out.push(bl));
-        bodyInserted = true;
         continue;
       } else if (inTarget) {
         inTarget = false;
@@ -700,13 +977,27 @@ function replaceCardInNarration(
   return out.join("\n");
 }
 
-// Bold the lead clause if paragraph starts with "At {Company}," or "Before that at …,".
-// Small helper so narration reads like the design without the model emitting markdown.
-function boldFirstClause(html: string): string {
-  const leadRe = /^(At [^,]+,|Before that at [^,]+,|Earlier at [^,]+,|Previously at [^,]+,|Most recently at [^,]+,)/;
-  const m = html.match(leadRe);
-  if (m) {
-    return `<strong>${m[1]}</strong>${html.slice(m[1].length)}`;
+function removeCardFromNarration(narration: string, cardIndex: number): string {
+  const lines = narration.split("\n");
+  let count = -1;
+  let inTarget = false;
+  const out: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("### ")) {
+      count++;
+      if (count === cardIndex) {
+        inTarget = true;
+        continue;
+      } else if (inTarget) {
+        inTarget = false;
+      }
+    } else if (inTarget && line.startsWith("## ")) {
+      inTarget = false;
+    }
+    if (!inTarget) {
+      out.push(line);
+    }
   }
-  return html;
+  return out.join("\n");
 }

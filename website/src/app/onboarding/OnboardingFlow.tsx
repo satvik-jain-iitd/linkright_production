@@ -13,6 +13,8 @@ import {
   type CareerOutlineData,
   type ParsedExperience,
   type ParsedEducation,
+  getLockedChunks,
+  storeLockedChunks,
 } from "@/components/onboarding/CareerOutlineView";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 
@@ -391,6 +393,10 @@ function StepCareerBasics({
     setEnrichedChunks([]);
     // Clear any enrichment warning from Resume A so it doesn't bleed into Resume B's session.
     setNarrationEnrichWarning(null);
+    // Clear module-level locked chunks store so Resume A's lock state cannot contaminate
+    // Resume B's save payload. Must be called here (not just in CareerOutlineView) because
+    // storeLockedChunks() is the shared write path between the two components.
+    storeLockedChunks([]);
   };
 
   const applyParsed = (data: Record<string, unknown>) => {
@@ -667,16 +673,15 @@ function StepCareerBasics({
       }
 
       if (careerText.trim().length >= 200) {
-        // Build final enriched chunks: diff against silently pre-enriched state.
-        // Chunks whose text hasn't changed reuse cached metadata; changed or new
-        // chunks are enriched synchronously here before upload.
-        const finalChunks = parseNarrationChunks(careerText);
-        let chunksToUpload: EnrichedChunkUpload[] | undefined;
-        if (finalChunks.length > 0) {
-          const careerContext = buildCareerContext(outline?.experiences ?? []);
-          setSavePhase("enriching");
-          chunksToUpload = await buildFinalChunks(finalChunks, enrichedChunks, careerContext);
-        }
+        // v3 (PR #26): Use locked chunks from CareerOutlineView instead of
+        // batch-enriching all chunks synchronously on Save. Locked chunks were
+        // already enriched individually when the user clicked Lock — so we just
+        // assemble them here, no extra LLM calls needed.
+        const lockedChunks = getLockedChunks();
+        const chunksToUpload: EnrichedChunkUpload[] | undefined =
+          lockedChunks.length > 0
+            ? lockedChunks.map((c) => ({ text: c.text, metadata: c.meta }))
+            : undefined;
 
         setSavePhase("uploading");
         const uploadRes = await fetch("/api/career/upload", {
@@ -691,6 +696,55 @@ function StepCareerBasics({
           const data = await uploadRes.json().catch(() => ({}));
           setError(data.error ?? "Failed to save career details. Please try again.");
           return;
+        }
+
+        // Parse the chunk IDs returned by career/upload so we can stamp server-side lock state.
+        // This makes the 409 guard in /api/onboarding/stories/lock real — locked_at is set
+        // in DB, and resume_submitted_at gates all future mutations.
+        let uploadedChunks: { id: string; chunk_index: number }[] = [];
+        try {
+          const uploadData = await uploadRes.json();
+          if (Array.isArray(uploadData.chunks)) {
+            uploadedChunks = uploadData.chunks;
+          }
+        } catch {
+          // json() may fail if already consumed — proceed without server-lock wiring
+        }
+
+        // For each locally locked card (by index), stamp locked_at server-side via
+        // POST /api/onboarding/stories/lock. This makes the 409 guard functional.
+        // Best-effort: failure here is non-blocking (client-side lock state is the
+        // source of truth for the upload payload; server lock is the durable record).
+        if (uploadedChunks.length > 0) {
+          const lockedChunks = getLockedChunks();
+          // lockedChunks is ordered by card index (matching chunk_index).
+          // Use chunk_index as the mapping key.
+          const lockPromises = lockedChunks.map((_, cardIdx) => {
+            const dbChunk = uploadedChunks.find((c) => c.chunk_index === cardIdx);
+            if (!dbChunk) return Promise.resolve();
+            return fetch("/api/onboarding/stories/lock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chunk_id: dbChunk.id }),
+            }).catch(() => {});
+          });
+          await Promise.all(lockPromises);
+        }
+
+        // Await submit-resume — navigation is gated on success so the 409 guard is real.
+        // Route returns 200 for both success and graceful degradation (migration 046 not run).
+        // 5xx = real DB failure → show error, don't navigate.
+        const submitRes = await fetch("/api/onboarding/stories/submit-resume", { method: "POST" });
+        if (!submitRes.ok) {
+          const submitData = await submitRes.json().catch(() => ({}));
+          // Real server failure — show error, don't navigate
+          setError(submitData.error ?? "Failed to finalise stories. Please try again.");
+          return;
+        }
+        // 200 with degraded=true means migration 046 not run — log and proceed
+        const submitData = await submitRes.json().catch(() => ({}));
+        if (submitData.degraded) {
+          console.warn("[onboarding] submit-resume degraded — migration 046 not yet run");
         }
       }
 
@@ -928,40 +982,20 @@ function StepCareerBasics({
           onChange={setOutline}
           fileMeta={fileMeta ?? undefined}
           onSwap={handleSwapResume}
+          onContinue={handleSave}
           streamingNarration={streamingNarration}
+          busy={saving}
+          continueLabel={
+            saving
+              ? savePhase === "uploading"
+                ? "Uploading…"
+                : "Saving…"
+              : "Save and continue"
+          }
         />
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-
-      {parsed && (
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-6">
-          <p className="text-xs text-muted">
-            We&apos;ll keep processing in the background. You can continue now.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
-            >
-              {saving
-                ? savePhase === "enriching"
-                  ? "Enriching stories…"
-                  : savePhase === "uploading"
-                    ? "Uploading…"
-                    : "Saving…"
-                : "Save and continue →"}
-            </button>
-            <button
-              onClick={onSkip}
-              className="rounded-lg border border-border bg-white px-4 py-3 text-sm font-medium text-muted transition hover:border-accent hover:text-accent"
-            >
-              Skip
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
