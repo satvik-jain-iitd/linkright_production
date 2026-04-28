@@ -211,6 +211,7 @@ export function AppNav({ user, variant = "app" }: AppNavProps) {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={false}
                   className={cls}
                 >
                   {link.label}
