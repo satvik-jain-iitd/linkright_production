@@ -135,5 +135,6 @@ export async function GET(request: Request) {
     { onConflict: "user_id,provider" },
   );
 
-  return redirectTo(request.url, stateObj.rt ?? "/dashboard/broadcast");
+  // SECURITY: always use sanitised returnUrl, never stateObj.rt directly — prevents open-redirect.
+  return redirectTo(request.url, returnUrl);
 }
