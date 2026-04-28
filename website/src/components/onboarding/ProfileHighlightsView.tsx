@@ -344,7 +344,6 @@ export function ProfileHighlightsView() {
 
   const lockedCount = nuggets.filter((n) => !!n.locked_at).length;
   const total = status?.total_extracted ?? nuggets.length;
-  const embedded = status?.total_embedded ?? 0;
 
   // ---- Optimistic lock/unlock state updates ----
   const handleNuggetLocked = (id: string) => {
@@ -512,7 +511,7 @@ export function ProfileHighlightsView() {
       </div>
 
       {/* Progress strip — while extraction is in progress */}
-      {!submitted && total > 0 && embedded < total && (
+      {!submitted && nuggets.length < total && !status?.profile_ready && (
         <div
           className="flex items-center gap-4 rounded-xl border p-3.5"
           style={{
