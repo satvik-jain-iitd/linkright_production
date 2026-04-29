@@ -193,12 +193,6 @@ export function CareerOutlineView({
 
   const totalCount = initiativeCards.length;
 
-  // allLocked: every remaining card is locked (deleted cards don't count — they're removed from initiativeCards).
-  const allLocked = useMemo(
-    () => totalCount > 0 && initiativeCards.every((_, i) => getCardState(i).locked),
-    [totalCount, initiativeCards, getCardState],
-  );
-
   // Lock a card: optimistic UI only.
   const lockCard = useCallback(
     (i: number) => {
@@ -309,13 +303,18 @@ export function CareerOutlineView({
   // Derive continue button label.
   // continueLabel prop is accepted for backward compat but not used in derived logic —
   // the count-based copy is always shown per spec (Bug 14).
-  const derivedContinueLabel = (() => {
+  const allLocked = useMemo(
+    () => totalCount > 0 && initiativeCards.every((_, i) => getCardState(i).locked),
+    [totalCount, initiativeCards, getCardState],
+  );
+
+  const derivedContinueLabel = useMemo(() => {
     if (busy) return "Saving…";
-    if (lockedCount === 0) {
-      return `Lock or delete all stories to continue (0/${totalCount} ready)`;
-    }
+    if (totalCount === 0) return "Add at least one story to continue";
+    if (lockedCount === 0) return `Lock at least one story to continue (0/${totalCount} ready)`;
+    if (lockedCount < totalCount) return `Lock or delete remaining (${lockedCount}/${totalCount} ready)`;
     return `Save and continue (${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} selected)`;
-  })();
+  }, [busy, totalCount, lockedCount]);
 
   return (
     <div className="space-y-6">
@@ -819,7 +818,7 @@ function StoryCard({
           onClick={onToggleLock}
           aria-label={locked ? "Unlock this story" : "Lock for resume"}
           title={locked ? "Unlock to edit" : "Lock to use this story"}
-          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded transition ${
+          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded transition ${
             locked
               ? "border-0 bg-accent text-white"
               : "border border-muted/40 bg-white hover:border-accent"
