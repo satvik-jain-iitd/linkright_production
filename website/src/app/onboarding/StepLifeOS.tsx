@@ -249,7 +249,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
             onClick={onDone}
             className="text-sm text-muted hover:text-foreground transition-colors"
           >
-            Skip for now &rarr;
+            Skip for now
           </button>
         </div>
 
