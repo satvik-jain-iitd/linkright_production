@@ -35,12 +35,34 @@ type JobDiscovery = {
   liveness_status?: string | null;
 };
 
+type ScoreBreakdownHard = {
+  years_fit: number;
+  industry: number;
+  stage: number;
+  location: number;
+  salary: number;
+  subtotal: number;
+};
+
+type ScoreBreakdownSemantic = {
+  score: number;
+  top3_similarities: number[];
+};
+
+type ScoreBreakdown = {
+  total: number;
+  hard: ScoreBreakdownHard;
+  semantic: ScoreBreakdownSemantic;
+  recency_decay?: number;
+} | null;
+
 type Top20Row = {
   id: string;
   rank: number;
   final_score: number | null;
   reason: string | null;
   resume_job_id: string | null;
+  score_breakdown?: ScoreBreakdown;
   job_discoveries: JobDiscovery | null;
 };
 
@@ -89,6 +111,83 @@ function reasonChips(reason: string | null): string[] {
 
 const MAX_POLLS = 8;
 const POLL_INTERVAL_MS = 10_000;
+
+// ── Why tooltip ─────────────────────────────────────────────────────────────
+
+function WhyTooltip({ breakdown }: { breakdown: ScoreBreakdown }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (!breakdown) return null;
+
+  const hard = breakdown.hard;
+  const sem = breakdown.semantic;
+
+  const lines: { label: string; got: number; max: number }[] = [
+    { label: "Years experience", got: hard.years_fit, max: 12 },
+    { label: "Industry match", got: hard.industry, max: 10 },
+    { label: "Company stage", got: hard.stage, max: 8 },
+    { label: "Location", got: hard.location, max: 5 },
+    { label: "Salary range", got: hard.salary, max: 5 },
+    { label: "Semantic similarity", got: Math.round(sem.score), max: 60 },
+  ];
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-full border border-border bg-white px-2 py-0.5 text-[10px] font-semibold text-muted transition hover:border-accent hover:text-accent"
+        aria-label="Why this match?"
+      >
+        Why?
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full z-50 mt-1.5 w-52 rounded-xl border border-border bg-white p-3 shadow-lg"
+          role="tooltip"
+        >
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+            Match breakdown
+          </p>
+          <div className="space-y-1.5">
+            {lines.map((l) => (
+              <div key={l.label} className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-foreground leading-tight">{l.label}</span>
+                <span
+                  className={`shrink-0 text-[11px] font-semibold tabular-nums ${
+                    l.got > 0 ? "text-accent" : "text-muted"
+                  }`}
+                >
+                  {l.got}/{l.max}
+                </span>
+              </div>
+            ))}
+          </div>
+          {breakdown.recency_decay != null && breakdown.recency_decay < 0.95 && (
+            <p className="mt-2 border-t border-border pt-1.5 text-[10px] text-muted">
+              Recency penalty applied ({Math.round(breakdown.recency_decay * 100)}%)
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 export function FindRolesView({ embedded }: Props) {
   const router = useRouter();
@@ -745,10 +844,10 @@ function SpotlightCard({ row, onStart }: { row: Top20Row; onStart: () => void })
         </div>
         <div className="text-right">
           <div className="text-3xl font-bold tracking-tight text-accent">
-            {pct(row.final_score)}%
+            {pct(row.final_score)}/100
           </div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            match
+          <div className="mt-1 flex justify-end">
+            <WhyTooltip breakdown={row.score_breakdown ?? null} />
           </div>
         </div>
       </div>
@@ -806,9 +905,9 @@ function RoleRow({ row, onStart }: { row: Top20Row; onStart: () => void }) {
       </div>
       <div className="flex items-center gap-4">
         <div className="text-right">
-          <div className="text-base font-bold text-accent">{pct(row.final_score)}%</div>
-          <div className="text-[9px] font-semibold uppercase tracking-wider text-muted">
-            match
+          <div className="text-base font-bold text-accent">{pct(row.final_score)}/100</div>
+          <div className="mt-0.5 flex justify-end">
+            <WhyTooltip breakdown={row.score_breakdown ?? null} />
           </div>
         </div>
         <button

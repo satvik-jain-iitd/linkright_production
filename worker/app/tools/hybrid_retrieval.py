@@ -205,18 +205,31 @@ async def _vector_query(
     jina_api_key: str,
     similarity_threshold: float = 0.0,
 ) -> list[dict]:
-    """Vector similarity search via Supabase RPC match_career_nuggets.
+    """Vector similarity search via Supabase RPC.
 
-    Embeds the query with Jina first. If embedding fails or RPC is
-    unavailable, raises so the caller can fall back to BM25-only.
+    Routing logic:
+    - When ORACLE_BACKEND_URL is set: _embed_query uses Oracle nomic-embed-text
+      and the RPC is match_career_nuggets (searches the Oracle \ column).
+    - When ORACLE_BACKEND_URL is NOT set: _embed_query uses Jina (retrieval.query task)
+      and the RPC is match_career_nuggets_jina (searches the \ column).
 
-    Expected RPC signature (SQL function must exist in Supabase):
+    Mixing embedding models corrupts cosine similarity — the column selection
+    MUST follow the embedding model used for the query.
+
+    Expected RPC signatures (SQL functions must exist in Supabase):
         match_career_nuggets(
             query_embedding vector(768),
             match_user_id   uuid,
             match_company   text  DEFAULT NULL,
             match_count     int   DEFAULT 20
-        ) returns rows including a `similarity` column (1 - cosine distance)
+        ) returns rows including a \ column (1 - cosine distance)
+
+        match_career_nuggets_jina(  -- same signature, searches embedding_jina column
+            query_embedding vector(768),
+            match_user_id   uuid,
+            match_company   text  DEFAULT NULL,
+            match_count     int   DEFAULT 20
+        ) returns rows including a \ column
 
     Args:
         similarity_threshold: drop rows with similarity below this (0.0 = keep all).
@@ -227,6 +240,10 @@ async def _vector_query(
     if query_embedding is None:
         raise RuntimeError("hybrid_retrieval: query embedding returned None")
 
+    # Select RPC based on which embedding model was used for this query
+    oracle_url = os.environ.get("ORACLE_BACKEND_URL", "").rstrip("/")
+    rpc_name = "match_career_nuggets" if oracle_url else "match_career_nuggets_jina"
+
     params: dict = {
         "query_embedding": query_embedding,
         "match_user_id": user_id,
@@ -235,7 +252,7 @@ async def _vector_query(
     if company:
         params["match_company"] = company
 
-    result = sb.rpc("match_career_nuggets", params).execute()
+    result = sb.rpc(rpc_name, params).execute()
     rows = result.data or []
     if similarity_threshold > 0.0:
         rows = [r for r in rows if r.get("similarity", 0.0) >= similarity_threshold]

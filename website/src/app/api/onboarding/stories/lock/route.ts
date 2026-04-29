@@ -7,14 +7,16 @@
 // Semantics:
 //   1. Stamp career_chunks.locked_at = now(), clear cancelled_at if set (re-lock)
 //   2. Run enrich-chunk inline — creates career_nuggets rows with source_chunk_id = chunk_id
-//   3. Fire worker POST /nuggets/embed (background — UI doesn't wait)
-//   4. Return immediately with { chunk_id, locked_at }
+//   3. Fire worker POST /nuggets/embed (background — UI doesn't wait) [Oracle path]
+//   4. Fire inline Jina embed for resume customization use case (sub-second, fire-and-forget)
+//   5. Return immediately with { chunk_id, locked_at }
 //
 // 409 if resume_submitted_at is already set (session frozen).
 
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { enrichChunkInline, ENRICH_FALLBACK } from "@/lib/enrich-chunk";
+import { jinaEmbed, getNextJinaKey } from "@/lib/jina-embed";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -172,8 +174,9 @@ export async function POST(request: Request) {
       }
 
       // Step 3: Fire worker embed for THIS chunk's freshly-inserted nuggets —
-      // one targeted call per nugget, fire-and-forget. Avoids full user-sweep
-      // that would cause N×N redundant embed calls on rapid multi-card locking.
+      // one targeted call per nugget, fire-and-forget (Oracle path for job matching).
+      // Avoids full user-sweep that would cause N×N redundant embed calls on rapid
+      // multi-card locking.
       if (workerUrl && workerSecret && insertedNuggetIds.length > 0) {
         void Promise.all(
           insertedNuggetIds.map((nugget_id) =>
@@ -187,6 +190,35 @@ export async function POST(request: Request) {
             }).catch(() => null) // best-effort fire-and-forget per nugget
           )
         );
+      }
+
+      // Step 4: Inline Jina embed for resume customization use case (sub-second user-facing).
+      // Different vector space from Oracle — stored in embedding_jina column.
+      // Fire-and-forget — do NOT block response on Jina latency (~500ms).
+      const jinaKey = getNextJinaKey();
+      if (jinaKey && insertedNuggetIds.length > 0) {
+        void (async () => {
+          for (const nuggetId of insertedNuggetIds) {
+            try {
+              const { data: nugget } = await supabase
+                .from("career_nuggets")
+                .select("answer")
+                .eq("id", nuggetId)
+                .maybeSingle();
+              if (!nugget?.answer) continue;
+              const vectors = await jinaEmbed([nugget.answer], jinaKey, "text-matching");
+              if (vectors?.[0]) {
+                await supabase
+                  .from("career_nuggets")
+                  .update({ embedding_jina: vectors[0] })
+                  .eq("id", nuggetId);
+              }
+            } catch (jinaErr) {
+              // Best-effort — Oracle path covers job matching; Jina is additive
+              console.warn("[stories/lock] Jina embed failed for nugget:", nuggetId, jinaErr);
+            }
+          }
+        })();
       }
     } catch (pipelineErr) {
       console.error("[stories/lock] background pipeline failed:", (pipelineErr as Error).message);
