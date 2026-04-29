@@ -3,22 +3,19 @@
 // Wave 2 / Screen 04 — Resume upload review + first-person narration.
 // Design handoff: specs/design-handoff-2026-04-18/ → screens-build.jsx Screen04.
 //
-// LOCK/UNLOCK MODEL (v4 — Bug 1 redesign):
-//   - Each initiative card has Lock / Unlock / Edit / Delete actions.
-//   - Lock (client-side only): marks card as locked. Enrichment + nugget creation +
-//     embedding are triggered server-side in POST /api/onboarding/stories/lock
-//     which is called on Save (after career/upload creates chunk IDs).
-//   - Unlock → card becomes editable; server deletes nuggets via source_chunk_id.
-//   - Edit when unlocked → inline textarea. Save re-locks to re-enrich.
-//   - Delete only when unlocked.
-//   - Save & Continue enabled when ≥1 card locked.
+// LOCK/UNLOCK MODEL (v5 — Bug 14 compact redesign):
+//   - Checkbox-style inline toggle (☐/☑) replaces the prominent Lock/Unlock button.
+//   - Cards are collapsible: first card auto-expanded, rest collapsed by default.
+//   - Collapsed view: heading + 2-line preview + inline [☐][Edit][Delete].
+//   - "Read more" / "Show less" toggles full body text.
+//   - Lock logic unchanged: locked cards enrich on Save via /api/onboarding/stories/lock.
 //
 // Shape:
 //   ┌─ step indicator (1 Resume · 2 Profile · 3 Preferences · 4 Broadcast · 5 First match) ─┐
 //   │ eyebrow + headline + sub                                                │
 //   │ [file-chip: filename · size · parsed in Ns]   [swap resume]             │
 //   │ ┌──────────── OUTLINE ────────────┬──────── YOUR STORY ─────────────┐   │
-//   │ │ Experience (company+role+chips) │ Lock/unlock cards per initiative │   │
+//   │ │ Experience (company+role+chips) │ Collapsible cards, checkbox lock │   │
 //   │ │ Education · Skills              │                                  │   │
 //   │ └─────────────────────────────────┴─────────────────────────────────┘   │
 //   │ [explainer]                        [Save and continue → (≥1 locked)]   │
@@ -101,6 +98,17 @@ const STEPS = [
   { n: 5, label: "First match" },
 ] as const;
 
+// Truncate body text to approximately 2 lines (~100 chars)
+function truncatePreview(body: string, maxChars = 110): string {
+  const flat = body
+    .split(/\n+/)
+    .filter(Boolean)
+    .map((l) => l.replace(/^[-*•]\s*/, ""))
+    .join(" ");
+  if (flat.length <= maxChars) return flat;
+  return flat.slice(0, maxChars).replace(/\s+\S*$/, "") + "…";
+}
+
 export function CareerOutlineView({
   data,
   onChange,
@@ -108,7 +116,7 @@ export function CareerOutlineView({
   onSwap,
   onContinue,
   onSkip,
-  continueLabel = "Save and continue",
+  continueLabel,
   busy,
   streamingNarration = false,
 }: Props) {
@@ -118,6 +126,9 @@ export function CareerOutlineView({
   const [editingCardIdx, setEditingCardIdx] = useState<number | null>(null);
   const [editingCardHeading, setEditingCardHeading] = useState("");
   const [editingCardBody, setEditingCardBody] = useState("");
+
+  // Collapsible cards — first card (index 0) auto-expanded for discoverability
+  const [expandedCardIdx, setExpandedCardIdx] = useState<number | null>(0);
 
   const paragraphs = useMemo(
     () =>
@@ -134,14 +145,10 @@ export function CareerOutlineView({
   const [cardStates, setCardStates] = useState<Record<number, CardState>>({});
 
   // Reset card states when narration changes (new resume upload or streaming completed)
-  // We only reset if the number of cards changes to avoid thrashing during streaming.
-  // internalMutationRef is set to true before internal deleteCard/commitCardEdit actions
-  // that change card count — those should NOT reset lock states.
   const prevCardCountRef = useRef(initiativeCards.length);
   const internalMutationRef = useRef(false);
   useEffect(() => {
     if (internalMutationRef.current) {
-      // Internal mutation (delete/edit) caused the count change — skip reset
       internalMutationRef.current = false;
       prevCardCountRef.current = initiativeCards.length;
       return;
@@ -149,6 +156,8 @@ export function CareerOutlineView({
     if (initiativeCards.length !== prevCardCountRef.current) {
       prevCardCountRef.current = initiativeCards.length;
       setCardStates({});
+      // Re-expand first card when card set changes (e.g. streaming completes)
+      setExpandedCardIdx(0);
     }
   }, [initiativeCards.length]);
 
@@ -182,23 +191,9 @@ export function CareerOutlineView({
     [cardStates],
   );
 
-  // Total initiative cards (includes deleted cards removed from narration,
-  // but cardStates only tracks cards that existed when parsed — so we use
-  // initiativeCards.length as the ground truth for "total").
   const totalCount = initiativeCards.length;
 
-  // All cards must be in a definitive state (locked OR deleted from narration)
-  // before Save and continue is enabled. A card is "decided" if it is locked.
-  // Deleted cards are removed from initiativeCards entirely so they don't count.
-  // allLocked is true when every remaining card is locked.
-  const allLocked = useMemo(
-    () => totalCount > 0 && initiativeCards.every((_, i) => getCardState(i).locked),
-    [totalCount, initiativeCards, getCardState],
-  );
-
   // Lock a card: optimistic UI only.
-  // Enrichment + nugget creation + embedding are triggered server-side when
-  // /api/onboarding/stories/lock is called on Save (after career/upload).
   const lockCard = useCallback(
     (i: number) => {
       if (!initiativeCards[i]) return;
@@ -208,7 +203,7 @@ export function CareerOutlineView({
     [initiativeCards, setCardState],
   );
 
-  // Unlock a card: clear enrichment, mark editable
+  // Unlock a card
   const unlockCard = useCallback(
     (i: number) => {
       setCardState(i, { locked: false, status: "stale", enrichedMeta: null });
@@ -242,6 +237,8 @@ export function CareerOutlineView({
     setEditingCardIdx(i);
     setEditingCardHeading(card.heading);
     setEditingCardBody(card.body);
+    // Expand card being edited
+    setExpandedCardIdx(i);
   }
 
   function cancelCardEdit() {
@@ -250,29 +247,34 @@ export function CareerOutlineView({
 
   function commitCardEdit() {
     if (editingCardIdx === null) return;
-    internalMutationRef.current = true; // prevent useEffect from resetting all card states
+    internalMutationRef.current = true;
     const updated = replaceCardInNarration(narration, editingCardIdx, editingCardHeading, editingCardBody);
     onChange({ ...data, career_summary_first_person: updated });
-    // Edit auto-unlocks + marks stale (re-lock required to re-enrich)
     setCardState(editingCardIdx, { locked: false, status: "stale", enrichedMeta: null });
     setEditingCardIdx(null);
   }
 
   function deleteCard(i: number) {
     const cs = getCardState(i);
-    if (cs.locked) return; // shouldn't happen — button hidden when locked
+    if (cs.locked) return;
     const updated = removeCardFromNarration(narration, i);
-    internalMutationRef.current = true; // prevent useEffect from resetting all card states
+    internalMutationRef.current = true;
     onChange({ ...data, career_summary_first_person: updated });
-    // Remove card state
     setCardStates((prev) => {
       const next: Record<number, CardState> = {};
       for (const [k, v] of Object.entries(prev)) {
         const ki = Number(k);
         if (ki < i) next[ki] = v as CardState;
-        else if (ki > i) next[ki - 1] = v as CardState; // shift indices down
+        else if (ki > i) next[ki - 1] = v as CardState;
       }
       return next;
+    });
+    // Fix expanded idx after deletion
+    setExpandedCardIdx((prev) => {
+      if (prev === null) return null;
+      if (prev === i) return null;
+      if (prev > i) return prev - 1;
+      return prev;
     });
   }
 
@@ -298,8 +300,21 @@ export function CareerOutlineView({
       .filter((c): c is NonNullable<typeof c> => c !== null);
   }
 
-  // Exposed via prop so OnboardingFlow can assemble final data
-  // (we attach it to the `onContinue` closure below rather than a separate prop)
+  // Derive continue button label.
+  // continueLabel prop is accepted for backward compat but not used in derived logic —
+  // the count-based copy is always shown per spec (Bug 14).
+  const allLocked = useMemo(
+    () => totalCount > 0 && initiativeCards.every((_, i) => getCardState(i).locked),
+    [totalCount, initiativeCards, getCardState],
+  );
+
+  const derivedContinueLabel = useMemo(() => {
+    if (busy) return "Saving…";
+    if (totalCount === 0) return "Add at least one story to continue";
+    if (lockedCount === 0) return `Lock at least one story to continue (0/${totalCount} ready)`;
+    if (lockedCount < totalCount) return `Lock or delete remaining (${lockedCount}/${totalCount} ready)`;
+    return `Save and continue (${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} selected)`;
+  }, [busy, totalCount, lockedCount]);
 
   return (
     <div className="space-y-6">
@@ -341,9 +356,8 @@ export function CareerOutlineView({
           Here&apos;s what we understood from your resume.
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Lock the stories that are accurate. Edit anything that&apos;s off, then lock.
-          Locked stories get enriched immediately — the more you lock, the sharper everything
-          downstream gets.
+          Check the stories that are accurate. Edit anything that&apos;s off, then check.
+          Checked stories get enriched — the more you select, the sharper everything downstream gets.
         </p>
       </div>
 
@@ -386,18 +400,18 @@ export function CareerOutlineView({
         </div>
       )}
 
-      {/* Lock progress banner — shown when ≥1 card locked */}
+      {/* Selection progress banner — shown when ≥1 card locked */}
       {lockedCount > 0 && !streamingNarration && (
         <div className="flex items-center gap-3 rounded-xl border border-tertiary-200 bg-tertiary-50 px-4 py-3">
           <svg className="h-4 w-4 shrink-0 text-tertiary-600" fill="currentColor" viewBox="0 0 24 24">
             <path
               fillRule="evenodd"
-              d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z"
+              d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z"
               clipRule="evenodd"
             />
           </svg>
           <p className="text-xs font-medium text-tertiary-700">
-            {lockedCount} of {initiativeCards.length} stor{lockedCount === 1 ? "y" : "ies"} locked
+            {lockedCount} of {totalCount} stor{lockedCount === 1 ? "y" : "ies"} selected
           </p>
         </div>
       )}
@@ -467,9 +481,9 @@ export function CareerOutlineView({
                       </div>
                       {chips.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {chips.slice(0, 4).map((c, i) => (
+                          {chips.slice(0, 4).map((c, chipI) => (
                             <span
-                              key={`${exp.company}-chip-${i}`}
+                              key={`${exp.company}-chip-${chipI}`}
                               className="rounded-[10px] bg-primary-500/10 px-2.5 py-0.5 text-[11px] font-medium text-primary-700"
                             >
                               {c}
@@ -554,15 +568,15 @@ export function CareerOutlineView({
           )}
         </div>
 
-        {/* ─── FIRST-PERSON NARRATION — LOCK/UNLOCK CARDS ─── */}
-        <div className="rounded-2xl border border-border bg-gradient-to-b from-[#FDF6F0] to-white p-6">
+        {/* ─── FIRST-PERSON NARRATION — COLLAPSIBLE CARDS ─── */}
+        <div className="rounded-2xl border border-border bg-gradient-to-b from-[#FDF6F0] to-white p-6 lg:max-h-[680px] lg:overflow-y-auto">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
                 Your story, in your words
               </h3>
               <p className="mt-0.5 text-xs text-muted">
-                Lock the stories that are right. Edit anything off, then re-lock.
+                Check the stories that are right. Edit anything off, then check.
               </p>
             </div>
             {!editing && !streamingNarration && paragraphs.length > 0 && (
@@ -603,10 +617,11 @@ export function CareerOutlineView({
               </div>
             </div>
           ) : initiativeCards.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {initiativeCards.map((card, i) => {
                 const cs = getCardState(i);
                 const isEditingThis = editingCardIdx === i;
+                const isExpanded = expandedCardIdx === i;
                 return (
                   <StoryCard
                     key={i}
@@ -614,29 +629,32 @@ export function CareerOutlineView({
                     index={i}
                     cardState={cs}
                     isEditing={isEditingThis}
+                    isExpanded={isExpanded}
                     editingHeading={editingCardHeading}
                     editingBody={editingCardBody}
                     onEditHeadingChange={setEditingCardHeading}
                     onEditBodyChange={setEditingCardBody}
-                    onLock={() => lockCard(i)}
-                    onUnlock={() => unlockCard(i)}
+                    onToggleLock={() => cs.locked ? unlockCard(i) : lockCard(i)}
                     onStartEdit={() => startCardEdit(i)}
                     onCancelEdit={cancelCardEdit}
                     onCommitEdit={commitCardEdit}
                     onDelete={() => deleteCard(i)}
+                    onToggleExpand={() =>
+                      setExpandedCardIdx((prev) => (prev === i ? null : i))
+                    }
                   />
                 );
               })}
               {streamingNarration && (
-                <div className="h-20 animate-pulse rounded-[20px] border border-border bg-white" />
+                <div className="h-16 animate-pulse rounded-[16px] border border-border bg-white" />
               )}
             </div>
           ) : streamingNarration ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[1, 2, 3].map((k) => (
                 <div
                   key={k}
-                  className="h-20 animate-pulse rounded-[20px] border border-border bg-white"
+                  className="h-16 animate-pulse rounded-[16px] border border-border bg-white"
                 />
               ))}
             </div>
@@ -661,49 +679,37 @@ export function CareerOutlineView({
       {onContinue && (
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <p className="text-xs text-muted">
-            {allLocked && lockedCount >= 1
-              ? `${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} ready. Save to continue.`
-              : `Lock or delete all stories to continue (${lockedCount}/${totalCount} ready).`}
+            {lockedCount > 0
+              ? `${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} selected. Save to continue.`
+              : "Check at least one story to continue."}
           </p>
           <button
             type="button"
             onClick={() => {
-              if (!allLocked || lockedCount === 0) return;
-              // Pass locked chunk metadata back to OnboardingFlow via onContinue
-              // We do this by attaching lockedChunks to window state temporarily
-              // The cleaner pattern would be a callback prop but to avoid changing
-              // the OnboardingFlow interface we store in a module-level ref.
+              if (totalCount === 0 || !allLocked) return;
               storeLockedChunks(buildLockedChunks());
               onContinue();
             }}
-            disabled={busy || !allLocked || lockedCount === 0}
-            title={
-              lockedCount === 0
-                ? "Lock at least one story first"
-                : !allLocked
-                  ? `Lock or delete all stories to continue (${lockedCount}/${totalCount} ready)`
-                  : undefined
-            }
+            disabled={busy || totalCount === 0 || !allLocked}
+            title={totalCount === 0 ? "Add a story first" : !allLocked ? "Lock or delete all stories first" : undefined}
             className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-60"
           >
-            {busy
-              ? continueLabel
-              : allLocked && lockedCount >= 1
-                ? `Save and continue (${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} selected)`
-                : `Lock or delete all stories to continue (${lockedCount}/${totalCount} ready)`}
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
-              />
-            </svg>
+            {derivedContinueLabel}
+            {!busy && lockedCount > 0 && (
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+                />
+              </svg>
+            )}
           </button>
         </div>
       )}
@@ -718,37 +724,39 @@ function StoryCard({
   index,
   cardState,
   isEditing,
+  isExpanded,
   editingHeading,
   editingBody,
   onEditHeadingChange,
   onEditBodyChange,
-  onLock,
-  onUnlock,
+  onToggleLock,
   onStartEdit,
   onCancelEdit,
   onCommitEdit,
   onDelete,
+  onToggleExpand,
 }: {
   card: { heading: string; body: string };
   index: number;
   cardState: CardState;
   isEditing: boolean;
+  isExpanded: boolean;
   editingHeading: string;
   editingBody: string;
   onEditHeadingChange: (v: string) => void;
   onEditBodyChange: (v: string) => void;
-  onLock: () => void;
-  onUnlock: () => void;
+  onToggleLock: () => void;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onCommitEdit: () => void;
   onDelete: () => void;
+  onToggleExpand: () => void;
 }) {
-  const { locked, status } = cardState;
+  const { locked } = cardState;
 
   const cardCls = locked
-    ? "rounded-[20px] border border-tertiary-200 bg-tertiary-50/40 p-4 shadow-sm transition"
-    : "rounded-[20px] border border-border bg-surface p-4 shadow-sm transition";
+    ? "rounded-[16px] border border-tertiary-200 bg-tertiary-50/40 px-3.5 py-3 transition"
+    : "rounded-[16px] border border-border bg-surface px-3.5 py-3 transition";
 
   if (isEditing) {
     return (
@@ -788,85 +796,108 @@ function StoryCard({
     );
   }
 
+  const flat = card.body
+    .split(/\n+/)
+    .filter(Boolean)
+    .map((l) => l.replace(/^[-*\u2022]\s*/, ""))
+    .join(" ");
+  const needsExpansion = flat.length > 110;
+  const preview = needsExpansion ? truncatePreview(card.body) : flat;
+  const bodyLines = card.body
+    .split(/\n+/)
+    .filter(Boolean)
+    .map((l) => l.replace(/^[-*\u2022]\s*/, ""));
+
   return (
     <div className={cardCls} data-story-index={index}>
-      <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-semibold text-foreground leading-snug">
-          {card.heading}
-        </h4>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* Status badge */}
-          {locked && status === "ready" && (
-            <span className="inline-flex items-center gap-1 rounded-lg bg-green-50 border border-green-200 px-2 py-0.5 text-[10px] font-semibold text-green-700">
-              ✓ Ready
-            </span>
+      {/* Header row: heading + inline actions */}
+      <div className="flex items-start gap-2">
+        {/* Checkbox-style lock toggle */}
+        <button
+          type="button"
+          onClick={onToggleLock}
+          aria-label={locked ? "Unlock this story" : "Lock for resume"}
+          title={locked ? "Unlock to edit" : "Lock to use this story"}
+          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded transition ${
+            locked
+              ? "border-0 bg-accent text-white"
+              : "border border-muted/40 bg-white hover:border-accent"
+          }`}
+        >
+          {locked && (
+            <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
           )}
-          {/* Edit button — only when unlocked and not in edit mode */}
+        </button>
+
+        {/* Heading — clicking expands/collapses */}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="flex-1 text-left"
+        >
+          <h4 className="text-[13px] font-semibold leading-snug text-foreground">
+            {card.heading}
+          </h4>
+          {/* 2-line preview shown only when collapsed */}
+          {!isExpanded && (
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted line-clamp-2">
+              {preview}
+            </p>
+          )}
+        </button>
+
+        {/* Edit + Delete (small icon buttons) — always visible */}
+        <div className="flex shrink-0 items-center gap-1">
           {!locked && (
             <button
               type="button"
               onClick={onStartEdit}
-              className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-medium text-muted transition hover:border-accent hover:text-accent"
-              title="Edit this story"
+              aria-label="Edit this story"
+              title="Edit"
+              className="flex h-5 w-5 items-center justify-center rounded text-muted transition hover:text-accent"
             >
-              ✏
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+              </svg>
             </button>
           )}
-          {/* Delete button — only when unlocked */}
           {!locked && (
             <button
               type="button"
               onClick={onDelete}
-              className="rounded-lg border border-border px-2 py-0.5 text-[11px] font-medium text-muted transition hover:border-red-400 hover:text-red-500"
-              title="Delete this story"
-            >
-              ✕
-            </button>
-          )}
-          {/* Lock / Unlock toggle */}
-          {locked ? (
-            <button
-              type="button"
-              onClick={onUnlock}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-tertiary-500 bg-tertiary-500/10 px-2.5 py-1 text-xs font-semibold text-tertiary-700 transition hover:bg-tertiary-500/20 disabled:opacity-60"
-              title="Click to unlock and edit"
-            >
-              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-                <path
-                  fillRule="evenodd"
-                  d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Locked
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onLock}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1 text-xs font-semibold text-foreground transition hover:border-tertiary-500 hover:bg-tertiary-500/10 hover:text-tertiary-700"
-              title="Lock to enrich this story"
+              aria-label="Delete this story"
+              title="Delete"
+              className="flex h-5 w-5 items-center justify-center rounded text-muted transition hover:text-red-500"
             >
               <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
               </svg>
-              Lock
             </button>
           )}
         </div>
       </div>
-      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-muted">
-        {card.body
-          .split(/\n+/)
-          .filter(Boolean)
-          .map((line, j) => (
-            <p key={j}>{line.replace(/^[-*•]\s*/, "")}</p>
+
+      {/* Expanded: full body + Read more/less affordance */}
+      {isExpanded && (
+        <div className="mt-2 space-y-1 text-[11px] leading-relaxed text-muted pl-6">
+          {bodyLines.map((line, j) => (
+            <p key={j}>{line}</p>
           ))}
-      </div>
+        </div>
+      )}
+
+      {/* Read more / Show less affordance — only if body is long enough to truncate */}
+      {needsExpansion && (
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="mt-1.5 pl-6 text-[11px] font-semibold text-accent transition hover:text-accent-hover"
+        >
+          {isExpanded ? "Show less" : "Read more"}
+        </button>
+      )}
     </div>
   );
 }
@@ -885,15 +916,6 @@ export function getLockedChunks(): typeof _lockedChunksStore {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function buildCareerContext(experiences: ParsedExperience[]): string {
-  if (!experiences?.length) return "";
-  const current = experiences[0];
-  const prev = experiences.slice(1, 3).map((e) => e.company).filter(Boolean);
-  let ctx = `${current.role} at ${current.company}`;
-  if (prev.length > 0) ctx += `, prev ${prev.join(", ")}`;
-  return ctx;
-}
 
 function extractChunkMeta(card: { heading: string; body: string }): Record<string, unknown> {
   return { initiative: card.heading };
