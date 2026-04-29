@@ -182,6 +182,20 @@ export function CareerOutlineView({
     [cardStates],
   );
 
+  // Total initiative cards (includes deleted cards removed from narration,
+  // but cardStates only tracks cards that existed when parsed — so we use
+  // initiativeCards.length as the ground truth for "total").
+  const totalCount = initiativeCards.length;
+
+  // All cards must be in a definitive state (locked OR deleted from narration)
+  // before Save and continue is enabled. A card is "decided" if it is locked.
+  // Deleted cards are removed from initiativeCards entirely so they don't count.
+  // allLocked is true when every remaining card is locked.
+  const allLocked = useMemo(
+    () => totalCount > 0 && initiativeCards.every((_, i) => getCardState(i).locked),
+    [totalCount, initiativeCards, getCardState],
+  );
+
   // Lock a card: optimistic UI only.
   // Enrichment + nugget creation + embedding are triggered server-side when
   // /api/onboarding/stories/lock is called on Save (after career/upload).
@@ -647,14 +661,14 @@ export function CareerOutlineView({
       {onContinue && (
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           <p className="text-xs text-muted">
-            {lockedCount > 0
-              ? `${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} locked and enriched. Save to continue.`
-              : "Lock at least one story to continue."}
+            {allLocked && lockedCount >= 1
+              ? `${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} ready. Save to continue.`
+              : `Lock or delete all stories to continue (${lockedCount}/${totalCount} ready).`}
           </p>
           <button
             type="button"
             onClick={() => {
-              if (lockedCount === 0) return;
+              if (!allLocked || lockedCount === 0) return;
               // Pass locked chunk metadata back to OnboardingFlow via onContinue
               // We do this by attaching lockedChunks to window state temporarily
               // The cleaner pattern would be a callback prop but to avoid changing
@@ -662,11 +676,21 @@ export function CareerOutlineView({
               storeLockedChunks(buildLockedChunks());
               onContinue();
             }}
-            disabled={busy || lockedCount === 0}
-            title={lockedCount === 0 ? "Lock at least one story first" : undefined}
+            disabled={busy || !allLocked || lockedCount === 0}
+            title={
+              lockedCount === 0
+                ? "Lock at least one story first"
+                : !allLocked
+                  ? `Lock or delete all stories to continue (${lockedCount}/${totalCount} ready)`
+                  : undefined
+            }
             className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-60"
           >
-            {busy ? "Saving…" : continueLabel}
+            {busy
+              ? continueLabel
+              : allLocked && lockedCount >= 1
+                ? `Save and continue (${lockedCount} stor${lockedCount === 1 ? "y" : "ies"} selected)`
+                : `Lock or delete all stories to continue (${lockedCount}/${totalCount} ready)`}
             <svg
               className="h-4 w-4"
               fill="none"
