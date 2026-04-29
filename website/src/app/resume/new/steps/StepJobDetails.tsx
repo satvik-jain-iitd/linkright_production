@@ -559,7 +559,7 @@ export function StepJobDetails({ data, update, next }: Props) {
             onClick={handleBackToInput}
             className="text-sm text-muted transition-colors hover:text-foreground"
           >
-            ← Edit JD
+            Edit JD
           </button>
           <div className="flex gap-3">
             <button
@@ -572,7 +572,7 @@ export function StepJobDetails({ data, update, next }: Props) {
               onClick={handleContinue}
               className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover"
             >
-              Continue → Customize
+              Continue to Customize
             </button>
           </div>
         </div>

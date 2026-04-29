@@ -301,7 +301,7 @@ export default function AdminJobsPage() {
               disabled={page === 0}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-40 hover:bg-surface"
             >
-              ← Prev
+              Prev
             </button>
             <span className="px-2 py-1.5 text-xs">Page {page + 1} of {totalPages}</span>
             <button
@@ -309,7 +309,7 @@ export default function AdminJobsPage() {
               disabled={page >= totalPages - 1}
               className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-40 hover:bg-surface"
             >
-              Next →
+              Next
             </button>
           </div>
         </div>

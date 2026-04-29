@@ -165,7 +165,7 @@ export default function EnrichPage() {
           onClick={proceed}
           className="px-5 py-2 rounded-lg bg-primary text-primary-foreground"
         >
-          Proceed now →
+          Proceed now
         </button>
       </div>
 

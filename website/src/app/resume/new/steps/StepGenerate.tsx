@@ -266,7 +266,7 @@ export function StepGenerate({ data, update, next, onReset, onRetry }: Props) {
               onClick={next}
               className="w-full rounded-xl bg-cta px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
             >
-              Review &amp; download →
+              Review & download
             </button>
           </div>
         </div>

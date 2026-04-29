@@ -78,7 +78,7 @@ export function StepCareer({ data, update, next, back }: Props) {
         onClick={() => setShowPromptModal(true)}
         className="text-sm text-blue-600 hover:text-blue-800 underline mt-2"
       >
-        Or extract on Claude/ChatGPT instead &rarr;
+        Or extract on Claude/ChatGPT instead
       </button>
 
       <ExtractionPromptModal
@@ -92,7 +92,7 @@ export function StepCareer({ data, update, next, back }: Props) {
             onClick={back}
             className="text-sm text-muted transition-colors hover:text-foreground"
           >
-            &larr; Back
+            Back
           </button>
           <span className="text-xs text-muted">
             {data.career_text.trim().length} characters (min 200)

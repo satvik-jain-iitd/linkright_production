@@ -228,7 +228,7 @@ function SuggestionCard({
                 isPicking(idx) ? "text-accent" : "text-muted group-hover:text-accent"
               }`}
             >
-              {isPicking(idx) ? "Drafting…" : "Pick this →"}
+              {isPicking(idx) ? "Drafting…" : "Pick this"}
             </span>
           </button>
         ))}

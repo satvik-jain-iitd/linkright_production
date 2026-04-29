@@ -551,7 +551,7 @@ export function StepCustomize({ data, update, next, back }: Props) {
           onClick={back}
           className="text-sm text-muted transition-colors hover:text-foreground"
         >
-          &larr; Back
+          Back
         </button>
         <div className="flex gap-3">
           <button
