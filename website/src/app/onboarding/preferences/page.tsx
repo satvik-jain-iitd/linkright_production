@@ -567,7 +567,7 @@ export default function PreferencesPage() {
           onClick={() => router.push("/onboarding/profile")}
           className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-4 py-2.5 text-sm font-semibold text-foreground transition hover:border-accent"
         >
-          ← Back
+          Back
         </button>
         <div className="flex gap-2">
           <button

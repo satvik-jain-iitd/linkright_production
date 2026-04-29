@@ -1251,7 +1251,7 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
             onClick={onBack}
             className="mt-3 text-xs text-muted hover:text-foreground underline underline-offset-2 transition-colors"
           >
-            ← Add more achievements
+            Add more achievements
           </button>
         )}
       </div>

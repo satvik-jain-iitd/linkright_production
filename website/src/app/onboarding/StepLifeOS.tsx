@@ -242,7 +242,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
               onClick={onBack}
               className="text-sm text-muted hover:text-foreground transition-colors"
             >
-              &larr; Back
+              Back
             </button>
           )}
           <button
