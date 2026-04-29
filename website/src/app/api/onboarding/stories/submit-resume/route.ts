@@ -3,12 +3,16 @@
 // nuggets (Jina paid + Oracle worker background), then stamps resume_submitted_at.
 //
 // Semantics (in order):
-//   1. Gate: SELECT COUNT(*) career_chunks WHERE user_id AND locked_at IS NULL
-//            → 422 if any unlocked chunks exist
+//   1. Gate (two-pass):
+//      a. SELECT COUNT(*) career_chunks WHERE user_id AND locked_at IS NULL
+//         → 422 if any unlocked chunks exist (strict: zero tolerance for unlocked)
+//      b. SELECT COUNT(*) career_chunks WHERE user_id AND locked_at IS NOT NULL
+//         → 422 if no locked chunks exist (must have at least 1)
 //   2. Batch embed: find all career_nuggets WHERE user_id AND embedding_jina IS NULL
 //      For each nugget (max 3 concurrent):
 //        a. jinaEmbed([nugget.answer]) → UPDATE embedding_jina
 //        b. Fire Oracle worker POST /nuggets/embed (background, fire-and-forget)
+//           ** Only fires after successful Jina embed — never unconditionally **
 //   3. Stamp resume_submitted_at = now() on all locked chunks (idempotent — NULL only)
 //   4. Return { submitted_chunks: N, embedded_count: M, worker_pending: P }
 //
@@ -32,36 +36,59 @@ export async function POST() {
     return rateLimitResponse("stories submit");
   }
 
-  // ── Gate: at least 1 chunk must be locked ────────────────────────────────
-  // The frontend enforces "all remaining cards must be locked before submit".
-  // Server-side we validate at least 1 locked chunk exists (sufficient safety
-  // net — frontend button is the primary UX gate for per-card decisions).
-  // We do NOT block on locked_at IS NULL count because UI-deleted cards leave
-  // DB rows with locked_at = null, cancelled_at = null, and those are valid
-  // "abandoned" rows (they will get resume_submitted_at stamped below, which
-  // is fine — they just have no nuggets).
-  const { count: lockedChunkCount, error: countError } = await supabase
+  // ── Gate pass 1: reject if ANY unlocked chunks exist ─────────────────────
+  // Strict server-side enforcement: zero unlocked chunks allowed.
+  // A direct API caller with 2 locked + 1 unlocked would previously pass the
+  // old "at least 1 locked" check — this closes that gap.
+  const { count: unlockedChunkCount, error: unlockedCountError } = await supabase
+    .from("career_chunks")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .is("locked_at", null);
+
+  if (unlockedCountError) {
+    if (
+      unlockedCountError.code === "42703" ||
+      unlockedCountError.message?.includes("does not exist") ||
+      unlockedCountError.message?.includes("schema cache") ||
+      unlockedCountError.message?.includes("Could not find")
+    ) {
+      console.warn("[stories/submit-resume] locked_at column missing — skipping gate check");
+    } else {
+      return Response.json({ error: unlockedCountError.message }, { status: 500 });
+    }
+  } else if ((unlockedChunkCount ?? 0) > 0) {
+    return Response.json(
+      {
+        error: "All stories must be locked or deleted before submitting",
+        unlocked_count: unlockedChunkCount,
+      },
+      { status: 422 }
+    );
+  }
+
+  // ── Gate pass 2: require at least 1 locked chunk ──────────────────────────
+  const { count: lockedChunkCount, error: lockedCountError } = await supabase
     .from("career_chunks")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
     .not("locked_at", "is", null);
 
-  if (countError) {
-    // Migration not run yet — degrade gracefully (skip gate)
+  if (lockedCountError) {
     if (
-      countError.code === "42703" ||
-      countError.message?.includes("does not exist") ||
-      countError.message?.includes("schema cache") ||
-      countError.message?.includes("Could not find")
+      lockedCountError.code === "42703" ||
+      lockedCountError.message?.includes("does not exist") ||
+      lockedCountError.message?.includes("schema cache") ||
+      lockedCountError.message?.includes("Could not find")
     ) {
       console.warn("[stories/submit-resume] locked_at column missing — skipping gate check");
     } else {
-      return Response.json({ error: countError.message }, { status: 500 });
+      return Response.json({ error: lockedCountError.message }, { status: 500 });
     }
   } else if ((lockedChunkCount ?? 0) === 0) {
     return Response.json(
       {
-        error: "All stories must be locked or deleted before submitting",
+        error: "At least one story must be locked before submitting",
         locked_count: 0,
       },
       { status: 422 }
@@ -112,23 +139,24 @@ export async function POST() {
                 .eq("user_id", user.id);
               if (!embedErr) {
                 embeddedCount++;
+                // Oracle worker fires only after successful Jina embed —
+                // never unconditionally, to avoid inconsistent state where
+                // embedding_jina is NULL but Oracle has already run.
+                if (workerUrl && workerSecret) {
+                  void fetch(`${workerUrl}/nuggets/embed`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${workerSecret}`,
+                    },
+                    body: JSON.stringify({ user_id: user.id, nugget_id: nugget.id }),
+                  }).catch(() => null);
+                  workerPending++;
+                }
               } else {
                 console.warn("[stories/submit-resume] embed update failed:", nugget.id, embedErr.message);
               }
             }
-          }
-
-          // Fire Oracle worker in background (job matching — different vector space)
-          if (workerUrl && workerSecret) {
-            void fetch(`${workerUrl}/nuggets/embed`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${workerSecret}`,
-              },
-              body: JSON.stringify({ user_id: user.id, nugget_id: nugget.id }),
-            }).catch(() => null);
-            workerPending++;
           }
         } catch (nuggetErr) {
           console.warn("[stories/submit-resume] nugget embed error:", nugget.id, (nuggetErr as Error).message);
