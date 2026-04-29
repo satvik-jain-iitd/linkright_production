@@ -1,22 +1,23 @@
 // POST /api/onboarding/stories/lock
 // Locks a single career_chunks row, runs enrich-chunk for it (creating nuggets
-// in career_nuggets with source_chunk_id set), then fires worker embed per nugget.
+// in career_nuggets with source_chunk_id set). Embedding is deferred to
+// POST /api/onboarding/stories/submit-resume (batch paid step).
 //
 // Body: { chunk_id: string }
 //
 // Semantics:
 //   1. Stamp career_chunks.locked_at = now(), clear cancelled_at if set (re-lock)
 //   2. Run enrich-chunk inline — creates career_nuggets rows with source_chunk_id = chunk_id
-//   3. Fire worker POST /nuggets/embed (background — UI doesn't wait) [Oracle path]
-//   4. Fire inline Jina embed for resume customization use case (sub-second, fire-and-forget)
-//   5. Return immediately with { chunk_id, locked_at }
+//      and text/tags/importance. embedding_jina left NULL (filled at submit time).
+//   3. Return immediately with { chunk_id, locked_at }
 //
 // 409 if resume_submitted_at is already set (session frozen).
+// NOTE: Oracle worker embed + Jina inline embed REMOVED — moved to submit-resume batch.
+//       Lock-Unlock-Re-lock cycles are now free (enrichment only, no paid Jina calls).
 
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { enrichChunkInline, ENRICH_FALLBACK } from "@/lib/enrich-chunk";
-import { jinaEmbed, getNextJinaKey } from "@/lib/jina-embed";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -83,23 +84,20 @@ export async function POST(request: Request) {
     return Response.json({ error: updateError.message }, { status: 500 });
   }
 
-  // ── Background pipeline: enrich → create nuggets → embed ──────────────────
-  // Fire-and-forget. UI polls /api/nuggets/list?embedded=true to see progress.
+  // ── Background pipeline: enrich → create nuggets (NO embedding) ───────────
+  // Fire-and-forget. Embedding fires later at submit-resume time (paid batch).
+  // UI polls /api/nuggets/list?embedded=true to see progress after submit.
   const chunkText: string = chunk.chunk_text ?? "";
   const metadata = (chunk.metadata ?? {}) as Record<string, unknown>;
   const company = String(metadata.company ?? "");
   const role = String(metadata.role ?? "");
   const careerContext = [role, company].filter(Boolean).join(" at ");
 
-  const workerUrl = process.env.WORKER_URL;
-  const workerSecret = process.env.WORKER_SECRET;
-
-  // We run this entire pipeline as a best-effort background chain.
+  // We run enrichment as a best-effort background chain.
   // Lock button returns immediately — UI doesn't wait for this.
   (async () => {
     try {
       // Step 1: Enrich chunk inline (no HTTP roundtrip — avoids NEXTAUTH_URL/localhost issue)
-      // Blocker 4 fix: was self-fetching NEXTAUTH_URL which is undefined in production.
       let enrichedMeta = ENRICH_FALLBACK;
       try {
         enrichedMeta = await enrichChunkInline(chunkText, careerContext);
@@ -119,7 +117,7 @@ export async function POST(request: Request) {
         return;
       }
 
-      // Blocker 5 fix: prepend "source:onboarding" so worker's tag filter picks this up.
+      // Prepend "source:onboarding" so worker's tag filter picks this up at embed time.
       // Worker embed query: .overlaps("tags", ["source:truthengine", "source:onboarding", "source:skill_upload"])
       const finalTags = ["source:onboarding", ...(enrichedMeta.tags ?? [])];
 
@@ -140,9 +138,6 @@ export async function POST(request: Request) {
         .select("id")
         .maybeSingle();
 
-      // Collect inserted nugget IDs for targeted worker calls
-      const insertedNuggetIds: string[] = [];
-
       if (nuggetErr) {
         // source_chunk_id column may not exist yet — degrade to insert without it
         if (
@@ -150,7 +145,7 @@ export async function POST(request: Request) {
           nuggetErr.message?.includes("does not exist") || nuggetErr.message?.includes("schema cache") || nuggetErr.message?.includes("Could not find")
         ) {
           console.warn("[stories/lock] source_chunk_id column missing — inserting without it");
-          const { data: fallbackRow } = await supabase
+          await supabase
             .from("career_nuggets")
             .insert({
               user_id: user.id,
@@ -161,64 +156,18 @@ export async function POST(request: Request) {
               section_type: "experience",
               importance: enrichedMeta.importance,
               tags: finalTags,
-            })
-            .select("id")
-            .maybeSingle();
-          if (fallbackRow?.id) insertedNuggetIds.push(fallbackRow.id);
+            });
+          // No nugget ID captured — embedding at submit time will still find this nugget
+          // via the embedding_jina IS NULL filter, since source_chunk_id-based lookup
+          // is not used in submit-resume path.
         } else {
           console.error("[stories/lock] nugget insert failed:", nuggetErr.message);
           return;
         }
       } else if (nuggetRow?.id) {
-        insertedNuggetIds.push(nuggetRow.id);
-      }
-
-      // Step 3: Fire worker embed for THIS chunk's freshly-inserted nuggets —
-      // one targeted call per nugget, fire-and-forget (Oracle path for job matching).
-      // Avoids full user-sweep that would cause N×N redundant embed calls on rapid
-      // multi-card locking.
-      if (workerUrl && workerSecret && insertedNuggetIds.length > 0) {
-        void Promise.all(
-          insertedNuggetIds.map((nugget_id) =>
-            fetch(`${workerUrl}/nuggets/embed`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${workerSecret}`,
-              },
-              body: JSON.stringify({ user_id: user.id, nugget_id }),
-            }).catch(() => null) // best-effort fire-and-forget per nugget
-          )
-        );
-      }
-
-      // Step 4: Inline Jina embed for resume customization use case (sub-second user-facing).
-      // Different vector space from Oracle — stored in embedding_jina column.
-      // Fire-and-forget — do NOT block response on Jina latency (~500ms).
-      const jinaKey = getNextJinaKey();
-      if (jinaKey && insertedNuggetIds.length > 0) {
-        void (async () => {
-          for (const nuggetId of insertedNuggetIds) {
-            try {
-              const { data: nugget } = await supabase
-                .from("career_nuggets")
-                .select("answer")
-                .eq("id", nuggetId)
-                .maybeSingle();
-              if (!nugget?.answer) continue;
-              const vectors = await jinaEmbed([nugget.answer], jinaKey, "text-matching");
-              if (vectors?.[0]) {
-                await supabase
-                  .from("career_nuggets")
-                  .update({ embedding_jina: vectors[0] })
-                  .eq("id", nuggetId);
-              }
-            } catch (jinaErr) {
-              // Best-effort — Oracle path covers job matching; Jina is additive
-              console.warn("[stories/lock] Jina embed failed for nugget:", nuggetId, jinaErr);
-            }
-          }
-        })();
+        // Nugget inserted successfully — embedding_jina left NULL.
+        // submit-resume will batch-embed all NULL nuggets for this user.
+        console.info("[stories/lock] nugget created (embedding deferred):", nuggetRow.id);
       }
     } catch (pipelineErr) {
       console.error("[stories/lock] background pipeline failed:", (pipelineErr as Error).message);
