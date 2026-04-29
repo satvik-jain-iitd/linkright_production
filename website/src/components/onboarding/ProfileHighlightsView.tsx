@@ -2,14 +2,16 @@
 
 // Wave 2 / Screen 05 — Profile highlights streaming view.
 //
-// Bug 1 redesign:
-//   - NO Lock/Unlock buttons (lock concept moved to story screen).
-//   - NO Edit button on individual nuggets.
-//   - Pure streaming view: polls /api/nuggets/list?embedded=true every 2s.
-//   - Shows ONLY nuggets where embedding IS NOT NULL (is_embedded = true).
-//   - Per-nugget: [Delete] + [Add more details] (follow-up modal).
-//   - Per-chunk group: [Delete group] via DELETE /api/nuggets/by-chunk/[chunkId].
-//   - Continue → /onboarding/preferences. Enabled when embeddedCount >= 1.
+// Bug 7 fix (skeleton UI for pending nuggets):
+//   - Fetches ALL nuggets (embedded + pending) — no embedded=true filter.
+//   - Nuggets with is_embedded=true → full card with content + actions.
+//   - Nuggets with is_embedded=false → skeleton card (pulse animation,
+//     company/role chip visible, body replaced with shimmer bars, no actions).
+//   - embeddedCount derived from is_embedded field (not list length).
+//   - Continue button disabled until embeddedCount >= 1, with helper text.
+//   - Polls every 2s — skeleton cards transition to full cards in-place.
+//   - Per-chunk group: [Delete group] always available.
+//   - Delete on skeleton card: hidden (button not rendered).
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -78,6 +80,7 @@ const STEPS = [
 ] as const;
 
 const SOURCE_CHIP_CLS = "bg-[#EDF2F7] text-[#4A5568]";
+const SKELETON_CHIP_CLS = "bg-[#E2E8F0] text-[#A0AEC0]";
 
 function sourceLabel(n: Nugget): string {
   const sec = (n.section_type ?? "").toLowerCase();
@@ -102,6 +105,36 @@ function shortDescription(n: Nugget): string {
   return rest.length > 140 ? rest.slice(0, 137) + "…" : rest;
 }
 
+// Skeleton card — same outer dimensions as a full card, pulse animation,
+// company/role chip visible, body replaced with shimmer bars.
+function SkeletonCard({ nugget }: { nugget: Nugget }) {
+  return (
+    <div className="relative rounded-2xl border border-muted/30 bg-muted/10 p-4 text-left animate-pulse">
+      {/* Source chip — real data, muted styling */}
+      <span className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-medium ${SKELETON_CHIP_CLS}`}>
+        {sourceLabel(nugget)}
+      </span>
+
+      {/* Shimmer bars replacing the title */}
+      <div className="mt-2.5 space-y-1.5">
+        <div className="h-3.5 w-11/12 rounded bg-muted/30" />
+        <div className="h-3.5 w-8/12 rounded bg-muted/30" />
+      </div>
+
+      {/* Shimmer bars replacing the description */}
+      <div className="mt-2 space-y-1.5">
+        <div className="h-2.5 w-full rounded bg-muted/20" />
+        <div className="h-2.5 w-9/12 rounded bg-muted/20" />
+      </div>
+
+      {/* Processing label at the bottom — no action buttons */}
+      <div className="mt-3 text-[11px] text-muted/60 italic">
+        Processing…
+      </div>
+    </div>
+  );
+}
+
 export function ProfileHighlightsView() {
   const router = useRouter();
   const [nuggets, setNuggets] = useState<Nugget[]>([]);
@@ -114,11 +147,10 @@ export function ProfileHighlightsView() {
   const [deleting, setDeleting] = useState(false);
   const [profileReadyToast, setProfileReadyToast] = useState(false);
 
-  // Load embedded-only nuggets
+  // Load ALL nuggets (embedded + pending) — no embedded=true filter
   const loadNuggets = useCallback(async () => {
     try {
-      // Only fetch embedded nuggets — pure streaming view
-      const listRes = await fetch("/api/nuggets/list?limit=48&embedded=true", {
+      const listRes = await fetch("/api/nuggets/list?limit=48", {
         cache: "no-store",
       });
       const listJson = listRes.ok ? await listRes.json() : { nuggets: [] };
@@ -135,24 +167,31 @@ export function ProfileHighlightsView() {
     loadNuggets();
   }, [loadNuggets]);
 
-  // Poll every 2s — show new nuggets as they get embedded one-by-one
+  // Poll every 2s — skeleton cards transform to full cards as embedding completes.
+  // Stop after 5 minutes (safety valve).
   useEffect(() => {
     const id = setInterval(async () => {
       try {
-        const res = await fetch("/api/nuggets/list?limit=48&embedded=true", {
+        const res = await fetch("/api/nuggets/list?limit=48", {
           cache: "no-store",
         });
         if (res.ok) {
           const json = await res.json();
           const incoming: Nugget[] = json.nuggets ?? [];
           setNuggets((prev) => {
-            // Detect new arrivals — trigger "ready" toast if count jumped
-            if (incoming.length > prev.length && incoming.length >= 1) {
+            const prevEmbedded = prev.filter((n) => n.is_embedded === true).length;
+            const nextEmbedded = incoming.filter((n) => n.is_embedded === true).length;
+            // Show toast when first nugget becomes embedded
+            if (prevEmbedded === 0 && nextEmbedded >= 1) {
               setProfileReadyToast(true);
-              track({ event: "profile_nugget_embedded", properties: { count: incoming.length } });
+              track({ event: "profile_nugget_embedded", properties: { count: nextEmbedded } });
             }
             return incoming;
           });
+          // Stop polling once all nuggets are embedded — no need to keep firing
+          if (incoming.length > 0 && incoming.every((n) => n.is_embedded === true)) {
+            clearInterval(id);
+          }
         }
       } catch {
         // silent — next tick will retry
@@ -167,11 +206,13 @@ export function ProfileHighlightsView() {
     };
   }, []);
 
-  const embeddedCount = nuggets.length; // list already filtered to embedded=true
+  // Derived counts from is_embedded field — NOT from list length
+  const embeddedCount = nuggets.filter((n) => n.is_embedded === true).length;
+  const pendingCount = nuggets.filter((n) => n.is_embedded !== true).length;
 
   const goToPreferences = () => router.push("/onboarding/preferences");
 
-  // Delete individual nuggets
+  // Delete individual nuggets (only available on embedded cards)
   const confirmDelete = (ids: string[], label: string, chunkId?: string) =>
     setDeleteConfirm({ ids, label, chunkId });
 
@@ -197,6 +238,17 @@ export function ProfileHighlightsView() {
 
     setDeleteConfirm(null);
     setDeleting(false);
+  };
+
+  // Continue button helper text based on embedding state
+  const continueHelperText = () => {
+    if (pendingCount > 0 && embeddedCount === 0) {
+      return `Waiting for first highlight to finish processing… (${pendingCount} pending)`;
+    }
+    if (embeddedCount > 0 && pendingCount > 0) {
+      return `${embeddedCount} ready · ${pendingCount} processing`;
+    }
+    return null;
   };
 
   return (
@@ -243,32 +295,39 @@ export function ProfileHighlightsView() {
             Each locked story is being turned into searchable highlights. Click &quot;Add more details&quot; to expand any card.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={goToPreferences}
-          disabled={embeddedCount < 1}
-          title={embeddedCount < 1 ? "Waiting for your first highlight to load" : undefined}
-          className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Continue →
-          <svg
-            className="h-3.5 w-3.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            type="button"
+            onClick={goToPreferences}
+            disabled={embeddedCount < 1}
+            title={embeddedCount < 1 ? "Waiting for your first highlight to load" : undefined}
+            className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
-            />
-          </svg>
-        </button>
+            Continue →
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+              />
+            </svg>
+          </button>
+          {continueHelperText() && (
+            <p className="text-[11px] text-muted text-right max-w-[220px]">
+              {continueHelperText()}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Streaming progress strip — shown while embedding is still running */}
-      {embeddedCount === 0 && !loading && (
+      {/* Progress strip — shown while any nuggets are still pending */}
+      {pendingCount > 0 && !loading && (
         <div
           className="flex items-center gap-4 rounded-xl border p-3.5"
           style={{
@@ -287,9 +346,11 @@ export function ProfileHighlightsView() {
                 display: "inline-block",
               }}
             />
-            Processing your locked stories…
+            Processing your highlights
           </span>
-          <span className="text-xs text-muted">highlights appear as they&apos;re ready</span>
+          <span className="text-xs text-muted">
+            {embeddedCount}/{embeddedCount + pendingCount} ready — more appearing shortly
+          </span>
           <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
         </div>
       )}
@@ -324,6 +385,7 @@ export function ProfileHighlightsView() {
                   <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
                     {[group.company, group.role].filter(Boolean).join(" · ")}
                   </p>
+                  {/* Delete group always available — deletes the chunk's nuggets */}
                   <button
                     type="button"
                     onClick={() =>
@@ -340,63 +402,69 @@ export function ProfileHighlightsView() {
                 </div>
               )}
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                {group.items.map((n) => (
-                  <div
-                    key={n.id}
-                    className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
-                  >
-                    {/* Source chip */}
-                    <span
-                      className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}
+                {group.items.map((n) =>
+                  n.is_embedded === true ? (
+                    // Full card — nugget is embedded and ready
+                    <div
+                      key={n.id}
+                      className="group relative rounded-2xl border border-border bg-white p-4 text-left transition hover:border-accent hover:shadow-md"
                     >
-                      {sourceLabel(n)}
-                    </span>
-
-                    {/* Title */}
-                    <h4 className="mt-2.5 text-sm font-semibold leading-snug text-foreground">
-                      {shortTitle(n)}
-                    </h4>
-                    {shortDescription(n) && (
-                      <p className="mt-1.5 text-xs leading-snug text-muted">
-                        {shortDescription(n)}
-                      </p>
-                    )}
-
-                    {/* Actions: Delete + Add more details */}
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveNugget(n)}
-                        className="text-[11px] font-semibold text-tertiary-700 transition hover:text-tertiary-600"
+                      {/* Source chip */}
+                      <span
+                        className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-medium ${SOURCE_CHIP_CLS}`}
                       >
-                        Add more details →
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          confirmDelete([n.id], shortTitle(n) || "this highlight");
-                        }}
-                        aria-label="Delete highlight"
-                        className="text-muted transition hover:text-red-500"
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          viewBox="0 0 24 24"
+                        {sourceLabel(n)}
+                      </span>
+
+                      {/* Title */}
+                      <h4 className="mt-2.5 text-sm font-semibold leading-snug text-foreground">
+                        {shortTitle(n)}
+                      </h4>
+                      {shortDescription(n) && (
+                        <p className="mt-1.5 text-xs leading-snug text-muted">
+                          {shortDescription(n)}
+                        </p>
+                      )}
+
+                      {/* Actions: Add more details + Delete */}
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveNugget(n)}
+                          className="text-[11px] font-semibold text-tertiary-700 transition hover:text-tertiary-600"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                          />
-                        </svg>
-                      </button>
+                          Add more details →
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmDelete([n.id], shortTitle(n) || "this highlight");
+                          }}
+                          aria-label="Delete highlight"
+                          className="text-muted transition hover:text-red-500"
+                        >
+                          <svg
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                            />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    // Skeleton card — nugget is pending embedding
+                    <SkeletonCard key={n.id} nugget={n} />
+                  )
+                )}
               </div>
             </div>
           ))}
@@ -449,7 +517,7 @@ export function ProfileHighlightsView() {
         />
       )}
 
-      {/* Toast: first highlight appeared */}
+      {/* Toast: first highlight became embedded */}
       {profileReadyToast && embeddedCount >= 1 && (
         <div
           className="fixed bottom-6 left-6 z-40 flex max-w-sm items-center gap-3 rounded-xl border bg-white p-3.5 shadow-lg"

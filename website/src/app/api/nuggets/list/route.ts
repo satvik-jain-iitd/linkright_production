@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   // If migration hasn't run yet, Supabase returns an error; we fall back to
   // the pre-045 column set so existing data is never silently lost.
   const SELECT_V2 =
-    "id, nugget_text, answer, company, role, event_date, section_type, importance, resume_relevance, tags, created_at, primary_layer, life_domain, leadership_signal, locked_at, profile_submitted_at";
+    "id, nugget_text, answer, company, role, event_date, section_type, importance, resume_relevance, tags, created_at, primary_layer, life_domain, leadership_signal, locked_at, profile_submitted_at, source_chunk_id";
   const SELECT_V1 =
     "id, nugget_text, answer, company, role, event_date, section_type, importance, resume_relevance, tags, created_at, primary_layer, life_domain, leadership_signal";
 
