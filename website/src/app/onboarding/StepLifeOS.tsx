@@ -242,14 +242,14 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
               onClick={onBack}
               className="text-sm text-muted hover:text-foreground transition-colors"
             >
-              &larr; Back
+              Back
             </button>
           )}
           <button
             onClick={onDone}
             className="text-sm text-muted hover:text-foreground transition-colors"
           >
-            Skip for now &rarr;
+            Skip for now
           </button>
         </div>
 
@@ -258,7 +258,7 @@ export function StepLifeOS({ onDone, onBack }: StepLifeOSProps) {
             onClick={onDone}
             className="rounded-lg bg-primary-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-600 transition-colors"
           >
-            Continue →
+            Continue
           </button>
         )}
       </div>

@@ -306,7 +306,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                   onClick={() => { setStep(1); setError(""); }}
                   className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-tertiary-500"
                 >
-                  ← Edit back
+                  Edit back
                 </button>
                 <button
                   type="button"
@@ -356,7 +356,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                       Generating…
                     </>
                   ) : (
-                    "Generate preview →"
+                    "Generate preview"
                   )}
                 </button>
               </>

@@ -632,7 +632,7 @@ function StepCareerBasics({
                 onClick={() => { setParseError(""); setUploadMode("paste"); }}
                 className="mt-2 text-xs font-semibold text-accent hover:underline"
               >
-                Try pasting text instead →
+                Try pasting text instead
               </button>
             </div>
           )}
@@ -644,7 +644,7 @@ function StepCareerBasics({
               onClick={() => setUploadMode("paste")}
               className="font-semibold text-accent hover:underline"
             >
-              Start from scratch →
+              Start from scratch
             </button>
           </p>
         </div>
@@ -730,7 +730,7 @@ function StepCareerBasics({
             disabled={!resumePasteText.trim() || parsing}
             className="w-full rounded-lg bg-cta px-4 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {parsing ? "Parsing…" : "Parse resume →"}
+            {parsing ? "Parsing…" : "Parse resume"}
           </button>
         </div>
       )}
@@ -1251,7 +1251,7 @@ function StepSummary({ initialStats, onBack }: { initialStats?: SummaryStats; on
             onClick={onBack}
             className="mt-3 text-xs text-muted hover:text-foreground underline underline-offset-2 transition-colors"
           >
-            ← Add more achievements
+            Add more achievements
           </button>
         )}
       </div>

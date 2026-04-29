@@ -75,7 +75,7 @@ function ConnectButtons({
           href="/onboarding/find"
           className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
         >
-          Continue to your matches →
+          Continue to your matches
         </Link>
       </div>
     );
@@ -88,7 +88,7 @@ function ConnectButtons({
           href="/onboarding/find"
           className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
         >
-          Continue →
+          Continue
         </Link>
       </div>
     );

@@ -313,7 +313,7 @@ export function CareerOutlineView({
             onClick={onSkip}
             className="text-xs text-muted transition hover:text-foreground"
           >
-            Skip →
+            Skip
           </button>
         )}
       </div>
@@ -557,7 +557,7 @@ export function CareerOutlineView({
                 onClick={startEditing}
                 className="text-xs font-semibold text-accent hover:text-accent-hover transition"
               >
-                Edit all →
+                Edit all
               </button>
             )}
           </div>

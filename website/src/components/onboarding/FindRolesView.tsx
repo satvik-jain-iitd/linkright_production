@@ -404,7 +404,7 @@ export function FindRolesView({ embedded }: Props) {
               href="/onboarding/profile"
               className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent hover:text-accent"
             >
-              Add a few more details →
+              Add a few more details
             </Link>
           </div>
         </div>
@@ -611,7 +611,7 @@ export function FindRolesView({ embedded }: Props) {
                     onClick={() => setCustomOpen(true)}
                     className="rounded-lg bg-cta px-4 py-2 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover"
                   >
-                    Add a custom job →
+                    Add a custom job
                   </button>
                 </div>
               </div>
@@ -675,7 +675,7 @@ export function FindRolesView({ embedded }: Props) {
           <div className="mt-4 flex justify-end gap-2">
             <button type="button" onClick={() => { setCustomOpen(false); setCustomError(""); }} className="rounded-lg border border-border px-4 py-1.5 text-xs font-semibold text-foreground hover:border-accent transition">Cancel</button>
             <button type="button" onClick={submitCustomJob} disabled={customSaving} className="inline-flex items-center gap-1.5 rounded-lg bg-cta px-5 py-1.5 text-xs font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50">
-              {customSaving ? "Saving…" : "Build my resume →"}
+              {customSaving ? "Saving…" : "Build my resume"}
             </button>
           </div>
         </div>
@@ -816,7 +816,7 @@ function RoleRow({ row, onStart }: { row: Top20Row; onStart: () => void }) {
           onClick={onStart}
           className="rounded-lg border border-border bg-white px-3.5 py-1.5 text-xs font-semibold text-foreground transition hover:border-cta hover:bg-cta hover:text-white"
         >
-          Customise →
+          Customise
         </button>
       </div>
     </div>
