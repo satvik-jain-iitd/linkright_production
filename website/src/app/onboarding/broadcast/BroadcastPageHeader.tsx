@@ -46,7 +46,7 @@ export function BroadcastPageHeader({ connecting }: Props) {
           href="/onboarding/find"
           className="text-xs text-muted transition hover:text-foreground"
         >
-          Skip for now →
+          Skip for now
         </Link>
       )}
     </div>

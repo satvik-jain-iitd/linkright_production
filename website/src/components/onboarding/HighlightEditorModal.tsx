@@ -356,7 +356,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                       Generating…
                     </>
                   ) : (
-                    "Generate preview →"
+                    "Generate preview"
                   )}
                 </button>
               </>

@@ -303,7 +303,7 @@ export function ProfileHighlightsView() {
             title={embeddedCount < 1 ? "Waiting for your first highlight to load" : undefined}
             className="inline-flex items-center gap-2 rounded-lg bg-cta px-6 py-3 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Continue →
+            Continue
             <svg
               className="h-3.5 w-3.5"
               fill="none"
@@ -433,7 +433,7 @@ export function ProfileHighlightsView() {
                           onClick={() => setActiveNugget(n)}
                           className="text-[11px] font-semibold text-tertiary-700 transition hover:text-tertiary-600"
                         >
-                          Add more details →
+                          Add more details
                         </button>
                         <button
                           type="button"
