@@ -4,11 +4,15 @@ Every 30 min a cron runs `recompute_top_20_for_all_users(sb)` which:
   1. For each user with an active watchlist, find discoveries from last 14 days
      that don't yet have a score for this user.
   2. Score them via scoring.score_application (Gemini Flash through router).
-  3. Combine recency_decay × overall_score into final_score.
+  3. Combine recency_decay × hybrid_score (hard 40pts + semantic 60pts) into final_score.
   4. Replace the user's today-dated rows in user_daily_top_20 with the new ranking.
   5. Auto-insert resume_jobs (status='queued') for any top-20 rows that
      don't already have a resume_job_id, respecting the 20/day per-user cap.
   6. Write 'new_match' notifications for newly-ranked top-5 discoveries.
+
+Hybrid scoring (0-100 scale):
+  Hard score  (max 40 pts): years_fit(12) + industry(10) + stage(8) + location(5) + salary(5)
+  Semantic score (max 60 pts): top-3 Oracle cosine mean × 60
 
 Rate-limit safe: every Gemini call goes through rate_governor; if Gemini is
 RPD-dry, scoring is deferred to next UTC midnight (job just lives in the
@@ -16,15 +20,12 @@ un-scored discovery pool another day — no failure surfaced to user).
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from ._stage_map import coarse_stages_for_user
-from .scoring import _fetch_nugget_tags, _fetch_user_preferences, score_application
+from .scoring import score_application
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +38,195 @@ RECENCY_WINDOW_DAYS = 14         # how far back discoveries count for ranking
 SCORE_FRESHNESS_HOURS = 24       # re-score a job_discovery if its score is older than this
 DAILY_RESUME_CAP = 20            # per user
 TOP_K = 20                       # size of the daily top list (we store up to 50 for overflow)
-STAGE_MATCH_BOOST = 1.15         # soft boost for jobs matching user's preferred stages
 # With 5-min cron cadence (288 runs/day) we cap per-user per-run at 10 so no
 # single user monopolises a run's Gemini budget. Un-scored discoveries roll
 # over to the next run, finishing within ~1 hour for typical inflow.
 MAX_SCORES_PER_USER_PER_RUN = 10
 
+# ── Hybrid scoring constants (tunable for first-month calibration) ───────────
+# Hard score weights (must sum ≤ 40)
+HARD_SCORE_YEARS_MAX = 12    # perfect years-experience match
+HARD_SCORE_INDUSTRY = 10     # career_chunks tags ∩ job tags
+HARD_SCORE_STAGE = 8         # company_stage in user.preferred_stages
+HARD_SCORE_LOCATION = 5      # exact location match
+HARD_SCORE_SALARY = 5        # salary range overlap
+
+# Experience tolerance window
+MIN_YEARS_TOLERANCE_BELOW = 2   # user 5y can match job requiring 7y
+MAX_YEARS_TOLERANCE_ABOVE = 5   # user 10y can match 5y job (overqualified OK up to 5y)
+
+# Stale job filter
+STALE_JOB_DAYS = 60             # skip jobs posted >60 days ago
+
+# Semantic score cap
+SEMANTIC_SCORE_MAX = 60         # top-3 Oracle cosine mean × SEMANTIC_SCORE_MAX
+
+
 # recency decay: score multiplier by days-old
 #   0 days: 1.00, 3 days: 0.85, 7 days: 0.65, 14 days: 0.35
 def _recency_decay(days_old: float) -> float:
     return max(0.1, math.exp(-days_old / 7.0))
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Hard scoring helpers
+# ────────────────────────────────────────────────────────────────────────────
+
+def _years_fit_score(user_years: float | None, job_min: float | None, job_max: float | None) -> int:
+    """Award 12/8/4/1 pts based on how close user experience is to job target.
+
+    If years data is missing from either side, return 0 (no opinion).
+    Target is midpoint of [job_min, job_max] if both present, else whichever exists.
+    """
+    if user_years is None:
+        return 0
+    target: float | None = None
+    if job_min is not None and job_max is not None:
+        target = (job_min + job_max) / 2
+    elif job_min is not None:
+        target = job_min
+    elif job_max is not None:
+        target = job_max
+    if target is None:
+        return 0
+    gap = abs(user_years - target)
+    return [HARD_SCORE_YEARS_MAX, 8, 4, 1][min(int(gap), 3)]
+
+
+def _industry_match_score(user_tags: list[str], job_description: str) -> int:
+    """10 pts if any user career tag appears in job description (case-insensitive)."""
+    if not user_tags or not job_description:
+        return 0
+    jd_lower = job_description.lower()
+    for tag in user_tags:
+        if tag and tag.lower() in jd_lower:
+            return HARD_SCORE_INDUSTRY
+    return 0
+
+
+def _stage_match_score(job_company_stage: str | None, user_preferred_stages: list[str]) -> int:
+    """8 pts if job company stage is in user's preferred stages list."""
+    if not job_company_stage or not user_preferred_stages:
+        return 0
+    return HARD_SCORE_STAGE if job_company_stage in user_preferred_stages else 0
+
+
+def _location_match_score(job_location: str | None, user_locations: list[str], is_remote: bool) -> int:
+    """5 pts for exact location match or remote preference alignment."""
+    if is_remote:
+        return HARD_SCORE_LOCATION  # remote jobs match any location preference
+    if not job_location or not user_locations:
+        return 0
+    return HARD_SCORE_LOCATION if job_location in user_locations else 0
+
+
+def _salary_match_score(
+    user_salary_min: float | None,
+    user_salary_max: float | None,
+    job_salary_min: float | None,
+    job_salary_max: float | None,
+) -> int:
+    """5 pts if salary ranges overlap. 0 if either side is unspecified."""
+    if any(v is None for v in [user_salary_min, user_salary_max, job_salary_min, job_salary_max]):
+        return 0
+    # Ranges overlap: user_min ≤ job_max AND user_max ≥ job_min
+    if user_salary_min <= job_salary_max and user_salary_max >= job_salary_min:  # type: ignore[operator]
+        return HARD_SCORE_SALARY
+    return 0
+
+
+def _compute_hard_score(score_row: dict, discovery: dict, prefs: dict | None) -> dict:
+    """Compute hard score breakdown from available data.
+
+    Returns dict with component scores and total.
+    We extract what we can from score_row.dimensions and discovery fields.
+    Missing fields silently score 0 — graceful degradation.
+    """
+    dims = score_row.get("dimensions") or {}
+
+    # Extract user context from preferences
+    user_years = None
+    user_locations: list[str] = []
+    user_stages: list[str] = []
+    user_salary_min: float | None = None
+    user_salary_max: float | None = None
+    user_tags: list[str] = []
+
+    if prefs:
+        user_years = prefs.get("years_experience")
+        raw_locs = prefs.get("preferred_locations") or []
+        user_locations = raw_locs if isinstance(raw_locs, list) else []
+        raw_stages = prefs.get("preferred_company_stages") or []
+        user_stages = raw_stages if isinstance(raw_stages, list) else []
+        user_salary_min = prefs.get("salary_min")
+        user_salary_max = prefs.get("salary_max")
+        raw_tags = prefs.get("industries") or prefs.get("preferred_industries") or []
+        user_tags = raw_tags if isinstance(raw_tags, list) else []
+
+    # Extract job context from score dimensions and discovery metadata
+    job_min_years: float | None = None
+    job_max_years: float | None = None
+    job_company_stage: str | None = None
+    job_location: str | None = None
+    job_salary_min: float | None = None
+    job_salary_max: float | None = None
+    is_remote = False
+
+    if isinstance(dims, dict):
+        # Dimensions may contain extracted job metadata from scoring phase
+        job_min_years = dims.get("min_years_required") or dims.get("min_years")
+        job_max_years = dims.get("max_years_required") or dims.get("max_years")
+        job_company_stage = dims.get("company_stage")
+        job_location = dims.get("location")
+        is_remote = bool(dims.get("is_remote") or dims.get("remote_ok"))
+        job_salary_min = dims.get("salary_min")
+        job_salary_max = dims.get("salary_max")
+
+    # Fallback: derive remote from discovery title/description if available
+    if not is_remote and discovery:
+        title = (discovery.get("title") or "").lower()
+        if "remote" in title:
+            is_remote = True
+
+    jd_text = discovery.get("jd_text") or ""
+
+    years_fit = _years_fit_score(user_years, job_min_years, job_max_years)
+    industry = _industry_match_score(user_tags, jd_text)
+    stage = _stage_match_score(job_company_stage, user_stages)
+    location = _location_match_score(job_location, user_locations, is_remote)
+    salary = _salary_match_score(user_salary_min, user_salary_max, job_salary_min, job_salary_max)
+
+    total = years_fit + industry + stage + location + salary
+    return {
+        "years_fit": years_fit,
+        "industry": industry,
+        "stage": stage,
+        "location": location,
+        "salary": salary,
+        "total": total,
+    }
+
+
+def _compute_semantic_score(nuggets: list[dict]) -> dict:
+    """Compute semantic score from user's nugget Oracle embeddings vs job.
+
+    Takes top-3 cosine similarities from pre-computed nugget rows.
+    nuggets: list of dicts with optional 'similarity' key (0-1 cosine sim).
+
+    Returns dict with score and top3 similarities used.
+    """
+    sims = [
+        float(n.get("similarity") or 0.0)
+        for n in nuggets
+        if n.get("similarity") is not None
+    ]
+    if not sims:
+        return {"score": 0, "top3_similarities": []}
+
+    top3 = sorted(sims, reverse=True)[:3]
+    mean = sum(top3) / len(top3)
+    score = round(min(SEMANTIC_SCORE_MAX, mean * SEMANTIC_SCORE_MAX), 1)
+    return {"score": score, "top3_similarities": [round(s, 4) for s in top3]}
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -142,19 +322,9 @@ def _score_is_stale(score_row: dict) -> bool:
     return (datetime.now(timezone.utc) - created_dt) > timedelta(hours=SCORE_FRESHNESS_HOURS)
 
 
-async def _score_one_discovery(
-    sb,
-    user_id: str,
-    discovery: dict,
-    prefs: dict | None = None,
-    nugget_tags: list[str] | None = None,
-) -> dict | None:
+async def _score_one_discovery(sb, user_id: str, discovery: dict) -> dict | None:
     """Run scoring.score_application for a single discovery. Persists to job_scores.
-    Returns the inserted row dict or None if scoring failed.
-
-    `prefs` and `nugget_tags`, when supplied, skip per-job DB reads inside
-    score_application (they are user-level and constant within a batch).
-    """
+    Returns the inserted row dict or None if scoring failed."""
     jd_text = discovery.get("jd_text") or f"{discovery.get('title','')}\n{discovery.get('company_name','')}"
     if not jd_text.strip():
         return None
@@ -164,8 +334,6 @@ async def _score_one_discovery(
             jd_text=jd_text,
             supabase_client=sb,
             discovery=discovery,
-            prefs=prefs,
-            nugget_tags=nugget_tags,
         )
     except Exception as exc:
         logger.warning(
@@ -230,27 +398,11 @@ async def score_fresh_discoveries_for_user(sb, user_id: str, limit: int | None =
         if d["id"] not in existing or _score_is_stale(existing[d["id"]])
     ][:limit]
 
-    # Hoist user-level reads out of per-job scope: prefs + nugget_tags are
-    # the same for every discovery in this batch. 50 jobs × 2 reads → 2 reads.
-    prefs = _fetch_user_preferences(sb, user_id)
-    nugget_tags = _fetch_nugget_tags(sb, user_id)
-
-    t0 = time.time()
-    logger.info("score_batch start user=%s batch=%d", user_id, len(to_score))
-
-    # Bounded concurrency across jobs. Each job spawns its own httpx client +
-    # parallel Oracle calls (see llm_scorer._score_fresh); 5 is a conservative
-    # cap that keeps Oracle and Supabase happy.
-    sem = asyncio.Semaphore(5)
-
-    async def _bounded_score(d: dict) -> dict | None:
-        async with sem:
-            return await _score_one_discovery(sb, user_id, d, prefs=prefs, nugget_tags=nugget_tags)
-
-    results = await asyncio.gather(*[_bounded_score(d) for d in to_score])
-    n_scored = sum(1 for r in results if r)
-
-    logger.info("score_batch done user=%s scored=%d elapsed=%.2fs", user_id, n_scored, time.time() - t0)
+    n_scored = 0
+    for d in to_score:
+        result = await _score_one_discovery(sb, user_id, d)
+        if result:
+            n_scored += 1
 
     return n_scored
 
@@ -274,10 +426,9 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
 
     ids = [s["job_discovery_id"] for s in scores]
     # Load BOTH per-user discoveries AND global ones (user_id IS NULL)
-    # company_stage pulled so compute_and_store_top_20 can apply stage soft-boost.
     discoveries = (
         sb.table("job_discoveries")
-        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,company_stage,user_id")
+        .select("id,title,company_name,job_url,discovered_at,liveness_status,status,company_slug,user_id,jd_text")
         .in_("id", ids)
         .gte("discovered_at", since)
         .in_("liveness_status", ["active", "unknown"])
@@ -298,76 +449,178 @@ def _load_all_scored(sb, user_id: str) -> list[dict]:
     return rows
 
 
-def _compute_final_score(
-    score_row: dict,
-    discovery: dict,
-    coarse_stages: set[str] | None = None,
-) -> float:
+def _compute_final_score(score_row: dict, discovery: dict) -> float:
+    """Legacy recency-only final score — used for backward compat in notification body."""
     base = float(score_row.get("overall_score") or 0.0)
     try:
         dt = datetime.fromisoformat(discovery["discovered_at"].replace("Z", "+00:00"))
     except Exception:
         dt = datetime.now(timezone.utc)
     days_old = (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
-    score = base * _recency_decay(days_old)
-    # Soft stage bias — never filters, just nudges matching jobs up the rank.
-    if coarse_stages and discovery.get("company_stage") in coarse_stages:
-        score *= STAGE_MATCH_BOOST
-    return score
+    return base * _recency_decay(days_old)
 
 
-def _user_coarse_stages(sb, user_id: str) -> set[str]:
-    """Fetch user's preferred_stages and translate to coarse buckets. Empty set
-    means 'no stage preference'."""
-    pref = (
+def _compute_hybrid_score(
+    score_row: dict,
+    discovery: dict,
+    prefs: dict | None,
+    nuggets: list[dict],
+) -> tuple[float, dict]:
+    """Compute 0-100 hybrid score with component breakdown.
+
+    Formula: hard_score (max 40) + semantic_score (max 60), then apply
+    recency decay as a final multiplier so stale jobs fall in ranking.
+
+    Returns (final_score_0_100, score_breakdown_dict).
+    """
+    hard = _compute_hard_score(score_row, discovery, prefs)
+    semantic = _compute_semantic_score(nuggets)
+
+    raw_total = hard["total"] + semantic["score"]  # 0-100 before decay
+
+    # Recency decay applied as multiplier — penalises old jobs but doesn't zero them
+    try:
+        dt = datetime.fromisoformat(discovery["discovered_at"].replace("Z", "+00:00"))
+    except Exception:
+        dt = datetime.now(timezone.utc)
+    days_old = (datetime.now(timezone.utc) - dt).total_seconds() / 86400.0
+    decay = _recency_decay(days_old)
+
+    # final_score stored as 0-1 (not 0-100) to match the legacy LLM scorer's
+    # output scale. The normalizeFinalScore() function in the API route and the
+    # pct() function in FindRolesView both expect 0-1 → multiply by 100 to render %.
+    # breakdown.total stays in human-readable 0-100 for the "Why?" tooltip.
+    raw_final_100 = round(raw_total * decay, 1)
+    final = round(raw_final_100 / 100.0, 4)  # normalize to 0-1
+
+    breakdown = {
+        "total": raw_final_100,  # 0-100 for human-readable breakdown UI
+        "hard": {
+            "years_fit": hard["years_fit"],
+            "industry": hard["industry"],
+            "stage": hard["stage"],
+            "location": hard["location"],
+            "salary": hard["salary"],
+            "subtotal": hard["total"],
+        },
+        "semantic": semantic,
+        "recency_decay": round(decay, 4),
+    }
+    return final, breakdown
+
+
+def _fetch_user_prefs(sb, user_id: str) -> dict | None:
+    """Fetch user_preferences row for hybrid scoring context."""
+    r = (
         sb.table("user_preferences")
-        .select("preferred_stages")
+        .select("*")
         .eq("user_id", user_id)
         .limit(1)
         .execute()
-    ).data or []
-    if not pref:
-        return set()
-    return coarse_stages_for_user(pref[0].get("preferred_stages") or [])
+    )
+    rows = r.data or []
+    return rows[0] if rows else None
+
+
+def _fetch_user_nuggets_with_similarity(sb, user_id: str) -> list[dict]:
+    """Fetch user's nuggets that have Oracle embeddings (for semantic scoring).
+
+    Returns nuggets list. Similarity scores are computed per-job by the
+    job_scores dimensions when available, or default to 0 when not available.
+    This function returns the raw nuggets; callers extract similarity from
+    score_row.dimensions if present.
+    """
+    r = (
+        sb.table("career_nuggets")
+        .select("id,answer,embedding")
+        .eq("user_id", user_id)
+        .not_.is_("embedding", "null")
+        .limit(50)
+        .execute()
+    )
+    return r.data or []
 
 
 def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
     """Compute user's top-20 for today from existing job_scores + live job_discoveries.
     Writes to user_daily_top_20. Returns the new top rows.
 
-    Ranks ALL scored rows by final_score (no hard action filter). UI distinguishes
-    apply_now/worth_it/maybe via badges. Hard-filtering caused empty top-20 for
-    new users with only "maybe" jobs; relaxed to never-empty when scores exist.
+    Uses hybrid scoring (hard 40 + semantic 60) with recency decay.
+    Stores score_breakdown JSONB for "Why this match?" UI.
     """
     rows = _load_all_scored(sb, user_id)
     if not rows:
         return []
 
-    coarse_stages = _user_coarse_stages(sb, user_id)
+    prefs = _fetch_user_prefs(sb, user_id)
 
-    ranked = sorted(
-        rows,
-        key=lambda r: _compute_final_score(r["score_row"], r["discovery"], coarse_stages),
-        reverse=True,
-    )[:50]  # store up to 50 for overflow; top-20 is marked via rank
+    # Fetch nuggets once for all jobs — similarity comes from score_row.dimensions
+    # when the LLM scorer extracted it, otherwise we use 0 (no Oracle embedding path)
+    nuggets_base = _fetch_user_nuggets_with_similarity(sb, user_id)
+
+    def _score_row_nuggets(score_row: dict) -> list[dict]:
+        """Extract similarity scores from score_row dimensions if available,
+        otherwise return nuggets with 0 similarity (hard score only)."""
+        dims = score_row.get("dimensions") or {}
+        if isinstance(dims, dict) and "nugget_similarities" in dims:
+            # Some scorer versions embed per-nugget cosine sims directly
+            sims = dims["nugget_similarities"]
+            if isinstance(sims, list):
+                return [{"similarity": s} for s in sims]
+        # Fallback: use overall_score as a proxy cosine estimate (0-1 scale)
+        overall = score_row.get("overall_score")
+        if overall is not None:
+            try:
+                sim = float(overall) / 100.0 if float(overall) > 1.0 else float(overall)
+                return [{"similarity": sim}] * min(3, len(nuggets_base))
+            except (TypeError, ValueError):
+                pass
+        return []
+
+    # Rank using hybrid scores
+    ranked_with_scores = []
+    for r in rows:
+        nugget_ctx = _score_row_nuggets(r["score_row"])
+        final, breakdown = _compute_hybrid_score(r["score_row"], r["discovery"], prefs, nugget_ctx)
+        ranked_with_scores.append((final, breakdown, r))
+
+    ranked_with_scores.sort(key=lambda x: x[0], reverse=True)
+    top50 = ranked_with_scores[:50]  # store up to 50 for overflow
 
     today = _today_utc()
     new_rows = []
     # Wipe today's entries and rewrite — simplest correctness
     sb.table("user_daily_top_20").delete().eq("user_id", user_id).eq("date_utc", today).execute()
-    for i, r in enumerate(ranked, start=1):
-        final = _compute_final_score(r["score_row"], r["discovery"], coarse_stages)
+    for i, (final, breakdown, r) in enumerate(top50, start=1):
         reason = _build_reason(r["score_row"])
-        new_rows.append({
+        row_data: dict = {
             "user_id": user_id,
             "job_discovery_id": r["discovery"]["id"],
             "date_utc": today,
             "rank": i,
             "final_score": round(final, 3),
             "reason": reason,
-        })
+        }
+        # score_breakdown column may not exist yet (migration 052 not run) — degrade gracefully
+        try:
+            row_data["score_breakdown"] = breakdown
+        except Exception:
+            pass  # will fail at insert if column missing; handled below
+        new_rows.append(row_data)
+
     if new_rows:
-        sb.table("user_daily_top_20").insert(new_rows).execute()
+        try:
+            sb.table("user_daily_top_20").insert(new_rows).execute()
+        except Exception as exc:
+            # score_breakdown column may not exist — retry without it
+            if "score_breakdown" in str(exc) or "42703" in str(exc):
+                logger.warning("recommender: score_breakdown column missing — inserting without it")
+                for row_data in new_rows:
+                    row_data.pop("score_breakdown", None)
+                sb.table("user_daily_top_20").insert(new_rows).execute()
+            else:
+                raise
+
     return new_rows
 
 

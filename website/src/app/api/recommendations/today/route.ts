@@ -5,6 +5,8 @@
 // rank inline from those scores + insert into user_daily_top_20. This means the page
 // works even when the worker cron is down — as long as scoring has happened previously,
 // top-20 surfaces immediately on any page load.
+//
+// score_breakdown (hard + semantic components) included when migration 052 is applied.
 
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -240,6 +242,53 @@ async function coldStartHeuristicTop20(
   return rows.length;
 }
 
+// Select fragment with score_breakdown (migration 052 required).
+// Falls back without score_breakdown if column doesn't exist yet.
+const SELECT_WITH_BREAKDOWN = `
+  id, rank, final_score, reason, resume_job_id, created_at, score_breakdown,
+  job_discoveries (
+    id, title, company_name, job_url, discovered_at, liveness_status
+  )
+`;
+
+const SELECT_WITHOUT_BREAKDOWN = `
+  id, rank, final_score, reason, resume_job_id, created_at,
+  job_discoveries (
+    id, title, company_name, job_url, discovered_at, liveness_status
+  )
+`;
+
+async function fetchTop20(
+  supabase: SupabaseClient,
+  userId: string,
+  today: string,
+): Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }> {
+  const { data, error } = await supabase
+    .from("user_daily_top_20")
+    .select(SELECT_WITH_BREAKDOWN)
+    .eq("user_id", userId)
+    .eq("date_utc", today)
+    .lte("rank", 20)
+    .order("rank", { ascending: true });
+
+  if (error) {
+    const msg = (error as { message?: string; code?: string }).message ?? "";
+    const code = (error as { code?: string }).code ?? "";
+    // score_breakdown column not yet migrated — fall back gracefully
+    if (code === "42703" || msg.includes("score_breakdown") || msg.includes("does not exist") || msg.includes("schema cache")) {
+      return supabase
+        .from("user_daily_top_20")
+        .select(SELECT_WITHOUT_BREAKDOWN)
+        .eq("user_id", userId)
+        .eq("date_utc", today)
+        .lte("rank", 20)
+        .order("rank", { ascending: true });
+    }
+    return { data: null, error };
+  }
+  return { data: data as Array<Record<string, unknown>>, error: null };
+}
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -252,23 +301,10 @@ export async function GET() {
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD UTC
 
   // First read attempt
-  let { data: top20, error } = await supabase
-    .from("user_daily_top_20")
-    .select(
-      `
-        id, rank, final_score, reason, resume_job_id, created_at,
-        job_discoveries (
-          id, title, company_name, job_url, discovered_at, liveness_status
-        )
-      `,
-    )
-    .eq("user_id", user.id)
-    .eq("date_utc", today)
-    .lte("rank", 20)
-    .order("rank", { ascending: true });
+  let { data: top20, error } = await fetchTop20(supabase, user.id, today);
 
   if (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ error: (error as { message?: string }).message }, { status: 500 });
   }
 
   // Self-heal chain — never return empty if any path can surface jobs.
@@ -297,27 +333,14 @@ export async function GET() {
       scoringPending = (scoredJobsCount ?? 0) === 0;
     }
     if (computed > 0) {
-      const reread = await supabase
-        .from("user_daily_top_20")
-        .select(
-          `
-            id, rank, final_score, reason, resume_job_id, created_at,
-            job_discoveries (
-              id, title, company_name, job_url, discovered_at, liveness_status
-            )
-          `,
-        )
-        .eq("user_id", user.id)
-        .eq("date_utc", today)
-        .lte("rank", 20)
-        .order("rank", { ascending: true });
+      const reread = await fetchTop20(supabase, user.id, today);
       if (!reread.error && reread.data) top20 = reread.data;
     }
   }
 
   // Enrich with resume_job status (for inline "resume ready" / "queued" chips)
   const jobIds = (top20 ?? [])
-    .map((row: { resume_job_id?: string | null }) => row.resume_job_id)
+    .map((row) => row.resume_job_id)
     .filter(Boolean) as string[];
   let resumeJobStatusById: Record<string, { status: string; created_at: string }> = {};
   if (jobIds.length > 0) {
@@ -344,10 +367,11 @@ export async function GET() {
   // Output normalization: legacy rows in DB may have final_score on 0-5 scale
   // (LLM overall_score 1-5 × recency_decay 0.1-1 ⇒ up to ~5). UIs multiply by
   // 100 to render %, so we collapse everything to 0-1 here.
+  // Hybrid scorer rows already emit 0-100 scores — normalize them too for consistency.
   const normalizedTop20 = (top20 ?? []).map(
-    (row: { final_score: number | null } & Record<string, unknown>) => ({
+    (row) => ({
       ...row,
-      final_score: normalizeFinalScore(row.final_score),
+      final_score: normalizeFinalScore(row.final_score as number | null),
     }),
   );
 
