@@ -243,7 +243,7 @@ export default function JobsPage() {
                         onClick={() => handleStart(row)}
                         className="rounded-full bg-amber-400 px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:bg-amber-500"
                       >
-                        Resume →
+                        Resume
                       </button>
                     ) : (
                       <button
@@ -251,7 +251,7 @@ export default function JobsPage() {
                         onClick={() => handleStart(row)}
                         className="rounded-full bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-80"
                       >
-                        Start →
+                        Start
                       </button>
                     )}
                   </div>

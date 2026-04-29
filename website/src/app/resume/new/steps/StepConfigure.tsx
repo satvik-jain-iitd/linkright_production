@@ -221,7 +221,7 @@ export function StepConfigure({ data, update, next, back }: Props) {
           onClick={back}
           className="text-sm text-muted transition-colors hover:text-foreground"
         >
-          &larr; Back
+          Back
         </button>
         <button
           onClick={next}

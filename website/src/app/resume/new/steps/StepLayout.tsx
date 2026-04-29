@@ -206,13 +206,13 @@ export function StepLayout({ data, update, next, back }: Props) {
           onClick={back}
           className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-muted hover:bg-surface transition-colors"
         >
-          ← Back
+          Back
         </button>
         <button
           onClick={handleConfirm}
           className="flex-1 rounded-xl bg-accent px-6 py-3 text-base font-semibold text-white hover:bg-accent/90 transition-colors"
         >
-          Build My Resume →
+          Build My Resume
         </button>
       </div>
     </div>

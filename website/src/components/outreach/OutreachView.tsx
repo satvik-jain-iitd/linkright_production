@@ -166,7 +166,7 @@ export function OutreachView({
                 onClick={generateDm}
                 className="mt-4 rounded-lg bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
               >
-                Draft DM →
+                Draft DM
               </button>
             </div>
           )}
@@ -232,7 +232,7 @@ export function OutreachView({
                 onClick={generateEmail}
                 className="mt-4 rounded-lg bg-cta px-5 py-2 text-sm font-semibold text-white shadow-cta transition hover:bg-cta-hover"
               >
-                Draft email →
+                Draft email
               </button>
             </div>
           )}

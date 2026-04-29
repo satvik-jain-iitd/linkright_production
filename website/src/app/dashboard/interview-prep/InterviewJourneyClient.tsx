@@ -480,7 +480,7 @@ export function InterviewJourneyClient({
             className="shrink-0 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition disabled:opacity-60"
             style={{ background: "#4A5D32" }}
           >
-            {advancing ? "Saving…" : "Mark stage done →"}
+            {advancing ? "Saving…" : "Mark stage done"}
           </button>
         )}
 

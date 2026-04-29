@@ -457,7 +457,7 @@ export function StepEnrich({ data, update, next, back }: Props) {
             onClick={back}
             className="text-sm text-muted transition-colors hover:text-foreground"
           >
-            &larr; Back
+            Back
           </button>
           {!hasGaps && (
             <span className="text-xs text-muted">
