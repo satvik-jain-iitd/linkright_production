@@ -47,8 +47,8 @@ export async function GET(request: Request) {
     if (company) query = query.eq("company", company);
     if (importance) query = query.eq("importance", importance);
     if (search) query = query.ilike("answer", `%${search}%`);
-    if (embeddedFilter === "true") query = query.not("embedding", "is", null);
-    if (embeddedFilter === "false") query = query.is("embedding", null);
+    if (embeddedFilter === "true") query = query.or("embedding.not.is.null,embedding_jina.not.is.null");
+    if (embeddedFilter === "false") query = query.is("embedding", null).is("embedding_jina", null);
     if (primaryLayer) query = query.eq("primary_layer", primaryLayer);
 
     return query;
@@ -73,18 +73,41 @@ export async function GET(request: Request) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 
-  // Get embedded IDs for the returned nuggets
+  // Get embedded IDs for the returned nuggets.
+  // A card is considered embedded when EITHER embedding (legacy Oracle/nomic)
+  // OR embedding_jina (new Jina flow) is populated. This ensures ProfileHighlightsView
+  // polling terminates correctly after Jina embedding completes.
   const nuggetIds = (data || []).map((n: { id: string }) => n.id);
   let embeddedIds = new Set<string>();
 
   if (nuggetIds.length > 0) {
-    const { data: embRows } = await supabase
+    // First try OR query (requires migration 051 — adds embedding_jina column).
+    // If the column is missing (code 42703), fall back to legacy single-column check
+    // so existing users are not affected during the deploy-to-migration gap.
+    const { data: embRows, error: embErr } = await supabase
       .from("career_nuggets")
       .select("id")
       .in("id", nuggetIds)
-      .not("embedding", "is", null);
+      .or("embedding.not.is.null,embedding_jina.not.is.null");
 
-    embeddedIds = new Set((embRows || []).map((r: { id: string }) => r.id));
+    if (embErr && (
+      embErr.code === "42703" ||
+      embErr.message?.includes("embedding_jina") ||
+      embErr.message?.includes("does not exist") ||
+      embErr.message?.includes("Could not find") ||
+      embErr.message?.includes("schema cache")
+    )) {
+      // Migration 051 not yet applied — fall back to legacy embedding column only
+      console.warn("[nuggets/list] embedding_jina column missing — using legacy embedding fallback for is_embedded");
+      const { data: legacyEmbRows } = await supabase
+        .from("career_nuggets")
+        .select("id")
+        .in("id", nuggetIds)
+        .not("embedding", "is", null);
+      embeddedIds = new Set((legacyEmbRows || []).map((r: { id: string }) => r.id));
+    } else {
+      embeddedIds = new Set((embRows || []).map((r: { id: string }) => r.id));
+    }
   }
 
   const totalCount = count || 0;

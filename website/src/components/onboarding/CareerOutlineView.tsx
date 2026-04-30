@@ -417,9 +417,9 @@ export function CareerOutlineView({
       )}
 
       {/* Split: outline | narration */}
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2 lg:auto-rows-fr">
         {/* ─── OUTLINE ─── */}
-        <div className="rounded-2xl border border-border bg-white p-6">
+        <div className="h-full rounded-2xl border border-border bg-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Outline</h3>
             <span className="rounded-[10px] border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-muted">
@@ -569,7 +569,7 @@ export function CareerOutlineView({
         </div>
 
         {/* ─── FIRST-PERSON NARRATION — COLLAPSIBLE CARDS ─── */}
-        <div className="rounded-2xl border border-border bg-gradient-to-b from-[#FDF6F0] to-white p-6 lg:max-h-[680px] lg:overflow-y-auto">
+        <div className="h-full rounded-2xl border border-border bg-gradient-to-b from-[#FDF6F0] to-white p-6">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-foreground">
