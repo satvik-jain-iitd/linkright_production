@@ -4,7 +4,7 @@
 //
 //   total_extracted  — rows in career_nuggets for this user
 //   total_locked     — rows whose locked_at is set (new in v2)
-//   total_embedded   — rows whose embedding column is populated
+//   total_embedded   — rows whose embedding OR embedding_jina column is populated (either provider)
 //   embed_queued     — locked but not yet embedded
 //   ready            — legacy field: true when ≥90% of all extracted are embedded
 //   profile_ready    — new field: true when all locked nuggets are embedded
@@ -44,18 +44,20 @@ export async function GET() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .not("locked_at", "is", null),
+      // Either embedding column being populated counts as "embedded"
+      // (legacy Oracle nomic writes to `embedding`; new Jina flow writes to `embedding_jina`)
       supabase
         .from("career_nuggets")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
-        .not("embedding", "is", null),
-      // Numerator for profileReady: locked AND embedded
+        .or("embedding.not.is.null,embedding_jina.not.is.null"),
+      // Numerator for profileReady: locked AND (either embedding column populated)
       supabase
         .from("career_nuggets")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
         .not("locked_at", "is", null)
-        .not("embedding", "is", null),
+        .or("embedding.not.is.null,embedding_jina.not.is.null"),
       supabase
         .from("career_nuggets")
         .select("created_at")
