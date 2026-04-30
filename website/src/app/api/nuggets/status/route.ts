@@ -5,7 +5,7 @@
 //   total_extracted  — rows in career_nuggets for this user
 //   total_locked     — rows whose locked_at is set (new in v2)
 //   total_embedded   — rows whose embedding OR embedding_jina column is populated (either provider)
-//   embed_queued     — locked but not yet embedded
+//   embed_queued     — locked but not yet embedded (= totalLocked - lockedAndEmbedded)
 //   ready            — legacy field: true when ≥90% of all extracted are embedded
 //   profile_ready    — new field: true when all locked nuggets are embedded
 //   last_activity_at — most recent created_at (for detecting stalls)
@@ -14,6 +14,10 @@
 // The 163s hang from the Playwright session was caused by a Supabase
 // connection that stalled mid-query. Promise.race ensures the client
 // always gets a timely response.
+//
+// Deployment-race guard: the dbQuery IIFE is wrapped in try/catch so that
+// if migration 051 (adds embedding_jina column) has not yet run, Supabase
+// rejections degrade gracefully to safe-partial JSON instead of 500.
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,46 +37,58 @@ export async function GET() {
     setTimeout(() => resolve(null), MAX_WAIT_MS)
   );
 
+  // Wrap the IIFE in try/catch so that Supabase errors (e.g. column 42703
+  // "embedding_jina does not exist" during deploy-to-migration gap) resolve
+  // to null rather than rejecting the Promise.race — which would propagate
+  // as an unhandled 500. The existing result===null path returns safe
+  // partial JSON so polling continues cleanly.
   const dbQuery = (async () => {
-    const [totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes] = await Promise.all([
-      supabase
-        .from("career_nuggets")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id),
-      supabase
-        .from("career_nuggets")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .not("locked_at", "is", null),
-      // Either embedding column being populated counts as "embedded"
-      // (legacy Oracle nomic writes to `embedding`; new Jina flow writes to `embedding_jina`)
-      supabase
-        .from("career_nuggets")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .or("embedding.not.is.null,embedding_jina.not.is.null"),
-      // Numerator for profileReady: locked AND (either embedding column populated)
-      supabase
-        .from("career_nuggets")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .not("locked_at", "is", null)
-        .or("embedding.not.is.null,embedding_jina.not.is.null"),
-      supabase
-        .from("career_nuggets")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
-    return { totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes };
+    try {
+      const [totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes] = await Promise.all([
+        supabase
+          .from("career_nuggets")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        supabase
+          .from("career_nuggets")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .not("locked_at", "is", null),
+        // Either embedding column being populated counts as "embedded"
+        // (legacy Oracle nomic writes to `embedding`; new Jina flow writes to `embedding_jina`)
+        supabase
+          .from("career_nuggets")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .or("embedding.not.is.null,embedding_jina.not.is.null"),
+        // Numerator for profileReady: locked AND (either embedding column populated)
+        supabase
+          .from("career_nuggets")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .not("locked_at", "is", null)
+          .or("embedding.not.is.null,embedding_jina.not.is.null"),
+        supabase
+          .from("career_nuggets")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      return { totalRes, lockedRes, embeddedRes, lockedEmbeddedRes, latestRes };
+    } catch (err) {
+      // Any unexpected throw (network error, schema cache miss, etc.) degrades
+      // to null — same path as a timeout — so the client gets safe partial JSON.
+      console.warn("[nuggets/status] dbQuery threw unexpectedly:", err);
+      return null;
+    }
   })();
 
   const result = await Promise.race([dbQuery, timeout]);
 
   if (result === null) {
-    // Timed out — return a safe partial response so polling continues
+    // Timed out OR dbQuery threw — return a safe partial response so polling continues
     return Response.json(
       {
         total_extracted: 0,
@@ -111,7 +127,9 @@ export async function GET() {
     total_extracted: totalExtracted,
     total_locked: totalLocked,
     total_embedded: totalEmbedded,
-    embed_queued: Math.max(0, totalLocked - totalEmbedded),
+    // embed_queued = locked rows still pending embedding (NOT totalLocked - totalEmbedded,
+    // which would undercount when totalEmbedded includes unlocked legacy rows)
+    embed_queued: Math.max(0, totalLocked - lockedAndEmbedded),
     ready,
     profile_ready: profileReady,
     last_activity_at: latestRes.data?.created_at ?? null,
