@@ -15,6 +15,7 @@
 // NOTE: Oracle worker embed + Jina inline embed REMOVED — moved to submit-resume batch.
 //       Lock-Unlock-Re-lock cycles are now free (enrichment only, no paid Jina calls).
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { enrichChunkInline, ENRICH_FALLBACK } from "@/lib/enrich-chunk";
@@ -85,7 +86,10 @@ export async function POST(request: Request) {
   }
 
   // ── Background pipeline: enrich → create nuggets (NO embedding) ───────────
-  // Fire-and-forget. Embedding fires later at submit-resume time (paid batch).
+  // Uses next/server `after()` so Vercel keeps the function alive until this
+  // promise resolves — fire-and-forget IIFE was being killed on serverless before
+  // the Supabase insert completed (the root cause of empty career_nuggets).
+  // Embedding fires later at submit-resume time (paid batch).
   // UI polls /api/nuggets/list?embedded=true to see progress after submit.
   const chunkText: string = chunk.chunk_text ?? "";
   const metadata = (chunk.metadata ?? {}) as Record<string, unknown>;
@@ -93,9 +97,9 @@ export async function POST(request: Request) {
   const role = String(metadata.role ?? "");
   const careerContext = [role, company].filter(Boolean).join(" at ");
 
-  // We run enrichment as a best-effort background chain.
+  // after() signals Vercel: extend function lifetime until this promise settles.
   // Lock button returns immediately — UI doesn't wait for this.
-  (async () => {
+  after(async () => {
     try {
       // Step 1: Enrich chunk inline (no HTTP roundtrip — avoids NEXTAUTH_URL/localhost issue)
       let enrichedMeta = ENRICH_FALLBACK;
@@ -117,6 +121,13 @@ export async function POST(request: Request) {
         return;
       }
 
+      // Get nugget_index (next sequential index for this user — NOT NULL constraint)
+      const { count: nuggetCount } = await supabase
+        .from("career_nuggets")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      const nuggetIndex = nuggetCount ?? 0;
+
       // Prepend "source:onboarding" so worker's tag filter picks this up at embed time.
       // Worker embed query: .overlaps("tags", ["source:truthengine", "source:onboarding", "source:skill_upload"])
       const finalTags = ["source:onboarding", ...(enrichedMeta.tags ?? [])];
@@ -126,11 +137,14 @@ export async function POST(request: Request) {
         .insert({
           user_id: user.id,
           source_chunk_id: chunk_id,
-          answer: nuggetText,
+          nugget_index: nuggetIndex,
           nugget_text: chunkText.slice(0, 1000),
+          question: "",
+          answer: nuggetText,
+          primary_layer: "A",
           company: company || null,
           role: role || null,
-          section_type: "experience",
+          section_type: "work_experience",
           importance: enrichedMeta.importance,
           tags: finalTags,
           leadership_signal: enrichedMeta.leadership || null,
@@ -149,11 +163,14 @@ export async function POST(request: Request) {
             .from("career_nuggets")
             .insert({
               user_id: user.id,
-              answer: nuggetText,
+              nugget_index: nuggetIndex,
               nugget_text: chunkText.slice(0, 1000),
+              question: "",
+              answer: nuggetText,
+              primary_layer: "A",
               company: company || null,
               role: role || null,
-              section_type: "experience",
+              section_type: "work_experience",
               importance: enrichedMeta.importance,
               tags: finalTags,
             });
@@ -172,7 +189,7 @@ export async function POST(request: Request) {
     } catch (pipelineErr) {
       console.error("[stories/lock] background pipeline failed:", (pipelineErr as Error).message);
     }
-  })();
+  });
 
   return Response.json({ chunk: updated });
 }
