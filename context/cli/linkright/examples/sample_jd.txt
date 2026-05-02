@@ -1,0 +1,46 @@
+Product Manager / Senior Product Manager — Attentive.ai
+
+Location: Noida, India
+Type: Full-time
+
+About Attentive.ai:
+Attentive.ai is an AI-powered construction technology company that automates takeoff and estimation for construction, landscaping, paving, and field-service companies. Our products, Beam AI and AutoMeasure, use computer vision to extract measurements from blueprints and aerial imagery, validated by a human QA team for 98%+ accuracy.
+
+Role Overview:
+We're looking for a Product Manager to own a segment of our product — end to end. You'll drive strategy, execution, and growth for your segment, working closely with engineering, design, data science, and customer success teams.
+
+Requirements:
+
+Must-Have (P0):
+- 3-5 years of product management experience
+- Experience with AI/ML products or data-heavy platforms
+- Strong analytical skills — SQL, data analysis, A/B testing
+- Proven ability to ship products from 0→1 and iterate based on data
+- Excellent stakeholder management across engineering, design, and business teams
+
+Should-Have (P1):
+- Experience in B2B SaaS, ideally vertical SaaS
+- Understanding of computer vision or document processing AI
+- Track record of driving product metrics (NRR, churn, adoption)
+- Experience with agile/scrum development processes
+- Comfort with ambiguity and fast-paced startup environments
+
+Nice-to-Have (P2):
+- Construction or field-services industry knowledge
+- Experience building estimation or measurement tools
+- Familiarity with blueprint/CAD processing
+- Experience scaling products across multiple customer segments
+
+What You'll Do:
+- Own segment P&L and drive product strategy for your vertical
+- Define and prioritize product roadmap using data-driven frameworks
+- Work with engineering to ship features on time with quality
+- Conduct customer interviews, analyze usage data, and derive insights
+- Define success metrics and track product health dashboards
+- Collaborate with sales and customer success on go-to-market strategy
+
+Benefits:
+- Competitive salary + equity
+- Health insurance
+- Flexible work policy
+- Series B funded ($30.5M) with strong growth trajectory
