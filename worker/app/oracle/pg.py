@@ -5,7 +5,7 @@ Constitutional rule (feedback_split_db_architecture_locked.md):
   Supabase   → user PII: auth, career_nuggets, resume_jobs, prefs
 
 Usage (async context):
-    from app.db.oracle import get_pool
+    from app.oracle.pg import get_pool
 
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -18,26 +18,27 @@ Lifecycle:
 
 Environment:
     ORACLE_PG_URL  — postgres://user:pass@host:5432/dbname  (SSL required)
-    ORACLE_PG_ENABLED — computed from ORACLE_PG_URL in config.py
+    ORACLE_PG_ENABLED — computed from ORACLE_PG_URL in app/config.py
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import asyncpg
+if TYPE_CHECKING:
+    import asyncpg as _asyncpg_t  # type: ignore[import]  # only for type hints
 
 from ..config import ORACLE_PG_URL, ORACLE_PG_ENABLED
 
 logger = logging.getLogger(__name__)
 
-_pool: Optional[asyncpg.Pool] = None
+_pool: Optional["_asyncpg_t.Pool"] = None
 
 _RUNBOOK_URL = "https://github.com/linkright/linkright_production/blob/main/specs/oracle-pg-runbook-2026-05-03.md"
 
 
-async def get_pool() -> asyncpg.Pool:
+async def get_pool():  # -> asyncpg.Pool
     """Return the shared asyncpg connection pool, creating it on first call.
 
     Raises:
@@ -52,6 +53,7 @@ async def get_pool() -> asyncpg.Pool:
         )
 
     if _pool is None:
+        import asyncpg  # lazy import — avoids ImportError at startup when asyncpg not yet installed
         logger.info("oracle_pg: creating connection pool → %s", _redact(ORACLE_PG_URL))
         _pool = await asyncpg.create_pool(
             ORACLE_PG_URL,

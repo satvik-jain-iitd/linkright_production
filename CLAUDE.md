@@ -63,7 +63,7 @@ ORACLE_PG_ENABLED     = bool(ORACLE_PG_URL)
 ```
 
 Worker Supabase client: `worker/app/db.py`  
-Worker Oracle PG pool: `worker/app/db/oracle.py`
+Worker Oracle PG pool: `worker/app/oracle/pg.py`
 
 ### CLI (`linkright admin`)
 
