@@ -120,6 +120,7 @@ class _TableProxy:
         self._order_col: str | None = None
         self._order_desc: bool = False
         self._limit_n: int | None = None
+        self._maybe_single: bool = False
         self._insert_payload: Any = None
         self._update_payload: dict | None = None
         self._delete: bool = False
@@ -173,6 +174,7 @@ class _TableProxy:
 
     def maybe_single(self) -> "_TableProxy":
         self._limit_n = 1
+        self._maybe_single = True
         return self
 
     def insert(self, payload) -> "_TableProxy":
@@ -219,7 +221,7 @@ class _TableProxy:
         result = _R(matched)
         if self._count_mode:
             result.count = len(matched)
-        if self._limit_n == 1:
+        if self._maybe_single:
             result.data = matched[0] if matched else None
         return result
 
