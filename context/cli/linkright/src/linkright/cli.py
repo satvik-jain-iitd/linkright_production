@@ -2,6 +2,7 @@
 
 Top-level command groups:
   resume      — Pillar 1: Tailor, score, batch, iterate (16-step pipeline)
+  cover-letter — Pillar 1 extension: Cover letter generation (cl alias)
   jobsearch   — Pillar 2: Evaluate, scan, recommend, apply
   interview   — Pillar 3: Schedule, prep, mock, debrief
   content     — Pillar 4: Plan, draft, schedule, performance
@@ -30,15 +31,17 @@ from linkright.jobsearch.cli import jobsearch_group
 from linkright.auth.cli import auth_group
 from linkright.interview.cli import interview_group
 from linkright.content.cli import content_group
+from linkright.coverletter.cli import coverletter_group
 
 
 _EPILOG = """\
 \b
 Common workflow:
   linkright tailor -j jd.md       1. Generate tailored resume
-  linkright critique              2. LLM review → issues + fixes
-  linkright fill                  3. Resolve missing-metric gaps
-  linkright practice              4. Interview prep cards
+  linkright cl -j jd.md           2. Generate cover letter (same JD)
+  linkright critique              3. LLM review → issues + fixes
+  linkright fill                  4. Resolve missing-metric gaps
+  linkright practice              5. Interview prep cards
 
 \b
 Quick reference:
@@ -48,6 +51,7 @@ Quick reference:
 \b
 Pillars (full names — short aliases also work):
   linkright resume {tailor | score | improve | practice | critique | fill | plan}
+  linkright cover-letter -j <jd.md>   (alias: cl)
   linkright profile {create | show | edit-contact | enrich | delete-nugget}
 """
 
@@ -58,7 +62,7 @@ def main() -> None:
     """LinkRight — local-first, agent-native career OS.
 
     \b
-    🚀 Try first: linkright tldr
+    Try first: linkright tldr
     """
 
 
@@ -66,16 +70,15 @@ def main() -> None:
 
 main.add_command(resume_group)
 main.add_command(auth_group)
-main.add_command(jobsearch_group)  # name="jobs" (registered in group def)
+main.add_command(jobsearch_group)       # name="jobs" (registered in group def)
 main.add_command(jobsearch_group, name="jobsearch")  # backward-compat alias
 main.add_command(interview_group)
 main.add_command(content_group)
+main.add_command(coverletter_group)     # name="cover-letter"
+main.add_command(coverletter_group, name="cl")  # top-level alias
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
-# Best-in-class CLI tools (git/npm/gh) put high-frequency commands at the
-# top level. `linkright tailor` is much more memorable than
-# `linkright resume tailor`. Same Click command under multiple names.
 def _register_top_level_shortcuts():
     """Add high-frequency commands as top-level shortcuts.
 
@@ -123,7 +126,6 @@ def _register_top_level_shortcuts():
                 pass
 
     # Profile shortcut — `contact` (canonical at top level) + `ec` alias.
-    # Inside the profile group the canonical is `edit-contact`.
     try:
         from linkright.profile import cli as _profile_cli
         contact_cmd = getattr(_profile_cli, "edit_contact_cmd", None)
@@ -162,11 +164,20 @@ def init_cmd() -> None:
 _TLDR = """\
 LinkRight — Quick Reference (cheat sheet)
 
-🚀 Common workflow (most users only need these 4):
+🚀 Common workflow (most users only need these 5):
   linkright tailor -j <jd.md>      Generate tailored resume for a JD
+  linkright cl -j <jd.md>          Generate cover letter for the same JD
   linkright critique               LLM review → 5 actionable issues
   linkright fill                   Resolve missing-metric gaps (interactive)
   linkright practice               Interview prep cards from your resume
+
+📝 Pillar 1 — Cover letter:
+  linkright cl -j <jd.md>                      Generate 3-paragraph cover letter
+  linkright cl --from-discovery <id>           Cover letter from saved job discovery
+  linkright cl -j <jd.md> --tone formal        Formal tone
+  linkright cl -j <jd.md> --tone enthusiastic  Enthusiastic tone
+  linkright cl -j <jd.md> --pdf               Also render PDF
+  linkright cover-letter --help                Full option list
 
 🔍 Pillar 2 — Job feed (daily workflow):
   linkright auth login             Log in to sync.linkright.in (once)
@@ -195,7 +206,7 @@ LinkRight — Quick Reference (cheat sheet)
 ⚡ Shortcuts (single letter — when you don't want to type):
   t   tailor       imp / i  improve     fill / f  fill-metrics
   c   critique     prac / p practice    r         strategy-review
-  s   score        ec / contact         edit-contact
+  s   score        cl       cover-letter          ec / contact edit-contact
   (jobs group)  jobs f → find    jobs s → status
 
 🩺 Health:
