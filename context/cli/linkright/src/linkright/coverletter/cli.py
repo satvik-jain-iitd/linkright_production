@@ -32,7 +32,10 @@ import click
               help="Output path for the cover letter markdown (default: ~/.linkright/runs/<id>/artifacts/cover_letter.md)")
 @click.option("--pdf", "render_pdf",
               is_flag=True, default=False,
-              help="Also render a PDF version (requires playwright or weasyprint)")
+              help="Also render a PDF version via Playwright (requires: pip install playwright && playwright install chromium)")
+@click.option("--no-html", "no_html",
+              is_flag=True, default=False,
+              help="Skip HTML rendering — output markdown only (for power users / CI)")
 @click.option("--json", "output_json",
               is_flag=True, default=False,
               help="Output machine-readable JSON result to stdout")
@@ -44,6 +47,7 @@ def coverletter_group(
     tone: str,
     output: Path | None,
     render_pdf: bool,
+    no_html: bool,
     output_json: bool,
 ) -> None:
     """Pillar 1 — Generate a personalized cover letter from a JD.
@@ -63,6 +67,15 @@ def coverletter_group(
       5. Formats and saves markdown + optional PDF
 
     Requires: `linkright profile create -r resume.pdf` (one-time setup).
+
+    \b
+    Output files (default, no flags):
+      cover_letter.md    — raw markdown (always written)
+      cover_letter.html  — A4 HTML for browser preview (open in browser to see typography)
+
+    \b
+    With --pdf:
+      cover_letter.pdf   — recruiter-ready PDF via Playwright Chromium
     """
     if ctx.invoked_subcommand:
         return
@@ -107,6 +120,7 @@ def coverletter_group(
                 tone=tone,
                 output_path=output,
                 render_pdf=render_pdf,
+                render_html=not no_html,
             )
         except RuntimeError as e:
             raise click.ClickException(str(e))
@@ -124,6 +138,7 @@ def coverletter_group(
         out = {
             "run_id": result["run_id"],
             "letter_path": str(result["letter_path"]),
+            "html_path": str(result["html_path"]) if result.get("html_path") else None,
             "pdf_path": str(result["pdf_path"]) if result["pdf_path"] else None,
             "violations": result["violations"],
             "telemetry": {
@@ -151,6 +166,8 @@ def coverletter_group(
     console.print(
         f"[dim]Saved to: {result['letter_path']}[/]"
     )
+    if result.get("html_path"):
+        console.print(f"[dim]HTML preview: {result['html_path']} (open in browser)[/]")
     if result["pdf_path"]:
         console.print(f"[dim]PDF: {result['pdf_path']}[/]")
     console.print(

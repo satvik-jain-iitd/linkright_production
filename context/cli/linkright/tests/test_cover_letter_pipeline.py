@@ -699,3 +699,269 @@ class TestOutputPermissionError:
         assert not output_file.exists(), (
             f"No partial file should exist after PermissionError, but found: {output_file}"
         )
+
+
+# ── HTML rendering tests — M16/M17/M18/M19 ───────────────────────────────────
+
+class TestHtmlRendering:
+    """M16: Template exists with all placeholders.
+    M17: Pipeline writes .html by default (no flag needed).
+    M18: --pdf uses HTML string input (not markdown).
+    M19: --no-html flag suppresses .html output.
+    """
+
+    SAMPLE_CONTACT = {
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "phone": "+1 555 123 4567",
+        "linkedin": "linkedin.com/in/janedoe",
+        "location": "San Francisco, CA",
+    }
+
+    SAMPLE_JD_META = {
+        "hiring_manager": "Sarah Chen",
+        "company_name": "Acme Corp",
+        "role_title": "Senior PM",
+    }
+
+    SAMPLE_LETTER_MD = """Jane Doe  |  jane@example.com  |  +1 555 123 4567  |  linkedin.com/in/janedoe
+
+May 02, 2026
+
+Dear Sarah Chen,
+
+Acme Corp's mission to make payments instant resonates deeply with my product background in enterprise fintech.
+
+At TechCo I led the B2B SaaS roadmap, growing ARR by $2M over twelve months with focused product discipline [n:1].
+My SQL analysis at FinBank reduced chargebacks by 30%, demonstrating rigorous data-driven decision-making [n:3].
+These achievements map directly to your stated requirements for B2B SaaS and data fluency.
+I understand the rigor that financial-grade products demand and deliver accordingly.
+
+I would welcome the chance to discuss this role with your team. Thank you for your consideration.
+
+Best regards,
+Jane Doe
+"""
+
+    def test_m16_template_exists_with_all_placeholders(self):
+        """M16: HTML template file exists and contains all required {{var}} placeholders."""
+        from pathlib import Path
+        template_path = (
+            Path(__file__).parent.parent
+            / "src" / "linkright" / "coverletter" / "templates" / "cover-letter.html"
+        )
+        assert template_path.exists(), f"Template not found at {template_path}"
+
+        template = template_path.read_text(encoding="utf-8")
+
+        required_placeholders = [
+            "{{name}}", "{{email}}", "{{phone}}", "{{linkedin}}", "{{location}}",
+            "{{date}}", "{{recipient}}",
+            "{{paragraph_1}}", "{{paragraph_2}}", "{{paragraph_3}}",
+            "{{phone_sep}}", "{{linkedin_sep}}", "{{location_sep}}",
+        ]
+        for placeholder in required_placeholders:
+            assert placeholder in template, (
+                f"Placeholder '{placeholder}' missing from cover-letter.html template"
+            )
+
+    def test_m16_html_substitutes_all_placeholders(self):
+        """M16: render_cover_letter_html replaces all {{...}} — none left in output."""
+        from linkright.coverletter.pipeline import render_cover_letter_html
+
+        html = render_cover_letter_html(
+            self.SAMPLE_LETTER_MD,
+            self.SAMPLE_CONTACT,
+            self.SAMPLE_JD_META,
+        )
+
+        assert "{{" not in html, (
+            f"Unreplaced placeholders found in HTML output. "
+            f"First occurrence near: {html[html.index('{{'):html.index('{{')+40]!r}"
+        )
+        assert "}}" not in html, "Unreplaced closing braces found in HTML output"
+
+    def test_m16_html_contains_contact_info(self):
+        """M16: HTML output contains name, email, recipient from contact dict."""
+        from linkright.coverletter.pipeline import render_cover_letter_html
+
+        html = render_cover_letter_html(
+            self.SAMPLE_LETTER_MD,
+            self.SAMPLE_CONTACT,
+            self.SAMPLE_JD_META,
+        )
+
+        assert "Jane Doe" in html
+        assert "jane@example.com" in html
+        assert "Sarah Chen" in html
+        # Verify A4 dimensions present
+        assert "210mm" in html or "A4" in html or "page-width" in html
+
+    def test_m17_html_written_by_default(self, tmp_path: Path):
+        """M17: run_cover_letter_pipeline writes .html file by default (no flag)."""
+        mock_usage = {"provider": "groq", "prompt_tokens": 300, "completion_tokens": 150}
+        mock_draft = (
+            "Acme Corp\'s mission resonates with my background in enterprise payments.\n\n"
+            "At TechCo I led the B2B SaaS roadmap growing ARR by $2M [n:1]. "
+            "My SQL analysis at FinBank reduced chargebacks by 30% [n:3]. "
+            "These outcomes match your stated requirements directly.\n\n"
+            "I would love to discuss this role. Thank you for your time."
+        )
+        mock_contact = {
+            "name": "Jane Doe", "email": "jane@example.com",
+            "phone": "", "linkedin": "", "portfolio": "", "location": "",
+        }
+
+        from linkright.coverletter.pipeline import run_cover_letter_pipeline
+        output_md = tmp_path / "letter.md"
+
+        with patch("linkright.coverletter.pipeline.step_1_parse_jd",
+                   return_value=(SAMPLE_JD_PARSED, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_2_retrieve_nuggets",
+                   return_value=SAMPLE_NUGGETS), \
+             patch("linkright.coverletter.pipeline.step_3_generate_draft",
+                   return_value=(mock_draft, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(mock_draft, [])), \
+             patch("linkright.coverletter.pipeline.load_contact",
+                   return_value=mock_contact), \
+             patch("linkright.coverletter.pipeline._runs_dir",
+                   return_value=tmp_path / "runs"), \
+             patch("linkright.coverletter.pipeline._profile_dir",
+                   return_value=tmp_path / "profile"):
+            result = run_cover_letter_pipeline(
+                jd_text=SAMPLE_JD,
+                output_path=output_md,
+                # render_html defaults to True — no flag needed
+            )
+
+        # .md must exist
+        assert output_md.exists(), ".md file not written"
+        # .html must exist alongside .md (default behaviour)
+        html_path = output_md.with_suffix(".html")
+        assert html_path.exists(), (
+            f".html file not written at {html_path} — HTML rendering should be ON by default"
+        )
+        # result dict must include html_path
+        assert result.get("html_path") is not None, "html_path missing from result dict"
+        # No unreplaced placeholders in HTML
+        html_content = html_path.read_text()
+        assert "{{" not in html_content, "Unreplaced placeholders in written HTML file"
+
+    def test_m18_pdf_renders_from_html_not_markdown(self, tmp_path: Path):
+        """M18: When --pdf flag set, PDF generation receives HTML string (not markdown)."""
+        mock_usage = {"provider": "groq", "prompt_tokens": 300, "completion_tokens": 150}
+        mock_draft = (
+            "Acme Corp is great.\n\n"
+            "At TechCo I grew ARR by $2M [n:1]. My analysis reduced chargebacks by 30% [n:3].\n\n"
+            "Thank you for your time."
+        )
+        mock_contact = {
+            "name": "Jane Doe", "email": "jane@example.com",
+            "phone": "", "linkedin": "", "portfolio": "", "location": "",
+        }
+        output_md = tmp_path / "letter.md"
+
+        # Capture what set_content receives
+        received_html: list[str] = []
+
+        from unittest.mock import MagicMock
+
+        mock_page = MagicMock()
+        mock_page.set_content.side_effect = lambda html, **kw: received_html.append(html)
+        mock_page.pdf.return_value = None
+
+        mock_browser = MagicMock()
+        mock_browser.new_page.return_value = mock_page
+
+        mock_pw_ctx = MagicMock()
+        mock_pw_ctx.__enter__ = lambda self: self
+        mock_pw_ctx.__exit__ = MagicMock(return_value=False)
+        mock_pw_ctx.chromium.launch.return_value = mock_browser
+
+        from linkright.coverletter.pipeline import run_cover_letter_pipeline
+
+        with patch("linkright.coverletter.pipeline.step_1_parse_jd",
+                   return_value=(SAMPLE_JD_PARSED, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_2_retrieve_nuggets",
+                   return_value=SAMPLE_NUGGETS), \
+             patch("linkright.coverletter.pipeline.step_3_generate_draft",
+                   return_value=(mock_draft, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(mock_draft, [])), \
+             patch("linkright.coverletter.pipeline.load_contact",
+                   return_value=mock_contact), \
+             patch("linkright.coverletter.pipeline._runs_dir",
+                   return_value=tmp_path / "runs"), \
+             patch("linkright.coverletter.pipeline._profile_dir",
+                   return_value=tmp_path / "profile"), \
+             patch("linkright.coverletter.pipeline.sync_playwright",
+                   return_value=mock_pw_ctx):
+            run_cover_letter_pipeline(
+                jd_text=SAMPLE_JD,
+                output_path=output_md,
+                render_pdf=True,
+            )
+
+        # set_content must have been called (HTML-first path)
+        assert mock_page.set_content.called, (
+            "page.set_content() was never called — PDF is not using HTML-first path"
+        )
+        assert len(received_html) > 0, "No HTML passed to set_content"
+        html_passed = received_html[0]
+
+        # The HTML must be actual HTML (not markdown)
+        assert "<!DOCTYPE html>" in html_passed or "<html" in html_passed, (
+            f"set_content received non-HTML content. First 200 chars: {html_passed[:200]!r}"
+        )
+        # Must NOT be raw markdown (which starts with the name header)
+        assert not html_passed.startswith("Jane Doe  |"), (
+            "set_content received raw markdown — HTML-first path broken"
+        )
+
+    def test_m19_no_html_flag_suppresses_html_file(self, tmp_path: Path):
+        """M19: render_html=False suppresses .html output."""
+        mock_usage = {"provider": "groq", "prompt_tokens": 300, "completion_tokens": 150}
+        mock_draft = (
+            "Acme Corp is great.\n\n"
+            "At TechCo I grew ARR by $2M [n:1]. My analysis reduced chargebacks by 30% [n:3].\n\n"
+            "Thank you for your time."
+        )
+        mock_contact = {
+            "name": "Jane Doe", "email": "jane@example.com",
+            "phone": "", "linkedin": "", "portfolio": "", "location": "",
+        }
+        output_md = tmp_path / "letter.md"
+
+        from linkright.coverletter.pipeline import run_cover_letter_pipeline
+
+        with patch("linkright.coverletter.pipeline.step_1_parse_jd",
+                   return_value=(SAMPLE_JD_PARSED, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_2_retrieve_nuggets",
+                   return_value=SAMPLE_NUGGETS), \
+             patch("linkright.coverletter.pipeline.step_3_generate_draft",
+                   return_value=(mock_draft, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(mock_draft, [])), \
+             patch("linkright.coverletter.pipeline.load_contact",
+                   return_value=mock_contact), \
+             patch("linkright.coverletter.pipeline._runs_dir",
+                   return_value=tmp_path / "runs"), \
+             patch("linkright.coverletter.pipeline._profile_dir",
+                   return_value=tmp_path / "profile"):
+            result = run_cover_letter_pipeline(
+                jd_text=SAMPLE_JD,
+                output_path=output_md,
+                render_html=False,  # --no-html equivalent
+            )
+
+        # .md must still exist
+        assert output_md.exists(), ".md file not written even with --no-html"
+        # .html must NOT exist
+        html_path = output_md.with_suffix(".html")
+        assert not html_path.exists(), (
+            f".html file was written despite render_html=False: {html_path}"
+        )
+        # result dict: html_path is None
+        assert result.get("html_path") is None, "html_path should be None with render_html=False"
+        assert result.get("letter_html") is None, "letter_html should be None with render_html=False"

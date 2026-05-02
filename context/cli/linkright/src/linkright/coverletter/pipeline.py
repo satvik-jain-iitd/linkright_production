@@ -23,6 +23,10 @@ import click
 
 # ── Module-level imports (patchable in tests) ─────────────────────────────────
 from linkright.llm.direct import groq_chat, gemini_chat_best, LLMError  # noqa: F401
+try:
+    from playwright.sync_api import sync_playwright  # noqa: F401
+except ImportError:  # playwright optional — only needed with --pdf
+    sync_playwright = None  # type: ignore[assignment]
 from linkright.resume.lib.embedder import embed  # noqa: F401
 from linkright.resume.lib.metric_extract import find_fabricated  # noqa: F401
 from linkright.resume.lib.jd_keyphrase import extract_jd_terms, find_fishing  # noqa: F401
@@ -503,6 +507,114 @@ def step_5_format(
     return letter
 
 
+
+# ── HTML rendering (deterministic) ───────────────────────────────────────────
+
+def _parse_3_paragraphs(letter_md: str) -> list[str]:
+    """Extract 3 prose paragraphs from the markdown letter body.
+
+    Skips the header line (name | email | ...), date line, greeting, and
+    sign-off block.  Returns a list of exactly 3 strings; pads with empty
+    strings if fewer than 3 paragraphs are found.
+    """
+    lines = letter_md.splitlines()
+    # A "paragraph" is a block of non-empty lines separated by blank lines.
+    # We collect all paragraph blocks first, then heuristically skip header /
+    # date / greeting / sign-off.
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in lines:
+        if line.strip():
+            current.append(line.strip())
+        else:
+            if current:
+                blocks.append(" ".join(current))
+                current = []
+    if current:
+        blocks.append(" ".join(current))
+
+    # Filter out well-known non-body blocks:
+    #   • header (contains " | " separator used in step_5_format)
+    #   • date line (matches month-day-year pattern, e.g. "May 02, 2026")
+    #   • greeting ("Dear ...")
+    #   • sign-off ("Best regards," or candidate name after sign-off)
+    import re as _re
+    body_blocks: list[str] = []
+    date_pat = _re.compile(
+        r"^(January|February|March|April|May|June|July|August|September|"
+        r"October|November|December)\s+\d{1,2},\s+\d{4}$"
+    )
+    for block in blocks:
+        if "  |  " in block:          # header contact line
+            continue
+        if date_pat.match(block):      # date
+            continue
+        if block.startswith("Dear "):  # greeting
+            continue
+        if block.startswith("Best regards"):  # sign-off line 1
+            continue
+        # Last block often = candidate name alone (sign-off line 2).
+        # Heuristic: ≤4 words, no punctuation, comes after sign-off was seen.
+        # We relax this — just collect all remaining blocks and trim to 3.
+        body_blocks.append(block)
+
+    # Return exactly 3; pad with empty if fewer found
+    while len(body_blocks) < 3:
+        body_blocks.append("")
+    return body_blocks[:3]
+
+
+def render_cover_letter_html(letter_md: str, contact: dict, jd_meta: dict) -> str:
+    """Convert cover letter markdown to professional A4 HTML.
+
+    Parses 3 paragraphs from markdown body, substitutes into the HTML template
+    with contact info, date, recipient, and signature blocks.
+
+    Args:
+        letter_md: Full formatted cover letter markdown (output of step_5_format).
+        contact:   Dict with keys: name, email, phone, linkedin, location.
+        jd_meta:   Dict with key: hiring_manager (may be empty).
+
+    Returns:
+        HTML string ready for browser preview or PDF rendering.
+    """
+    paragraphs = _parse_3_paragraphs(letter_md)
+
+    template_path = Path(__file__).parent / "templates" / "cover-letter.html"
+    template = template_path.read_text(encoding="utf-8")
+
+    name = contact.get("name") or ""
+    email = contact.get("email") or ""
+    phone = contact.get("phone") or ""
+    linkedin = contact.get("linkedin") or ""
+    location = contact.get("location") or ""
+
+    # Build contact sub-separators: only show separator before a field if the field has value
+    phone_sep = '<span class="separator"> | </span>' if phone else ""
+    linkedin_sep = '<span class="separator"> | </span>' if linkedin else ""
+    location_sep = '<span class="separator"> | </span>' if location else ""
+
+    recipient = jd_meta.get("hiring_manager") or "Hiring Team"
+    today_str = date.today().strftime("%B %d, %Y")
+
+    html = template
+    html = html.replace("{{name}}", name)
+    html = html.replace("{{email}}", email)
+    html = html.replace("{{phone}}", phone)
+    html = html.replace("{{phone_sep}}", phone_sep)
+    html = html.replace("{{linkedin}}", linkedin)
+    html = html.replace("{{linkedin_sep}}", linkedin_sep)
+    html = html.replace("{{location}}", location)
+    html = html.replace("{{location_sep}}", location_sep)
+    html = html.replace("{{date}}", today_str)
+    html = html.replace("{{recipient}}", recipient)
+    html = html.replace("{{paragraph_1}}", paragraphs[0])
+    html = html.replace("{{paragraph_2}}", paragraphs[1])
+    html = html.replace("{{paragraph_3}}", paragraphs[2])
+
+    return html
+
+
 # ── Main pipeline orchestrator ─────────────────────────────────────────────────
 
 def run_cover_letter_pipeline(
@@ -510,14 +622,25 @@ def run_cover_letter_pipeline(
     tone: str = "conversational",
     output_path: Optional[Path] = None,
     render_pdf: bool = False,
+    render_html: bool = True,
     profile_dir: Optional[Path] = None,
     run_id: Optional[str] = None,
 ) -> dict:
     """Run the full 5-step cover letter pipeline.
 
+    By default writes two output files:
+      - cover_letter.md  — raw markdown (always written)
+      - cover_letter.html — A4 HTML for browser preview (written unless render_html=False)
+
+    Optionally (render_pdf=True):
+      - cover_letter.pdf — recruiter-ready PDF via Playwright (HTML-first rendering)
+
     Returns result dict with:
       letter_md: str — final markdown letter
-      letter_path: Path — where it was saved
+      letter_html: str | None — HTML string (None if render_html=False)
+      letter_path: Path — where .md was saved
+      html_path: Path | None — where .html was saved
+      pdf_path: Path | None — where .pdf was saved (None unless render_pdf=True)
       telemetry: dict — api_calls, tokens, wall_time, cost, validator_failures
       nuggets_used: list — top-N nugget dicts
       violations: list — truth-engine violations found (and dropped)
@@ -624,15 +747,54 @@ def run_cover_letter_pipeline(
     else:
         letter_path = artifacts_dir / "cover_letter.md"
 
-    # Optional PDF render
+    # ── HTML rendering (default: on) ──────────────────────────────────────────
+    # Always build HTML string from the markdown letter — it's cheap and deterministic.
+    # Only skip writing to disk if render_html=False (--no-html flag).
+    letter_html: Optional[str] = None
+    html_path: Optional[Path] = None
+    if render_html:
+        try:
+            letter_html = render_cover_letter_html(letter_md, contact, jd_parsed)
+            html_path = letter_path.with_suffix(".html")
+            html_path.write_text(letter_html, encoding="utf-8")
+            (artifacts_dir / "05_cover_letter.html").write_text(letter_html, encoding="utf-8")
+        except Exception as e:
+            violations.append(f"HTML_RENDER_ERROR: {e}")
+
+    # ── PDF rendering (optional: --pdf flag) — HTML-first path ────────────────
+    # Renders from the HTML string via Playwright headless Chromium.
+    # This is the correct path: markdown → HTML template → PDF (not markdown → PDF).
     pdf_path: Optional[Path] = None
     if render_pdf:
-        try:
-            from linkright.resume.lib.pdf_renderer import render_pdf as _render_pdf
-            pdf_path = letter_path.with_suffix(".pdf")
-            _render_pdf(letter_md, str(pdf_path))
-        except Exception as e:
-            violations.append(f"PDF_RENDER_ERROR: {e}")
+        # Ensure we have an HTML string to render from
+        if letter_html is None:
+            try:
+                letter_html = render_cover_letter_html(letter_md, contact, jd_parsed)
+            except Exception as e:
+                violations.append(f"HTML_BUILD_ERROR: {e}")
+                letter_html = None
+
+        if letter_html is not None:
+            try:
+                if sync_playwright is None:
+                    raise ImportError(
+                        "playwright not installed. Run: pip install playwright && playwright install chromium"
+                    )
+                pdf_path = letter_path.with_suffix(".pdf")
+                with sync_playwright() as pw:
+                    browser = pw.chromium.launch()
+                    page = browser.new_page()
+                    page.set_content(letter_html, wait_until="networkidle")
+                    page.pdf(
+                        path=str(pdf_path),
+                        format="A4",
+                        print_background=True,
+                        margin={"top": "25mm", "bottom": "25mm", "left": "25mm", "right": "25mm"},
+                    )
+                    browser.close()
+            except Exception as e:
+                violations.append(f"PDF_RENDER_ERROR: {e}")
+                pdf_path = None
 
     # ── Telemetry ──────────────────────────────────────────────────────────
     wall_time_s = round(time.time() - t_start, 2)
@@ -667,12 +829,15 @@ def run_cover_letter_pipeline(
         "providers": list({u.get("provider") for u in usages if u.get("provider")}),
         "violations": violations,
         "pdf_rendered": pdf_path is not None,
+        "html_rendered": html_path is not None,
     }
     (run_dir / "telemetry.json").write_text(json.dumps(telemetry, indent=2))
 
     return {
         "letter_md": letter_md,
+        "letter_html": letter_html,
         "letter_path": letter_path,
+        "html_path": html_path,
         "pdf_path": pdf_path,
         "telemetry": telemetry,
         "nuggets_used": nuggets,

@@ -200,6 +200,50 @@ After import, run `linkright jobs find` in 2-3 minutes to see fit scores (backen
 | `linkright resume batch` | Run `tailor` across a folder of JDs |
 | `linkright resume iterate` | Re-run with scorecard feedback loop |
 
+### Pillar 1 Extension — Cover letter
+
+Generate a personalized, truth-engine-validated cover letter directly from a job description. Reuses your career profile nuggets — no extra setup.
+
+```bash
+# Default: writes .md + .html (browser-previewable)
+linkright cover-letter -j jd.md
+linkright cl -j jd.md                        # alias
+
+# Tone variants (formal / conversational / enthusiastic)
+linkright cl -j jd.md --tone formal
+
+# With recruiter-ready PDF (requires: pip install playwright && playwright install chromium)
+linkright cl -j jd.md --pdf
+
+# Markdown only (power users / CI)
+linkright cl -j jd.md --no-html
+
+# From Pillar 2 discovery (requires auth)
+linkright cl --from-discovery abc123
+```
+
+**Output files:**
+
+| File | When | Purpose |
+|---|---|---|
+| `cover_letter.md` | Always | Raw markdown — edit-friendly source of truth |
+| `cover_letter.html` | Default (suppress with `--no-html`) | A4 HTML — open in browser to see final typography and layout |
+| `cover_letter.pdf` | Only with `--pdf` flag | Recruiter-ready PDF via Playwright Chromium |
+
+> **Note:** The HTML preview shows the polished A4 version. The PDF is generated from that same HTML — not from markdown — so typography is consistent between preview and final output.
+
+**5-step pipeline (≤2 LLM calls, rest deterministic):**
+
+1. Parse JD into structured requirements (LLM, free tier)
+2. Retrieve top-7 matching career nuggets from your profile (no LLM — cosine similarity)
+3. Generate 3-paragraph draft (LLM, free tier)
+4. Truth-engine validation — drops fabricated metrics; aborts if >50% unverifiable
+5. Format + render → `.md` + `.html` (+ `.pdf` if requested)
+
+Requires: `linkright profile create -r resume.pdf` (one-time profile setup).
+
+---
+
 ### Pillar 2 — Job search
 | Command | What it does |
 |---|---|
