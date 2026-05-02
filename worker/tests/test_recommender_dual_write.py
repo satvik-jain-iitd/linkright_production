@@ -412,3 +412,89 @@ def test_user_daily_top_20_write_path_untouched():
     assert "_dual_write_job_scores_rank" in src, (
         "_dual_write_job_scores_rank call missing from compute_and_store_top_20"
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests — M12/M13/M14/M15: migration 054 structural verification
+# ---------------------------------------------------------------------------
+
+def _read_migration(filename: str) -> str:
+    """Read a migration file from website/db/migrations/ relative to the worktree root."""
+    # _WORKER_ROOT is worker/ — go up one level to repo root, then into website/
+    repo_root = os.path.abspath(os.path.join(_WORKER_ROOT, ".."))
+    migration_path = os.path.join(repo_root, "website", "db", "migrations", filename)
+    with open(migration_path) as f:
+        return f.read()
+
+
+def test_migration_054_exists_and_contains_constraint():
+    """M12/M13: migration 054 file exists and adds the expected UNIQUE CONSTRAINT.
+
+    This catches the regression where a developer ships the upsert code but
+    forgets to add the migration that makes ON CONFLICT inference work.
+    """
+    sql = _read_migration("054_job_scores_unique_constraint.sql")
+
+    # Must define the correct constraint name
+    assert "uq_job_scores_user_discovery" in sql, (
+        "Migration 054 must define constraint 'uq_job_scores_user_discovery'. "
+        "PostgREST ON CONFLICT inference needs this exact non-partial constraint."
+    )
+
+    # Must be an ADD CONSTRAINT ... UNIQUE statement (not just an index)
+    assert "ADD CONSTRAINT" in sql.upper(), (
+        "Migration 054 must use ADD CONSTRAINT, not just CREATE INDEX. "
+        "Only a UNIQUE CONSTRAINT (not a partial index) satisfies ON CONFLICT column-list inference."
+    )
+
+    # Must target the correct columns
+    assert "user_id" in sql and "job_discovery_id" in sql, (
+        "Migration 054 must reference both user_id and job_discovery_id columns."
+    )
+
+
+def test_migration_054_has_duplicate_guard():
+    """M14: migration 054 contains the defensive duplicate-count guard.
+
+    The DO $$ block prevents the ALTER TABLE from failing on a dirty DB by
+    raising a descriptive error first.  Without this guard, the migration would
+    fail with a generic Postgres constraint-violation message that is hard to
+    diagnose.
+    """
+    sql = _read_migration("054_job_scores_unique_constraint.sql")
+
+    assert "DO $$" in sql, (
+        "Migration 054 must contain a DO $$ block for the duplicate-count guard."
+    )
+    assert "duplicate_count" in sql, (
+        "Migration 054 DO $$ block must check for existing duplicate (user_id, job_discovery_id) pairs."
+    )
+    assert "RAISE EXCEPTION" in sql, (
+        "Migration 054 DO $$ block must RAISE EXCEPTION when duplicates are found."
+    )
+
+
+def test_upsert_on_conflict_columns_match_constraint():
+    """M15: recommender.py upsert on_conflict columns match migration 054 constraint columns.
+
+    Reads both files as text. No Postgres connection needed — this is a pure
+    source-level consistency check that catches typos in column names and ensures
+    the constraint and the call site stay in sync.
+    """
+    # Read recommender source
+    recommender_path = os.path.join(_WORKER_ROOT, "app", "pipeline", "recommender.py")
+    with open(recommender_path) as f:
+        recommender_src = f.read()
+
+    # The upsert call must use the correct column list
+    assert 'on_conflict="user_id,job_discovery_id"' in recommender_src, (
+        "recommender.py upsert must use on_conflict='user_id,job_discovery_id' "
+        "to match the uq_job_scores_user_discovery constraint from migration 054."
+    )
+
+    # Migration 054 must define those same two columns as the constraint
+    sql = _read_migration("054_job_scores_unique_constraint.sql")
+    assert "UNIQUE (user_id, job_discovery_id)" in sql, (
+        "Migration 054 constraint must be UNIQUE (user_id, job_discovery_id) — "
+        "column order must match the on_conflict parameter in recommender.py."
+    )
