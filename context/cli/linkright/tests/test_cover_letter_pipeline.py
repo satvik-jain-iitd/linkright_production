@@ -432,6 +432,8 @@ class TestTelemetry:
                    return_value=SAMPLE_NUGGETS), \
              patch("linkright.coverletter.pipeline.step_3_generate_draft",
                    return_value=(mock_draft, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(mock_draft, [])), \
              patch("linkright.coverletter.pipeline.load_contact",
                    return_value=mock_contact), \
              patch("linkright.coverletter.pipeline._runs_dir",
@@ -477,3 +479,223 @@ class TestTelemetry:
         """Telemetry records the tone used."""
         result = self._run_pipeline_mocked(tmp_path, tone="formal")
         assert result["telemetry"]["tone"] == "formal"
+
+
+# ── Truth-engine integrity tests — M11/M12/M13 ───────────────────────────────
+
+class TestValidationFallbackRefusal:
+    """M11: VALIDATION_FALLBACK now raises ClickException + exits non-zero + no file.
+    M12: >50% sentences fabricated → pipeline aborts, no file written.
+    M13: 1 fabricated sentence → cleaned output written normally.
+    """
+
+    def _mock_common(self, tmp_path: Path):
+        """Common mocks for pipeline orchestrator tests."""
+        return {
+            "jd_parsed": SAMPLE_JD_PARSED,
+            "usage": {"provider": "groq", "prompt_tokens": 300, "completion_tokens": 150},
+            "contact": {
+                "name": "Jane Doe", "email": "jane@example.com",
+                "phone": "", "linkedin": "", "portfolio": "",
+            },
+            "runs_dir": tmp_path / "runs",
+            "profile_dir": tmp_path / "profile",
+        }
+
+    def test_m12_validation_fallback_raises_click_exception_no_file(self, tmp_path: Path):
+        """M12: When >50% of sentences are fabricated, pipeline raises ClickException and
+        does NOT write any output file."""
+        from linkright.coverletter.pipeline import run_cover_letter_pipeline
+        import click as _click
+
+        ctx = self._mock_common(tmp_path)
+        output_file = tmp_path / "output_should_not_exist.md"
+
+        # Craft a draft where step_4_validate will drop >50% words.
+        # We mock step_4_validate to simulate this: return a heavily-trimmed cleaned draft
+        # and a VALIDATION_FALLBACK violation (as the real code would produce).
+        trimmed_draft = "Only this one sentence survived."  # ~5 words vs original ~40
+        fallback_violations = [
+            "METRIC_FABRICATION: 'I boosted revenue by 9999% in one week.' unsupported metrics: ['9999%']",
+            "METRIC_FABRICATION: 'Cut costs by 8888% overnight.' unsupported metrics: ['8888%']",
+            "METRIC_FABRICATION: 'Grew team by 7777% instantly.' unsupported metrics: ['7777%']",
+            "METRIC_FABRICATION: 'Shipped 6666 features in one sprint.' unsupported metrics: ['6666']",
+            (
+                "VALIDATION_FALLBACK: 4 sentences dropped (5/40 words retained) "
+                "— refusing to save fabricated content"
+            ),
+        ]
+        mock_draft = (
+            "I boosted revenue by 9999% in one week. "
+            "Cut costs by 8888% overnight. "
+            "Grew team by 7777% instantly. "
+            "Shipped 6666 features in one sprint. "
+            "Only this one sentence survived."
+        )
+
+        with patch("linkright.coverletter.pipeline.step_1_parse_jd",
+                   return_value=(ctx["jd_parsed"], ctx["usage"])), \
+             patch("linkright.coverletter.pipeline.step_2_retrieve_nuggets",
+                   return_value=SAMPLE_NUGGETS), \
+             patch("linkright.coverletter.pipeline.step_3_generate_draft",
+                   return_value=(mock_draft, ctx["usage"])), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(trimmed_draft, fallback_violations)), \
+             patch("linkright.coverletter.pipeline.load_contact",
+                   return_value=ctx["contact"]), \
+             patch("linkright.coverletter.pipeline._runs_dir",
+                   return_value=ctx["runs_dir"]), \
+             patch("linkright.coverletter.pipeline._profile_dir",
+                   return_value=ctx["profile_dir"]):
+            with pytest.raises(_click.ClickException) as exc_info:
+                run_cover_letter_pipeline(
+                    jd_text=SAMPLE_JD,
+                    output_path=output_file,
+                )
+
+        # M11: exception message must explain the truth-engine refusal
+        err_msg = exc_info.value.format_message()
+        assert "truth-engine" in err_msg.lower() or "validation" in err_msg.lower(), (
+            f"Error message should mention truth-engine/validation. Got: {err_msg[:200]}"
+        )
+        assert "profile" in err_msg.lower(), (
+            f"Error message should guide user to expand profile. Got: {err_msg[:200]}"
+        )
+
+        # M12: output file must NOT have been written
+        assert not output_file.exists(), (
+            f"Output file should NOT exist after VALIDATION_FALLBACK, but found: {output_file}"
+        )
+
+    def test_m13_single_fabrication_cleans_and_writes_file(self, tmp_path: Path):
+        """M13: When only 1 sentence is fabricated (below 50% threshold), pipeline
+        succeeds: output file IS written, fabricated sentence NOT in output."""
+        from linkright.coverletter.pipeline import run_cover_letter_pipeline
+
+        ctx = self._mock_common(tmp_path)
+        output_file = tmp_path / "cover_letter_cleaned.md"
+
+        # Mock draft with 1 fabricated sentence among 4 real ones
+        full_draft = (
+            "Acme Corp's mission to make payments instant resonates with my background. "
+            "At TechCo I led the B2B SaaS roadmap growing ARR by $2M over 12 months. "
+            "I SINGLE-HANDEDLY BOOSTED REVENUE BY 500000% FABRICATED CLAIM HERE. "
+            "My SQL analysis at FinBank reduced chargebacks by 30% demonstrably. "
+            "I would welcome the chance to discuss this opportunity with your team."
+        )
+        # step_4_validate strips the fabricated sentence — 4/5 sentences survive (>50%)
+        cleaned_draft = (
+            "Acme Corp's mission to make payments instant resonates with my background. "
+            "At TechCo I led the B2B SaaS roadmap growing ARR by $2M over 12 months. "
+            "My SQL analysis at FinBank reduced chargebacks by 30% demonstrably. "
+            "I would welcome the chance to discuss this opportunity with your team."
+        )
+        single_violation = [
+            "METRIC_FABRICATION: 'I SINGLE-HANDEDLY BOOSTED REVENUE BY 500000%...' unsupported metrics: ['500000%']"
+        ]
+
+        with patch("linkright.coverletter.pipeline.step_1_parse_jd",
+                   return_value=(ctx["jd_parsed"], ctx["usage"])), \
+             patch("linkright.coverletter.pipeline.step_2_retrieve_nuggets",
+                   return_value=SAMPLE_NUGGETS), \
+             patch("linkright.coverletter.pipeline.step_3_generate_draft",
+                   return_value=(full_draft, ctx["usage"])), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(cleaned_draft, single_violation)), \
+             patch("linkright.coverletter.pipeline.load_contact",
+                   return_value=ctx["contact"]), \
+             patch("linkright.coverletter.pipeline._runs_dir",
+                   return_value=ctx["runs_dir"]), \
+             patch("linkright.coverletter.pipeline._profile_dir",
+                   return_value=ctx["profile_dir"]):
+            result = run_cover_letter_pipeline(
+                jd_text=SAMPLE_JD,
+                output_path=output_file,
+            )
+
+        # File IS written
+        assert output_file.exists(), "Output file should be written when fallback does NOT trigger"
+
+        # Fabricated sentence NOT in output
+        letter_content = output_file.read_text()
+        assert "500000" not in letter_content, (
+            "Fabricated claim '500000%' must not appear in written cover letter"
+        )
+
+        # Result dict has expected keys
+        assert "letter_md" in result
+        assert "violations" in result
+        assert len(result["violations"]) == 1  # Only the one METRIC_FABRICATION
+
+
+# ── PermissionError / OSError tests — M14/M15 ────────────────────────────────
+
+class TestOutputPermissionError:
+    """M14: PermissionError on --output raises clean ClickException (not traceback).
+    M15: Asserts no partial file left behind.
+    """
+
+    def test_m14_m15_permission_error_raises_click_exception_no_partial_file(self, tmp_path: Path):
+        """M14+M15: When write_text raises PermissionError on the user --output path,
+        pipeline raises ClickException with helpful message AND no partial file is left."""
+        from linkright.coverletter.pipeline import run_cover_letter_pipeline
+        import click as _click
+        from pathlib import Path as _Path
+
+        mock_jd_parsed = SAMPLE_JD_PARSED
+        mock_usage = {"provider": "groq", "prompt_tokens": 300, "completion_tokens": 150}
+        mock_draft = (
+            "Acme Corp's mission resonates with my background in enterprise payments. "
+            "At TechCo I grew ARR by $2M over 12 months with a focused B2B SaaS roadmap. "
+            "I would welcome the chance to discuss this opportunity with your team."
+        )
+        mock_contact = {
+            "name": "Jane Doe", "email": "jane@example.com",
+            "phone": "", "linkedin": "", "portfolio": "",
+        }
+        output_file = tmp_path / "cover_letter_output.md"
+        output_file_str = str(output_file)
+
+        # Patch Path.write_text so it fails only for the user-specified output path,
+        # but succeeds for internal artifact writes (which use different paths).
+        original_write_text = _Path.write_text
+
+        def selective_write_text(self, *args, **kwargs):
+            if str(self) == output_file_str:
+                raise PermissionError(f"Permission denied: {output_file_str}")
+            return original_write_text(self, *args, **kwargs)
+
+        with patch("linkright.coverletter.pipeline.step_1_parse_jd",
+                   return_value=(mock_jd_parsed, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_2_retrieve_nuggets",
+                   return_value=SAMPLE_NUGGETS), \
+             patch("linkright.coverletter.pipeline.step_3_generate_draft",
+                   return_value=(mock_draft, mock_usage)), \
+             patch("linkright.coverletter.pipeline.step_4_validate",
+                   return_value=(mock_draft, [])), \
+             patch("linkright.coverletter.pipeline.load_contact",
+                   return_value=mock_contact), \
+             patch("linkright.coverletter.pipeline._runs_dir",
+                   return_value=tmp_path / "runs"), \
+             patch("linkright.coverletter.pipeline._profile_dir",
+                   return_value=tmp_path / "profile"), \
+             patch.object(_Path, "write_text", selective_write_text):
+            with pytest.raises(_click.ClickException) as exc_info:
+                run_cover_letter_pipeline(
+                    jd_text=SAMPLE_JD,
+                    output_path=output_file,
+                )
+
+        # M14: Error message is user-friendly (not a raw traceback)
+        err_msg = exc_info.value.format_message()
+        assert "permission" in err_msg.lower() or "could not write" in err_msg.lower(), (
+            f"Expected helpful permission error message. Got: {err_msg[:200]}"
+        )
+        assert "--output" in err_msg or "permissions" in err_msg, (
+            f"Expected guidance on --output path. Got: {err_msg[:200]}"
+        )
+
+        # M15: Output file does NOT exist (no partial write)
+        assert not output_file.exists(), (
+            f"No partial file should exist after PermissionError, but found: {output_file}"
+        )

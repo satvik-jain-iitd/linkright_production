@@ -19,6 +19,8 @@ from typing import Optional
 
 import numpy as np
 
+import click
+
 # ── Module-level imports (patchable in tests) ─────────────────────────────────
 from linkright.llm.direct import groq_chat, gemini_chat_best, LLMError  # noqa: F401
 from linkright.resume.lib.embedder import embed  # noqa: F401
@@ -427,12 +429,20 @@ def step_4_validate(
 
     cleaned_draft = " ".join(cleaned_sentences)
 
-    # Safety: if we stripped more than 50% of content, keep original
+    # Safety: if we stripped more than 50% of content, raise severe validation flag.
+    # We do NOT silently revert to the fabricated original — that would undermine the
+    # truth-engine guarantee.  The orchestrator checks for this sentinel and refuses to
+    # write the output file.
     original_words = _count_words(draft)
     cleaned_words = _count_words(cleaned_draft)
     if original_words > 0 and cleaned_words < original_words * 0.5:
-        cleaned_draft = draft
-        violations.append("VALIDATION_FALLBACK: too many sentences dropped — kept original draft")
+        # Keep the cleaned (stripped) draft — DO NOT revert to original fabricated draft.
+        # Append sentinel so the orchestrator can detect and abort.
+        violations.append(
+            f"VALIDATION_FALLBACK: {len(violations)} sentences dropped "
+            f"({cleaned_words}/{original_words} words retained) — "
+            f"refusing to save fabricated content"
+        )
 
     return cleaned_draft, violations
 
@@ -572,6 +582,28 @@ def run_cover_letter_pipeline(
         json.dumps({"violations": violations}, indent=2)
     )
 
+    # ── Truth-engine integrity gate ────────────────────────────────────────
+    # If >50% of sentences were fabricated, refuse to continue.  The cleaned_draft
+    # is heavily truncated and unfit to send; the original was fabricated. Abort.
+    validation_fallback = any("VALIDATION_FALLBACK" in v for v in violations)
+    if validation_fallback:
+        # Collect first 3 non-fallback violations for the error message
+        sample_violations = [v for v in violations if "VALIDATION_FALLBACK" not in v][:3]
+        viol_summary = "\n".join(f"  \u2022 {v[:120]}" for v in sample_violations) if sample_violations else "  (no individual violations logged)"
+        n_flagged = len([v for v in violations if "VALIDATION_FALLBACK" not in v])
+        raise click.ClickException(
+            f"\n\u274c Cover letter generation failed truth-engine validation.\n\n"
+            f"The LLM produced too many unverifiable claims for the available career\n"
+            f"evidence. This usually means:\n"
+            f"  1. Your career profile is too sparse — run `linkright profile create`\n"
+            f"     or `linkright profile enrich <id>` to add more career nuggets\n"
+            f"  2. The JD requires skills not present in your profile — consider\n"
+            f"     a different role or be honest about gaps\n\n"
+            f"{n_flagged} sentences flagged:\n{viol_summary}\n\n"
+            f"We refuse to write a cover letter with unverified claims.\n"
+            f"Re-run after expanding your profile."
+        )
+
     # ── Step 5: Format ─────────────────────────────────────────────────────
     contact = load_contact(profile_dir=profile_dir or _profile_dir())
     letter_md = step_5_format(cleaned_draft, contact, jd_parsed, run_id)
@@ -580,8 +612,14 @@ def run_cover_letter_pipeline(
     # Save to requested output path or default
     if output_path:
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(letter_md)
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(letter_md)
+        except (PermissionError, OSError) as e:
+            raise click.ClickException(
+                f"Could not write cover letter to {output_path}: {e}\n"
+                f"Check directory permissions or pick a different --output path."
+            )
         letter_path = output_path
     else:
         letter_path = artifacts_dir / "cover_letter.md"
