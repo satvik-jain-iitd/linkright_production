@@ -133,20 +133,27 @@ linkright auth logout                   # clear session
 
 ### CSV import schema
 
-| Column | Required | Notes |
-|---|---|---|
-|  | YES | Job title |
-|  | YES | Company name |
-|  | recommended | Job URL (used for enrichment) |
-|  | optional | Defaults to "Unknown" |
-|  | optional | Full JD text; auto-fetched from URL if empty |
-|  | optional | Number (INR) |
-|  | optional | Number |
-|  | optional | Defaults to "INR" |
-|  | optional | YYYY-MM-DD; defaults to today |
-|  | optional | Auto-detected if empty |
-|  | optional | Your notes |
-|  | optional | Comma-separated |
+| Column | Required? | Type | Example | Default if empty |
+|---|---|---|---|---|
+| `title` | YES | text | `Senior Product Manager` | (error — required) |
+| `company` | YES | text | `Razorpay` | (error — required) |
+| `url` | strong-recommend | text | `https://razorpay.com/careers/abc` | empty |
+| `location` | optional | text | `Bangalore` | `"Unknown"` |
+| `jd_text` | optional | text (multiline OK) | full JD body | (auto-fetched from URL if empty) |
+| `salary_min` | optional | number (INR) | `5000000` | NULL |
+| `salary_max` | optional | number | `8000000` | NULL |
+| `currency` | optional | text | `INR` | `INR` |
+| `posted_date` | optional | YYYY-MM-DD | `2026-04-28` | today |
+| `seniority` | optional | text | `senior` / `lead` / `mid` | (auto-detected) |
+| `notes` | optional | text | `Referral via Anjali` | empty |
+| `tags` | optional | comma-separated | `fintech,b2c` | empty |
+
+**Sample CSV:**
+```csv
+title,company,url,location,notes
+Senior Product Manager,Razorpay,https://razorpay.com/careers/abc,Bangalore,Referral via Anjali
+Engineering Manager,PhonePe,https://phonepe.com/jobs/xyz,Mumbai,Applied via LinkedIn
+```
 
 After import, run `linkright jobs find` in 2-3 minutes to see fit scores (backend enriches asynchronously).
 

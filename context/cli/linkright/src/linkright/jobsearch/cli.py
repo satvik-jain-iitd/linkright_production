@@ -337,13 +337,20 @@ def apply_cmd(discovery_id: str, no_status: bool) -> None:
     click.echo(f"  Run ID: {run_id}")
     click.echo("")
 
-    # Invoke tailor via subprocess (same as CLI — avoids module-state collision)
+    # Invoke tailor via subprocess (same as CLI — avoids module-state collision).
+    # Force --llm-mode direct: default to free Groq/Cerebras tier.
+    # Per memory feedback_never_agent_mode_for_hypothesis_tests — agent mode bills
+    # per-token on Claude subscription, burning $$$ for multi-pipeline runs.
+    # User must explicitly set default_llm_mode="agent" in config to override.
+    cfg_mode = getattr(cfg, "default_llm_mode", None)
+    llm_mode = cfg_mode if cfg_mode in ("direct",) else "direct"
     result = subprocess.run(
         [sys.executable, "-m", "linkright", "resume", "tailor",
          "-r", str(resume_path),
          "-j", str(jd_path),
          "--run-id", run_id,
-         "--yes"],
+         "--yes",
+         "--llm-mode", llm_mode],
         capture_output=False,  # stream output to terminal
     )
 
@@ -376,12 +383,15 @@ def apply_cmd(discovery_id: str, no_status: bool) -> None:
 
 @jobsearch_group.command("status")
 @click.argument("discovery_id")
-@click.argument("state", type=click.Choice(["new", "saved", "dismissed", "applied"]))
+@click.argument("state", type=click.Choice(["new", "saved", "dismissed"]))
 def status_cmd(discovery_id: str, state: str) -> None:
     """Update the status of a discovery on sync.linkright.in.
 
     \b
-    Valid states:  new | saved | dismissed | applied
+    Valid states:  new | saved | dismissed
+
+    To mark applied, use `linkright jobs apply <id>` instead — that
+    triggers resume tailoring and creates an applications record.
 
     \b
     Examples:

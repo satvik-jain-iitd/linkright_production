@@ -6,6 +6,7 @@ Provides helpers used by all Pillar 2 CLI commands.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -40,8 +41,17 @@ def load_session() -> dict | None:
 
 
 def save_session(data: dict) -> None:
+    # Restrict parent dir to owner-only (0o700) — prevents other users from
+    # listing ~/.linkright/ contents on shared/multi-user systems.
     LINKRIGHT_HOME.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(LINKRIGHT_HOME, 0o700)
+    except OSError:
+        pass  # some filesystems (FAT32, network mounts) don't support chmod
     _session_path().write_text(json.dumps(data, indent=2))
+    # Restrict session file to owner read/write only (0o600) — JWT is a credential;
+    # world-readable would allow other users on the same machine to steal the token.
+    os.chmod(_session_path(), 0o600)
 
 
 def clear_session() -> None:
