@@ -11,3 +11,6 @@ build/
 .pytest_cache/
 *.pem
 *.key
+
+# Pillar 2 — local auth session (contains JWT — never commit)
+session.json
