@@ -259,14 +259,14 @@ async function coldStartHeuristicTop20(
 const SELECT_WITH_BREAKDOWN = `
   id, rank, final_score, reason, resume_job_id, created_at, score_breakdown,
   job_discoveries (
-    id, title, company_name, job_url, discovered_at, liveness_status
+    id, title, company_name, job_url, discovered_at, liveness_status, auto_score_grade
   )
 `;
 
 const SELECT_WITHOUT_BREAKDOWN = `
   id, rank, final_score, reason, resume_job_id, created_at,
   job_discoveries (
-    id, title, company_name, job_url, discovered_at, liveness_status
+    id, title, company_name, job_url, discovered_at, liveness_status, auto_score_grade
   )
 `;
 

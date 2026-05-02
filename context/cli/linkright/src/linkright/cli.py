@@ -10,6 +10,7 @@ Ops commands:
   init        — Bootstrap ~/.linkright/ + MongoDB collections
   mcp serve   — Start per-session MCP server (for Claude Code / Cursor)
   profile     — import / export user data
+  auth        — log in to sync.linkright.in (required for jobs commands)
 
 Legacy v0.0 commands (preserved — do not break existing users):
   optimize, validate, assisted
@@ -26,6 +27,7 @@ from linkright import __version__
 from linkright.cli_aliases import AliasedGroup
 from linkright.resume.cli import resume_group
 from linkright.jobsearch.cli import jobsearch_group
+from linkright.auth.cli import auth_group
 from linkright.interview.cli import interview_group
 from linkright.content.cli import content_group
 
@@ -63,7 +65,9 @@ def main() -> None:
 # ── Pillars ─────────────────────────────────────────────────────────────
 
 main.add_command(resume_group)
-main.add_command(jobsearch_group)
+main.add_command(auth_group)
+main.add_command(jobsearch_group)  # name="jobs" (registered in group def)
+main.add_command(jobsearch_group, name="jobsearch")  # backward-compat alias
 main.add_command(interview_group)
 main.add_command(content_group)
 
@@ -164,12 +168,22 @@ LinkRight — Quick Reference (cheat sheet)
   linkright fill                   Resolve missing-metric gaps (interactive)
   linkright practice               Interview prep cards from your resume
 
+🔍 Pillar 2 — Job feed (daily workflow):
+  linkright auth login             Log in to sync.linkright.in (once)
+  linkright auth status            Show current session
+  linkright jobs find              Today's top-10 scored job matches
+  linkright jobs find --top 20     See more results
+  linkright jobs show <id>         Full JD + scoring breakdown
+  linkright jobs apply <id>        Tailor resume + mark applied
+  linkright jobs status <id> saved Save a job for later
+  linkright jobs import jobs.csv   Import jobs from CSV
+
 🎯 First-time setup (run once):
   linkright setup                  Pick LLM / embedder / PDF — guided wizard
   linkright profile create -r <resume.pdf>
   linkright contact                Verify phone / email / LinkedIn
 
-🔍 Inspect:
+🔍 Resume inspect:
   linkright score                  Quality scorecard for latest run
   linkright profile show           Career memory tree
   linkright practice -n            Non-interactive prep packet (pipe-friendly)
@@ -179,9 +193,10 @@ LinkRight — Quick Reference (cheat sheet)
   linkright plan                   Strategy review — confirm bullet plan pre-gen
 
 ⚡ Shortcuts (single letter — when you don't want to type):
-  t   tailor       imp / i  improve     f       fill-metrics
-  c   critique     prac / p practice    r       strategy-review
+  t   tailor       imp / i  improve     fill / f  fill-metrics
+  c   critique     prac / p practice    r         strategy-review
   s   score        ec / contact         edit-contact
+  (jobs group)  jobs f → find    jobs s → status
 
 🩺 Health:
   linkright doctor                 Check config + API keys + deps
@@ -190,6 +205,8 @@ LinkRight — Quick Reference (cheat sheet)
 📚 Full reference:
   linkright --help                 Top-level groups + commands
   linkright resume --help          All resume subcommands
+  linkright jobs --help            All jobsearch subcommands
+  linkright auth --help            Auth subcommands
   linkright profile --help         All profile subcommands
 
 Tip: prefix matching works (git-style) — `linkright tail` resolves to `tailor`

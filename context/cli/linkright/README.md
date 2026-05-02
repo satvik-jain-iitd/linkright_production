@@ -86,6 +86,77 @@ export GROQ_API_KEY=...           # cascade step 1
 linkright resume tailor -r resume.pdf -j jds/noon.md --llm-mode direct
 ```
 
+
+---
+
+## Pillar 2 — Job search (v0.2.0)
+
+Connect your sync.linkright.in job feed directly to the CLI. Browse, filter, and act on scraped + scored job matches without leaving the terminal.
+
+### Quick start
+
+```bash
+# 1. Log in once (stores JWT locally in ~/.linkright/session.json)
+linkright auth login                    # prompts email + password
+
+# 2. Browse today's top matches
+linkright jobs find                     # top 10 by fit score
+linkright jobs find --top 20            # see more
+linkright jobs find --grade A           # A-grade only
+linkright jobs find --location bangalore
+
+# 3. Read a full JD
+linkright jobs show 1                   # rank 1 from 'find' output
+linkright jobs show <uuid>              # or paste the discovery ID
+
+# 4. Tailor resume + mark applied (runs Pillar 1 pipeline automatically)
+linkright jobs apply 1
+
+# 5. Save / dismiss jobs
+linkright jobs status 1 saved
+linkright jobs status 1 dismissed       # alias: linkright jobs s 1 dismissed
+
+# 6. Import your own jobs from CSV
+linkright jobs import jobs.csv          # see schema below
+linkright jobs import jobs.csv --dry-run  # validate only
+```
+
+### Auth commands
+
+```bash
+linkright auth login                    # interactive (prompts method)
+linkright auth login --method email     # email + password via Supabase
+linkright auth login --method jwt       # paste JWT from browser DevTools
+linkright auth status                   # show session info
+linkright auth logout                   # clear session
+```
+
+### CSV import schema
+
+| Column | Required? | Type | Example | Default if empty |
+|---|---|---|---|---|
+| `title` | YES | text | `Senior Product Manager` | (error — required) |
+| `company` | YES | text | `Razorpay` | (error — required) |
+| `url` | strong-recommend | text | `https://razorpay.com/careers/abc` | empty |
+| `location` | optional | text | `Bangalore` | `"Unknown"` |
+| `jd_text` | optional | text (multiline OK) | full JD body | (auto-fetched from URL if empty) |
+| `salary_min` | optional | number (INR) | `5000000` | NULL |
+| `salary_max` | optional | number | `8000000` | NULL |
+| `currency` | optional | text | `INR` | `INR` |
+| `posted_date` | optional | YYYY-MM-DD | `2026-04-28` | today |
+| `seniority` | optional | text | `senior` / `lead` / `mid` | (auto-detected) |
+| `notes` | optional | text | `Referral via Anjali` | empty |
+| `tags` | optional | comma-separated | `fintech,b2c` | empty |
+
+**Sample CSV:**
+```csv
+title,company,url,location,notes
+Senior Product Manager,Razorpay,https://razorpay.com/careers/abc,Bangalore,Referral via Anjali
+Engineering Manager,PhonePe,https://phonepe.com/jobs/xyz,Mumbai,Applied via LinkedIn
+```
+
+After import, run `linkright jobs find` in 2-3 minutes to see fit scores (backend enriches asynchronously).
+
 ---
 
 ## Architecture
