@@ -81,6 +81,13 @@ all = [
     "weasyprint>=60",
 ]
 
+# Admin / backend tooling — Oracle Postgres driver (C-extension; requires gcc on Alpine).
+# End-users (job seekers) do NOT need this.
+#   pip install linkright[admin]
+admin = [
+    "asyncpg>=0.29.0",
+]
+
 # Development — tests + build/publish toolchain
 dev = [
     "pytest>=7.0.0",
