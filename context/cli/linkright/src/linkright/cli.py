@@ -381,6 +381,12 @@ def mcp_serve() -> None:
 from linkright.profile.cli import profile_group as _profile_group
 main.add_command(_profile_group)
 
+# Admin commands — Oracle Postgres company knowledge base + slug discovery.
+# ORACLE_PG_URL must be configured before admin commands will connect.
+from linkright.admin.cli import admin_group as _admin_group
+main.add_command(_admin_group)
+
+
 
 # ── Legacy v0.0 commands (preserved for back-compat, hidden from --help) ─
 
