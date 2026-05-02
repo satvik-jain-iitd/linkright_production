@@ -1,15 +1,27 @@
 // GET /api/recommendations/today
 // Returns the user's top-20 job matches for today with enriched discovery + resume_job info.
 //
-// Self-healing: if user_daily_top_20 is empty for today but user has existing job_scores,
-// rank inline from those scores + insert into user_daily_top_20. This means the page
-// works even when the worker cron is down — as long as scoring has happened previously,
-// top-20 surfaces immediately on any page load.
+// Stage 3 of user_daily_top_20 elimination: dual-read controlled by feature flag.
+//
+//   USE_USER_JOBS_RANK=false (DEFAULT): old path — reads user_daily_top_20 with
+//     self-healing (lazyComputeTop20 + coldStartHeuristicTop20 fallbacks).
+//
+//   USE_USER_JOBS_RANK=true: new path — reads job_scores where rank IS NOT NULL
+//     AND status='new', ordered by rank ASC. Uses idx_job_scores_user_rank partial
+//     index added in migration 052.  Response shape is IDENTICAL to old path so
+//     UI components (DashboardContent, FindRolesView, JobsPage) require zero changes.
+//
+// Stage 4 (after 1-week soak): drop user_daily_top_20 + cron + remove flag.
 //
 // score_breakdown (hard + semantic components) included when migration 052 is applied.
 
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+// ─── Feature flag ─────────────────────────────────────────────────────────────
+// Default false = zero user impact at deploy time.  Set true in Vercel env vars
+// to activate new path for gradual rollout.
+const USE_NEW_RANK = process.env.USE_USER_JOBS_RANK === "true";
 
 const RECENCY_WINDOW_DAYS = 14;
 
@@ -289,6 +301,59 @@ async function fetchTop20(
   return { data: data as Array<Record<string, unknown>>, error: null };
 }
 
+// ─── NEW PATH: read from job_scores.rank ─────────────────────────────────────
+// Activated when USE_USER_JOBS_RANK=true. Queries the partial index
+// idx_job_scores_user_rank (user_id, rank ASC WHERE status = 'new'), joins
+// job_discoveries, and maps to the IDENTICAL response shape as the old path so
+// all UI components work without changes.
+//
+// Fields available in job_scores but NOT yet in old path response (will be null):
+//   - reason         (Stage 2 writes recommended_action; Stage 4 maps to reason)
+//   - resume_job_id  (Stage 4 will wire this when user_daily_top_20 is dropped)
+//   - score_breakdown (not on job_scores yet; null is fine, UI handles it)
+async function fetchFromJobScores(
+  supabase: SupabaseClient,
+  userId: string,
+  limit: number = 20,
+): Promise<{ data: Array<Record<string, unknown>> | null; error: unknown }> {
+  const { data, error } = await supabase
+    .from("job_scores")
+    .select(
+      `
+      id, rank, overall_score, created_at,
+      job_discoveries (
+        id, title, company_name, job_url, discovered_at, liveness_status
+      )
+    `,
+    )
+    .eq("user_id", userId)
+    .eq("status", "new")
+    .not("rank", "is", null)
+    .not("job_discovery_id", "is", null)
+    .order("rank", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  // Map job_scores rows to IDENTICAL shape as user_daily_top_20 rows so UI is untouched.
+  // Null-safe: reason + resume_job_id + score_breakdown default to null (not present yet
+  // on job_scores; will be wired in Stage 4 when user_daily_top_20 is dropped).
+  const mapped = (data ?? []).map((row) => ({
+    id: row.id,
+    rank: row.rank,
+    final_score: normalizeFinalScore(row.overall_score as number | null),
+    reason: null,
+    resume_job_id: null,
+    created_at: row.created_at,
+    score_breakdown: null,
+    job_discoveries: row.job_discoveries,
+  }));
+
+  return { data: mapped, error: null };
+}
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -300,45 +365,78 @@ export async function GET() {
 
   const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD UTC
 
-  // First read attempt
-  let { data: top20, error } = await fetchTop20(supabase, user.id, today);
+  // ─── Observability: log on every request so flag rollout is monitorable ─────
+  // During Stage 3 soak: grep Vercel logs for '[recommendations/today]' to verify
+  // new_path rows_returned count matches expected per-user top-N.
+  // Log is emitted early (before DB reads) so it fires even on error paths.
+  // NOTE: user.id logged for debugging; rotate to a hash if PII policy requires.
+  const logCtx = { user_id: user.id, flag: USE_NEW_RANK ? "new_path" : "old_path" };
 
-  if (error) {
-    return Response.json({ error: (error as { message?: string }).message }, { status: 500 });
-  }
-
-  // Self-heal chain — never return empty if any path can surface jobs.
-  // scoring_pending: set true when Tier 1 (existing scores) returns 0 AND Tier 2
-  // (cold-start heuristic) also returns 0. This means the user is brand-new with no
-  // scored data yet — the worker scoring job is still running. The frontend uses this
-  // flag to show an honest "We're scoring your roles" message instead of "No matches."
+  let top20: Array<Record<string, unknown>> | null = null;
   let scoringPending = false;
-  if (!top20 || top20.length === 0) {
-    // Tier 1: rank from existing job_scores
-    const tier1 = await lazyComputeTop20(supabase, user.id, today);
-    // Tier 2: cold-start heuristic (no scores → text-match recent jobs to target_roles)
-    const tier2 = tier1 === 0 ? await coldStartHeuristicTop20(supabase, user.id, today) : 0;
-    const computed = tier1 + tier2;
-    // If both tiers returned 0, check whether the user has ANY job_scores rows.
-    // Two distinct cases:
-    //   (a) Zero job_scores rows → truly fresh user, worker scoring not yet run → pending.
-    //   (b) Has job_scores rows but all associated discoveries are stale/expired →
-    //       returning user whose matches aged out. Show "nothing matches today", NOT
-    //       "scoring in progress" — their scoring already happened.
-    if (tier1 === 0 && tier2 === 0) {
-      const { count: scoredJobsCount } = await supabase
+
+  if (USE_NEW_RANK) {
+    // ─── NEW PATH: job_scores.rank ─────────────────────────────────────────
+    const { data, error } = await fetchFromJobScores(supabase, user.id, 20);
+    if (error) {
+      console.log("[recommendations/today]", { ...logCtx, rows_returned: 0, error: (error as { message?: string }).message });
+      return Response.json({ error: (error as { message?: string }).message }, { status: 500 });
+    }
+    top20 = data;
+    // On new path: if rank IS NULL for all rows, the worker hasn't scored yet.
+    // fetchFromJobScores already filters rank IS NOT NULL, so empty = pending.
+    if (!top20 || top20.length === 0) {
+      const { count } = await supabase
         .from("job_scores")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
-      scoringPending = (scoredJobsCount ?? 0) === 0;
+        .eq("user_id", user.id)
+        .not("job_discovery_id", "is", null);
+      scoringPending = (count ?? 0) === 0;
     }
-    if (computed > 0) {
-      const reread = await fetchTop20(supabase, user.id, today);
-      if (!reread.error && reread.data) top20 = reread.data;
+  } else {
+    // ─── OLD PATH: user_daily_top_20 (unchanged) ──────────────────────────
+    // First read attempt
+    const fetched = await fetchTop20(supabase, user.id, today);
+    if (fetched.error) {
+      console.log("[recommendations/today]", { ...logCtx, rows_returned: 0, error: (fetched.error as { message?: string }).message });
+      return Response.json({ error: (fetched.error as { message?: string }).message }, { status: 500 });
+    }
+    top20 = fetched.data;
+
+    // Self-heal chain — never return empty if any path can surface jobs.
+    // scoring_pending: set true when Tier 1 (existing scores) returns 0 AND Tier 2
+    // (cold-start heuristic) also returns 0. This means the user is brand-new with no
+    // scored data yet — the worker scoring job is still running. The frontend uses this
+    // flag to show an honest "We're scoring your roles" message instead of "No matches."
+    if (!top20 || top20.length === 0) {
+      // Tier 1: rank from existing job_scores
+      const tier1 = await lazyComputeTop20(supabase, user.id, today);
+      // Tier 2: cold-start heuristic (no scores → text-match recent jobs to target_roles)
+      const tier2 = tier1 === 0 ? await coldStartHeuristicTop20(supabase, user.id, today) : 0;
+      const computed = tier1 + tier2;
+      // If both tiers returned 0, check whether the user has ANY job_scores rows.
+      // Two distinct cases:
+      //   (a) Zero job_scores rows → truly fresh user, worker scoring not yet run → pending.
+      //   (b) Has job_scores rows but all associated discoveries are stale/expired →
+      //       returning user whose matches aged out. Show "nothing matches today", NOT
+      //       "scoring in progress" — their scoring already happened.
+      if (tier1 === 0 && tier2 === 0) {
+        const { count: scoredJobsCount } = await supabase
+          .from("job_scores")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id);
+        scoringPending = (scoredJobsCount ?? 0) === 0;
+      }
+      if (computed > 0) {
+        const reread = await fetchTop20(supabase, user.id, today);
+        if (!reread.error && reread.data) top20 = reread.data;
+      }
     }
   }
 
-  // Enrich with resume_job status (for inline "resume ready" / "queued" chips)
+  // Enrich with resume_job status (for inline "resume ready" / "queued" chips).
+  // On new path, resume_job_id is always null for now (not yet wired in job_scores),
+  // so jobIds will be empty and this block is a no-op. Harmless.
   const jobIds = (top20 ?? [])
     .map((row) => row.resume_job_id)
     .filter(Boolean) as string[];
@@ -368,12 +466,15 @@ export async function GET() {
   // (LLM overall_score 1-5 × recency_decay 0.1-1 ⇒ up to ~5). UIs multiply by
   // 100 to render %, so we collapse everything to 0-1 here.
   // Hybrid scorer rows already emit 0-100 scores — normalize them too for consistency.
-  const normalizedTop20 = (top20 ?? []).map(
-    (row) => ({
-      ...row,
-      final_score: normalizeFinalScore(row.final_score as number | null),
-    }),
-  );
+  // On new path, normalizeFinalScore already applied inside fetchFromJobScores.
+  const normalizedTop20 = (top20 ?? []).map((row) => ({
+    ...row,
+    final_score: USE_NEW_RANK
+      ? (row.final_score as number) // already normalized in fetchFromJobScores
+      : normalizeFinalScore(row.final_score as number | null),
+  }));
+
+  console.log("[recommendations/today]", { ...logCtx, rows_returned: normalizedTop20.length });
 
   return Response.json({
     date_utc: today,
