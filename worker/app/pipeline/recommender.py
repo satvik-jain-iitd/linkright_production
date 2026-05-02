@@ -621,7 +621,101 @@ def compute_and_store_top_20(sb, user_id: str) -> list[dict]:
             else:
                 raise
 
+    # ── Stage 2 dual-write ──────────────────────────────────────────────────
+    # Populate job_scores.rank inline so Stage 3 website API can read it.
+    # user_daily_top_20 write above is PRESERVED — old cron path unchanged.
+    # Failures are logged but non-fatal: user_daily_top_20 is authoritative
+    # until Stage 4 drops it.
+    # Only rank the true TOP_K in job_scores; the overflow rows (rank > TOP_K)
+    # exist in user_daily_top_20 for UI convenience but should not appear ranked.
+    _dual_write_job_scores_rank(sb, user_id, [r for r in new_rows if r["rank"] <= TOP_K])
+
     return new_rows
+
+
+def _dual_write_job_scores_rank(sb, user_id: str, ranked_rows: list[dict]) -> None:
+    """Stage 2: populate job_scores.rank for the freshly-computed ranked list.
+
+    Writes rank=i for jobs IN the top list via a single batched upsert (Phase 1).
+    Clears rank=NULL for jobs that previously had a rank but fell out (Phase 2).
+
+    This is non-transactional (Supabase REST doesn't expose explicit BEGIN/COMMIT
+    via the Python client). We do the write in two phases so any partial failure
+    leaves job_scores slightly stale rather than corrupted.
+
+    Phase 1 uses a single upsert rather than N per-row UPDATEs.  job_scores has a
+    unique partial index idx_job_scores_user_discovery on (user_id, job_discovery_id)
+    WHERE job_discovery_id IS NOT NULL (migration 025), so the upsert is safe and
+    avoids the N+1 REST call pattern that would saturate Supabase's connection pool.
+
+    If the job_scores.rank column doesn't exist yet (migration 052 not run on this
+    env), we catch PostgreSQL SQLSTATE 42703 (undefined_column) and skip silently
+    so that legacy envs keep working.
+    """
+    if not ranked_rows:
+        return
+
+    top_discovery_ids = [row["job_discovery_id"] for row in ranked_rows]
+
+    # ── Phase 1: upsert rank for all top-N jobs in a single REST call ─────────
+    # Build payload: one dict per ranked row with only the columns we own.
+    ranked_payload = [
+        {
+            "user_id": user_id,
+            "job_discovery_id": row["job_discovery_id"],
+            "rank": row["rank"],
+        }
+        for row in ranked_rows
+    ]
+
+    try:
+        # Single upsert — resolves conflicts on the unique partial index
+        # idx_job_scores_user_discovery (user_id, job_discovery_id)
+        # defined in migration 025_user_daily_top_20_and_notifications.sql.
+        sb.table("job_scores").upsert(
+            ranked_payload,
+            on_conflict="user_id,job_discovery_id",
+        ).execute()
+
+        # ── Phase 2: clear stale ranks for jobs that fell out of the top list ─
+        # Supabase PostgREST doesn't support `NOT IN (list)` directly, but we
+        # can use .not_.in_() to express it. Equivalent to:
+        #   UPDATE job_scores SET rank = NULL
+        #   WHERE user_id = $1
+        #     AND rank IS NOT NULL
+        #     AND job_discovery_id NOT IN ($2, $3, ...)
+        (
+            sb.table("job_scores")
+            .update({"rank": None})
+            .eq("user_id", user_id)
+            .not_.is_("rank", "null")        # only rows that previously had a rank
+            .not_.in_("job_discovery_id", top_discovery_ids)
+            .execute()
+        )
+
+        logger.debug(
+            "recommender: dual-write rank OK — user=%s top_n=%d",
+            user_id, len(ranked_rows),
+        )
+
+    except Exception as exc:
+        err_str = str(exc)
+        # Catch PostgreSQL SQLSTATE 42703 (undefined_column) only.
+        # This fires when migration 052 has not been applied and job_scores.rank
+        # does not exist yet.  We match on the SQLSTATE code "42703" directly,
+        # NOT on the substring "rank", to avoid silently swallowing unrelated
+        # errors whose messages happen to contain the word "rank" (e.g. a
+        # constraint named "valid_rank", a URL path, or a column "ranking_score").
+        if "42703" in err_str:
+            logger.warning(
+                "recommender: dual-write skipped — job_scores.rank column missing "
+                "(run migration 052). user=%s error=%s", user_id, exc
+            )
+        else:
+            logger.error(
+                "recommender: dual-write rank FAILED — user=%s error=%s",
+                user_id, exc,
+            )
 
 
 def _build_reason(score_row: dict) -> str:

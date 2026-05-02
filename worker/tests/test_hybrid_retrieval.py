@@ -244,6 +244,14 @@ async def test_company_scoped_query(httpx_mock):
     """company='AmEx' → AmEx nugget appears in results."""
     amex_row = _nugget_row("n1", company="AmEx")
 
+    # Oracle embed mock: handles calls when ORACLE_BACKEND_URL is set (env pollution
+    # from test_lock_embed_isolation.py which sets it at module level without cleanup).
+    httpx_mock.add_response(
+        url="http://fake-oracle/lifeos/embed",
+        json={"embedding": [0.1] * 768},
+        is_reusable=True,
+    )
+
     # Three Jina mocks: company-scoped pass + unscoped pass + min_floor floor
     # pass (floor pass fires when len(results) < min_floor=3 and company is set).
     httpx_mock.add_response(
@@ -292,6 +300,14 @@ async def test_unscoped_query(httpx_mock):
     'hybrid' or 'bm25_only' and that high-relevance nuggets are present.
     """
     high_rel = _nugget_row("n1", resume_relevance=0.9)
+
+    # Oracle embed mock: handles calls when ORACLE_BACKEND_URL is set (env pollution
+    # from test_lock_embed_isolation.py which sets it at module level without cleanup).
+    httpx_mock.add_response(
+        url="http://fake-oracle/lifeos/embed",
+        json={"embedding": [0.1] * 768},
+        is_reusable=True,
+    )
 
     httpx_mock.add_response(
         url=_JINA_EMBED_URL,
@@ -349,6 +365,16 @@ def test_unscoped_filter_logic():
 async def test_fallback_to_bm25_on_vector_error(httpx_mock):
     """Jina AI (vector embed) fails → falls back to bm25_only."""
     import httpx as _httpx
+
+    # Oracle embed mock: handles calls when ORACLE_BACKEND_URL is set (env pollution
+    # from test_lock_embed_isolation.py which sets it at module level without cleanup).
+    # For this test (bm25 fallback), we want Oracle to ALSO fail so Jina is tried.
+    # Since Jina also fails, the test expects bm25_only. So Oracle should fail too.
+    for _ in range(10):
+        httpx_mock.add_exception(
+            _httpx.ConnectError("Oracle unreachable"),
+            url="http://fake-oracle/lifeos/embed",
+        )
 
     # All Jina calls fail
     for _ in range(10):

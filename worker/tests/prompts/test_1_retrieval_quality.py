@@ -12,6 +12,8 @@ Generates a markdown report for manual review. No production code modified.
 """
 from __future__ import annotations
 
+import os
+
 import re
 from pathlib import Path
 
@@ -49,6 +51,10 @@ def _keyword_coverage(keywords: list[str], text: str) -> float:
     return hits / len(keywords)
 
 
+@pytest.mark.skipif(
+    bool(os.getenv("CI") or os.getenv("GITHUB_ACTIONS")),
+    reason="Requires live Supabase connection — run manually only",
+)
 async def test_retrieval_quality_per_jd(
     live_sb,
     satvik_user_id,
