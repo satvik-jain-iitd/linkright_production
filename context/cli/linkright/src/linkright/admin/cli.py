@@ -8,6 +8,9 @@ Subcommands:
 
 All writes go to Oracle Postgres.  ORACLE_PG_URL must be set in env or
 ~/.linkright/.env.  Commands refuse to proceed if it is not configured.
+
+This command group is hidden from `linkright --help` (backend-only tooling).
+Install the Oracle Postgres driver with:  pip install linkright[admin]
 """
 from __future__ import annotations
 
@@ -119,7 +122,14 @@ async def _import_companies_async(
     dry_run: bool,
 ) -> dict[str, int]:
     """Async core of the import command.  Returns {imported, updated, skipped}."""
-    import asyncpg  # type: ignore[import]
+    try:
+        import asyncpg  # type: ignore[import]
+    except ImportError:
+        raise click.ClickException(
+            "asyncpg is not installed — required for Oracle Postgres admin commands.\n\n"
+            "  Install with:  pip install linkright[admin]\n\n"
+            "  Then follow the runbook: specs/oracle-pg-runbook-2026-05-03.md"
+        )
 
     counts = {"imported": 0, "updated": 0, "skipped": 0, "errors": 0}
 
@@ -198,7 +208,14 @@ async def _import_companies_async(
 
 async def _stats_async(oracle_pg_url: str) -> None:
     """Print health stats from Oracle PG companies table."""
-    import asyncpg
+    try:
+        import asyncpg
+    except ImportError:
+        raise click.ClickException(
+            "asyncpg is not installed — required for Oracle Postgres admin commands.\n\n"
+            "  Install with:  pip install linkright[admin]\n\n"
+            "  Then follow the runbook: specs/oracle-pg-runbook-2026-05-03.md"
+        )
 
     pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2, ssl="require")
     try:
@@ -231,13 +248,17 @@ async def _stats_async(oracle_pg_url: str) -> None:
 
 # ── Click command group ───────────────────────────────────────────────────────
 
-@click.group(name="admin")
+@click.group(name="admin", hidden=True)
 def admin_group() -> None:
-    """Oracle Postgres admin — companies + slug discovery.
+    """Admin commands (backend-only — not for end users).
+
+    These commands manage Oracle Postgres infrastructure: company-DB seed,
+    slug discovery, batch ingestion. Hidden from `linkright --help`.
 
     \b
     All writes go to Oracle Postgres (ORACLE_PG_URL).
     Set ORACLE_PG_URL in env or ~/.linkright/.env before using.
+    Requires:  pip install linkright[admin]
     """
 
 

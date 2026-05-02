@@ -50,7 +50,7 @@ ORACLE_BACKEND_SECRET = os.getenv("ORACLE_BACKEND_SECRET", "")
 # See: feedback_split_db_architecture_locked.md
 #
 # Format: postgres://linkright_app:<password>@oracle-pg.linkright.in:5432/linkright_jobs
-# SSL is REQUIRED — the asyncpg pool in app/db/oracle.py enforces ssl="require".
+# SSL is REQUIRED — the asyncpg pool in app/oracle/pg.py enforces ssl="require".
 # Leave unset while Oracle Postgres is being provisioned. All Oracle-PG-backed
 # code paths check ORACLE_PG_ENABLED before connecting and raise a clear error.
 ORACLE_PG_URL = os.environ.get("ORACLE_PG_URL")  # None = not yet provisioned
