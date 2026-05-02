@@ -118,14 +118,43 @@ class _NotProxy:
         return self._chain
 
 
+class _FakeUpsertChain:
+    """Chainable UPSERT stub — simulates ON CONFLICT DO UPDATE SET."""
+
+    def __init__(self, rows: list[dict], payload: list[dict], on_conflict: str) -> None:
+        self._rows = rows
+        self._payload = payload
+        self._conflict_cols = [c.strip() for c in on_conflict.split(",") if c.strip()]
+
+    def execute(self):
+        for item in self._payload:
+            # Find existing row matching all conflict columns
+            match = next(
+                (r for r in self._rows
+                 if all(r.get(c) == item.get(c) for c in self._conflict_cols)),
+                None,
+            )
+            if match is not None:
+                match.update(item)
+            else:
+                self._rows.append(dict(item))
+        return type("_R", (), {"data": list(self._payload)})()
+
+
 class FakeJobScoresTable:
-    """Dict-backed job_scores stub."""
+    """Dict-backed job_scores stub with upsert support."""
 
     def __init__(self, initial_rows: list[dict] | None = None) -> None:
         self.rows: list[dict] = list(initial_rows or [])
+        self.upsert_call_count: int = 0
 
     def update(self, payload: dict) -> _FakeQueryChain:
         return _FakeQueryChain(self.rows).update(payload)
+
+    def upsert(self, payload: list[dict], on_conflict: str = "") -> "_FakeUpsertChain":
+        """Upsert stub — increments call counter and applies ON CONFLICT DO UPDATE."""
+        self.upsert_call_count += 1
+        return _FakeUpsertChain(self.rows, payload, on_conflict)
 
 
 class FakeSupabaseClient:
@@ -253,6 +282,9 @@ def test_dual_write_ignores_missing_column_error(caplog):
         def update(self, *_a, **_kw):
             raise RuntimeError("column rank of relation job_scores does not exist (42703)")
 
+        def upsert(self, *_a, **_kw):
+            raise RuntimeError("column rank of relation job_scores does not exist (42703)")
+
     class _ErrorSb:
         def table(self, name: str):
             return _ErrorTable()
@@ -276,6 +308,83 @@ def test_dual_write_noop_on_empty():
     # Should not raise
     _dual_write_job_scores_rank(sb, "user-empty", [])
     assert sb._job_scores.rows == []
+
+
+# ---------------------------------------------------------------------------
+# Tests — M9: Non-42703 exception with "rank" in message → classified ERROR
+# ---------------------------------------------------------------------------
+
+def test_non_42703_rank_substring_error_is_logged_as_error(caplog):
+    """An exception whose message contains 'rank' but is NOT a 42703 error must be
+    classified as ERROR — not silently swallowed as a warning.
+
+    Regression guard for BLOCKER #1: the old code matched 'rank' substring, which
+    would silently drop real failures such as a constraint named 'valid_rank' or a
+    foreign-key error mentioning 'rank_id'.
+    """
+    import logging
+
+    user_id = "user-error-classify"
+    ranked_rows = _make_ranked_rows(user_id, 3)
+
+    class _AmbiguousRankErrorTable:
+        """Raises a non-42703 error whose message happens to contain 'rank'."""
+
+        def upsert(self, *_a, **_kw):
+            # e.g. FK violation on a column named "ranking_score", or a network
+            # error on a URL that happens to contain "/rank/".
+            raise RuntimeError("insert violates foreign key constraint valid_rank_fk on ranking_score")
+
+        def update(self, *_a, **_kw):
+            return self  # Phase 2 UPDATE — won't be reached but kept for safety
+
+    class _AmbiguousSb:
+        def table(self, name: str):
+            return _AmbiguousRankErrorTable()
+
+    with caplog.at_level(logging.DEBUG, logger="app.pipeline.recommender"):
+        _dual_write_job_scores_rank(_AmbiguousSb(), user_id, ranked_rows)
+
+    # Must have logged at ERROR level, not just WARNING
+    error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert error_records, (
+        "Expected at least one ERROR-level log for non-42703 exception containing 'rank'; "
+        "got only: " + str([r.levelname + ": " + r.message for r in caplog.records])
+    )
+    # Must NOT have logged a misleading warning about missing column
+    warning_about_migration = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "migration 052" in r.message
+    ]
+    assert not warning_about_migration, (
+        "Non-42703 error was incorrectly classified as missing-column warning"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tests — M10: Single upsert call regardless of ranked_rows length
+# ---------------------------------------------------------------------------
+
+def test_dual_write_issues_single_upsert_call():
+    """_dual_write_job_scores_rank must issue exactly ONE upsert call (not N per-row).
+
+    Regression guard for BLOCKER #2: the old code had a per-row UPDATE loop,
+    which issued N sequential REST calls — N+1 query pattern.
+    """
+    user_id = "user-batch"
+    n = 20  # deliberately choose TOP_K to stress-test
+    ranked_rows = _make_ranked_rows(user_id, n)
+    disc_ids = [r["job_discovery_id"] for r in ranked_rows]
+
+    initial_scores = _make_job_score_rows(user_id, disc_ids, [None] * n)
+    sb = FakeSupabaseClient(job_scores_rows=initial_scores)
+
+    _dual_write_job_scores_rank(sb, user_id, ranked_rows)
+
+    assert sb._job_scores.upsert_call_count == 1, (
+        f"Expected exactly 1 upsert call, got {sb._job_scores.upsert_call_count}. "
+        "N+1 query pattern must be replaced with a single batched upsert."
+    )
 
 
 # ---------------------------------------------------------------------------
