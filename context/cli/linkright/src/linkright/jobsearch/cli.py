@@ -115,6 +115,7 @@ def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_
 
     from linkright.watch.db import (
         fetch_captures,
+        is_capture_row,
         merge_dedup_by_url,
         sort_scored_then_captures,
         pretty_source,
@@ -235,8 +236,9 @@ def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_
         )
         source_pretty = pretty_source(source_raw)
 
-        is_capture = score_val == 0 or score_val is None or row.get("captured_at")
-        if is_capture and not score_val:
+        # Source-shape based classification (NOT score-value based) so a
+        # Supabase row with `final_score=0` stays classified as scored.
+        if is_capture_row(row):
             n_capture += 1
         else:
             n_scored += 1

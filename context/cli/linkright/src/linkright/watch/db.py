@@ -1,14 +1,15 @@
-"""Shared Oracle-PG capture-read helper used by `linkright jobs find` and
-`linkright watch list`.
+"""Shared Oracle-PG capture-read helper used by `linkright jobs find` AND
+`linkright watch list` (post-refactor: both now route through fetch_captures
+to eliminate SQL-duplication drift risk).
 
-Encapsulates the asyncpg connection + query + row-shape conversion so:
-  - `watch list` calls fetch_captures(...) for its rich-table render
-  - `jobs find` calls fetch_captures(...) and merges with Supabase-API rows
+Encapsulates the asyncpg connection + query + row-shape conversion + input
+validation in one place. SQL is built ONCE; both callers consume the same
+shape.
 
 Returns rows in the SAME OUTER SHAPE as `sync.linkright.in/api/recommendations/today`:
     {
         "rank": None,                       # no score yet (capture-only)
-        "auto_score_grade": "?",
+        "auto_score_grade": None,
         "final_score": None,
         "captured_at": "2026-05-03T...",   # ISO string for sort
         "source": "capture_naukri",         # for source-column rendering
@@ -19,7 +20,7 @@ Returns rows in the SAME OUTER SHAPE as `sync.linkright.in/api/recommendations/t
             "company_name": "...",
             "location": "...",
             "salary_text": "...",
-            "auto_score_grade": "?",
+            "auto_score_grade": None,
             "source_type": "capture_naukri",
         },
     }
@@ -28,16 +29,34 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, Optional
 
 from .poster import load_oracle_pg_url
 
 logger = logging.getLogger(__name__)
 
+# ── --since whitelist (SQL injection guard) ─────────────────────────────────
+# PostgreSQL doesn't accept parameterized values inside INTERVAL '...' literals,
+# so we MUST interpolate the value. The regex below is the ONLY thing standing
+# between user input and the SQL string; defense-in-depth means this validation
+# lives HERE (the read layer), not at the caller. Keep this in sync with
+# watch/cli.py:_SINCE_PATTERN — they must match exactly.
+_SINCE_PATTERN = re.compile(
+    r"^\d+[ ]+(?:second|minute|hour|day|week|month|year)s?$",
+    re.IGNORECASE,
+)
+
 
 class CapturesUnavailable(Exception):
     """Raised when Oracle PG captures cannot be read (missing dep, missing config,
     or connection failure). Caller should fall through gracefully."""
+
+
+class InvalidSinceValue(ValueError):
+    """Raised when --since doesn't match the whitelist. Distinct from
+    CapturesUnavailable so callers can surface it as a user-input error
+    (exit 2) rather than a system error."""
 
 
 def fetch_captures(
@@ -51,9 +70,22 @@ def fetch_captures(
     ``CapturesUnavailable`` with a human-readable reason if the read can't
     happen — caller decides whether to warn the user or silently skip.
 
-    ``since`` MUST already be validated as a Postgres INTERVAL string by the
-    caller (e.g. via watch.cli._SINCE_PATTERN). Passed through verbatim.
+    Input validation:
+      - ``since`` (if provided) MUST match ``_SINCE_PATTERN`` — raises
+        ``InvalidSinceValue`` if not. Validation is done HERE (the read
+        layer) not by the caller, to make the function injection-safe by
+        construction.
+      - ``source`` is parameterized via asyncpg (no interpolation), safe.
     """
+    if since is not None:
+        if not _SINCE_PATTERN.match(since.strip()):
+            raise InvalidSinceValue(
+                f"invalid --since value: {since!r}. "
+                "Must be `<int> <unit>` where unit is "
+                "second/minute/hour/day/week/month/year (singular or plural). "
+                'Examples: "1 hour", "2 days", "1 week"'
+            )
+
     try:
         oracle_pg_url = load_oracle_pg_url()
     except ValueError as exc:
@@ -86,10 +118,8 @@ async def _fetch_async(
     params: list = []
 
     if since:
-        # Caller is expected to have validated `since` matches the Postgres
-        # INTERVAL whitelist (see watch.cli._SINCE_PATTERN). Interpolating
-        # an unvalidated value here = SQL injection — caller's responsibility.
-        where_clauses.append(f"captured_at > NOW() - INTERVAL '{since}'")
+        # `since` was whitelist-validated by fetch_captures() before reaching here.
+        where_clauses.append(f"captured_at > NOW() - INTERVAL '{since.strip()}'")
     if source:
         params.append(source)
         where_clauses.append(f"source_type = ${len(params)}")
@@ -173,26 +203,37 @@ def merge_dedup_by_url(
     return merged
 
 
+def is_capture_row(row: dict[str, Any]) -> bool:
+    """True if the row originated from Oracle PG `job_discoveries` (a capture)
+    rather than the Supabase scored feed.
+
+    Uses source-shape markers, NOT score value — a Supabase row with
+    ``final_score=0`` (terrible JD-fit) is still a SCORED row, not a capture.
+    Heuristic: has top-level ``captured_at`` AND ``source`` starts with
+    ``capture_`` (set by ``_to_recommendation_shape``).
+    """
+    if row.get("captured_at") is None:
+        return False
+    source = row.get("source") or ""
+    return source.startswith("capture_")
+
+
 def sort_scored_then_captures(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sort with scored rows first (by descending score), capture rows after
-    (by descending captured_at). Stable for ties.
+    (by descending captured_at). Stable.
 
-    A row is "scored" if it has a non-None ``final_score`` or ``auto_score``.
+    A row is a "capture" iff ``is_capture_row(row)`` returns True (uses
+    source-shape markers, not score value). This keeps Supabase rows with
+    ``final_score=0`` in the scored tier where they belong.
     """
-    def sort_key(row: dict[str, Any]) -> tuple[int, float, str]:
-        score = row.get("final_score") or row.get("auto_score") or 0
-        captured = row.get("captured_at") or ""
-        # Tier 0 = scored (sort by -score), Tier 1 = capture (sort by -captured_at)
-        if score:
-            return (0, -float(score), "")
-        return (1, 0.0, captured if captured else "")
+    scored = [r for r in rows if not is_capture_row(r)]
+    captures = [r for r in rows if is_capture_row(r)]
 
-    # Python's sort is stable, so we get descending score within tier 0
-    # and descending captured_at within tier 1 by inverting captured_at:
-    scored = [r for r in rows if (r.get("final_score") or r.get("auto_score"))]
-    captures = [r for r in rows if not (r.get("final_score") or r.get("auto_score"))]
-
+    # Scored: descending by final_score (or auto_score fallback). Rows with
+    # genuine 0/None scores sort to the bottom of the scored tier — but they
+    # remain in the scored tier, NOT moved to captures.
     scored.sort(key=lambda r: -(r.get("final_score") or r.get("auto_score") or 0))
+    # Captures: descending by captured_at ISO string (lexicographic == chronological).
     captures.sort(key=lambda r: r.get("captured_at") or "", reverse=True)
 
     return scored + captures
