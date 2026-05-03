@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import signal
 import sys
 from datetime import datetime, timezone
@@ -24,18 +23,10 @@ import httpx
 
 from linkright.watch import cdp, extractor, poster, service, setup as setup_mod
 
-# Whitelist for `linkright watch list --since` — must match PostgreSQL INTERVAL
-# syntax narrowly. We interpolate into SQL (Postgres doesn't accept parameterized
-# values inside INTERVAL literals), so input MUST be validated against this
-# strict allowlist to prevent injection (even though it's user-typed self-pwn,
-# accidental quoting bugs etc. are still real).
-#
-# `[ ]+` (literal spaces) NOT `\s+` — `\s` matches tab/newline/etc. which would
-# pass validation but produce malformed Postgres INTERVAL literals.
-_SINCE_PATTERN = re.compile(
-    r"^\d+[ ]+(?:second|minute|hour|day|week|month|year)s?$",
-    re.IGNORECASE,
-)
+# Note: `--since` whitelist (was _SINCE_PATTERN here in earlier commits) now
+# lives ONLY in `linkright.watch.db._SINCE_PATTERN`. fetch_captures() validates
+# input there before any SQL is built. Don't add a copy here — single source
+# of truth in db.py.
 
 logger = logging.getLogger("linkright.watch")
 
@@ -254,102 +245,67 @@ def list_cmd(limit: int, since: Optional[str], source: Optional[str], as_json: b
     Requires `pip install linkright[admin]` for the asyncpg driver.
     Reads ORACLE_PG_URL from env, then ~/.linkright/.env.oracle, then ~/.linkright/.env.
     """
+    # Delegate fetch to the shared db.fetch_captures helper. It validates
+    # `since`, loads the Oracle PG URL, lazy-imports asyncpg, opens+closes
+    # the pool, and returns rows in the unified shape used by both
+    # `watch list` AND `jobs find`. SQL lives in ONE place.
+    from linkright.watch.db import (
+        fetch_captures,
+        CapturesUnavailable,
+        InvalidSinceValue,
+    )
     try:
-        oracle_pg_url = poster.load_oracle_pg_url()
-    except ValueError as exc:
+        rows = fetch_captures(limit=limit, since=since, source=source)
+    except InvalidSinceValue as exc:
         click.echo(f"✗ {exc}", err=True)
         sys.exit(2)
-
-    try:
-        import asyncpg  # noqa: F401
-    except ImportError:
-        click.echo(
-            "✗ asyncpg not installed — required for `linkright watch list`.\n"
-            "   Install with:  pip install linkright[admin]",
-            err=True,
-        )
-        sys.exit(2)
-
-    # Wrap the async runner so DB connection failures (bad URL, network unreachable,
-    # wrong creds) surface as a one-line actionable message instead of a raw
-    # Python traceback. Catches OSError (network), asyncpg errors (auth /
-    # protocol), AND Exception fallback so anything else also gets handled.
-    try:
-        asyncio.run(_list_async(oracle_pg_url, limit, since, source, as_json))
-    except OSError as exc:
-        click.echo(
-            f"✗ Cannot connect to Oracle PG: {exc}\n"
-            f"  Check ORACLE_PG_URL is reachable. Try: psql \"$ORACLE_PG_URL\" -c 'SELECT 1'",
-            err=True,
-        )
-        sys.exit(2)
-    except Exception as exc:
-        # Catches asyncpg.PostgresError (which we don't import at module top to
-        # keep asyncpg lazy) AND any other unexpected runtime issue.
-        click.echo(f"✗ Oracle PG query failed: {exc}", err=True)
-        sys.exit(2)
-
-
-async def _list_async(
-    oracle_pg_url: str,
-    limit: int,
-    since: Optional[str],
-    source: Optional[str],
-    as_json: bool,
-) -> None:
-    import asyncpg
-    import json as _json
-
-    where_clauses: list[str] = []
-    params: list = []
-
-    if since:
-        # Validate against whitelist — only `<int> <unit>[s]` accepted.
-        # PostgreSQL doesn't accept parameterized values inside INTERVAL literals,
-        # so we MUST interpolate; the regex prevents injection of arbitrary SQL.
-        if not _SINCE_PATTERN.match(since.strip()):
+    except CapturesUnavailable as exc:
+        msg = str(exc)
+        if "asyncpg not installed" in msg:
             click.echo(
-                f"✗ invalid --since value: {since!r}.\n"
-                "  Must be `<int> <unit>` where unit is second/minute/hour/day/week/month/year (singular or plural).\n"
-                '  Examples: "1 hour", "2 days", "1 week"',
+                "✗ asyncpg not installed — required for `linkright watch list`.\n"
+                "   Install with:  pip install linkright[admin]",
                 err=True,
             )
-            sys.exit(2)
-        where_clauses.append(f"captured_at > NOW() - INTERVAL '{since.strip()}'")
-    if source:
-        params.append(source)
-        where_clauses.append(f"source_type = ${len(params)}")
+        elif "ORACLE_PG_URL" in msg:
+            click.echo(f"✗ {msg}", err=True)
+        elif "cannot reach" in msg:
+            click.echo(
+                f"✗ {msg}\n"
+                "  Check ORACLE_PG_URL is reachable. Try: psql \"$ORACLE_PG_URL\" -c 'SELECT 1'",
+                err=True,
+            )
+        else:
+            click.echo(f"✗ {msg}", err=True)
+        sys.exit(2)
 
-    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    params.append(limit)
-    sql = (
-        "SELECT id::text AS id, title, company_name, location, salary_text, "
-        "source_type, captured_at, job_url "
-        f"FROM job_discoveries{where_sql} "
-        f"ORDER BY captured_at DESC LIMIT ${len(params)}"
-    )
+    _render_captures(rows, as_json)
 
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2)
-    try:
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-    finally:
-        await pool.close()
+
+def _render_captures(
+    rows: list[dict],
+    as_json: bool,
+) -> None:
+    """Render captures rows (already in the unified shape from db.py) as
+    rich-table or JSON. Extracted from the old _list_async so the SQL +
+    fetch path lives in db.fetch_captures (single source of truth).
+    """
+    import json as _json
 
     if as_json:
-        out = [
-            {
-                "id": r["id"],
-                "title": r["title"],
-                "company_name": r["company_name"],
-                "location": r["location"],
-                "salary_text": r["salary_text"],
-                "source_type": r["source_type"],
-                "captured_at": r["captured_at"].isoformat() if r["captured_at"] else None,
-                "job_url": r["job_url"],
-            }
-            for r in rows
-        ]
+        out = []
+        for r in rows:
+            disc = r.get("job_discoveries") or {}
+            out.append({
+                "id": disc.get("id"),
+                "title": disc.get("title"),
+                "company_name": disc.get("company_name"),
+                "location": disc.get("location"),
+                "salary_text": disc.get("salary_text"),
+                "source_type": disc.get("source_type"),
+                "captured_at": r.get("captured_at"),
+                "job_url": disc.get("job_url"),
+            })
         click.echo(_json.dumps(out, indent=2))
         return
 
@@ -357,7 +313,6 @@ async def _list_async(
         click.echo("No captures found. Browse a Naukri job page after `linkright watch` is running.")
         return
 
-    # Lazy import rich (already a core dep) for nice table rendering
     from rich.console import Console
     from rich.table import Table
 
@@ -370,15 +325,24 @@ async def _list_async(
     table.add_column("Location", width=14, overflow="ellipsis")
 
     for i, r in enumerate(rows, 1):
-        captured = r["captured_at"]
-        captured_str = captured.strftime("%b %d %H:%M") if captured else "?"
+        disc = r.get("job_discoveries") or {}
+        captured_iso = r.get("captured_at")
+        # captured_at in unified shape is ISO string; format for human display
+        captured_str = "?"
+        if captured_iso:
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(captured_iso.replace("Z", "+00:00"))
+                captured_str = dt.strftime("%b %d %H:%M")
+            except (ValueError, AttributeError):
+                captured_str = str(captured_iso)[:16]
         table.add_row(
             str(i),
             captured_str,
-            r["source_type"] or "?",
-            r["company_name"] or "?",
-            r["title"] or "?",
-            r["location"] or "-",
+            disc.get("source_type") or "?",
+            disc.get("company_name") or "?",
+            disc.get("title") or "?",
+            disc.get("location") or "-",
         )
 
     Console().print(table)

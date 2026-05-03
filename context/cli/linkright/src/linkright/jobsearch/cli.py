@@ -64,6 +64,26 @@ def _auth_headers() -> dict:
     return api_headers(require_session())
 
 
+def _try_auth_headers() -> dict | None:
+    """Like ``_auth_headers`` but returns None on missing/expired session
+    instead of raising or sys.exit'ing. Used by dual-read paths where the
+    Supabase API is optional (Oracle PG captures still flow even without
+    a website session).
+
+    Note: ``auth.require_session()`` calls ``sys.exit(1)`` directly on missing
+    session (raises SystemExit, not Exception), so we go through ``load_session``
+    here to bypass the user-facing prompt and just check truthiness.
+    """
+    try:
+        from linkright.auth import load_session, api_headers
+        sess = load_session()
+        if not sess:
+            return None
+        return api_headers(sess)
+    except Exception:
+        return None
+
+
 def _grade_color(grade: str) -> str:
     return {"A": "green", "B": "cyan", "C": "yellow", "D": "red", "F": "red"}.get(grade, "white")
 
@@ -79,44 +99,88 @@ def _grade_color(grade: str) -> str:
 @click.option("--refresh", is_flag=True, help="Trigger a fresh scan before fetching")
 @click.option("--json", "as_json", is_flag=True, help="Output raw JSON (pipe-friendly)")
 def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_json: bool) -> None:
-    """Show today's top job matches from your sync.linkright.in feed."""
+    """Show today's top job matches — merged from sync.linkright.in (scored
+    feed via Supabase) AND your local Oracle-PG captures (`linkright watch`).
+
+    Both data sources are OPTIONAL — find degrades gracefully:
+      - No website session → skip Supabase fetch, show captures only
+      - No ORACLE_PG_URL / asyncpg → skip captures, show Supabase only
+      - Neither configured → friendly error pointing to `auth login` or
+        `watch setup`
+    """
     import httpx
     from rich.console import Console
     from rich.table import Table
     from rich import box
 
-    headers = _auth_headers()
+    from linkright.watch.db import (
+        fetch_captures,
+        is_capture_row,
+        merge_dedup_by_url,
+        sort_scored_then_captures,
+        pretty_source,
+        CapturesUnavailable,
+    )
 
-    if refresh:
-        click.echo("Triggering scan... ", nl=False)
+    # ── Source 1: Supabase via website API (scored feed) ────────────────────
+    supabase_rows: list[dict] = []
+    headers = _try_auth_headers()
+
+    if headers is not None:
+        if refresh:
+            click.echo("Triggering scan... ", nl=False)
+            try:
+                with _http() as client:
+                    client.post(f"{_LINKRIGHT_API}/api/scan", headers=headers)
+                click.echo("done.")
+            except Exception:
+                click.echo("(scan endpoint unreachable — fetching cached feed)")
+
         try:
             with _http() as client:
-                client.post(f"{_LINKRIGHT_API}/api/scan", headers=headers)
-            click.echo("done.")
-        except Exception:
-            click.echo("(scan endpoint unreachable — fetching cached feed)")
+                resp = client.get(
+                    f"{_LINKRIGHT_API}/api/recommendations/today",
+                    headers=headers,
+                    params={"limit": max(top_n * 3, 50)},
+                )
+            if resp.status_code == 401:
+                click.echo("⚠ session expired — captures-only mode (run `linkright auth login` to refresh)", err=True)
+            elif resp.status_code == 200:
+                supabase_rows = (resp.json() or {}).get("top20") or []
+            else:
+                click.echo(f"⚠ API {resp.status_code}: {resp.text[:120]} — captures-only mode", err=True)
+        except Exception as e:
+            click.echo(f"⚠ network error fetching scored feed: {e} — captures-only mode", err=True)
+    else:
+        click.echo("⚠ not logged in to sync.linkright.in — showing captures only (run `linkright auth login` for scored recommendations)", err=True)
 
+    # ── Source 2: Oracle PG captures (linkright watch) ──────────────────────
+    capture_rows: list[dict] = []
     try:
-        with _http() as client:
-            resp = client.get(
-                f"{_LINKRIGHT_API}/api/recommendations/today",
-                headers=headers,
-                params={"limit": max(top_n * 3, 50)},  # over-fetch to allow client-side filter
+        capture_rows = fetch_captures(limit=max(top_n * 3, 50))
+    except CapturesUnavailable as exc:
+        # Don't spam the warning if user is unauthenticated (they already saw
+        # the auth warning above) — only warn if Supabase WORKED but captures
+        # failed, since that's the "you have setup gap" case.
+        if supabase_rows:
+            click.echo(f"⚠ Oracle PG captures unavailable: {exc}", err=True)
+        else:
+            # Both sources failed — give actionable guidance
+            pass
+
+    # ── Merge + sort: scored feed first, then captures by recency ───────────
+    merged = merge_dedup_by_url(supabase_rows, capture_rows)
+    rows = sort_scored_then_captures(merged)
+
+    # If BOTH sources empty, give actionable error
+    if not rows:
+        if headers is None:
+            raise click.ClickException(
+                "No jobs available. Either:\n"
+                "  • Log in: `linkright auth login` for scored feed, OR\n"
+                "  • Set up captures: `linkright watch setup` then browse some jobs"
             )
-    except Exception as e:
-        raise click.ClickException(f"Network error: {e}")
-
-    if resp.status_code == 401:
-        click.echo(
-            "Session expired or invalid.\nRun: linkright auth login",
-            err=True,
-        )
-        sys.exit(1)
-    if resp.status_code != 200:
-        raise click.ClickException(f"API error {resp.status_code}: {resp.text[:200]}")
-
-    data = resp.json()
-    rows = data.get("top20") or []
+        raise click.ClickException("No jobs available. Try `linkright jobs find --refresh`.")
 
     # Client-side filters
     if location:
@@ -143,12 +207,15 @@ def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_
     table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold")
     table.add_column("Rank", style="dim", width=4, justify="right")
     table.add_column("Grade", width=5, justify="center")
-    table.add_column("Title", min_width=28, max_width=48)
-    table.add_column("Company", min_width=18, max_width=28)
-    table.add_column("Location", min_width=14, max_width=24)
+    table.add_column("Title", min_width=24, max_width=42)
+    table.add_column("Company", min_width=16, max_width=24)
+    table.add_column("Location", min_width=12, max_width=20)
     table.add_column("Score", width=6, justify="right")
+    table.add_column("Source", width=10)  # NEW — shows naukri / themuse / linkedin / etc.
     table.add_column("Action", width=14)
 
+    n_scored = 0
+    n_capture = 0
     for i, row in enumerate(rows, 1):
         disc = row.get("job_discoveries") or {}
         rank_val = row.get("rank", i)
@@ -162,22 +229,42 @@ def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_
         company = disc.get("company_name") or row.get("company_name") or "-"
         loc = disc.get("location") or row.get("location") or "-"
         discovery_id = disc.get("id") or row.get("id") or ""
+        source_raw = (
+            row.get("source")
+            or disc.get("source_type")
+            or row.get("source_type")
+        )
+        source_pretty = pretty_source(source_raw)
 
-        grade_styled = f"[{_grade_color(grade_val)}]{grade_val}[/{_grade_color(grade_val)}]"
+        # Source-shape based classification (NOT score-value based) so a
+        # Supabase row with `final_score=0` stays classified as scored.
+        if is_capture_row(row):
+            n_capture += 1
+        else:
+            n_scored += 1
+
+        grade_styled = f"[{_grade_color(grade_val if grade_val else '?')}]{grade_val or '—'}[/{_grade_color(grade_val if grade_val else '?')}]"
         action = f"jobs show {discovery_id[:8]}..." if discovery_id else "jobs show <id>"
 
         table.add_row(
-            str(rank_val),
+            str(rank_val) if rank_val else "—",
             grade_styled,
-            title[:48],
-            company[:28],
-            loc[:24],
-            f"{score_val:.0f}" if isinstance(score_val, (int, float)) else str(score_val),
+            title[:42],
+            company[:24],
+            loc[:20],
+            (f"{score_val:.0f}" if isinstance(score_val, (int, float)) and score_val else "—"),
+            source_pretty[:10],
             action,
         )
 
     console.print(table)
-    click.echo(f"\n{len(rows)} jobs shown. Use 'linkright jobs show <id>' for full detail.")
+    summary_parts = []
+    if n_scored:
+        summary_parts.append(f"{n_scored} scored")
+    if n_capture:
+        summary_parts.append(f"{n_capture} from captures")
+    summary = " + ".join(summary_parts) if summary_parts else f"{len(rows)} rows"
+    click.echo(f"\n{summary}. Use 'linkright jobs show <id>' for full detail.")
     click.echo("Use 'linkright jobs apply <id>' to tailor your resume and mark applied.")
 
 
