@@ -77,9 +77,16 @@ class FakeCollection:
 def tmp_artifacts(tmp_path, monkeypatch):
     """Repoint orchestrator's ARTIFACTS + neutralize logbook for step_08b
     tests. logbook.append() writes to a fixed `resume/logs/pipeline.log`
-    that doesn't exist in test envs; we no-op it."""
+    that doesn't exist in test envs; we no-op it.
+
+    Also sets `LR_USE_STORIES=1` — step_08b is opt-in by default (reviewer-
+    flagged: zero-overhead default since downstream consumption is post-v1
+    work). Tests that exercise the function need the gate ON.
+    """
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
+
+    monkeypatch.setenv("LR_USE_STORIES", "1")
 
     from linkright.resume import orchestrator
     monkeypatch.setattr(orchestrator, "ARTIFACTS", artifacts)
@@ -104,6 +111,35 @@ def fake_db_and_embedder(monkeypatch):
 
 # ── Tests ──────────────────────────────────────────────────────────────────
 
+def test_default_off_returns_empty_no_io(monkeypatch, tmp_path, fake_db_and_embedder):
+    """AR-flagged: step_08b is opt-in via LR_USE_STORIES=1. With the env var
+    UNSET (default), the function must return [] immediately without any
+    Mongo query or embed call. Zero overhead on existing tailor runs."""
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+
+    # Explicitly do NOT set LR_USE_STORIES (and clear any pre-existing value)
+    monkeypatch.delenv("LR_USE_STORIES", raising=False)
+
+    from linkright.resume import orchestrator
+    monkeypatch.setattr(orchestrator, "ARTIFACTS", artifacts)
+    monkeypatch.setattr(orchestrator.logbook, "append", lambda *a, **kw: None)
+    monkeypatch.setattr(orchestrator, "log", lambda *a, **kw: None)
+
+    # Insert a story that WOULD match the query — proves we never queried
+    fake_db_and_embedder.insert_one({
+        "user_id": "local", "title": "Should Not Surface",
+        "action": "AML thing", "result": "y", "tags": [], "emb": None,
+    })
+
+    result = orchestrator.step_08b_retrieve_stories(
+        {"jd_keywords": ["AML"], "role_title": "PM"},
+    )
+    assert result == []
+    # No artifact written — the function exited before any work
+    assert not (artifacts / "08b_retrieved_stories.json").exists()
+
+
 def test_returns_empty_when_mongo_unreachable(monkeypatch, tmp_artifacts):
     """If MongoDB ping fails, step_08b skips cleanly and returns []."""
     monkeypatch.setattr("linkright.db.mongo.ping", lambda: False)
@@ -114,6 +150,37 @@ def test_returns_empty_when_mongo_unreachable(monkeypatch, tmp_artifacts):
     assert result == []
     # No artifact file written
     assert not (tmp_artifacts / "08b_retrieved_stories.json").exists()
+
+
+def test_stub_embedder_skips_vector_path(monkeypatch, tmp_artifacts, fake_db_and_embedder):
+    """AR-flagged: when no real embedder is configured (fastembed/sentence-
+    transformers/Oracle all unavailable), `embedder.embed()` falls back to
+    a SHA256 pseudo-embedding (`tier="stub"`). Cosine on stubs is meaningless
+    — silently producing garbage rankings would let users with zero embedder
+    configured see false-positive top hits. Vector path must be skipped
+    when tier="stub", text fallback fires instead."""
+    fake_db_and_embedder.insert_one({
+        "user_id": "local", "title": "Real Match for AML",
+        "action": "AML automation", "result": "saved $1M", "tags": [],
+        "emb": [0.1] * 768,  # has emb but should NOT be cosine-scored
+    })
+
+    from linkright.resume import orchestrator
+    # Stub embedder returns a vector + tier="stub" metadata
+    monkeypatch.setattr(
+        orchestrator.embedder, "embed",
+        lambda q: ([0.5] * 768, {"tier": "stub", "WARNING": "stub embedding (no real embedder)"})
+    )
+
+    result = orchestrator.step_08b_retrieve_stories(
+        {"jd_keywords": ["AML"], "role_title": "PM"},
+    )
+    # Story still surfaces — but via TEXT fallback (regex on "AML"),
+    # not via cosine scoring of meaningless stub embeddings.
+    assert len(result) == 1
+    assert result[0]["title"] == "Real Match for AML"
+    # Score == 0.5 = text fallback (not cosine result)
+    assert result[0]["score"] == 0.5
 
 
 def test_returns_empty_when_no_query_signal(monkeypatch, tmp_artifacts, fake_db_and_embedder):

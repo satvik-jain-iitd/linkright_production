@@ -1679,7 +1679,7 @@ def step_08b_retrieve_stories(parsed_p12: dict, k: int = 8) -> list[dict]:
     `artifacts/08b_retrieved_stories.json` for visibility + future use.
 
     Strategy:
-      1. Build query from role_title + top-5 JD keywords
+      1. Build query from `target_role` + top-5 JD keywords
       2. Try vector search (Oracle embed + cosine across all stories with emb)
       3. Fall back to text regex on title/action/result/tags
       4. Persist serialized results
@@ -1692,11 +1692,26 @@ def step_08b_retrieve_stories(parsed_p12: dict, k: int = 8) -> list[dict]:
     debugging visibility + future-PR consumption only — step_10 prompt
     behavior is unchanged.
 
+    Gating: opt-in via `LR_USE_STORIES=1` env var. Default = skip with
+    zero overhead. Reviewer-flagged: until step_10 actually consumes the
+    output, mandatory MongoDB + embed cost on every tailor run is wasteful.
+
     Returns:
       list of serialized story dicts (id, title, S/T/A/R, tags, score).
-      Empty list if MongoDB unreachable or no stories match.
+      Empty list if disabled, MongoDB unreachable, no query signal, or
+      no stories match.
     """
     step = "step_08b_retrieve_stories"
+
+    # Reviewer-flagged: gate behind opt-in env var. Default off so existing
+    # tailor runs incur zero overhead (no Mongo query, no embed call) until
+    # downstream wiring (step_10 prompt context) lands. Flip default to ON
+    # in the PR that wires bullet-context consumption.
+    if os.environ.get("LR_USE_STORIES", "0") != "1":
+        logbook.append(step, "skip",
+                       "LR_USE_STORIES=0 (default); set to 1 to opt in to story retrieval.")
+        return []
+
     logbook.append(
         step, "starting",
         f"querying career_stories for top-{k} matches against role + JD keywords; "
@@ -1720,7 +1735,10 @@ def step_08b_retrieve_stories(parsed_p12: dict, k: int = 8) -> list[dict]:
     coll = get_db()["career_stories"]
 
     jd_keywords = parsed_p12.get("jd_keywords", [])[:5]
-    role_title = parsed_p12.get("role_title", "") or parsed_p12.get("target_role", "")
+    # `target_role` is the canonical field produced by the JD-strategy LLM
+    # (see prompts.py PHASE_1_2 output schema). `role_title` is checked
+    # second purely for forward-compat with any future schema rename.
+    role_title = parsed_p12.get("target_role", "") or parsed_p12.get("role_title", "")
     query = f"{role_title} {' '.join(jd_keywords)}".strip()
 
     if not query:
@@ -1731,10 +1749,13 @@ def step_08b_retrieve_stories(parsed_p12: dict, k: int = 8) -> list[dict]:
 
     hits: list[dict] = []
 
-    # Vector path — score all stories with embeddings, take top-k
+    # Vector path — score all stories with embeddings, take top-k.
+    # Skip when embedder falls back to stub (SHA256 pseudo-embeddings would
+    # produce meaningless cosine scores; user without Oracle/fastembed
+    # configured silently gets garbage rankings otherwise).
     try:
         q_emb, _meta = embedder.embed(query)
-        if q_emb:
+        if q_emb and _meta.get("tier") != "stub":
             cursor = coll.find({"user_id": "local", "emb": {"$ne": None}})
             scored = []
             for doc in cursor:
@@ -1744,6 +1765,9 @@ def step_08b_retrieve_stories(parsed_p12: dict, k: int = 8) -> list[dict]:
                     scored.append({**doc, "_score": round(sim, 4)})
             scored.sort(key=lambda x: x["_score"], reverse=True)
             hits = scored[:k]
+        elif q_emb and _meta.get("tier") == "stub":
+            log(f"[step_08b] embedder in stub tier ({_meta.get('WARNING', 'no real embedder')}); "
+                "skipping vector path, falling back to text regex.")
     except Exception as _e:
         log(f"[step_08b] vector path failed ({_e}); falling back to text regex")
 
