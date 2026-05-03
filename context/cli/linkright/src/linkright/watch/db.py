@@ -40,8 +40,12 @@ logger = logging.getLogger(__name__)
 # PostgreSQL doesn't accept parameterized values inside INTERVAL '...' literals,
 # so we MUST interpolate the value. The regex below is the ONLY thing standing
 # between user input and the SQL string; defense-in-depth means this validation
-# lives HERE (the read layer), not at the caller. Keep this in sync with
-# watch/cli.py:_SINCE_PATTERN — they must match exactly.
+# lives HERE (the read layer), not at the caller. SINGLE SOURCE OF TRUTH —
+# do not duplicate this regex elsewhere in the codebase. fetch_captures()
+# below is the gatekeeper; all callers (watch list, jobs find) flow through it.
+#
+# `[ ]+` (literal spaces) NOT `\s+` — `\s` matches tab/newline/etc. which would
+# pass validation but produce malformed Postgres INTERVAL literals.
 _SINCE_PATTERN = re.compile(
     r"^\d+[ ]+(?:second|minute|hour|day|week|month|year)s?$",
     re.IGNORECASE,

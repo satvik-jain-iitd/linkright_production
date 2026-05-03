@@ -200,7 +200,7 @@ def test_load_oracle_pg_url_missing_raises_value_error(tmp_path, monkeypatch):
     "1 HOUR", "1 Hour",  # case-insensitive
 ])
 def test_since_pattern_accepts_valid_intervals(value):
-    from linkright.watch.cli import _SINCE_PATTERN
+    from linkright.watch.db import _SINCE_PATTERN
     assert _SINCE_PATTERN.match(value), f"should accept {value!r}"
 
 
@@ -217,5 +217,5 @@ def test_since_pattern_accepts_valid_intervals(value):
     "1 day --comment",
 ])
 def test_since_pattern_rejects_injection_attempts(value):
-    from linkright.watch.cli import _SINCE_PATTERN
+    from linkright.watch.db import _SINCE_PATTERN
     assert not _SINCE_PATTERN.match(value), f"should reject {value!r}"

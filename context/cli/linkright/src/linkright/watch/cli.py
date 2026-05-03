@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import signal
 import sys
 from datetime import datetime, timezone
@@ -24,18 +23,10 @@ import httpx
 
 from linkright.watch import cdp, extractor, poster, service, setup as setup_mod
 
-# Whitelist for `linkright watch list --since` — must match PostgreSQL INTERVAL
-# syntax narrowly. We interpolate into SQL (Postgres doesn't accept parameterized
-# values inside INTERVAL literals), so input MUST be validated against this
-# strict allowlist to prevent injection (even though it's user-typed self-pwn,
-# accidental quoting bugs etc. are still real).
-#
-# `[ ]+` (literal spaces) NOT `\s+` — `\s` matches tab/newline/etc. which would
-# pass validation but produce malformed Postgres INTERVAL literals.
-_SINCE_PATTERN = re.compile(
-    r"^\d+[ ]+(?:second|minute|hour|day|week|month|year)s?$",
-    re.IGNORECASE,
-)
+# Note: `--since` whitelist (was _SINCE_PATTERN here in earlier commits) now
+# lives ONLY in `linkright.watch.db._SINCE_PATTERN`. fetch_captures() validates
+# input there before any SQL is built. Don't add a copy here — single source
+# of truth in db.py.
 
 logger = logging.getLogger("linkright.watch")
 
