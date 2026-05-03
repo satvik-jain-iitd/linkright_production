@@ -1,8 +1,12 @@
-"""Optional company-branded resume design (Phase 1).
+"""Optional company-branded resume + cover letter design (Phase 1).
 
 Runs AFTER `linkright resume tailor` — never inline. Output is a separate
 `15_final_resume_branded.pdf` alongside the original B&W PDF. The B&W default
 is preserved — branding is opt-in.
+
+Cover letter branding (`--cover-letter <md-path>`) renders an additional
+`cover_letter_branded.pdf` next to the source markdown. Same color spec —
+metric bolds get colored, all other text stays black.
 
 Per Satvik design spec 2026-05-03 (memory: feedback_brand_design_spec_2026_05_03):
 - Default = pure black-and-white. No tinted backgrounds, no colored panels.
@@ -19,6 +23,7 @@ Phase 2 (deferred): admin DB lookup of `companies.brand_*_hex` columns for
 """
 from __future__ import annotations
 
+import html as _html
 import re
 from pathlib import Path
 
@@ -59,6 +64,11 @@ def apply_brand_to_html(
         --brand-secondary-color: #...;
         --brand-tertiary-color: #...;
 
+    Replaces ONLY the hex value — preserves everything after (whitespace,
+    `!important`, trailing comments, the closing `;`). This makes the swap
+    robust against future template/CSS edits that add `!important` or other
+    qualifiers to brand variable declarations.
+
     Empty `secondary` → falls back to primary (divider becomes solid line).
     Empty `accent` → falls back to secondary (2-stop gradient).
     """
@@ -71,11 +81,92 @@ def apply_brand_to_html(
         ("--brand-tertiary-color", accent),
     ]
     for css_var, hex_value in swaps:
+        # Match `--brand-X-color:<ws>#HEX` and replace ONLY the hex.
+        # Anything after the hex (`!important`, comments, `;`) is preserved.
         pattern = re.compile(
-            rf"({re.escape(css_var)}:\s*)#[0-9A-Fa-f]{{6}}(\s*;)"
+            rf"({re.escape(css_var)}\s*:\s*)#[0-9A-Fa-f]{{6}}"
         )
-        html = pattern.sub(rf"\g<1>{hex_value}\g<2>", html)
+        html = pattern.sub(rf"\g<1>{hex_value}", html)
     return html
+
+
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+
+
+def markdown_to_branded_html(md_text: str, primary: str) -> str:
+    """Convert cover letter markdown to a minimal branded HTML page.
+
+    Cover letters are prose, not structured sections — so the only colored
+    surface is bolded metrics within paragraphs (matching the resume's
+    bullet-metric rule). All other text stays black.
+
+    Markdown handled:
+    - Paragraphs (separated by blank lines)
+    - Bold via `**text**` → `<b>text</b>` (gets primary color)
+    - Hard line breaks within a paragraph (preserved as `<br>`)
+    - HTML special chars escaped
+
+    Lists, headers, links etc. are NOT supported — CLs do not need them.
+    If the LLM produces `# Header` or `- bullet`, they render as plain text.
+    """
+    paragraphs: list[str] = []
+    for block in re.split(r"\n\s*\n", md_text.strip()):
+        block = block.strip()
+        if not block:
+            continue
+        # Escape HTML special chars FIRST, then re-introduce <b> tags
+        escaped = _html.escape(block)
+        # Now replace literal `**...**` (which became `**...**` after escape) with <b>
+        body = _BOLD_RE.sub(r"<b>\1</b>", escaped)
+        # Soft newlines within a paragraph → <br>
+        body = body.replace("\n", "<br>\n")
+        paragraphs.append(f"<p>{body}</p>")
+
+    body_html = "\n".join(paragraphs)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cover Letter</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {{
+    --brand-primary-color: {primary};
+    --brand-secondary-color: {primary};
+    --brand-tertiary-color: {primary};
+    --ui-text-primary-color: #000000;
+    --ui-page-bg-color: #FFFFFF;
+  }}
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: 'Roboto', sans-serif;
+    color: var(--ui-text-primary-color);
+    background: var(--ui-page-bg-color);
+    font-size: 11pt;
+    line-height: 1.5;
+  }}
+  .page {{
+    width: 210mm;
+    min-height: 297mm;
+    padding: 25mm;
+    background: var(--ui-page-bg-color);
+  }}
+  p {{ margin-bottom: 4mm; }}
+  b {{ color: var(--brand-primary-color); font-weight: 700; }}
+  @media print {{
+    body {{ background: none; padding: 0; }}
+    .page {{ margin: 0; }}
+    @page {{ size: A4; margin: 0; }}
+  }}
+</style>
+</head>
+<body>
+<div class="page">
+{body_html}
+</div>
+</body>
+</html>"""
 
 
 def render_branded_pdf(html_path: Path, pdf_out: Path) -> Path:
@@ -127,6 +218,9 @@ def _prompt_hex(label: str, required: bool) -> str | None:
               help="Secondary hex — gradient mid-stop. Empty = solid primary line")
 @click.option("--accent", default=None,
               help="Accent hex — gradient end-stop. Empty = 2-stop gradient")
+@click.option("--cover-letter", "cover_letter_md", default=None,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Path to cover_letter.md — also renders cover_letter_branded.pdf")
 @click.option("--yes", is_flag=True,
               help="Skip interactive prompts (--primary required when set)")
 def brand_cmd(
@@ -134,9 +228,10 @@ def brand_cmd(
     primary: str | None,
     secondary: str | None,
     accent: str | None,
+    cover_letter_md: Path | None,
     yes: bool,
 ) -> None:
-    """Apply optional brand colors to a tailored resume.
+    """Apply optional brand colors to a tailored resume (and optional cover letter).
 
     \b
     Defaults to pure B&W if you skip this step entirely. When you opt in,
@@ -144,10 +239,17 @@ def brand_cmd(
     black, background stays white. Max 3 colors.
 
     \b
+    Cover letter branding (consistency when emailing both together):
+      Pass `--cover-letter <path-to-cover_letter.md>` to also render
+      `cover_letter_branded.pdf` next to the source markdown.
+
+    \b
     Examples:
       linkright resume brand --run-id 2026-05-03_141023               # interactive prompts
       linkright resume brand --run-id 2026-05-03_141023 \\
           --primary "#635BFF" --secondary "#00D4FF" --accent "#FF6B6B"
+      linkright resume brand --run-id <id> --primary "#635BFF" \\
+          --cover-letter ~/.linkright/runs/cl-001/artifacts/cover_letter.md
     """
     cfg = Config.load()
     run_dir = cfg.runs_dir() / run_id
@@ -192,6 +294,7 @@ def brand_cmd(
         f"  accent    = {accent or '(skip — 2-stop gradient)'}\n"
     )
 
+    # Resume re-render
     html = html_path.read_text(encoding="utf-8")
     html_branded = apply_brand_to_html(html, primary, secondary, accent)
     branded_html_path = artifacts / "14_final_resume_branded.html"
@@ -199,8 +302,19 @@ def brand_cmd(
 
     branded_pdf_path = artifacts / "15_final_resume_branded.pdf"
     render_branded_pdf(branded_html_path, branded_pdf_path)
+    click.echo(f"  branded resume:        {branded_pdf_path}")
 
-    click.echo(f"  branded resume:  {branded_pdf_path}")
+    # Cover letter re-render (optional)
+    if cover_letter_md is not None:
+        cl_md_text = cover_letter_md.read_text(encoding="utf-8")
+        cl_html = markdown_to_branded_html(cl_md_text, primary)
+        cl_branded_html_path = cover_letter_md.with_name("cover_letter_branded.html")
+        cl_branded_html_path.write_text(cl_html, encoding="utf-8")
+
+        cl_branded_pdf_path = cover_letter_md.with_name("cover_letter_branded.pdf")
+        render_branded_pdf(cl_branded_html_path, cl_branded_pdf_path)
+        click.echo(f"  branded cover letter:  {cl_branded_pdf_path}")
+
     click.echo(
         "\nOriginal B&W PDF (15_final_resume.pdf) is unchanged. "
         "Email both as needed."

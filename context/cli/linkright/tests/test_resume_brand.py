@@ -27,6 +27,7 @@ if str(_ROOT) not in sys.path:
 from linkright.resume.brand import (  # noqa: E402
     apply_brand_to_html,
     brand_cmd,
+    markdown_to_branded_html,
     normalize_hex,
 )
 
@@ -143,6 +144,77 @@ class TestApplyBrandToHtml:
         out = apply_brand_to_html(html_loose, "#FF0000", None, None)
         assert "#FF0000" in out
         assert "#000000" not in out
+
+    def test_pattern_preserves_important_suffix(self):
+        # Robustness: `!important` after hex must be preserved (AR concern).
+        html_important = "--brand-primary-color: #000000 !important;"
+        out = apply_brand_to_html(html_important, "#FF0000", None, None)
+        assert "#FF0000 !important;" in out
+        assert "#000000" not in out
+
+    def test_pattern_preserves_inline_comment(self):
+        # Robustness: inline `/* comment */` after hex must be preserved
+        html_comment = "--brand-primary-color: #000000 /* user-set */;"
+        out = apply_brand_to_html(html_comment, "#FF0000", None, None)
+        assert "#FF0000 /* user-set */;" in out
+        assert "#000000" not in out
+
+
+# ── markdown_to_branded_html ────────────────────────────────────────────────
+
+class TestMarkdownToBrandedHtml:
+    def test_simple_paragraph(self):
+        out = markdown_to_branded_html("Hello world.", "#635BFF")
+        assert "<p>Hello world.</p>" in out
+        assert "--brand-primary-color: #635BFF" in out
+
+    def test_multiple_paragraphs_split_on_blank_lines(self):
+        md = "First paragraph.\n\nSecond paragraph."
+        out = markdown_to_branded_html(md, "#635BFF")
+        assert "<p>First paragraph.</p>" in out
+        assert "<p>Second paragraph.</p>" in out
+
+    def test_bold_metrics_get_brand_color(self):
+        # Bold gets <b> tags; CSS rule sets b { color: var(--brand-primary-color) }
+        md = "Drove **$1.2M** in savings via **40%** automation."
+        out = markdown_to_branded_html(md, "#635BFF")
+        assert "<b>$1.2M</b>" in out
+        assert "<b>40%</b>" in out
+        # Brand var set on body via CSS — bolds inherit
+        assert "--brand-primary-color: #635BFF" in out
+
+    def test_html_special_chars_escaped(self):
+        # `<script>` must NOT appear unescaped in output (XSS guard)
+        md = "Skills: TypeScript & <Sass>. <script>alert(1)</script>"
+        out = markdown_to_branded_html(md, "#000000")
+        assert "<script>" not in out  # raw script tag must be escaped
+        assert "&lt;script&gt;" in out
+        assert "&amp;" in out  # `&` escaped to `&amp;`
+
+    def test_soft_newlines_become_br(self):
+        md = "Line one\nLine two\n\nNew paragraph"
+        out = markdown_to_branded_html(md, "#000000")
+        # Within first paragraph, `\n` → `<br>`
+        assert "Line one<br>" in out
+        assert "Line two" in out
+        # New paragraph is its own <p>
+        assert "<p>New paragraph</p>" in out
+
+    def test_default_black_when_primary_is_black(self):
+        out = markdown_to_branded_html("Test **bold**.", "#000000")
+        # When primary is black, bold renders as black bold (still bold weight)
+        assert "--brand-primary-color: #000000" in out
+        assert "<b>bold</b>" in out
+
+    def test_empty_input_yields_no_paragraphs(self):
+        out = markdown_to_branded_html("", "#000000")
+        # Should still be valid HTML (no <p> blocks)
+        assert "<!DOCTYPE html>" in out
+        assert "<p>" not in out
+
+    def test_whitespace_only_input_yields_no_paragraphs(self):
+        out = markdown_to_branded_html("   \n\n  \n", "#000000")
+        assert "<p>" not in out
 
 
 # ── CLI: brand_cmd ──────────────────────────────────────────────────────────
@@ -284,3 +356,64 @@ def test_brand_interactive_prompt_uses_input(runner, fake_run_dir):
     assert result.exit_code == 0, result.output
     content = (artifacts / "14_final_resume_branded.html").read_text()
     assert content.count("#000FFF") == 3  # primary only → all fall back
+
+
+# ── Cover letter branding ──────────────────────────────────────────────────
+
+def test_brand_cover_letter_renders_branded_pdf(runner, fake_run_dir, tmp_path):
+    """--cover-letter <md-path> renders cover_letter_branded.pdf next to the md."""
+    run_id, artifacts = fake_run_dir
+
+    cl_dir = tmp_path / "cl_artifacts"
+    cl_dir.mkdir()
+    cl_md = cl_dir / "cover_letter.md"
+    cl_md.write_text(
+        "Dear Hiring Manager,\n\nI led work that drove **$1.2M ARR** in 6 months.\n\nSincerely,\nSatvik",
+        encoding="utf-8",
+    )
+
+    with patch("linkright.resume.brand.render_branded_pdf") as mock_render:
+        result = runner.invoke(
+            brand_cmd,
+            ["--run-id", run_id, "--primary", "#635BFF",
+             "--cover-letter", str(cl_md), "--yes"],
+        )
+
+    assert result.exit_code == 0, result.output
+    # Branded CL HTML created next to the source md
+    cl_html = cl_dir / "cover_letter_branded.html"
+    assert cl_html.exists()
+    cl_content = cl_html.read_text(encoding="utf-8")
+    assert "--brand-primary-color: #635BFF" in cl_content
+    assert "<b>$1.2M ARR</b>" in cl_content
+    # render_branded_pdf called twice: once for resume, once for CL
+    assert mock_render.call_count == 2
+
+
+def test_brand_cover_letter_missing_path_fails(runner, fake_run_dir, tmp_path):
+    """If --cover-letter points to a non-existent file, Click rejects."""
+    run_id, _ = fake_run_dir
+    nonexistent = tmp_path / "no_such_file.md"
+
+    result = runner.invoke(
+        brand_cmd,
+        ["--run-id", run_id, "--primary", "#635BFF",
+         "--cover-letter", str(nonexistent), "--yes"],
+    )
+    assert result.exit_code != 0
+    # Click's exists=True validator returns "does not exist" or "Invalid value"
+    assert "does not exist" in result.output.lower() or "invalid" in result.output.lower()
+
+
+def test_brand_no_cover_letter_flag_does_not_render_cl(runner, fake_run_dir):
+    """Without --cover-letter, only resume PDF gets rendered."""
+    run_id, _ = fake_run_dir
+    with patch("linkright.resume.brand.render_branded_pdf") as mock_render:
+        result = runner.invoke(
+            brand_cmd,
+            ["--run-id", run_id, "--primary", "#635BFF", "--yes"],
+        )
+
+    assert result.exit_code == 0, result.output
+    # Only resume rendered (1 call), not CL
+    assert mock_render.call_count == 1
