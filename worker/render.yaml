@@ -32,4 +32,14 @@ services:
         sync: false
       - key: OPENROUTER_MODEL
         value: "meta-llama/llama-3.3-70b-instruct"
+      # Sprint B (Oracle PG): job-related data persistence URL.
+      # Format: postgres://linkright_app:<password>@oracle-pg.linkright.in:5432/linkright_jobs?sslmode=prefer
+      # Set in Render dashboard from ~/.linkright/.env.oracle.
+      - key: ORACLE_PG_URL
+        sync: false
+      # Sprint C (passive captures): per-tenant secret for POST /api/captures auth.
+      # Generate with `python3 -c "import secrets; print('lrcap_' + secrets.token_urlsafe(32))"`
+      # and set BOTH the Render env var AND ~/.linkright/.env so the userscript matches.
+      - key: LINKRIGHT_CAPTURE_KEY
+        sync: false
     healthCheckPath: /health
