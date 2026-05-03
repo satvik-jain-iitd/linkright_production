@@ -8,7 +8,7 @@ Checks:
   1. Connect + server version
   2. Extensions: vector, pg_trgm
   3. Tables: companies, slug_discovery_cache, enriched_jobs_cache
-  4. Seed count: >= 31 rows in companies
+  4. Seed count: >= 81 rows in companies (31 from migration 004 + 50 from migration 005)
   5. Round-trip: INSERT test row + DELETE
 
 Exit code 0 = all checks PASS.
