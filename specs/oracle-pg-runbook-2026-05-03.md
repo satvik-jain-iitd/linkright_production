@@ -224,13 +224,18 @@ psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/001_companies_table.sq
 psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/002_slug_discovery_cache.sql
 psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/003_enriched_jobs_cache.sql
 psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/004_seed_31_companies.sql
+psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/005_seed_expansion_50_2026_05_03.sql
 ```
 
-Expected output for 004:
+Expected output for 004 + 005:
 ```
 NOTICE:  Seed migration 004 complete: 31 companies inserted/updated
 INSERT 0 31
+INSERT 0 50
 ```
+
+After both seed migrations, `companies` should have 81 rows (smoke test
+asserts `MIN_SEED_ROWS = 81`).
 
 ---
 

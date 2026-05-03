@@ -1,10 +1,14 @@
 -- Migration 005: Seed expansion — 50 additional companies (2026-05-03)
--- Source: worker/db/oracle_seed_inputs/seed_expansion_50_2026_05_03.json
+-- Pre-discovery input: worker/db/oracle_seed_inputs/seed_expansion_50_2026_05_03.json
+--   (input shows confidence='medium' for all 50; THIS migration is the
+--   POST-discovery snapshot — 27 rows upgraded to 'high' after live ATS
+--   verification, 23 stay 'medium'. See commit body for the breakdown.)
 -- Discovery method: linkright admin slug-discovery batch (Sprint B Layer 1)
--- 28/50 companies got ATS pairings auto-discovered live against the providers
--- (greenhouse/ashby brute-force majority); the remaining 22 (mostly Indian-
--- market SaaS) had no Greenhouse/Lever/Ashby/Keka match and stay ats=NULL
--- pending Naukri/internal-portal coverage in a future sprint.
+-- 27/50 companies got ATS pairings auto-discovered live against the providers
+-- (greenhouse/ashby brute-force majority); the remaining 23 (mostly Indian-
+-- market SaaS, plus DoorDash whose only matched slug was India-only and
+-- inconsistent with the row's US HQ) stay ats=NULL pending Naukri/internal-
+-- portal coverage in a future sprint.
 --
 -- confidence='high' = ATS slug verified returning live jobs from the API
 -- confidence='medium' = imported but no ATS pairing found (still useful as
@@ -414,14 +418,18 @@ INSERT INTO companies (
 
 -- ── Food Tech ──
 (
+  -- DoorDash: brute-force matched 'doordashindia' (10 India-only jobs) but row is
+  -- US-headquartered. Surfacing India jobs under a US row is a silent geography
+  -- mismatch, so we keep the company-knowledge entry and NULL the ATS pairing
+  -- until a verified US/global DoorDash board is found.
   '133c46b22745ffff24d6c557766090c21a13d91c',
   'DoorDash',
   'https://doordash.com',
   NULL,
   'Food Tech', NULL, 'San Francisco', 'US',
-  'greenhouse', 'doordashindia',
+  NULL, NULL,
   FALSE, TRUE,
-  ARRAY['seed_expansion_2026_05_03'], 'high', NOW()
+  ARRAY['seed_expansion_2026_05_03'], 'medium', NOW()
 ),
 
 -- ── Gaming ──
