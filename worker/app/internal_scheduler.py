@@ -198,3 +198,47 @@ async def start_internal_scheduler():
     asyncio.create_task(_run_remotive_loop())
     asyncio.create_task(_run_jobicy_loop())
     asyncio.create_task(_run_enricher_loop())
+    asyncio.create_task(_run_slug_validator_loop())
+
+
+# ── Slug self-heal cron — Sprint B Layer 4 ───────────────────────────────────
+
+async def _run_slug_validator_loop():
+    """Every 24h (off-peak 3 AM UTC): re-validate stale ATS slugs, heal dead ones.
+
+    Picks companies with last_verified_at > 7 days ago, checks live job counts,
+    increments consecutive_zero_count on misses, and triggers Tier 2 re-discovery
+    after 7 consecutive zeros (potential company/ATS migration detected).
+
+    Skipped silently when ORACLE_PG_URL is not set (Oracle PG not provisioned).
+    """
+    import asyncio as _asyncio
+    from datetime import datetime, timezone, timedelta
+
+    while True:
+        # Sleep until 3 AM UTC
+        now_utc = datetime.now(timezone.utc)
+        target = now_utc.replace(hour=3, minute=0, second=0, microsecond=0)
+        if target <= now_utc:
+            target += timedelta(days=1)
+        sleep_secs = (target - now_utc).total_seconds()
+        logger.info(
+            "slug_validator: next run in %.1f hours (03:00 UTC)",
+            sleep_secs / 3600,
+        )
+        await _asyncio.sleep(sleep_secs)
+
+        try:
+            from .oracle.pg import is_enabled
+            if not is_enabled():
+                logger.debug("slug_validator: ORACLE_PG_URL not set — skipping")
+                continue
+            from .oracle.slug_validator import validate_and_heal_slugs
+            report = await validate_and_heal_slugs(batch_size=100)
+            logger.info(
+                "slug_validator cron: validated=%d healed=%d marked_zero=%d errors=%d in %dms",
+                report.validated, report.healed, report.marked_zero,
+                len(report.errors), report.duration_ms,
+            )
+        except Exception as exc:
+            logger.exception("slug_validator cron: failed — %s", exc)

@@ -49,8 +49,10 @@ ORACLE_BACKEND_SECRET = os.getenv("ORACLE_BACKEND_SECRET", "")
 # Constitutional rule: job data goes to Oracle PG; user PII stays on Supabase.
 # See: feedback_split_db_architecture_locked.md
 #
-# Format: postgres://linkright_app:<password>@oracle-pg.linkright.in:5432/linkright_jobs
-# SSL is REQUIRED — the asyncpg pool in app/oracle/pg.py enforces ssl="require".
+# Format: postgres://linkright_app:<password>@oracle-pg.linkright.in:5432/linkright_jobs?sslmode=prefer
+# SSL behavior is set by the URL's `sslmode` query parameter (libpq semantics).
+# Today: sslmode=prefer (TLS optional, server has no Let's Encrypt cert yet).
+# Later: switch URL to sslmode=require once cert is provisioned. No code change needed.
 # Leave unset while Oracle Postgres is being provisioned. All Oracle-PG-backed
 # code paths check ORACLE_PG_ENABLED before connecting and raise a clear error.
 ORACLE_PG_URL = os.environ.get("ORACLE_PG_URL")  # None = not yet provisioned

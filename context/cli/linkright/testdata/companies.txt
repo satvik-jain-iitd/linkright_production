@@ -1,0 +1,12 @@
+# Test file for linkright admin slug-discovery batch
+# 10 companies — mix of well-known and Indian companies
+OpenAI
+Anthropic
+Stripe
+Razorpay
+CRED
+Meesho
+Mistral AI
+Cohere
+Perplexity AI
+ElevenLabs

@@ -4,7 +4,10 @@ Subcommands:
   companies import <file.json>          Upsert company JSON into Oracle PG
   companies import --dry-run <file.json> Validate only (no writes)
   companies stats                        Health stats from Oracle PG
-  slug-discovery batch <names.txt>       Run Layer 1 ATS discovery
+  slug-discovery <company>               Single company discovery (verbose)
+  slug-discovery batch <names.txt>       Parallel batch discovery
+  slug-discovery validate-all [--max N]  Layer 4 self-heal trigger
+  slug-discovery stats                   Last-24h discovery stats
 
 All writes go to Oracle Postgres.  ORACLE_PG_URL must be set in env or
 ~/.linkright/.env.  Commands refuse to proceed if it is not configured.
@@ -116,6 +119,12 @@ def _get_oracle_pg_url() -> str:
     )
 
 
+def _set_oracle_pg_url_env(oracle_pg_url: str) -> None:
+    """Inject ORACLE_PG_URL into os.environ so worker oracle/pg.py sees it."""
+    import os
+    os.environ["ORACLE_PG_URL"] = oracle_pg_url
+
+
 async def _import_companies_async(
     rows: list[CompanyResearchRow],
     oracle_pg_url: str,
@@ -137,7 +146,8 @@ async def _import_companies_async(
         click.echo(f"[dry-run] Validated {len(rows)} rows — no writes performed.")
         return counts
 
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=3, ssl="require")
+    # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
+    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=3)
 
     _UPSERT = """
         INSERT INTO companies (
@@ -217,7 +227,8 @@ async def _stats_async(oracle_pg_url: str) -> None:
             "  Then follow the runbook: specs/oracle-pg-runbook-2026-05-03.md"
         )
 
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2, ssl="require")
+    # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
+    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2)
     try:
         async with pool.acquire() as conn:
             total = await conn.fetchval("SELECT COUNT(*) FROM companies")
@@ -330,25 +341,75 @@ def companies_stats() -> None:
     asyncio.run(_stats_async(oracle_url))
 
 
-@admin_group.group(name="slug-discovery")
+# ── slug-discovery command group ─────────────────────────────────────────────
+
+class _SlugDiscoveryGroup(click.Group):
+    """Click group that accepts a company name as positional argument.
+
+    `linkright admin slug-discovery openai` invokes the single-company discovery.
+    `linkright admin slug-discovery batch companies.txt` runs the batch subcommand.
+    """
+
+    def parse_args(self, ctx, args):
+        # If first arg is not a known subcommand, treat the whole invocation as
+        # `single <company>`. This lets both forms work:
+        #   linkright admin slug-discovery openai
+        #   linkright admin slug-discovery single openai
+        if args and args[0] not in self.commands and not args[0].startswith("-"):
+            args = ["single"] + args
+        return super().parse_args(ctx, args)
+
+
+@admin_group.group(name="slug-discovery", cls=_SlugDiscoveryGroup)
 def slug_discovery_group() -> None:
-    """ATS slug discovery — Layer 1 HTML scrape over company lists."""
+    """ATS slug discovery — 3-tier auto-discovery + Layer 4 self-heal.
+
+    \b
+    Usage:
+      linkright admin slug-discovery <company>       # single company (verbose)
+      linkright admin slug-discovery batch <file>    # parallel batch
+      linkright admin slug-discovery validate-all    # Layer 4 self-heal
+      linkright admin slug-discovery stats           # last-24h stats
+    """
+
+
+@slug_discovery_group.command("single")
+@click.argument("company")
+@click.option("--website", default=None, help="Company website URL (improves Tier 1 coverage).")
+def slug_discovery_single(company: str, website: Optional[str]) -> None:
+    """Discover ATS slug for a single company (verbose output).
+
+    \b
+    Examples:
+      linkright admin slug-discovery single openai
+      linkright admin slug-discovery single razorpay --website https://razorpay.com
+    """
+    oracle_url = _get_oracle_pg_url()
+    _set_oracle_pg_url_env(oracle_url)
+
+    async def _run():
+        from linkright.admin._slug_discovery_runner import discover_single_verbose
+        return await discover_single_verbose(company, website)
+
+    asyncio.run(_run())
 
 
 @slug_discovery_group.command("batch")
 @click.argument("names_file", type=click.Path(exists=True, path_type=Path))
-@click.option("--ats", type=click.Choice(["greenhouse", "lever", "ashby", "all"]),
-              default="all", help="Which ATS to probe (default: all three).")
+@click.option("--concurrency", default=5, type=int,
+              help="Max parallel discoveries (default: 5).")
 @click.option("--dry-run", is_flag=True, default=False,
-              help="Print which slugs would be tried — no HTTP calls.")
-def slug_discovery_batch(names_file: Path, ats: str, dry_run: bool) -> None:
-    """Run Layer 1 ATS slug discovery over a list of company names.
+              help="Print slug candidates — no HTTP calls.")
+def slug_discovery_batch(names_file: Path, concurrency: int, dry_run: bool) -> None:
+    """Run 3-tier slug discovery over a list of company names in parallel.
 
     NAMES_FILE: plain text, one company name per line.
+    Lines starting with '#' are treated as comments and skipped.
 
     \b
     Example:
-      linkright admin slug-discovery batch targets.txt --ats greenhouse
+      linkright admin slug-discovery batch targets.txt
+      linkright admin slug-discovery batch targets.txt --concurrency 10
     """
     names = [
         line.strip() for line in names_file.read_text().splitlines()
@@ -357,18 +418,113 @@ def slug_discovery_batch(names_file: Path, ats: str, dry_run: bool) -> None:
     if not names:
         raise click.ClickException("names_file is empty.")
 
-    click.echo(f"Loaded {len(names)} company name(s) for slug discovery (ats={ats}).")
+    click.echo(f"Loaded {len(names)} company name(s).")
 
     if dry_run:
+        from linkright.admin._slug_discovery_runner import slug_variants_for
         for name in names:
-            slug_candidate = name.lower().replace(" ", "").replace(",", "").replace(".", "")
-            click.echo(f"  [dry-run] {name!r} → slug candidate: {slug_candidate!r}")
+            variants = slug_variants_for(name)
+            click.echo(f"  [dry-run] {name!r} → {variants[:3]}")
         return
 
-    # Actual implementation stub — full Layer 1 scraper ships in Sprint B.
-    # For now: print guidance and exit cleanly so the CLI surface is wired up.
-    click.echo(
-        "\nLayer 1 auto-discovery (Sprint B) is not yet implemented.\n"
-        "This command surface is ready — implementation ships with the slug-discovery scraper.\n"
-        "Interim: use `linkright admin companies import` to add verified slugs manually."
-    )
+    oracle_url = _get_oracle_pg_url()
+    _set_oracle_pg_url_env(oracle_url)
+
+    async def _run():
+        from linkright.admin._slug_discovery_runner import discover_batch
+        await discover_batch(names, concurrency=concurrency)
+
+    asyncio.run(_run())
+
+
+@slug_discovery_group.command("validate-all")
+@click.option("--max", "max_companies", default=100, type=int,
+              help="Maximum companies to validate in this run (default: 100).")
+def slug_discovery_validate_all(max_companies: int) -> None:
+    """Layer 4 self-heal: re-validate stale ATS slugs, heal dead ones.
+
+    Picks companies with last_verified_at > 7 days ago, checks job counts,
+    increments consecutive_zero_count on misses, and triggers re-discovery
+    after 7 consecutive zeros.
+
+    \b
+    Example:
+      linkright admin slug-discovery validate-all
+      linkright admin slug-discovery validate-all --max 50
+    """
+    oracle_url = _get_oracle_pg_url()
+    _set_oracle_pg_url_env(oracle_url)
+
+    async def _run():
+        # Layout-tolerant worker discovery lives in _slug_validator_runner — it walks
+        # the ancestry trying both worker/ (worktree) and repo/worker/ (production).
+        from linkright.admin._slug_validator_runner import validate_and_heal_slugs
+        report = await validate_and_heal_slugs(batch_size=max_companies)
+        click.echo(f"\nLayer 4 validation complete:")
+        click.echo(f"  Validated       : {report.validated}")
+        click.echo(f"  Healed          : {report.healed}")
+        click.echo(f"  Marked zero     : {report.marked_zero}")
+        click.echo(f"  Errors          : {len(report.errors)}")
+        click.echo(f"  Duration        : {report.duration_ms}ms")
+        if report.errors:
+            click.echo("\n  Errors:")
+            for err in report.errors[:5]:
+                click.echo(f"    {err}")
+
+    asyncio.run(_run())
+
+
+@slug_discovery_group.command("stats")
+def slug_discovery_stats() -> None:
+    """Show discovery statistics from the last 24 hours."""
+    oracle_url = _get_oracle_pg_url()
+    _set_oracle_pg_url_env(oracle_url)
+
+    async def _run():
+        try:
+            import asyncpg
+        except ImportError:
+            raise click.ClickException(
+                "asyncpg not installed — run: pip install linkright[admin]"
+            )
+        # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
+        pool = await asyncpg.create_pool(oracle_url, min_size=1, max_size=2)
+        try:
+            async with pool.acquire() as conn:
+                total_attempts = await conn.fetchval(
+                    "SELECT COUNT(*) FROM slug_discovery_cache "
+                    "WHERE attempted_at > NOW() - INTERVAL '24 hours'"
+                )
+                successful = await conn.fetchval(
+                    "SELECT COUNT(*) FROM slug_discovery_cache "
+                    "WHERE attempted_at > NOW() - INTERVAL '24 hours' "
+                    "AND ats_provider IS NOT NULL AND jobs_count > 0"
+                )
+                by_tier = await conn.fetch(
+                    "SELECT source_tier, COUNT(*) as n FROM slug_discovery_cache "
+                    "WHERE attempted_at > NOW() - INTERVAL '24 hours' "
+                    "GROUP BY source_tier ORDER BY n DESC"
+                )
+                by_ats = await conn.fetch(
+                    "SELECT ats_provider, COUNT(*) as n FROM slug_discovery_cache "
+                    "WHERE attempted_at > NOW() - INTERVAL '24 hours' "
+                    "AND ats_provider IS NOT NULL "
+                    "GROUP BY ats_provider ORDER BY n DESC"
+                )
+        finally:
+            await pool.close()
+
+        click.echo(f"\nSlug discovery stats (last 24h):")
+        click.echo(f"  Total attempts  : {total_attempts}")
+        click.echo(f"  Successful      : {successful}")
+        if total_attempts:
+            pct = int(100 * (successful or 0) / total_attempts)
+            click.echo(f"  Success rate    : {pct}%")
+        click.echo(f"\n  By tier:")
+        for r in by_tier:
+            click.echo(f"    {(r['source_tier'] or 'unknown'):<20} {r['n']}")
+        click.echo(f"\n  By ATS provider (successful):")
+        for r in by_ats:
+            click.echo(f"    {r['ats_provider']:<20} {r['n']}")
+
+    asyncio.run(_run())
