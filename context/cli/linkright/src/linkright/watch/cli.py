@@ -89,7 +89,27 @@ def _run_watch_default(ctx: click.Context) -> None:
     click.echo(f"   endpoint: {endpoint}")
     click.echo(f"   ctrl-C to stop\n")
 
-    asyncio.run(_run_async(host, port, endpoint, capture_key))
+    # Wrap the async runner so unexpected failures (Chrome restart, network
+    # blip, asyncpg unavailable, etc.) surface as a one-line actionable
+    # message instead of a raw Python traceback. Same pattern as `list_cmd`
+    # (PR #56). KeyboardInterrupt is intentionally allowed to propagate so
+    # ctrl-C exits cleanly with the standard SIGINT message.
+    try:
+        asyncio.run(_run_async(host, port, endpoint, capture_key))
+    except KeyboardInterrupt:
+        # Already handled by _run_async's signal handler; just exit cleanly
+        sys.exit(0)
+    except OSError as exc:
+        click.echo(
+            f"\n✗ Network/connection error: {exc}\n"
+            f"  Check Chrome is running with --remote-debugging-port={port} "
+            f"(run `linkright watch setup` to configure the alias).",
+            err=True,
+        )
+        sys.exit(1)
+    except Exception as exc:
+        click.echo(f"\n✗ linkright watch crashed: {exc}", err=True)
+        sys.exit(1)
 
 
 async def _run_async(host: str, port: int, endpoint: str, capture_key: str) -> None:
@@ -357,7 +377,17 @@ def status_cmd(ctx: click.Context) -> None:
     port: int = ctx.obj["port"]
     host: str = ctx.obj["host"]
 
-    asyncio.run(_status_async(host, port))
+    # Wrap the async runner so unexpected failures surface cleanly instead of
+    # bubbling up as a raw Python traceback. The status diagnostic itself
+    # already handles individual check failures (CDPError, httpx.RequestError)
+    # inline; this wrapper is a backstop for genuinely unexpected errors.
+    try:
+        asyncio.run(_status_async(host, port))
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception as exc:
+        click.echo(f"\n✗ status check crashed: {exc}", err=True)
+        sys.exit(1)
 
 
 async def _status_async(host: str, port: int) -> None:
