@@ -5,7 +5,7 @@
 > **Scope**: every user-facing CLI command + every cross-cutting flow shipped through PRs #50–#62 (Sprint D watch + Pillar 2 dual-read + brand-color + Story Bank). Deferred items (e.g., tailor pipeline reading stories alongside nuggets) are explicitly called out as v0.5 work, not v1 gaps.
 > **Goal**: sit at terminal, run each section in order, verify expected output, log any deviations using the bug template at the end
 
-This is a **runnable checklist**, not a document. Each section is "Do X → Expect Y → Log if not Y". Estimated total run-time: 60-90 min if everything works first try.
+This is a **runnable checklist**, not a document. Each section is "Do X → Expect Y → Log if not Y". Estimated total run-time: 75-95 min if everything works first try (see breakdown table at end).
 
 ---
 
@@ -117,7 +117,7 @@ linkright watch status
 
 ---
 
-## 2 — Pillar 1: Resume + Cover Letter (15-20 min)
+## 2 — Pillar 1: Resume + Cover Letter (20-25 min)
 
 > Pre-existing functionality from v0.3.0; verifying nothing regressed.
 
@@ -747,4 +747,5 @@ When all above sections pass + 4 operational-debt items closed (PyPI v0.4.0 uplo
 | 6 — Pillar 4 | 3 min |
 | 7 — Admin | 5 min (optional) |
 | 8 — Regression | 5 min |
-| **Total** | **~75-100 min** |
+| **Total (sum of row ranges)** | **~76-91 min** |
+| **With buffer for re-runs / debugging** | **~75-95 min** |
