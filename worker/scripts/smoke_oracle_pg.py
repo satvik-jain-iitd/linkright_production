@@ -58,11 +58,10 @@ async def run_smoke() -> bool:
         print(f"{RED}ERROR{RST}: asyncpg not installed. Run: pip install asyncpg", file=sys.stderr)
         return False
 
-    # Try ssl=require first (required for Oracle Cloud); fall back to ssl=False
-    # for local-postgres smoke testing where SSL may not be configured.
+    # SSL governed by URL's sslmode param (libpq semantics) — see app/oracle/pg.py.
+    # Today: sslmode=prefer in URL; switch to sslmode=require once Let's Encrypt is on the VPS.
     try:
-        pool = await asyncpg.create_pool(ORACLE_PG_URL, min_size=1, max_size=2, ssl="require",
-                                          command_timeout=15)
+        pool = await asyncpg.create_pool(ORACLE_PG_URL, min_size=1, max_size=2, command_timeout=15)
     except Exception:
         try:
             pool = await asyncpg.create_pool(ORACLE_PG_URL, min_size=1, max_size=2, ssl=False,

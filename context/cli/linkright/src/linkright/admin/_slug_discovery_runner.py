@@ -19,23 +19,26 @@ import click
 
 
 def _ensure_worker_on_path() -> bool:
-    """Try to add the worker root to sys.path. Returns True if it worked."""
-    # repo/worker/ relative to this file's location in the CLI package tree
-    # context/cli/linkright/src/linkright/admin/ → up 8 levels → repo root → worker
+    """Try to add the worker root to sys.path. Returns True if it worked.
+
+    Walks up from this file's location and tries each ancestor as a candidate
+    repo root, looking for either `worker/` (worktree layout) or `repo/worker/`
+    (production-monorepo layout). Layout-tolerant: works whether the CLI lives
+    in `<repo>/context/cli/linkright/...` or `<wt>/context/cli/linkright/...`.
+    """
     this_file = Path(__file__).resolve()
-    candidate_roots = [
-        this_file.parents[7] / "worker",   # from context/cli/linkright/src/linkright/admin/
-        this_file.parents[8] / "worker",
-        this_file.parents[9] / "worker",
-    ]
-    for candidate in candidate_roots:
-        if candidate.exists() and candidate not in [Path(p) for p in sys.path]:
-            sys.path.insert(0, str(candidate))
-            try:
-                import app.oracle.slug_discovery  # noqa: F401
-                return True
-            except ImportError:
-                sys.path.pop(0)
+    # Walk up to 12 ancestors; check both layouts at each level.
+    seen = {Path(p).resolve() for p in sys.path}
+    for parent in this_file.parents[:12]:
+        for sub in ("worker", "repo/worker"):
+            candidate = parent / sub
+            if candidate.exists() and candidate.resolve() not in seen:
+                sys.path.insert(0, str(candidate))
+                try:
+                    import app.oracle.slug_discovery  # noqa: F401
+                    return True
+                except ImportError:
+                    sys.path.pop(0)
     return False
 
 

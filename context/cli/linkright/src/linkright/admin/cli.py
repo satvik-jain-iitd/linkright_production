@@ -146,7 +146,8 @@ async def _import_companies_async(
         click.echo(f"[dry-run] Validated {len(rows)} rows — no writes performed.")
         return counts
 
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=3, ssl="require")
+    # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
+    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=3)
 
     _UPSERT = """
         INSERT INTO companies (
@@ -226,7 +227,8 @@ async def _stats_async(oracle_pg_url: str) -> None:
             "  Then follow the runbook: specs/oracle-pg-runbook-2026-05-03.md"
         )
 
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2, ssl="require")
+    # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
+    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2)
     try:
         async with pool.acquire() as conn:
             total = await conn.fetchval("SELECT COUNT(*) FROM companies")
@@ -494,7 +496,8 @@ def slug_discovery_stats() -> None:
             raise click.ClickException(
                 "asyncpg not installed — run: pip install linkright[admin]"
             )
-        pool = await asyncpg.create_pool(oracle_url, min_size=1, max_size=2, ssl="require")
+        # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
+        pool = await asyncpg.create_pool(oracle_url, min_size=1, max_size=2)
         try:
             async with pool.acquire() as conn:
                 total_attempts = await conn.fetchval(

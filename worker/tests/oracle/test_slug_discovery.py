@@ -376,6 +376,48 @@ async def test_validate_triggers_rediscovery_after_7_zeros():
 
 
 @pytest.mark.asyncio
+async def test_validate_network_error_does_not_increment_zero_counter():
+    """Regression: _count_jobs returning -1 (network error) must NOT be treated as 0 jobs.
+
+    Bug history: pre-fix, network errors silently incremented consecutive_zero_count,
+    so 7 consecutive transient HTTP failures would falsely trigger re-discovery on a
+    healthy company.
+    """
+    from app.oracle.slug_validator import validate_and_heal_slugs
+
+    mock_row = {
+        "canonical_id": "test_005",
+        "name": "FlakeyCo",
+        "website": "https://flakeyco.com",
+        "ats_provider": "greenhouse",
+        "ats_slug": "flakeyco",
+        "consecutive_zero_count": 6,  # one error away from threshold
+    }
+
+    mock_conn = AsyncMock()
+    mock_conn.fetch = AsyncMock(return_value=[mock_row])
+    mock_conn.execute = AsyncMock()
+    mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+    mock_conn.__aexit__ = AsyncMock(return_value=False)
+
+    mock_pool = MagicMock()
+    mock_pool.acquire = MagicMock(return_value=mock_conn)
+
+    # _count_jobs returns -1 (its documented network-error sentinel)
+    with patch("app.oracle.slug_validator._count_jobs", new=AsyncMock(return_value=-1)):
+        with patch("app.oracle.pg.is_enabled", return_value=True):
+            with patch("app.oracle.pg.get_pool", new=AsyncMock(return_value=mock_pool)):
+                report = await validate_and_heal_slugs(batch_size=1)
+
+    # Network error must NOT increment marked_zero, must NOT trigger heal
+    assert report.marked_zero == 0, "network error wrongly counted as zero-jobs"
+    assert report.healed == 0,      "network error wrongly triggered re-discovery"
+    assert len(report.errors) == 1, "network error should be recorded in errors[]"
+    # And the row should NOT have its consecutive_zero_count incremented (no UPDATE called)
+    mock_conn.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_validate_rediscovery_finds_nothing():
     """Re-discovery finds no new slug → consecutive_zero_count incremented, healed=0."""
     from app.oracle.slug_validator import validate_and_heal_slugs

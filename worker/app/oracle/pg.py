@@ -24,12 +24,19 @@ Environment:
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     import asyncpg as _asyncpg_t  # type: ignore[import]  # only for type hints
 
-from ..config import ORACLE_PG_URL, ORACLE_PG_ENABLED
+# Read ORACLE_PG_URL directly from env — do NOT import app.config here.
+# Per constitutional split-DB architecture (feedback_split_db_architecture_locked.md),
+# the Oracle pool (jobs/companies) is orthogonal to Supabase (user PII).
+# Importing app.config would force every Oracle-only consumer (e.g. the standalone
+# admin CLI) to also have SUPABASE_URL/SUPABASE_SERVICE_KEY set, which is wrong.
+ORACLE_PG_URL = os.environ.get("ORACLE_PG_URL")
+ORACLE_PG_ENABLED = bool(ORACLE_PG_URL and ORACLE_PG_URL.strip())
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +62,14 @@ async def get_pool():  # -> asyncpg.Pool
     if _pool is None:
         import asyncpg  # lazy import — avoids ImportError at startup when asyncpg not yet installed
         logger.info("oracle_pg: creating connection pool → %s", _redact(ORACLE_PG_URL))
+        # SSL behavior is governed by the URL's `sslmode` query parameter (libpq semantics).
+        # Today: sslmode=prefer (TLS optional, server has no Let's Encrypt cert yet).
+        # Later: switch URL to sslmode=require once cert is provisioned. No code change needed.
         _pool = await asyncpg.create_pool(
             ORACLE_PG_URL,
             min_size=2,
             max_size=10,
             command_timeout=30,
-            ssl="require",   # TLS mandatory — Oracle Cloud blocks unencrypted PG traffic
         )
         logger.info("oracle_pg: pool ready (min=2, max=10)")
 

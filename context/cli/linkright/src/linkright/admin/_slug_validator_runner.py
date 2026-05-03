@@ -14,19 +14,25 @@ class ValidationReport:
 
 
 async def validate_and_heal_slugs(batch_size: int = 100) -> ValidationReport:
-    """Attempt to import from worker, raise informative error if not available."""
+    """Attempt to import from worker, raise informative error if not available.
+
+    Layout-tolerant: walks up to 12 ancestors and tries both `worker/` (worktree
+    layout) and `repo/worker/` (production-monorepo layout).
+    """
     import sys
     from pathlib import Path
     this_file = Path(__file__).resolve()
-    for depth in (7, 8, 9):
-        candidate = this_file.parents[depth] / "worker"
-        if candidate.exists():
-            sys.path.insert(0, str(candidate))
-            try:
-                from app.oracle.slug_validator import validate_and_heal_slugs as _real
-                return await _real(batch_size=batch_size)
-            except ImportError:
-                sys.path.pop(0)
+    seen = {Path(p).resolve() for p in sys.path}
+    for parent in this_file.parents[:12]:
+        for sub in ("worker", "repo/worker"):
+            candidate = parent / sub
+            if candidate.exists() and candidate.resolve() not in seen:
+                sys.path.insert(0, str(candidate))
+                try:
+                    from app.oracle.slug_validator import validate_and_heal_slugs as _real
+                    return await _real(batch_size=batch_size)
+                except ImportError:
+                    sys.path.pop(0)
     raise RuntimeError(
         "Could not import slug_validator from worker. "
         "Ensure you're running from the repo root or that worker/ is on PYTHONPATH."

@@ -100,6 +100,14 @@ async def validate_and_heal_slugs(
             count = await _count_jobs(ats, slug)
             report.validated += 1
 
+            # _count_jobs returns -1 on network error — treat as transient, skip both
+            # the "healthy" and "zero-jobs" branches so we don't falsely increment the
+            # consecutive_zero_count and trigger spurious re-discovery.
+            if count < 0:
+                report.errors.append(f"{name}: transient fetch error (count=-1)")
+                logger.warning("slug_validator: SKIP %r %s/%s — fetch error", name, ats, slug)
+                continue
+
             if count > 0:
                 # Healthy — update last_verified_at, reset zero counter
                 async with pool.acquire() as conn:
