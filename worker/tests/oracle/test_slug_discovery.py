@@ -413,6 +413,8 @@ async def test_validate_network_error_does_not_increment_zero_counter():
     assert report.marked_zero == 0, "network error wrongly counted as zero-jobs"
     assert report.healed == 0,      "network error wrongly triggered re-discovery"
     assert len(report.errors) == 1, "network error should be recorded in errors[]"
+    # And it must NOT inflate the "validated" metric — we never actually got a count.
+    assert report.validated == 0,   "network error wrongly counted as a successful validation"
     # And the row should NOT have its consecutive_zero_count incremented (no UPDATE called)
     mock_conn.execute.assert_not_called()
 

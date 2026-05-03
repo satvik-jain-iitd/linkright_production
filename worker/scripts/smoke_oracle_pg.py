@@ -60,13 +60,27 @@ async def run_smoke() -> bool:
 
     # SSL governed by URL's sslmode param (libpq semantics) — see app/oracle/pg.py.
     # Today: sslmode=prefer in URL; switch to sslmode=require once Let's Encrypt is on the VPS.
+    #
+    # Determine whether the URL explicitly mandates TLS — if it does, we MUST NOT
+    # fall back to ssl=False on connect failure, because that would silently turn
+    # a cert-verification problem into an accepted plaintext connection (security
+    # downgrade). Only allow the plaintext fallback for permissive sslmodes
+    # (prefer/allow/disable) where the URL author has signalled it's acceptable.
+    from urllib.parse import urlparse, parse_qs
+    _qs = parse_qs(urlparse(ORACLE_PG_URL).query)
+    _sslmode = (_qs.get("sslmode", [""])[0] or "prefer").lower()
+    _strict_tls = _sslmode in ("require", "verify-ca", "verify-full")
+
     try:
         pool = await asyncpg.create_pool(ORACLE_PG_URL, min_size=1, max_size=2, command_timeout=15)
-    except Exception:
+    except Exception as primary_exc:
+        if _strict_tls:
+            _fail(f"Could not connect to Oracle PG (sslmode={_sslmode}, no plaintext fallback): {primary_exc}")
+            return False
         try:
             pool = await asyncpg.create_pool(ORACLE_PG_URL, min_size=1, max_size=2, ssl=False,
                                               command_timeout=15)
-            print(f"  {DIM}Note: connected without SSL (ok for local testing; Oracle Cloud requires ssl=require){RST}")
+            print(f"  {DIM}Note: connected without SSL (sslmode={_sslmode} permits plaintext; not safe for production){RST}")
         except Exception as e:
             _fail(f"Could not connect to Oracle PG: {e}")
             return False

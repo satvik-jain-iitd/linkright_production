@@ -456,18 +456,9 @@ def slug_discovery_validate_all(max_companies: int) -> None:
     _set_oracle_pg_url_env(oracle_url)
 
     async def _run():
-        # Import worker oracle module directly; the CLI lives in a separate package
-        # but can still import worker code when run from the repo root.
-        # Fallback: use the bundled runner if worker not on path.
-        try:
-            import sys, os
-            worker_root = Path(__file__).parents[8] / "worker"
-            if str(worker_root) not in sys.path and worker_root.exists():
-                sys.path.insert(0, str(worker_root))
-            from app.oracle.slug_validator import validate_and_heal_slugs
-        except ImportError:
-            from linkright.admin._slug_validator_runner import validate_and_heal_slugs
-
+        # Layout-tolerant worker discovery lives in _slug_validator_runner — it walks
+        # the ancestry trying both worker/ (worktree) and repo/worker/ (production).
+        from linkright.admin._slug_validator_runner import validate_and_heal_slugs
         report = await validate_and_heal_slugs(batch_size=max_companies)
         click.echo(f"\nLayer 4 validation complete:")
         click.echo(f"  Validated       : {report.validated}")
