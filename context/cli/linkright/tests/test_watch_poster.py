@@ -189,3 +189,33 @@ def test_load_oracle_pg_url_missing_raises_value_error(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError, match="ORACLE_PG_URL not set"):
         poster.load_oracle_pg_url(extra_files=[nope1, nope2])
+
+
+# ── _SINCE_PATTERN whitelist (SQL injection guard for `watch list --since`) ─
+
+@pytest.mark.parametrize("value", [
+    "1 hour", "2 hours", "30 seconds", "1 day", "7 days",
+    "1 week", "4 weeks", "1 month", "12 months", "1 year", "2 years",
+    "1 minute", "59 minutes",
+    "1 HOUR", "1 Hour",  # case-insensitive
+])
+def test_since_pattern_accepts_valid_intervals(value):
+    from linkright.watch.cli import _SINCE_PATTERN
+    assert _SINCE_PATTERN.match(value), f"should accept {value!r}"
+
+
+@pytest.mark.parametrize("value", [
+    "1 day; DROP TABLE job_discoveries",
+    "1 day' OR '1'='1",
+    "; DELETE FROM companies",
+    "",
+    "yesterday",
+    "1",
+    "hour",
+    "1 fortnight",
+    "infinity",
+    "1 day --comment",
+])
+def test_since_pattern_rejects_injection_attempts(value):
+    from linkright.watch.cli import _SINCE_PATTERN
+    assert not _SINCE_PATTERN.match(value), f"should reject {value!r}"

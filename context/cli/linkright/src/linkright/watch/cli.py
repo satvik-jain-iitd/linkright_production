@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import signal
 import sys
 from datetime import datetime, timezone
@@ -22,6 +23,16 @@ import click
 import httpx
 
 from linkright.watch import cdp, extractor, poster, service, setup as setup_mod
+
+# Whitelist for `linkright watch list --since` — must match PostgreSQL INTERVAL
+# syntax narrowly. We interpolate into SQL (Postgres doesn't accept parameterized
+# values inside INTERVAL literals), so input MUST be validated against this
+# strict allowlist to prevent injection (even though it's user-typed self-pwn,
+# accidental quoting bugs etc. are still real).
+_SINCE_PATTERN = re.compile(
+    r"^\d+\s+(?:second|minute|hour|day|week|month|year)s?$",
+    re.IGNORECASE,
+)
 
 logger = logging.getLogger("linkright.watch")
 
@@ -273,8 +284,18 @@ async def _list_async(
     params: list = []
 
     if since:
-        # PostgreSQL accepts INTERVAL strings like '1 hour' / '1 day' / '7 days'
-        where_clauses.append(f"captured_at > NOW() - INTERVAL '{since}'")
+        # Validate against whitelist — only `<int> <unit>[s]` accepted.
+        # PostgreSQL doesn't accept parameterized values inside INTERVAL literals,
+        # so we MUST interpolate; the regex prevents injection of arbitrary SQL.
+        if not _SINCE_PATTERN.match(since.strip()):
+            click.echo(
+                f"✗ invalid --since value: {since!r}.\n"
+                "  Must be `<int> <unit>` where unit is second/minute/hour/day/week/month/year (singular or plural).\n"
+                '  Examples: "1 hour", "2 days", "1 week"',
+                err=True,
+            )
+            sys.exit(2)
+        where_clauses.append(f"captured_at > NOW() - INTERVAL '{since.strip()}'")
     if source:
         params.append(source)
         where_clauses.append(f"source_type = ${len(params)}")
