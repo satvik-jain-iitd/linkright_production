@@ -657,3 +657,82 @@ def _parse_number(val: str | None) -> float | None:
         return float(str(val).replace(",", "").strip())
     except Exception:
         return None
+
+
+# ── find-slug — user-facing ATS slug lookup (read-only) ──────────────────────
+
+@jobsearch_group.command("find-slug")
+@click.argument("company")
+@click.option("--website", default=None, help="Company website URL (improves accuracy).")
+def find_slug(company: str, website: str | None) -> None:
+    """Find the ATS slug for a company (read-only, no database writes).
+
+    Useful for setting up a job watchlist — tells you which ATS provider
+    a company uses and what their slug is, so you can track their jobs.
+
+    \b
+    Examples:
+      linkright jobs find-slug stripe
+      linkright jobs find-slug razorpay --website https://razorpay.com
+
+    \b
+    Output:
+      Company: Stripe
+      ATS:     greenhouse
+      Slug:    stripe
+      Jobs:    78 open positions
+      Samples: Software Engineer, Product Manager, Data Engineer
+    """
+    import asyncio
+
+    async def _run():
+        from linkright.admin._slug_discovery_standalone import discover_ats_standalone, _validate, _ATS_PROBE_URLS
+        import httpx
+
+        click.echo(f"Looking up ATS for {company!r}...")
+        result = await discover_ats_standalone(company, website)
+
+        if not result.success:
+            click.echo(f"\nCould not find ATS for {company!r}.")
+            click.echo("Tips:")
+            click.echo("  - Try passing --website https://<company>.com for better Tier 1 coverage")
+            click.echo("  - Some companies use proprietary ATS (Workday, Oracle HCM) — no public API")
+            return
+
+        click.echo("")
+        click.echo(f"Company : {company}")
+        click.echo(f"ATS     : {result.ats_provider}")
+        click.echo(f"Slug    : {result.ats_slug}")
+        click.echo(f"Jobs    : {result.jobs_count} open positions")
+
+        # Try to fetch sample job titles
+        titles: list[str] = []
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=8) as client:
+                url_tmpl = _ATS_PROBE_URLS.get(result.ats_provider, "")
+                if url_tmpl and result.ats_slug:
+                    url = url_tmpl.format(slug=result.ats_slug)
+                    r = await client.get(url, timeout=8)
+                    if r.status_code == 200:
+                        data = r.json()
+                        if result.ats_provider == "ashby":
+                            jobs = data.get("jobPostings") or data.get("jobs") or []
+                            titles = [j.get("title") or j.get("jobTitle") for j in jobs[:3] if j.get("title") or j.get("jobTitle")]
+                        elif result.ats_provider == "greenhouse":
+                            jobs = data.get("jobs") or []
+                            titles = [j.get("title") for j in jobs[:3] if j.get("title")]
+                        elif result.ats_provider == "lever":
+                            jobs = data if isinstance(data, list) else []
+                            titles = [j.get("text") for j in jobs[:3] if j.get("text")]
+        except Exception:
+            pass
+
+        if titles:
+            click.echo(f"Sample  : {', '.join(titles)}")
+
+        click.echo("")
+        click.echo(
+            f"Use with: linkright admin companies import (to add to company DB)"
+        )
+
+    asyncio.run(_run())
