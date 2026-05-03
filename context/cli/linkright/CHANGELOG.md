@@ -9,6 +9,16 @@ passive job-page capture across 7 portals), Pillar 2 dual-read jobs feed,
 optional resume brand-color design, and Story Bank for STAR-format career
 narratives.
 
+> **Note on prior versions**: 0.2.x (Pillar 2 v1 — auth + jobs CLI thin client)
+> and 0.3.0 (cover letter sub-tool) were released without CHANGELOG entries.
+> See PR history (#48, #49) for those changes.
+
+> **NOTICE — visual change for existing users**: default brand colors flipped
+> from navy palette (`#1B2A4A` etc.) to pure `#000000`. If you previously ran
+> `linkright resume tailor` and got navy section titles + bullet markers, the
+> output is now genuinely B&W. Opt back into color via the new `linkright
+> resume brand` subcommand.
+
 ### Added
 - **`linkright watch`** — passive job-page capture via Chrome DevTools Protocol
   (Sprint D). Attaches to user's existing Chrome profile, listens for navigation
@@ -22,7 +32,7 @@ narratives.
   feed + Oracle PG captures. Captures surface in the same view alongside
   scored recommendations; user sees their just-captured Naukri/LinkedIn
   postings without waiting for the next ranking job.
-- **Sprint B trigger on captures** — new captures fire fire-and-forget Sprint B
+- **Sprint B trigger on captures** — new captures fire fire-and-forget
   slug auto-discovery on previously-unknown companies (FastAPI BackgroundTasks +
   asyncpg). Companies database grows organically as user browses; no manual
   curation required.
@@ -32,18 +42,23 @@ narratives.
   section-divider gradient. Pure B&W default unchanged. Surgical CSS swap on
   the rendered HTML; auto-bolds metric tokens (`$X`, `X%`, `XK/M/B`, `Xx`,
   `X:Y`, time units, `+`) in cover letter prose.
-- **Pillar 3 Story Bank** — new `career_stories` MongoDB collection +
-  `linkright stories` CRUD CLI (list / add / edit / delete / search) with
-  STAR-format fields, tags, JD-requirement linkages. `--from-nugget` pre-fills
-  `result` from existing resume nuggets (Truth Engine compliant — no LLM
-  fabrication, scaffold only). `linkright interview prep` now reads the
-  Story Bank, merging legacy `user_context` debriefs as ranked-lower fallback.
+- **Pillar 3 Story Bank** *(landing in PR #62 — merge sequencing: this
+  release lands first, Story Bank one merge later)* — new `career_stories`
+  MongoDB collection + `linkright stories` CRUD CLI (list / add / edit /
+  delete / search) with STAR-format fields, tags, JD-requirement linkages.
+  `--from-nugget` pre-fills `result` from existing resume nuggets (Truth
+  Engine compliant — no LLM fabrication, scaffold only). `linkright
+  interview prep` reads the Story Bank, merging legacy `user_context`
+  debriefs as ranked-lower fallback.
 - **Sprint C Phase 1** — `/api/captures` POST endpoint backed by Oracle PG
   `job_discoveries` table; Tampermonkey userscript path for browser-extension
   capture (deprecated by `watch` but retained for reference).
 - **Oracle Postgres bring-up** — `companies` schema, slug-discovery cache,
   enriched-jobs cache. 81-company seed (28 ATS-verified). Sprint B 3-tier slug
-  auto-discovery (Layer 1 known-pattern, Layer 2 page-fetch, Layer 4 self-heal).
+  auto-discovery code: Layer 1 (known-pattern) and Layer 2 (page-fetch) are
+  fully wired in production; Layer 4 (self-heal validator) code is merged
+  but its Oracle VPS cron / systemd schedule has not yet been deployed
+  (see Known limitations).
 
 ### Changed
 - `linkright resume tailor` default brand colors flipped from navy palette
@@ -75,11 +90,16 @@ narratives.
   ambiguity at insert time.
 
 ### Known limitations
-- Manual QA pass before public release (see `specs/manual-qa-plan-v1-2026-05-03.md`).
+- Manual QA pass before public release (see
+  [`specs/manual-qa-plan-v1-2026-05-03.md`](../../specs/manual-qa-plan-v1-2026-05-03.md)).
 - `linkright resume brand --auto` (admin DB lookup) deferred to a follow-up release.
 - Tailor pipeline doesn't yet surface `career_stories` alongside nuggets in
-  step_08 retrieval (PR coming).
-- Layer 4 self-heal cron wiring on Oracle VPS pending.
+  step_08 retrieval — retrieval-and-persistence step (`step_08b`) is in PR #64
+  (stacked); LLM bullet-context wiring deferred to v0.5 pending RCA evaluation
+  per memory `feedback_one_resume_at_a_time`.
+- Layer 4 self-heal validator: code merged, but Oracle VPS cron / systemd
+  schedule has not yet been deployed. Manual `python -m linkright.admin.layer4_validate`
+  works today; automatic nightly run pending operator step.
 
 ## [0.1.0] - 2026-04-24
 
