@@ -2,7 +2,7 @@
 
 > **Date**: 2026-05-03
 > **Audience**: Satvik (sole tester for v1 pre-public-GitHub release)
-> **Scope**: every user-facing CLI command + every cross-cutting flow shipped through PRs #50-60
+> **Scope**: every user-facing CLI command + every cross-cutting flow shipped through PRs #50–#62 (Sprint D watch + Pillar 2 dual-read + brand-color + Story Bank). Deferred items (e.g., tailor pipeline reading stories alongside nuggets) are explicitly called out as v0.5 work, not v1 gaps.
 > **Goal**: sit at terminal, run each section in order, verify expected output, log any deviations using the bug template at the end
 
 This is a **runnable checklist**, not a document. Each section is "Do X → Expect Y → Log if not Y". Estimated total run-time: 60-90 min if everything works first try.
@@ -439,9 +439,9 @@ curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
 
 ---
 
-## 5 — Pillar 3: Interview Prep (current state, pre-Story Bank) (5 min)
+## 5 — Pillar 3: Interview Prep + Story Bank (8 min)
 
-### 5.1 Practice cards
+### 5.1 Practice cards (existing flow)
 
 ```bash
 linkright practice
@@ -449,11 +449,101 @@ linkright practice
 # Expect: STAR-format prep cards generated from your career nuggets matched to a JD
 ```
 
-### 5.2 Note: Story Bank deferred to NEXT sprint
+### 5.2 Story Bank — list (empty state)
 
-`linkright stories list` does NOT exist yet. v1 ship requires Story Bank to land first.
+```bash
+linkright stories list
+# Expect first time: "No stories yet — run `linkright stories add` to create one."
+# Aliases also work: `linkright stories ls`
+```
 
-**Pillar 3 v1 PASS for now = practice command produces sensible cards. Story Bank is the next build.**
+### 5.3 Story Bank — add via interactive prompts
+
+```bash
+linkright stories add
+# Expect 6 sequential prompts: Title, Situation, Task, Action, Result, Tags
+# Type:  My Test Story / Pipeline broke / Restore in 24h / Built oracle / $1.2M saved / python, leadership
+# Expect: "✓ Story saved: <ObjectId>" in green
+```
+
+### 5.4 Story Bank — add from existing resume nugget (Truth Engine flow)
+
+```bash
+linkright stories add --from-nugget "AML"
+# Pre-condition: profile must have a nugget containing "AML" (run `linkright profile show` to check)
+# Expect: "Pre-filling `result` from nugget: <text>..." then prompts for Title, Situation, Task, Action
+# (Result is pre-filled with the nugget text — accept or edit)
+# Expect: "✓ Story saved: <ObjectId>"
+```
+
+### 5.5 Story Bank — list (populated state)
+
+```bash
+linkright stories list
+# Expect: rich table — ID (8 hex chars) | Title | Tags | Used (count) | Last (date)
+# Most recent stories first
+```
+
+### 5.6 Story Bank — search (text + vector)
+
+```bash
+linkright stories search "AML"
+# Expect: matching stories printed with title + Action excerpt + Result excerpt + Tags
+# Aliases: `linkright stories find "AML"`
+```
+
+### 5.7 Story Bank — edit
+
+```bash
+linkright stories edit "My Test"
+# Expect: "Editing: My Test Story\nPress Enter to keep existing value."
+# Walk through 6 prompts; change ONE field (e.g., Action), Enter for the rest
+# Expect: "✓ Updated 1 fields" in green
+```
+
+### 5.8 Story Bank — delete (with confirmation)
+
+```bash
+linkright stories delete "My Test"
+# Expect: "Delete story 'My Test Story'? This cannot be undone. [y/N]:"
+# Type: n
+# Expect: "Cancelled."
+# Repeat with --yes flag:
+linkright stories delete "My Test" --yes
+# Expect: "✓ Deleted: My Test Story" in red
+```
+
+### 5.9 Story Bank ↔ Interview Prep bridge
+
+```bash
+linkright interview prep
+# After adding stories above, expect: prep cards now surface YOUR Story Bank entries
+# (not just generic STAR scaffolds)
+# Verifies: retrieve_stars() reads `career_stories` collection (PR #62)
+# Legacy `user_context` debriefs (if any) merge in below career_stories ranking
+```
+
+### 5.10 Story Bank — duplicate-title guard
+
+```bash
+linkright stories add --yes --title "Dup Test" --action "x" --result "y"
+# Expect: ✓ saved
+linkright stories add --yes --title "Dup Test" --action "different" --result "different"
+# Expect: ClickException — "A story titled 'Dup Test' already exists. Use `linkright stories edit \"<title>\"`..."
+# Cleanup:
+linkright stories delete "Dup Test" --yes
+```
+
+### 5.11 Story Bank — whitespace input rejection
+
+```bash
+linkright stories add --yes --title "   " --action "A" --result "R"
+# Expect: ClickException — "title + action + result are required and must be non-empty"
+linkright stories add --yes --title "T" --action " " --result "R"
+# Expect: same error citing action
+```
+
+**Pillar 3 v1 PASS = practice cards work + 5.2 through 5.11 all behave as expected.**
 
 ---
 
@@ -541,7 +631,7 @@ These are documented gaps. Don't waste time testing — they won't work today.
 | Render free-plan cold start | First POST after 15-min idle takes 30-60s | Render paid plan eventually |
 | Some ATS captures show ats_provider=NULL after Sprint B trigger | Tier3 iframe pattern doesn't match all Indian portals | Phase 2 / Naukri tier1.5 |
 | Watchlist UX still pre-demotion in code | Code works, docs/onboarding flow not updated yet | Pre-ship cleanup PR |
-| Story Bank doesn't exist | Pillar 3 v1 cap — being built next | Next sprint |
+| Story Bank tailor bridge (resume bullets surface stories) | Locked v1 scope item — deferred to v0.5 pending RCA | Next sprint |
 | Mock Interview / Negotiation | v2 deferred per scope decision | v2 |
 
 ---
@@ -577,13 +667,13 @@ Additional context: <env vars, screenshots, logs>
 - [ ] All Pillar 1 commands produce expected output (Section 2)
 - [ ] All Pillar 2 commands produce expected output (Section 3)
 - [ ] All Sprint D commands produce expected output (Section 4) — **highest weight; brand new code**
-- [ ] Pillar 3 practice works (Section 5) — Story Bank is the only v1 gap here
+- [ ] Pillar 3 practice + Story Bank works (Section 5) — bank CRUD + interview prep bridge verified
 - [ ] Pillar 4 commands run (Section 6)
 - [ ] Admin commands produce output (Section 7)
 - [ ] Cross-cutting regression OK (Section 8)
 - [ ] No surprise blockers beyond the documented limitations (Section 9)
 
-When 7/8 of the above pass + Story Bank is built + 4 operational-debt items closed, **v1 is ready for public GitHub release**.
+When all above sections pass + 4 operational-debt items closed (PyPI v0.4.0 upload, watchlist UX demotion docs, Layer 4 cron deployment, manual QA pass itself), **v1 is ready for public GitHub release**.
 
 ---
 
