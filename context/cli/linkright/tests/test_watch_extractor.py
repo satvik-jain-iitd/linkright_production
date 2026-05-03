@@ -42,53 +42,37 @@ def test_naukri_non_job_url_not_detected(url):
     assert detect_portal(url) is None
 
 
-# ── LinkedIn ─────────────────────────────────────────────────────────────────
+# ── Phase 2 portals — currently DISABLED in PORTAL_PATTERNS (server-side
+# ALLOWED_HOSTS only permits naukri). These tests assert detect_portal
+# returns None so the CLI doesn't fire wasted POSTs that the worker would 403.
+# When Phase 2 widens the server allowlist + CaptureSource Literal, these
+# tests flip from "asserts None" to "asserts source-name" in the same diff
+# that re-enables the patterns in extractor.py.
 
 @pytest.mark.parametrize("url", [
+    # LinkedIn
     "https://www.linkedin.com/jobs/view/4123456789",
     "https://in.linkedin.com/jobs/view/4123456789",
     "https://linkedin.com/jobs/view/4123456789",
     "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=123456",
-])
-def test_linkedin_job_url_detected(url):
-    assert detect_portal(url) == "linkedin"
-
-
-@pytest.mark.parametrize("url", [
     "https://www.linkedin.com/feed/",
     "https://www.linkedin.com/messaging/",
     "https://www.linkedin.com/in/satvik-jain/",
+    # Indeed
+    "https://www.indeed.com/viewjob?jk=abc123",
+    "https://in.indeed.com/viewjob?jk=abc123",
+    # Wellfound
+    "https://wellfound.com/jobs/12345-engineer",
+    # Greenhouse / Lever / Ashby boards
+    "https://boards.greenhouse.io/anthropic/jobs/4123456789",
+    "https://job-boards.greenhouse.io/stripe/jobs/4123456789",
+    "https://jobs.lever.co/cred/abcd1234-5678-9012-3456-789012345678",
+    "https://jobs.ashbyhq.com/openai/abcd1234-5678-9012-3456-789012345678",
 ])
-def test_linkedin_non_job_url_not_detected(url):
+def test_phase2_portals_currently_disabled(url):
+    """Phase 1 = Naukri only. All other portals must return None until the
+    server-side ALLOWED_HOSTS in worker/app/captures/privacy.py is widened."""
     assert detect_portal(url) is None
-
-
-# ── Indeed + Wellfound ───────────────────────────────────────────────────────
-
-def test_indeed_viewjob_detected():
-    assert detect_portal("https://www.indeed.com/viewjob?jk=abc123") == "indeed"
-    assert detect_portal("https://in.indeed.com/viewjob?jk=abc123") == "indeed"
-
-
-def test_wellfound_jobs_detected():
-    assert detect_portal("https://wellfound.com/jobs/12345-engineer") == "wellfound"
-
-
-# ── ATS (Greenhouse / Lever / Ashby) — currently classified as wellfound ────
-
-def test_greenhouse_job_url_detected():
-    # Phase 1 limitation: ATS family classified as 'wellfound' until server-side
-    # CaptureSource Literal is widened. Ensures the row still lands.
-    assert detect_portal("https://boards.greenhouse.io/anthropic/jobs/4123456789") == "wellfound"
-    assert detect_portal("https://job-boards.greenhouse.io/stripe/jobs/4123456789") == "wellfound"
-
-
-def test_lever_job_url_detected():
-    assert detect_portal("https://jobs.lever.co/cred/abcd1234-5678-9012-3456-789012345678") == "wellfound"
-
-
-def test_ashby_job_url_detected():
-    assert detect_portal("https://jobs.ashbyhq.com/openai/abcd1234-5678-9012-3456-789012345678") == "wellfound"
 
 
 # ── Junk + edge cases ────────────────────────────────────────────────────────

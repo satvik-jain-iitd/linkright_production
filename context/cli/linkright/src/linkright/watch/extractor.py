@@ -20,31 +20,33 @@ from urllib.parse import urlparse
 # ── Per-portal URL patterns ─────────────────────────────────────────────────
 # Each entry: source_name → list of (host_regex, path_regex) tuples. Both must
 # match for the URL to be considered a job page from that portal.
+#
+# **Phase 1 = Naukri only.** The server-side `ALLOWED_HOSTS` in
+# `worker/app/captures/privacy.py` only permits `naukri.com` hosts; sending a
+# capture with `source="linkedin"`, `"indeed"`, `"wellfound"`, or any ATS-board
+# host would produce a wasted POST that the server returns 403 for. Adding
+# new portals here is a TWO-STEP change: widen this dict AND widen the server
+# allowlist + `CaptureSource` Literal at the same time. Currently scoped
+# strictly to Naukri so CLI behavior matches what the backend accepts.
 PORTAL_PATTERNS: dict[str, list[tuple[re.Pattern[str], re.Pattern[str]]]] = {
     "naukri": [
         (re.compile(r"^(www\.|m\.)?naukri\.com$"),       re.compile(r"^/job-listings-")),
         (re.compile(r"^(www\.|m\.)?naukri\.com$"),       re.compile(r"^/jobs/")),
     ],
-    "linkedin": [
-        (re.compile(r"^(www\.|in\.)?linkedin\.com$"),    re.compile(r"^/jobs/view/")),
-        (re.compile(r"^(www\.|in\.)?linkedin\.com$"),    re.compile(r"^/jobs/collections/.*currentJobId=")),
-    ],
-    "indeed": [
-        (re.compile(r"^(www\.|in\.)?indeed\.com$"),      re.compile(r"^/viewjob")),
-    ],
-    "wellfound": [
-        (re.compile(r"^(www\.)?wellfound\.com$"),        re.compile(r"^/jobs/\d+")),
-    ],
+    # Phase 2 — re-enable WHEN AND ONLY WHEN the corresponding entry is added
+    # to `worker/app/captures/privacy.py:ALLOWED_HOSTS` and the worker is
+    # redeployed. Until then, leaving these commented prevents 403 spam.
+    #
+    # "linkedin": [
+    #     (re.compile(r"^(www\.|in\.)?linkedin\.com$"),    re.compile(r"^/jobs/view/")),
+    # ],
+    # "indeed": [
+    #     (re.compile(r"^(www\.|in\.)?indeed\.com$"),      re.compile(r"^/viewjob")),
+    # ],
+    # "wellfound": [
+    #     (re.compile(r"^(www\.)?wellfound\.com$"),        re.compile(r"^/jobs/\d+")),
+    # ],
 }
-
-# Greenhouse / Lever / Ashby boards live on per-tenant subdomains. We classify
-# them as their respective ATS source so the worker can reason about them.
-ATS_HOST_PATTERNS: list[tuple[str, re.Pattern[str], re.Pattern[str]]] = [
-    ("greenhouse", re.compile(r"^boards\.greenhouse\.io$"),       re.compile(r"^/[^/]+/jobs/\d+")),
-    ("greenhouse", re.compile(r"^job-boards\.greenhouse\.io$"),   re.compile(r"^/[^/]+/jobs/\d+")),
-    ("lever",      re.compile(r"^jobs\.lever\.co$"),              re.compile(r"^/[^/]+/[a-f0-9-]+")),
-    ("ashby",      re.compile(r"^jobs\.ashbyhq\.com$"),           re.compile(r"^/[^/]+/[a-f0-9-]+")),
-]
 
 
 def detect_portal(url: str) -> Optional[str]:
@@ -72,19 +74,10 @@ def detect_portal(url: str) -> Optional[str]:
             if host_re.match(host) and path_re.search(path_with_query):
                 return source
 
-    # ATS boards collapse into a single "ats" source family — server-side
-    # CaptureSource Literal doesn't yet include greenhouse/lever/ashby as
-    # capture sources. Phase 2 will widen the Literal; for now classify as
-    # the closest existing source ("wellfound") so the row still lands. This
-    # is a pragmatic Phase 1 limitation — flagged for cleanup.
-    for ats_name, host_re, path_re in ATS_HOST_PATTERNS:
-        if host_re.match(host) and path_re.search(path_with_query):
-            # Wide-pivot: tag as wellfound to satisfy the Literal until the
-            # server-side CaptureSource is widened in a later sprint.
-            # The actual ATS family is preserved in raw_payload by the
-            # extraction JS (host + URL).
-            return "wellfound"
-
+    # Phase 2 — ATS boards (Greenhouse / Lever / Ashby) live on per-tenant
+    # subdomains. Re-enable here ONLY when the server-side `ALLOWED_HOSTS`
+    # gains entries for those hosts AND the `CaptureSource` Literal in
+    # `worker/app/captures/models.py` is widened to include them.
     return None
 
 

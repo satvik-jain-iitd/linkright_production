@@ -188,18 +188,20 @@ def uninstall_systemd() -> tuple[bool, str]:
 
 def install_service(*, dry_run: bool = False) -> tuple[bool, str]:
     """Cross-platform dispatch."""
-    sys = platform.system()
-    if sys == "Darwin":
+    # NOTE: deliberately avoid the local name `sys` to prevent shadowing the
+    # `import sys` if any future maintainer adds it at module top.
+    system_name = platform.system()
+    if system_name == "Darwin":
         return install_launchd(dry_run=dry_run)
-    if sys == "Linux":
+    if system_name == "Linux":
         return install_systemd(dry_run=dry_run)
-    return False, f"--install-service not supported on {sys} yet (Mac + Linux only)"
+    return False, f"--install-service not supported on {system_name} yet (Mac + Linux only)"
 
 
 def uninstall_service() -> tuple[bool, str]:
-    sys = platform.system()
-    if sys == "Darwin":
+    system_name = platform.system()
+    if system_name == "Darwin":
         return uninstall_launchd()
-    if sys == "Linux":
+    if system_name == "Linux":
         return uninstall_systemd()
-    return False, f"--uninstall-service not supported on {sys} yet"
+    return False, f"--uninstall-service not supported on {system_name} yet"

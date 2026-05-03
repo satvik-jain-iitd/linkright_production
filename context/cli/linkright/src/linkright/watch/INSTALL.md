@@ -4,7 +4,9 @@ Sprint D: passive job-page capture from your real Chrome via Chrome DevTools Pro
 
 ## What it does
 
-While Chrome is running with `--remote-debugging-port=9222`, `linkright watch` listens for navigations to job-listing pages (Naukri, LinkedIn, Indeed, Greenhouse boards, Lever, Ashby) and silently captures the job into your LinkRight database. You browse jobs normally; LinkRight remembers them.
+While Chrome is running with `--remote-debugging-port=9222`, `linkright watch` listens for navigations to **Naukri** job-listing pages and silently captures the job into your LinkRight database. You browse jobs normally; LinkRight remembers them.
+
+> **Phase 1 = Naukri only.** LinkedIn / Indeed / Greenhouse / Lever / Ashby support is wired in `extractor.py` but disabled until the server-side privacy allowlist (`worker/app/captures/privacy.py:ALLOWED_HOSTS`) and `CaptureSource` Literal widen in a follow-up sprint. Re-enabling is a coordinated two-file change documented in those files.
 
 ## One-time setup (~60 sec)
 
@@ -57,7 +59,7 @@ linkright watch
 # (Ctrl-C to stop)
 ```
 
-Now browse any Naukri / LinkedIn / Indeed / Greenhouse-board / Lever / Ashby job page in your Chrome. You'll see lines like:
+Now browse any Naukri job page in your Chrome (Phase 1 covers `naukri.com/job-listings-*` and `naukri.com/jobs/*`). You'll see lines like:
 
 ```
 14:32:17 → naukri — https://www.naukri.com/job-listings-senior-product-manager-amazon-12345
