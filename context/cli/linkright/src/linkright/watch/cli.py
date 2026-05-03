@@ -29,8 +29,11 @@ from linkright.watch import cdp, extractor, poster, service, setup as setup_mod
 # values inside INTERVAL literals), so input MUST be validated against this
 # strict allowlist to prevent injection (even though it's user-typed self-pwn,
 # accidental quoting bugs etc. are still real).
+#
+# `[ ]+` (literal spaces) NOT `\s+` — `\s` matches tab/newline/etc. which would
+# pass validation but produce malformed Postgres INTERVAL literals.
 _SINCE_PATTERN = re.compile(
-    r"^\d+\s+(?:second|minute|hour|day|week|month|year)s?$",
+    r"^\d+[ ]+(?:second|minute|hour|day|week|month|year)s?$",
     re.IGNORECASE,
 )
 
@@ -267,7 +270,24 @@ def list_cmd(limit: int, since: Optional[str], source: Optional[str], as_json: b
         )
         sys.exit(2)
 
-    asyncio.run(_list_async(oracle_pg_url, limit, since, source, as_json))
+    # Wrap the async runner so DB connection failures (bad URL, network unreachable,
+    # wrong creds) surface as a one-line actionable message instead of a raw
+    # Python traceback. Catches OSError (network), asyncpg errors (auth /
+    # protocol), AND Exception fallback so anything else also gets handled.
+    try:
+        asyncio.run(_list_async(oracle_pg_url, limit, since, source, as_json))
+    except OSError as exc:
+        click.echo(
+            f"✗ Cannot connect to Oracle PG: {exc}\n"
+            f"  Check ORACLE_PG_URL is reachable. Try: psql \"$ORACLE_PG_URL\" -c 'SELECT 1'",
+            err=True,
+        )
+        sys.exit(2)
+    except Exception as exc:
+        # Catches asyncpg.PostgresError (which we don't import at module top to
+        # keep asyncpg lazy) AND any other unexpected runtime issue.
+        click.echo(f"✗ Oracle PG query failed: {exc}", err=True)
+        sys.exit(2)
 
 
 async def _list_async(
