@@ -13,13 +13,18 @@ from linkright.llm.oracle import oracle_embed, OracleUnavailable
 
 
 def retrieve_stars(query: str, k: int = 5, user_id: str = "local") -> list[dict[str, Any]]:
-    """Return top-k career stories matching `query`.
+    """Return up to k career stories matching `query`, MERGED across both
+    `career_stories` (Story Bank) and legacy `user_context.kind=story` rows.
 
-    Preference order:
-      1. Oracle embed + $vectorSearch (or cosine fallback) on `career_stories`.
-      2. Text-regex scan on `career_stories` (title / action / result / tags).
-      3. Same vector + text scan on legacy `user_context.kind=story` rows.
-      4. [] if Mongo unreachable.
+    Why merge instead of all-or-nothing: `linkright interview debrief` writes
+    to `user_context` (interview/cli.py:143). If we returned only career_stories
+    when non-empty, debrief notes would silently disappear from interview prep
+    output the moment a user adds their first Story Bank entry. AR round-2 catch.
+
+    Ranking order (highest first):
+      1. Story Bank hits (`career_stories`) — vector + text on title/action/result/tags
+      2. Legacy `user_context.kind=story` hits (debriefs + pre-Story-Bank data)
+    Capped at `k` total. Within each tier, Mongo's natural order or vector score.
 
     Returned dicts are shape-normalized: each has `title`, `body`, `tags`,
     `_id`, `_score`. For `career_stories`, `body` is composed from STAR
@@ -36,10 +41,12 @@ def retrieve_stars(query: str, k: int = 5, user_id: str = "local") -> list[dict[
     db = get_db()
 
     primary_hits = _query_career_stories(db, vector_search, query, k, user_id)
-    if primary_hits:
-        return primary_hits
+    legacy_hits = _query_user_context_legacy(db, vector_search, query, k, user_id)
 
-    return _query_user_context_legacy(db, vector_search, query, k, user_id)
+    seen_ids = {h.get("_id") for h in primary_hits if h.get("_id")}
+    legacy_unique = [h for h in legacy_hits if h.get("_id") not in seen_ids]
+
+    return (primary_hits + legacy_unique)[:k]
 
 
 def _query_career_stories(db, vector_search, query, k, user_id) -> list[dict[str, Any]]:

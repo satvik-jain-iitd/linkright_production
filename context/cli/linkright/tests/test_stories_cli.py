@@ -448,6 +448,66 @@ class TestEditCmd:
         assert result.exit_code == 0
         assert "No changes" in result.output
 
+    def test_edit_rejects_empty_title(self, runner, fake_coll):
+        """AR round-2 blocker fix: edit must validate non-empty title (same
+        guard as add). Previously a user could clear the title field and
+        write a corrupt document."""
+        fake_coll.insert_one({
+            "user_id": "local", "title": "Test Story",
+            "action": "a", "result": "r",
+            "situation": "", "task": "", "tags": [],
+        })
+        # User clears title → input "  \n" then Enter for rest
+        result = runner.invoke(stories_group, ["edit", "Test"], input=(
+            "   \n"     # title — clear
+            "\n"        # situation — keep
+            "\n"        # task — keep
+            "\n"        # action — keep
+            "\n"        # result — keep
+            "\n"        # tags — keep
+        ))
+        assert result.exit_code != 0
+        assert "cannot be empty" in result.output
+        # Document still has original title
+        assert fake_coll.docs[0]["title"] == "Test Story"
+
+    def test_edit_rejects_empty_action(self, runner, fake_coll):
+        fake_coll.insert_one({
+            "user_id": "local", "title": "Test Story",
+            "action": "old action", "result": "r",
+            "situation": "", "task": "", "tags": [],
+        })
+        result = runner.invoke(stories_group, ["edit", "Test"], input=(
+            "\n"        # title — keep
+            "\n"        # situation — keep
+            "\n"        # task — keep
+            " \n"       # action — clear (whitespace)
+            "\n"        # result — keep
+            "\n"        # tags — keep
+        ))
+        assert result.exit_code != 0
+        assert "cannot be empty" in result.output
+        assert fake_coll.docs[0]["action"] == "old action"
+
+    def test_edit_strips_whitespace(self, runner, fake_coll):
+        """Edit must strip leading/trailing whitespace before saving (same as add)."""
+        fake_coll.insert_one({
+            "user_id": "local", "title": "Padded Title",
+            "action": "old", "result": "r",
+            "situation": "", "task": "", "tags": [],
+        })
+        result = runner.invoke(stories_group, ["edit", "Padded"], input=(
+            "\n"                # title — keep
+            "\n"                # situation — keep
+            "\n"                # task — keep
+            "  new action  \n"  # action — change with surrounding whitespace
+            "\n"                # result — keep
+            "\n"                # tags — keep
+        ))
+        assert result.exit_code == 0, result.output
+        assert "Updated" in result.output
+        assert fake_coll.docs[0]["action"] == "new action"  # stripped on save
+
 
 # ── CLI: delete ───────────────────────────────────────────────────────────
 
@@ -641,19 +701,23 @@ class TestRetrieveStarsReadsCareerStories:
         assert results[0]["title"] == "Old Story"
         assert "Pre-Story-Bank narrative" in results[0]["body"]
 
-    def test_career_stories_take_precedence_over_legacy(self, monkeypatch):
-        """If both have hits, primary (career_stories) wins — legacy ignored."""
+    def test_merges_career_stories_with_legacy_debriefs(self, monkeypatch):
+        """AR round-2 blocker fix: `linkright interview debrief` writes to
+        `user_context`. Previous all-or-nothing precedence (career_stories
+        wins, legacy dropped entirely) caused debrief notes to silently
+        disappear from interview prep the moment a user added one story bank
+        entry. Now BOTH surface, with career_stories ranked first."""
         from linkright.interview import star_retriever as sr
 
         career_coll = FakeCollection()
         career_coll.insert_one({
-            "user_id": "local", "title": "New Story",
+            "user_id": "local", "title": "AML Migration Story",
             "action": "AML thing", "result": "saved money", "tags": [],
         })
         legacy_coll = FakeCollection()
         legacy_coll.insert_one({
             "user_id": "local", "kind": "story",
-            "title": "Old Story", "body": "AML narrative", "tags": [],
+            "title": "Past AML Debrief", "body": "AML narrative from interview", "tags": ["debrief"],
         })
 
         fake_db = {"career_stories": career_coll, "user_context": legacy_coll}
@@ -662,11 +726,69 @@ class TestRetrieveStarsReadsCareerStories:
         monkeypatch.setattr(sr, "oracle_embed", lambda *a, **kw: [])
 
         results = sr.retrieve_stars("AML")
-        # Only New Story surfaces — Old Story not pulled because career_stories
-        # had hits
         titles = [r["title"] for r in results]
-        assert "New Story" in titles
-        assert "Old Story" not in titles
+        # BOTH surface — career_stories first, legacy second
+        assert "AML Migration Story" in titles
+        assert "Past AML Debrief" in titles
+        assert titles.index("AML Migration Story") < titles.index("Past AML Debrief")
+
+    def test_merge_dedup_by_id(self, monkeypatch):
+        """If somehow the same _id appears in both collections (unlikely but
+        possible during legacy migration), dedup by _id — primary wins."""
+        from linkright.interview import star_retriever as sr
+
+        shared_id = FakeObjectId()
+        career_coll = FakeCollection()
+        career_coll.docs.append({
+            "_id": shared_id, "user_id": "local",
+            "title": "Career Version",
+            "action": "AML", "result": "saved", "tags": [],
+        })
+        legacy_coll = FakeCollection()
+        legacy_coll.docs.append({
+            "_id": shared_id, "user_id": "local", "kind": "story",
+            "title": "Legacy Version", "body": "AML legacy", "tags": [],
+        })
+
+        fake_db = {"career_stories": career_coll, "user_context": legacy_coll}
+        monkeypatch.setattr("linkright.db.mongo.get_db", lambda: fake_db)
+        monkeypatch.setattr("linkright.db.mongo.ping", lambda: True)
+        monkeypatch.setattr(sr, "oracle_embed", lambda *a, **kw: [])
+
+        results = sr.retrieve_stars("AML")
+        # Only career version surfaces — dedup by _id, primary wins
+        assert len(results) == 1
+        assert results[0]["title"] == "Career Version"
+
+    def test_merge_respects_k_cap(self, monkeypatch):
+        """If primary returns 3 hits and legacy returns 5 (matching), k=4
+        means we get 3 primary + 1 legacy = 4 total."""
+        from linkright.interview import star_retriever as sr
+
+        career_coll = FakeCollection()
+        for i in range(3):
+            career_coll.insert_one({
+                "user_id": "local", "title": f"Career Story {i}",
+                "action": f"AML action {i}", "result": "x", "tags": [],
+            })
+        legacy_coll = FakeCollection()
+        for i in range(5):
+            legacy_coll.insert_one({
+                "user_id": "local", "kind": "story",
+                "title": f"Legacy Story {i}", "body": f"AML legacy {i}", "tags": [],
+            })
+
+        fake_db = {"career_stories": career_coll, "user_context": legacy_coll}
+        monkeypatch.setattr("linkright.db.mongo.get_db", lambda: fake_db)
+        monkeypatch.setattr("linkright.db.mongo.ping", lambda: True)
+        monkeypatch.setattr(sr, "oracle_embed", lambda *a, **kw: [])
+
+        results = sr.retrieve_stars("AML", k=4)
+        assert len(results) == 4
+        career_count = sum(1 for r in results if r["title"].startswith("Career"))
+        assert career_count == 3  # all career stories included
+        legacy_count = sum(1 for r in results if r["title"].startswith("Legacy"))
+        assert legacy_count == 1  # one legacy fills the remaining slot
 
     def test_returns_empty_when_mongo_unreachable(self, monkeypatch):
         from linkright.interview import star_retriever as sr

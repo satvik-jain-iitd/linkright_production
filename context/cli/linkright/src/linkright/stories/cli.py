@@ -348,6 +348,11 @@ def edit_cmd(story_id: str) -> None:
     for key, label in fields:
         current = doc.get(key, "") or ""
         new = click.prompt(label, default=current, show_default=True)
+        # Strip — same guard as add_cmd, AR round-2 catch. Without strip, a user
+        # who types whitespace at the prompt would corrupt the document
+        # (whitespace-only title becomes unreachable by prefix; passes the
+        # existing falsy check but fails practical usability).
+        new = (new or "").strip()
         if new != current:
             updates[key] = new
 
@@ -356,6 +361,16 @@ def edit_cmd(story_id: str) -> None:
     new_tags = [t.strip() for t in new_tags_raw.split(",") if t.strip()]
     if new_tags != (doc.get("tags", []) or []):
         updates["tags"] = new_tags
+
+    # Required fields must remain non-empty after edit. If user cleared title /
+    # action / result, refuse the edit rather than corrupt the doc.
+    for required_key in ("title", "action", "result"):
+        merged_value = updates.get(required_key, doc.get(required_key, ""))
+        if not (merged_value or "").strip():
+            raise click.ClickException(
+                f"`{required_key}` cannot be empty. Use `linkright stories delete` "
+                "if you want to remove this story."
+            )
 
     if not updates:
         click.echo("No changes.")
