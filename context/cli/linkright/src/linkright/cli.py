@@ -32,6 +32,7 @@ from linkright.auth.cli import auth_group
 from linkright.interview.cli import interview_group
 from linkright.content.cli import content_group
 from linkright.coverletter.cli import coverletter_group
+from linkright.watch.cli import watch_group
 
 
 _EPILOG = """\
@@ -76,6 +77,7 @@ main.add_command(interview_group)
 main.add_command(content_group)
 main.add_command(coverletter_group)     # name="cover-letter"
 main.add_command(coverletter_group, name="cl")  # top-level alias
+main.add_command(watch_group, name="watch")     # Sprint D — passive job-page capture via Chrome CDP
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
