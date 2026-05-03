@@ -254,7 +254,7 @@ Oracle PG Smoke Test
   PASS  Connected — PostgreSQL 16.x ...
   PASS  Extensions present: pg_trgm, vector
   PASS  Tables present: companies, enriched_jobs_cache, slug_discovery_cache
-  PASS  Seed rows: 31 (>= 31 required)
+  PASS  Seed rows: 81 (>= 81 required)
   PASS  Round-trip INSERT/SELECT/DELETE complete
 ========================================
 
