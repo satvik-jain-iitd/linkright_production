@@ -171,3 +171,60 @@ async def persist_capture(capture: CaptureIn) -> CaptureOut:
         company_status=company_status,
         notes=None,
     )
+
+
+# ── Sprint B trigger: auto-discover ATS slug for newly-created companies ────
+async def schedule_slug_discovery(
+    canonical_id: str,
+    company_name: str,
+    company_website: Optional[str],
+) -> None:
+    """Background task: fire Sprint B's 3-tier slug auto-discovery for a
+    newly-captured company. Called from FastAPI BackgroundTasks AFTER the
+    capture POST returned 201, so the user's request is unaffected by
+    discovery latency.
+
+    The capture itself already succeeded (companies row + job_discoveries row
+    persisted with NULL ats_provider). This task does best-effort enrichment:
+    on success, the row is UPDATEd with the discovered ats_provider/ats_slug
+    via Sprint B's persist path. On failure, we log + move on — the row stays
+    ats_provider=NULL, identical to today's behavior, and the Layer 4 self-heal
+    cron (when wired) would retry on its next nightly run.
+
+    Idempotent: if discovery races (e.g., user browses two jobs from the same
+    new company simultaneously), Sprint B's `_persist_result` upserts on
+    `(company_canonical_id, attempt_number)` so duplicate attempts produce
+    one extra slug_discovery_cache row, not corruption.
+    """
+    try:
+        from ..oracle.slug_discovery import discover_ats
+        logger.info(
+            "captures: scheduling slug discovery for new company %r (canonical=%s)",
+            company_name, canonical_id[:12],
+        )
+        result = await discover_ats(
+            company_name=company_name,
+            website=company_website,
+            persist=True,
+            company_canonical_id=canonical_id,
+        )
+        if result.success:
+            logger.info(
+                "captures: slug discovery succeeded for %r → %s/%s (%d jobs, tier=%s)",
+                company_name, result.ats_provider, result.ats_slug,
+                result.jobs_count, result.source_tier,
+            )
+        else:
+            logger.info(
+                "captures: slug discovery found nothing for %r — row stays ats=NULL "
+                "(Layer 4 self-heal will retry nightly): %s",
+                company_name, result.notes or "all 3 tiers failed",
+            )
+    except Exception:
+        # Catch broadly — we MUST NOT let a discovery failure crash the
+        # background-task event loop or surface to the user (whose capture
+        # already succeeded).
+        logger.exception(
+            "captures: slug discovery background task failed for %r — row stays "
+            "ats=NULL (Layer 4 self-heal will retry nightly)", company_name,
+        )

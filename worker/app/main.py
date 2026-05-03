@@ -1165,11 +1165,13 @@ async def transcribe_audio(
 # consistent with the rest of the worker.
 from .captures.api import post_capture as _captures_handler  # noqa: E402
 from .captures.models import CaptureIn as _CaptureIn, CaptureOut as _CaptureOut  # noqa: E402
+from .captures.persist import schedule_slug_discovery as _schedule_slug_discovery  # noqa: E402
 
 
 @app.post("/api/captures", response_model=_CaptureOut, status_code=201)
 async def captures_endpoint(
     capture: _CaptureIn,
+    background_tasks: BackgroundTasks,
     x_linkright_capture_key: str = Header(default=""),
 ):
     """Receive a passive job-page capture from the user's browser.
@@ -1178,5 +1180,19 @@ async def captures_endpoint(
     Rate limit: 1 req/sec per tenant.
     Privacy: server-side filter rejects DM/PM/profile paths and private content.
     Persistence: Oracle PG `companies` (lookup/create) + `job_discoveries` (upsert).
+
+    Side effect: when a capture creates a NEW company row (i.e. user browsed
+    a job at a company we hadn't seen before), Sprint B's 3-tier slug
+    auto-discovery is fired as a background task. This means companies grow
+    organically with their ATS info filled in, no manual `admin slug-discovery`
+    runs needed. Failures are logged + best-effort; user's capture is unaffected.
     """
-    return await _captures_handler(capture, x_linkright_capture_key)
+    result = await _captures_handler(capture, x_linkright_capture_key)
+    if result.company_status == "created_new" and result.canonical_id:
+        background_tasks.add_task(
+            _schedule_slug_discovery,
+            result.canonical_id,
+            capture.company_name,
+            capture.company_website,
+        )
+    return result
