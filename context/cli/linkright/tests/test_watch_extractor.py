@@ -42,37 +42,137 @@ def test_naukri_non_job_url_not_detected(url):
     assert detect_portal(url) is None
 
 
-# ── Phase 2 portals — currently DISABLED in PORTAL_PATTERNS (server-side
-# ALLOWED_HOSTS only permits naukri). These tests assert detect_portal
-# returns None so the CLI doesn't fire wasted POSTs that the worker would 403.
-# When Phase 2 widens the server allowlist + CaptureSource Literal, these
-# tests flip from "asserts None" to "asserts source-name" in the same diff
-# that re-enables the patterns in extractor.py.
+# ── LinkedIn ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("url", [
-    # LinkedIn
     "https://www.linkedin.com/jobs/view/4123456789",
     "https://in.linkedin.com/jobs/view/4123456789",
     "https://linkedin.com/jobs/view/4123456789",
     "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=123456",
-    "https://www.linkedin.com/feed/",
-    "https://www.linkedin.com/messaging/",
-    "https://www.linkedin.com/in/satvik-jain/",
-    # Indeed
-    "https://www.indeed.com/viewjob?jk=abc123",
-    "https://in.indeed.com/viewjob?jk=abc123",
-    # Wellfound
-    "https://wellfound.com/jobs/12345-engineer",
-    # Greenhouse / Lever / Ashby boards
-    "https://boards.greenhouse.io/anthropic/jobs/4123456789",
-    "https://job-boards.greenhouse.io/stripe/jobs/4123456789",
-    "https://jobs.lever.co/cred/abcd1234-5678-9012-3456-789012345678",
-    "https://jobs.ashbyhq.com/openai/abcd1234-5678-9012-3456-789012345678",
+    "https://www.linkedin.com/jobs/search/?currentJobId=4123456789",
 ])
-def test_phase2_portals_currently_disabled(url):
-    """Phase 1 = Naukri only. All other portals must return None until the
-    server-side ALLOWED_HOSTS in worker/app/captures/privacy.py is widened."""
+def test_linkedin_job_url_detected(url):
+    assert detect_portal(url) == "linkedin"
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.linkedin.com/feed/",
+    "https://www.linkedin.com/messaging/threads/123",
+    "https://www.linkedin.com/in/satvik-jain/",
+    "https://www.linkedin.com/me/",
+    "https://www.linkedin.com/learning/something",
+    # Collections list view (no currentJobId) is NOT a job-detail page
+    "https://www.linkedin.com/jobs/collections/recommended/",
+])
+def test_linkedin_non_job_url_not_detected(url):
     assert detect_portal(url) is None
+
+
+# ── Indeed ───────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("url", [
+    "https://www.indeed.com/viewjob?jk=abc123def456",
+    "https://in.indeed.com/viewjob?jk=abc123",
+    "https://m.indeed.com/m/viewjob?jk=xyz",
+])
+def test_indeed_job_url_detected(url):
+    assert detect_portal(url) == "indeed"
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.indeed.com/career-advice/article-slug",
+    "https://www.indeed.com/account/settings",
+    "https://www.indeed.com/jobs?q=product+manager",  # search results, not a specific job
+])
+def test_indeed_non_job_url_not_detected(url):
+    assert detect_portal(url) is None
+
+
+# ── Wellfound ────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("url", [
+    "https://wellfound.com/jobs/12345-engineer-at-openai",
+    "https://www.wellfound.com/jobs/67890-pm-stripe",
+])
+def test_wellfound_job_url_detected(url):
+    assert detect_portal(url) == "wellfound"
+
+
+def test_wellfound_company_landing_not_detected():
+    assert detect_portal("https://wellfound.com/company/openai") is None
+
+
+# ── Greenhouse boards (per-tenant ATS) ───────────────────────────────────────
+
+@pytest.mark.parametrize("url", [
+    "https://boards.greenhouse.io/anthropic/jobs/4123456789",
+    "https://job-boards.greenhouse.io/stripe/jobs/4567890123",
+])
+def test_greenhouse_job_url_detected(url):
+    assert detect_portal(url) == "greenhouse"
+
+
+@pytest.mark.parametrize("url", [
+    "https://boards.greenhouse.io/anthropic",
+    "https://boards.greenhouse.io/anthropic/",
+])
+def test_greenhouse_tenant_landing_not_detected(url):
+    """Tenant homepage (no /jobs/<id> suffix) is the company landing, not a job."""
+    assert detect_portal(url) is None
+
+
+# ── Lever boards ─────────────────────────────────────────────────────────────
+
+def test_lever_job_url_detected():
+    url = "https://jobs.lever.co/cred/abcd1234-5678-9012-3456-789012345678"
+    assert detect_portal(url) == "lever"
+
+
+def test_lever_tenant_landing_not_detected():
+    assert detect_portal("https://jobs.lever.co/cred") is None
+
+
+# ── Ashby boards ─────────────────────────────────────────────────────────────
+
+def test_ashby_job_url_detected():
+    url = "https://jobs.ashbyhq.com/openai/abcd1234-5678-9012-3456-789012345678"
+    assert detect_portal(url) == "ashby"
+
+
+def test_ashby_tenant_landing_not_detected():
+    assert detect_portal("https://jobs.ashbyhq.com/openai") is None
+
+
+# ── Source-name contract: extractor sources MUST match server CaptureSource ─
+
+def test_extractor_sources_match_expected_set():
+    """Asserts PORTAL_PATTERNS keys equal a HARDCODED snapshot of the server's
+    CaptureSource Literal as of 2026-05-03.
+
+    KNOWN LIMITATION (acknowledged tradeoff): this is one-directional — if the
+    server's CaptureSource Literal in worker/app/captures/models.py grows in a
+    future commit (e.g. adds 'glassdoor') without updating EXPECTED_SOURCES
+    here, this test will still PASS even though the CLI doesn't have the new
+    source. Cross-repo schema validation needs a shared sources module that
+    both worker and CLI import — out of scope for the multi-portal expansion
+    PR; tracked as follow-up.
+
+    What this test DOES catch reliably:
+      - Someone adds a key to PORTAL_PATTERNS that isn't in EXPECTED_SOURCES
+        → test fails (`extra` non-empty) → forces a coordinated update
+      - Someone removes a key from PORTAL_PATTERNS without updating tests
+        → test fails (`missing` non-empty)
+    """
+    from linkright.watch.extractor import PORTAL_PATTERNS
+    # Hardcoded snapshot — must be kept in sync with
+    # worker/app/captures/models.py:CaptureSource manually for now.
+    EXPECTED_SOURCES = {"naukri", "linkedin", "indeed", "wellfound",
+                        "greenhouse", "lever", "ashby"}
+    keys = set(PORTAL_PATTERNS.keys())
+    extra = keys - EXPECTED_SOURCES
+    missing = EXPECTED_SOURCES - keys
+    assert not extra, f"PORTAL_PATTERNS has sources NOT in EXPECTED_SOURCES snapshot: {extra}"
+    assert not missing, f"PORTAL_PATTERNS missing sources from EXPECTED_SOURCES snapshot: {missing}"
 
 
 # ── Junk + edge cases ────────────────────────────────────────────────────────
