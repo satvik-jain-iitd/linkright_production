@@ -147,3 +147,45 @@ def test_now_iso_returns_utc_string():
     iso = poster.now_iso()
     assert "T" in iso
     assert iso.endswith("+00:00")  # UTC offset
+
+
+# ── load_oracle_pg_url ──────────────────────────────────────────────────────
+
+def test_load_oracle_pg_url_from_env(monkeypatch):
+    monkeypatch.setenv("ORACLE_PG_URL", "postgres://x:y@h:5432/db")
+    assert poster.load_oracle_pg_url() == "postgres://x:y@h:5432/db"
+
+
+def test_load_oracle_pg_url_from_env_oracle_file(tmp_path, monkeypatch):
+    """~/.linkright/.env.oracle takes precedence over ~/.linkright/.env."""
+    env_oracle = tmp_path / ".env.oracle"
+    env_oracle.write_text("ORACLE_PG_URL=postgres://from_oracle:pw@h:5432/db\n")
+    env = tmp_path / ".env"
+    env.write_text("ORACLE_PG_URL=postgres://from_env:pw@h:5432/db\n")
+    monkeypatch.delenv("ORACLE_PG_URL", raising=False)
+
+    url = poster.load_oracle_pg_url(extra_files=[env_oracle, env])
+    assert url == "postgres://from_oracle:pw@h:5432/db"
+
+
+def test_load_oracle_pg_url_falls_back_to_env_file(tmp_path, monkeypatch):
+    """If .env.oracle missing, fall back to .env."""
+    env_oracle = tmp_path / ".env.oracle"  # doesn't exist
+    env = tmp_path / ".env"
+    env.write_text("ORACLE_PG_URL=postgres://fallback:pw@h:5432/db\n")
+    monkeypatch.delenv("ORACLE_PG_URL", raising=False)
+
+    url = poster.load_oracle_pg_url(extra_files=[env_oracle, env])
+    assert url == "postgres://fallback:pw@h:5432/db"
+
+
+def test_load_oracle_pg_url_missing_raises_value_error(tmp_path, monkeypatch):
+    monkeypatch.delenv("ORACLE_PG_URL", raising=False)
+    nope1 = tmp_path / "nonexistent1"
+    nope2 = tmp_path / "nonexistent2"
+
+    # Also monkeypatch Path.home() to a tmp dir so the default candidates miss
+    monkeypatch.setattr(poster.Path, "home", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="ORACLE_PG_URL not set"):
+        poster.load_oracle_pg_url(extra_files=[nope1, nope2])

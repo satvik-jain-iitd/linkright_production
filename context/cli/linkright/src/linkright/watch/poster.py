@@ -128,3 +128,42 @@ async def post_capture(
 def now_iso() -> str:
     """Return current UTC time as RFC 3339 string (matches CaptureIn schema)."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def load_oracle_pg_url(extra_files: Optional[list[Path]] = None) -> str:
+    """Return ORACLE_PG_URL for `linkright watch list` (reads Oracle PG directly).
+
+    Lookup order:
+      1. ``os.environ["ORACLE_PG_URL"]``
+      2. ``~/.linkright/.env.oracle``     (where Satvik's setup actually stores it)
+      3. ``~/.linkright/.env``            (fallback for older configs)
+
+    Raises ``ValueError`` with concrete remediation steps if not found.
+    """
+    direct = os.environ.get("ORACLE_PG_URL", "").strip()
+    if direct:
+        return direct
+
+    home = Path.home()
+    candidates = [
+        home / ".linkright" / ".env.oracle",
+        home / ".linkright" / ".env",
+    ]
+    if extra_files:
+        candidates = list(extra_files) + candidates
+
+    for path in candidates:
+        if not path.exists():
+            continue
+        env = _read_env_file(path)
+        url = env.get("ORACLE_PG_URL", "").strip()
+        if url:
+            return url
+
+    raise ValueError(
+        "ORACLE_PG_URL not set in env or any of: "
+        f"{', '.join(str(p) for p in candidates)}.\n"
+        "If Oracle PG is provisioned, add it to ~/.linkright/.env.oracle:\n"
+        "  echo 'ORACLE_PG_URL=postgres://linkright_app:<pass>@<host>:5432/linkright_jobs?sslmode=prefer' >> ~/.linkright/.env.oracle\n"
+        "  chmod 600 ~/.linkright/.env.oracle"
+    )

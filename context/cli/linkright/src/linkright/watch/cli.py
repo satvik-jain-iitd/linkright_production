@@ -211,6 +211,139 @@ def uninstall_service_cmd() -> None:
     click.echo(("✓" if ok else "·") + " " + msg)
 
 
+# ── `linkright watch list` ──────────────────────────────────────────────────
+# Reads Oracle PG `job_discoveries` directly. This is the bridge that lets
+# Phase 1 captures be SEEN from the CLI today — `linkright jobs find` reads
+# Supabase via the website API, not Oracle PG, so without this command
+# captures land in Oracle PG and stay invisible to the user. Phase 2 will
+# unify the read path; for now this is the validation surface.
+@watch_group.command("list")
+@click.option("--limit", default=20, type=int, show_default=True,
+              help="How many recent captures to show")
+@click.option("--since", default=None,
+              help='Filter to captures newer than this (e.g. "1 hour", "1 day", "1 week")')
+@click.option("--source", default=None,
+              help="Filter by source_type (e.g. capture_naukri)")
+@click.option("--json", "as_json", is_flag=True, help="Output JSON instead of table")
+def list_cmd(limit: int, since: Optional[str], source: Optional[str], as_json: bool) -> None:
+    """Show recent captures from Oracle PG `job_discoveries`.
+
+    \b
+    Examples:
+      linkright watch list                       # last 20 captures
+      linkright watch list --limit 50
+      linkright watch list --since "1 day"       # captures from past 24h
+      linkright watch list --source capture_naukri
+      linkright watch list --json | jq           # pipe-friendly
+
+    \b
+    Requires `pip install linkright[admin]` for the asyncpg driver.
+    Reads ORACLE_PG_URL from env, then ~/.linkright/.env.oracle, then ~/.linkright/.env.
+    """
+    try:
+        oracle_pg_url = poster.load_oracle_pg_url()
+    except ValueError as exc:
+        click.echo(f"✗ {exc}", err=True)
+        sys.exit(2)
+
+    try:
+        import asyncpg  # noqa: F401
+    except ImportError:
+        click.echo(
+            "✗ asyncpg not installed — required for `linkright watch list`.\n"
+            "   Install with:  pip install linkright[admin]",
+            err=True,
+        )
+        sys.exit(2)
+
+    asyncio.run(_list_async(oracle_pg_url, limit, since, source, as_json))
+
+
+async def _list_async(
+    oracle_pg_url: str,
+    limit: int,
+    since: Optional[str],
+    source: Optional[str],
+    as_json: bool,
+) -> None:
+    import asyncpg
+    import json as _json
+
+    where_clauses: list[str] = []
+    params: list = []
+
+    if since:
+        # PostgreSQL accepts INTERVAL strings like '1 hour' / '1 day' / '7 days'
+        where_clauses.append(f"captured_at > NOW() - INTERVAL '{since}'")
+    if source:
+        params.append(source)
+        where_clauses.append(f"source_type = ${len(params)}")
+
+    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    params.append(limit)
+    sql = (
+        "SELECT id::text AS id, title, company_name, location, salary_text, "
+        "source_type, captured_at, job_url "
+        f"FROM job_discoveries{where_sql} "
+        f"ORDER BY captured_at DESC LIMIT ${len(params)}"
+    )
+
+    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+    finally:
+        await pool.close()
+
+    if as_json:
+        out = [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "company_name": r["company_name"],
+                "location": r["location"],
+                "salary_text": r["salary_text"],
+                "source_type": r["source_type"],
+                "captured_at": r["captured_at"].isoformat() if r["captured_at"] else None,
+                "job_url": r["job_url"],
+            }
+            for r in rows
+        ]
+        click.echo(_json.dumps(out, indent=2))
+        return
+
+    if not rows:
+        click.echo("No captures found. Browse a Naukri job page after `linkright watch` is running.")
+        return
+
+    # Lazy import rich (already a core dep) for nice table rendering
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("#", justify="right", style="dim", width=3)
+    table.add_column("Captured", width=16)
+    table.add_column("Source", width=16)
+    table.add_column("Company", width=22, overflow="ellipsis")
+    table.add_column("Title", overflow="ellipsis")
+    table.add_column("Location", width=14, overflow="ellipsis")
+
+    for i, r in enumerate(rows, 1):
+        captured = r["captured_at"]
+        captured_str = captured.strftime("%b %d %H:%M") if captured else "?"
+        table.add_row(
+            str(i),
+            captured_str,
+            r["source_type"] or "?",
+            r["company_name"] or "?",
+            r["title"] or "?",
+            r["location"] or "-",
+        )
+
+    Console().print(table)
+    click.echo(f"\n{len(rows)} capture(s). Use `linkright watch list --json` for full URLs / IDs.")
+
+
 # ── `linkright watch status` ────────────────────────────────────────────────
 @watch_group.command("status")
 @click.pass_context
