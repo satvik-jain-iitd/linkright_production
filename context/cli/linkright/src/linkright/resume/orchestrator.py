@@ -1669,6 +1669,128 @@ def step_08_retrieve_per_company(parsed_p12: dict, nuggets: list[dict]) -> dict:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Step 8b — Story Bank retrieval (Pillar 3 ↔ Pillar 1 bridge)
+# ────────────────────────────────────────────────────────────────────────────
+
+def step_08b_retrieve_stories(parsed_p12: dict, k: int = 8) -> list[dict]:
+    """Retrieve top-k career stories matching the JD.
+
+    Pillar 3 Story Bank ↔ Pillar 1 tailor bridge. Persists results to
+    `artifacts/08b_retrieved_stories.json` for visibility + future use.
+
+    Strategy:
+      1. Build query from role_title + top-5 JD keywords
+      2. Try vector search (Oracle embed + cosine across all stories with emb)
+      3. Fall back to text regex on title/action/result/tags
+      4. Persist serialized results
+
+    Per locked v1 scope (memory: project_v1_scope_locked_2026_05_03):
+    "tailor reads stories alongside nuggets". This step DOES the retrieval
+    end-to-end. Bullet-context wiring into step_10 prompt is deferred to a
+    follow-up PR with empirical RCA evaluation per
+    feedback_one_resume_at_a_time. Until then, this artifact is for
+    debugging visibility + future-PR consumption only — step_10 prompt
+    behavior is unchanged.
+
+    Returns:
+      list of serialized story dicts (id, title, S/T/A/R, tags, score).
+      Empty list if MongoDB unreachable or no stories match.
+    """
+    step = "step_08b_retrieve_stories"
+    logbook.append(
+        step, "starting",
+        f"querying career_stories for top-{k} matches against role + JD keywords; "
+        "vector path via Oracle embed + cosine, fallback to text regex.",
+    )
+
+    try:
+        from linkright.db.mongo import get_db, ping
+    except Exception as _e:
+        body = f"MongoDB driver unavailable ({_e}); story retrieval skipped."
+        log(f"[step_08b] {body}")
+        logbook.append(step, "skip", body)
+        return []
+
+    if not ping():
+        body = "MongoDB unreachable — story retrieval skipped (run `linkright init` to bootstrap)."
+        log(f"[step_08b] {body}")
+        logbook.append(step, "skip", body)
+        return []
+
+    coll = get_db()["career_stories"]
+
+    jd_keywords = parsed_p12.get("jd_keywords", [])[:5]
+    role_title = parsed_p12.get("role_title", "") or parsed_p12.get("target_role", "")
+    query = f"{role_title} {' '.join(jd_keywords)}".strip()
+
+    if not query:
+        body = "No role title or JD keywords; story retrieval skipped."
+        log(f"[step_08b] {body}")
+        logbook.append(step, "skip", body)
+        return []
+
+    hits: list[dict] = []
+
+    # Vector path — score all stories with embeddings, take top-k
+    try:
+        q_emb, _meta = embedder.embed(query)
+        if q_emb:
+            cursor = coll.find({"user_id": "local", "emb": {"$ne": None}})
+            scored = []
+            for doc in cursor:
+                emb = doc.get("emb")
+                if emb:
+                    sim = cosine.cosine(q_emb, emb)
+                    scored.append({**doc, "_score": round(sim, 4)})
+            scored.sort(key=lambda x: x["_score"], reverse=True)
+            hits = scored[:k]
+    except Exception as _e:
+        log(f"[step_08b] vector path failed ({_e}); falling back to text regex")
+
+    # Text fallback when vector returned nothing or failed
+    if not hits:
+        terms = [t for t in re.findall(r"\w+", query.lower()) if len(t) > 2]
+        if terms:
+            regex_pat = "|".join(re.escape(t) for t in terms[:10])
+            cursor = coll.find({
+                "user_id": "local",
+                "$or": [
+                    {"title": {"$regex": regex_pat, "$options": "i"}},
+                    {"action": {"$regex": regex_pat, "$options": "i"}},
+                    {"result": {"$regex": regex_pat, "$options": "i"}},
+                    {"tags": {"$regex": regex_pat, "$options": "i"}},
+                ],
+            }).limit(k)
+            hits = [{**doc, "_score": 0.5} for doc in cursor]
+
+    serialized = [
+        {
+            "_id": str(h.get("_id", "")),
+            "title": h.get("title", ""),
+            "situation": h.get("situation", "") or "",
+            "task": h.get("task", "") or "",
+            "action": h.get("action", ""),
+            "result": h.get("result", ""),
+            "tags": h.get("tags", []) or [],
+            "score": float(h.get("_score", 0.0)),
+        }
+        for h in hits
+    ]
+
+    out_path = ARTIFACTS / "08b_retrieved_stories.json"
+    out_path.write_text(json.dumps(serialized, indent=2, default=str))
+
+    top_title = serialized[0]["title"] if serialized else "—"
+    body = (
+        f"Retrieved {len(serialized)} stories from `career_stories`. "
+        f"Top match: '{top_title}' (score={serialized[0]['score'] if serialized else 0:.3f}). "
+        f"Persisted to `artifacts/08b_retrieved_stories.json`."
+    )
+    logbook.append(step, "pass", body)
+    return serialized
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Step 9 — Professional summary (Phase 3.5a)
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -5114,6 +5236,17 @@ def main():
     )
 
     retrieved = step_08_retrieve_per_company(parsed_p12, nuggets_with_emb)
+
+    # Pillar 3 Story Bank ↔ Pillar 1 bridge (2026-05-03). Retrieval runs
+    # end-to-end and persists artifacts; downstream consumption (step_10
+    # prompt context) is deferred to a follow-up PR pending empirical RCA
+    # evaluation per memory feedback_one_resume_at_a_time.
+    try:
+        retrieved_stories = step_08b_retrieve_stories(parsed_p12)
+        log(f"[step_08b] {len(retrieved_stories)} story matches retrieved")
+    except Exception as _e:
+        log(f"[step_08b] retrieval failed ({_e}); proceeding without stories")
+        retrieved_stories = []
 
     # 2026-05-02 — NEW-3: if user has confirmed a strategy plan via
     # `linkright resume strategy-review`, override auto-retrieval with the
