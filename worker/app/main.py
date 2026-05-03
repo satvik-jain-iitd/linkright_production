@@ -1157,3 +1157,26 @@ async def transcribe_audio(
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+# ── Sprint C: passive job-page captures (Naukri Phase 1) ─────────────────────
+# Business logic (auth, rate limit, privacy, persist) lives in app/captures/.
+# This file just wires the route so the FastAPI declaration style stays
+# consistent with the rest of the worker.
+from .captures.api import post_capture as _captures_handler  # noqa: E402
+from .captures.models import CaptureIn as _CaptureIn, CaptureOut as _CaptureOut  # noqa: E402
+
+
+@app.post("/api/captures", response_model=_CaptureOut, status_code=201)
+async def captures_endpoint(
+    capture: _CaptureIn,
+    x_linkright_capture_key: str = Header(default=""),
+):
+    """Receive a passive job-page capture from the user's browser.
+
+    Auth: `X-LinkRight-Capture-Key` header (env var `LINKRIGHT_CAPTURE_KEY`).
+    Rate limit: 1 req/sec per tenant.
+    Privacy: server-side filter rejects DM/PM/profile paths and private content.
+    Persistence: Oracle PG `companies` (lookup/create) + `job_discoveries` (upsert).
+    """
+    return await _captures_handler(capture, x_linkright_capture_key)
