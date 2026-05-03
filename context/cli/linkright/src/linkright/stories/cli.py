@@ -203,7 +203,10 @@ def list_cmd(tag: Optional[str], limit: int) -> None:
     table.add_column("Last", style="dim")
 
     for d in docs:
-        story_id = str(d.get("_id", ""))[-8:]
+        # First 8 hex chars of ObjectId (timestamp-based, more visually
+        # distinguishable than tail-8). Title-prefix is the primary lookup
+        # mechanism though — uniqueness enforced via Mongo index.
+        story_id = str(d.get("_id", ""))[:8]
         title = d.get("title", "(untitled)")
         tag_list = d.get("tags", []) or []
         tags_str = ", ".join(tag_list[:3])
@@ -266,9 +269,18 @@ def add_cmd(
         result = result or click.prompt("Result (outcome + metrics)", default="")
         tags = tags or click.prompt("Tags (comma-separated)", default="")
 
+    # Strip BEFORE validation — whitespace-only inputs ("   ") would otherwise
+    # pass the `not <field>` check and write unreachable stories (can't be
+    # found by title prefix because length<3 and trailing/leading spaces)
+    title = (title or "").strip()
+    situation = (situation or "").strip()
+    task = (task or "").strip()
+    action = (action or "").strip()
+    result = (result or "").strip()
+
     if not title or not action or not result:
         raise click.ClickException(
-            "title + action + result are required (got: "
+            "title + action + result are required and must be non-empty (got: "
             f"title={'set' if title else 'EMPTY'}, "
             f"action={'set' if action else 'EMPTY'}, "
             f"result={'set' if result else 'EMPTY'})"
@@ -280,8 +292,8 @@ def add_cmd(
     doc = {
         "user_id": "local",
         "title": title,
-        "situation": situation or "",
-        "task": task or "",
+        "situation": situation,
+        "task": task,
         "action": action,
         "result": result,
         "tags": tag_list,
@@ -289,13 +301,27 @@ def add_cmd(
         "last_used_at": None,
         "use_count": 0,
         "source_nugget_ids": [nugget_id] if nugget_id else [],
-        "emb": _embed_story(title, situation or "", task or "", action, result),
+        "emb": _embed_story(title, situation, task, action, result),
         "created_at": now,
         "updated_at": now,
         "schema_version": 1,
     }
 
-    insert = coll.insert_one(doc)
+    try:
+        insert = coll.insert_one(doc)
+    except Exception as e:
+        # DuplicateKeyError surfaces from MongoDB when the (user_id, title)
+        # unique index rejects a re-add. Catch broadly because the exception
+        # type lives in pymongo.errors which we don't always import here, and
+        # the FakeCollection in tests raises a plain ValueError on dup.
+        msg = str(e).lower()
+        if "duplicate" in msg or "e11000" in msg:
+            raise click.ClickException(
+                f"A story titled '{title}' already exists. "
+                "Use `linkright stories edit \"<title>\"` to update it, "
+                "or pick a different title.",
+            )
+        raise
     click.echo(click.style(f"✓ Story saved: {insert.inserted_id}", fg="green"))
 
 

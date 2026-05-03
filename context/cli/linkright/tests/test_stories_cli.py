@@ -82,6 +82,11 @@ class FakeCollection:
         self.docs: list[dict] = []
 
     def insert_one(self, doc: dict) -> FakeInsertResult:
+        if self._is_duplicate(doc):
+            raise ValueError(
+                f"E11000 duplicate key error: title '{doc.get('title')}' "
+                f"already exists for user_id '{doc.get('user_id')}'"
+            )
         oid = FakeObjectId()
         d = {"_id": oid, **doc}
         self.docs.append(d)
@@ -106,7 +111,13 @@ class FakeCollection:
                         if actual is None or not re.search(pattern, str(actual), flags):
                             return False
                 else:
-                    return False
+                    # Fail LOUDLY on unsupported operators so PR 2 fixture reuse
+                    # doesn't silently mismatch (e.g., $in / $gte / $ne for the
+                    # JD-requirement-id filter). AR round-1 catch.
+                    raise NotImplementedError(
+                        f"FakeCollection: unsupported query operator(s) {list(v.keys())} "
+                        f"on field '{k}'. Extend _matches if PR 2 needs this."
+                    )
             else:
                 if isinstance(actual, list) and not isinstance(v, list):
                     if v not in actual:
@@ -114,6 +125,13 @@ class FakeCollection:
                 elif actual != v:
                     return False
         return True
+
+    def _is_duplicate(self, doc: dict) -> bool:
+        """Mimic the (user_id, title) unique index — block re-add of same title."""
+        return any(
+            d.get("user_id") == doc.get("user_id") and d.get("title") == doc.get("title")
+            for d in self.docs
+        )
 
     def find_one(self, query: dict) -> dict | None:
         for d in self.docs:
@@ -278,6 +296,67 @@ class TestAddCmd:
         ])
         assert result.exit_code != 0
         assert "required" in result.output
+
+    def test_whitespace_only_title_rejected(self, runner, fake_coll):
+        """AR round-1 blocker: whitespace-only inputs must be stripped + rejected
+        BEFORE write so they don't become unreachable-by-prefix orphans."""
+        result = runner.invoke(stories_group, [
+            "add", "--yes", "--title", "   ", "--action", "A", "--result", "R",
+        ])
+        assert result.exit_code != 0
+        assert "required" in result.output
+        assert "non-empty" in result.output
+        assert len(fake_coll.docs) == 0  # nothing written
+
+    def test_whitespace_only_action_rejected(self, runner, fake_coll):
+        result = runner.invoke(stories_group, [
+            "add", "--yes", "--title", "T", "--action", "  \t  ", "--result", "R",
+        ])
+        assert result.exit_code != 0
+        assert "non-empty" in result.output
+
+    def test_whitespace_only_result_rejected(self, runner, fake_coll):
+        result = runner.invoke(stories_group, [
+            "add", "--yes", "--title", "T", "--action", "A", "--result", " ",
+        ])
+        assert result.exit_code != 0
+        assert "non-empty" in result.output
+
+    def test_padded_inputs_stripped_before_save(self, runner, fake_coll):
+        """Leading/trailing whitespace stripped — exact strings stored."""
+        result = runner.invoke(stories_group, [
+            "add", "--yes",
+            "--title", "  Padded Title  ",
+            "--action", "  did stuff  ",
+            "--result", "  outcome  ",
+            "--tags", "  python , leadership  ",
+        ])
+        assert result.exit_code == 0, result.output
+        d = fake_coll.docs[0]
+        assert d["title"] == "Padded Title"
+        assert d["action"] == "did stuff"
+        assert d["result"] == "outcome"
+        assert d["tags"] == ["python", "leadership"]
+
+    def test_duplicate_title_friendly_error(self, runner, fake_coll):
+        """AR round-1 blocker: the (user_id, title) unique index rejects
+        duplicates. The CLI must catch DuplicateKeyError-like exceptions and
+        surface an actionable message instead of a stack trace."""
+        # Insert one
+        runner.invoke(stories_group, [
+            "add", "--yes", "--title", "Same Name",
+            "--action", "A", "--result", "R",
+        ])
+        assert len(fake_coll.docs) == 1
+        # Try to insert again with the same title
+        result = runner.invoke(stories_group, [
+            "add", "--yes", "--title", "Same Name",
+            "--action", "different", "--result", "different",
+        ])
+        assert result.exit_code != 0
+        assert "already exists" in result.output
+        assert "Same Name" in result.output
+        assert len(fake_coll.docs) == 1  # Second insert blocked
 
     def test_interactive_prompts(self, runner, fake_coll):
         # User types each field at the prompt
@@ -483,3 +562,113 @@ def test_get_collection_exits_when_mongo_unreachable(runner, monkeypatch):
     assert result.exit_code == 1
     assert "MongoDB unreachable" in result.output
     assert "linkright init" in result.output
+
+
+# ── FakeCollection contract — fail loudly on unsupported ops (AR round-1) ──
+
+class TestFakeCollectionRobustness:
+    """The fixture itself must fail loudly when PR 2 uses query operators it
+    doesn't support, so tests don't silently pass with wrong results."""
+
+    def test_unknown_operator_raises(self):
+        coll = FakeCollection()
+        coll.insert_one({"user_id": "local", "title": "X", "tags": ["a"]})
+        # PR 2 might use $in for tag filtering — fixture must holler
+        with pytest.raises(NotImplementedError, match="unsupported query operator"):
+            coll.find_one({"user_id": "local", "tags": {"$in": ["a", "b"]}})
+
+    def test_gte_operator_raises(self):
+        # PR 2 might use $gte for last_used_at filtering
+        coll = FakeCollection()
+        coll.insert_one({"user_id": "local", "title": "X", "use_count": 5})
+        with pytest.raises(NotImplementedError):
+            coll.find_one({"use_count": {"$gte": 3}})
+
+
+# ── retrieve_stars now reads career_stories (AR round-1 wire-up) ──────────
+
+class TestRetrieveStarsReadsCareerStories:
+    """AR round-1 blocker fix: `retrieve_stars()` must surface stories from
+    the new `career_stories` collection so `linkright interview prep` works
+    end-to-end after `linkright stories add`."""
+
+    def test_reads_from_career_stories_primary(self, monkeypatch):
+        from linkright.interview import star_retriever as sr
+
+        career_coll = FakeCollection()
+        career_coll.insert_one({
+            "user_id": "local",
+            "title": "AmEx AML Save",
+            "situation": "Pipeline broke", "task": "Restore in 24h",
+            "action": "Built oracle", "result": "$1.2M saved",
+            "tags": ["python"],
+        })
+        legacy_coll = FakeCollection()  # empty — no legacy data
+
+        fake_db = {"career_stories": career_coll, "user_context": legacy_coll}
+        monkeypatch.setattr("linkright.db.mongo.get_db", lambda: fake_db)
+        monkeypatch.setattr("linkright.db.mongo.ping", lambda: True)
+        # Force vector path to fail → text fallback fires
+        monkeypatch.setattr(sr, "oracle_embed", lambda *a, **kw: [])
+
+        results = sr.retrieve_stars("AML pipeline")
+        assert len(results) == 1
+        assert results[0]["title"] == "AmEx AML Save"
+        # `body` is composed from STAR fields
+        assert "Pipeline broke" in results[0]["body"]
+        assert "Built oracle" in results[0]["body"]
+        assert "$1.2M saved" in results[0]["body"]
+
+    def test_falls_back_to_legacy_user_context_when_career_stories_empty(self, monkeypatch):
+        from linkright.interview import star_retriever as sr
+
+        career_coll = FakeCollection()  # empty — new user
+        legacy_coll = FakeCollection()
+        legacy_coll.insert_one({
+            "user_id": "local", "kind": "story",
+            "title": "Old Story",
+            "body": "Pre-Story-Bank narrative about AML",
+            "tags": ["python"],
+        })
+
+        fake_db = {"career_stories": career_coll, "user_context": legacy_coll}
+        monkeypatch.setattr("linkright.db.mongo.get_db", lambda: fake_db)
+        monkeypatch.setattr("linkright.db.mongo.ping", lambda: True)
+        monkeypatch.setattr(sr, "oracle_embed", lambda *a, **kw: [])
+
+        results = sr.retrieve_stars("AML pipeline")
+        assert len(results) == 1
+        assert results[0]["title"] == "Old Story"
+        assert "Pre-Story-Bank narrative" in results[0]["body"]
+
+    def test_career_stories_take_precedence_over_legacy(self, monkeypatch):
+        """If both have hits, primary (career_stories) wins — legacy ignored."""
+        from linkright.interview import star_retriever as sr
+
+        career_coll = FakeCollection()
+        career_coll.insert_one({
+            "user_id": "local", "title": "New Story",
+            "action": "AML thing", "result": "saved money", "tags": [],
+        })
+        legacy_coll = FakeCollection()
+        legacy_coll.insert_one({
+            "user_id": "local", "kind": "story",
+            "title": "Old Story", "body": "AML narrative", "tags": [],
+        })
+
+        fake_db = {"career_stories": career_coll, "user_context": legacy_coll}
+        monkeypatch.setattr("linkright.db.mongo.get_db", lambda: fake_db)
+        monkeypatch.setattr("linkright.db.mongo.ping", lambda: True)
+        monkeypatch.setattr(sr, "oracle_embed", lambda *a, **kw: [])
+
+        results = sr.retrieve_stars("AML")
+        # Only New Story surfaces — Old Story not pulled because career_stories
+        # had hits
+        titles = [r["title"] for r in results]
+        assert "New Story" in titles
+        assert "Old Story" not in titles
+
+    def test_returns_empty_when_mongo_unreachable(self, monkeypatch):
+        from linkright.interview import star_retriever as sr
+        monkeypatch.setattr("linkright.db.mongo.ping", lambda: False)
+        assert sr.retrieve_stars("anything") == []
