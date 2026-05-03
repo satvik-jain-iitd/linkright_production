@@ -32,7 +32,7 @@ narratives.
   feed + Oracle PG captures. Captures surface in the same view alongside
   scored recommendations; user sees their just-captured Naukri/LinkedIn
   postings without waiting for the next ranking job.
-- **Sprint B trigger on captures** — new captures fire fire-and-forget
+- **Sprint B trigger on captures** — new captures trigger fire-and-forget
   slug auto-discovery on previously-unknown companies (FastAPI BackgroundTasks +
   asyncpg). Companies database grows organically as user browses; no manual
   curation required.

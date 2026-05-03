@@ -197,10 +197,12 @@ Default tailor output is pure B&W. Opt in to company-branded design by piping
 
 ```bash
 linkright resume brand --run-id qa_test_*
-# Expect 3 sequential prompts:
-#   "Primary brand hex (required):"   # type #635BFF
-#   "Secondary brand hex (optional, press Enter to skip):"   # type #00D4FF
-#   "Accent brand hex (optional, press Enter to skip):"      # press Enter
+# Expect 3 sequential prompts (Click appends ": " to each label):
+#   "  Primary brand hex: "                                       # type #635BFF
+#   "  Secondary brand hex (optional, press Enter to skip): "    # type #00D4FF
+#   "  Accent brand hex (optional, press Enter to skip): "       # press Enter
+# (Note: the first prompt has no "(required)" suffix — it is distinguished
+#  from the optional ones by ABSENCE of "(optional, ...)".)
 # Expect: "branded resume:        ~/.linkright/runs/qa_test_*/artifacts/15_final_resume_branded.pdf"
 # Open the PDF: only metric bolds + section dividers should be colored.
 # All other text (headings, body, dates, locations, bullets) MUST be black.
@@ -237,10 +239,10 @@ ls ~/.linkright/runs/qa_test_*/artifacts/15_final_resume.pdf
 
 ```bash
 linkright resume brand --run-id qa_test_* --primary "not-a-hex" --yes
-# Expect: ClickException — "--primary is required when --yes is set"
+# Expect exact error: "Error: --primary is required when --yes is set (no interactive prompt)"
 # (invalid hex normalized to None, then --yes guard fires)
 linkright resume brand --run-id qa_test_* --primary "#GGGGGG" --yes
-# Expect: same — invalid hex chars rejected
+# Expect: same exact error — invalid hex chars normalize to None
 ```
 
 **Pillar 1 PASS = all 8 commands above produce expected output.**
@@ -738,11 +740,11 @@ When all above sections pass + 4 operational-debt items closed (PyPI v0.4.0 uplo
 |---|---|
 | 0 — Pre-flight | 5 min |
 | 1 — Smoke tests | 5 min |
-| 2 — Pillar 1 | 15-20 min |
+| 2 — Pillar 1 (incl. brand-color 2.8a-2.8e) | 20-25 min |
 | 3 — Pillar 2 | 10-15 min |
 | 4 — Sprint D | 15-20 min |
-| 5 — Pillar 3 | 5 min |
+| 5 — Pillar 3 + Story Bank (5.1-5.11) | 8 min |
 | 6 — Pillar 4 | 3 min |
 | 7 — Admin | 5 min (optional) |
 | 8 — Regression | 5 min |
-| **Total** | **~60-90 min** |
+| **Total** | **~75-100 min** |
