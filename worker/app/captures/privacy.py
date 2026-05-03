@@ -18,26 +18,55 @@ from urllib.parse import urlparse
 
 from .models import CaptureIn
 
-# ── Per-source host allowlist (Phase 1 = naukri only) ───────────────────────
+# ── Per-source host allowlist ───────────────────────────────────────────────
+# Naukri + 4 portals + 3 ATS-board families. Each entry's set is the ONLY
+# hosts the server will accept captures from for that source — the CLI/
+# userscript extractor MUST send a `source` whose host is in this set or
+# the capture is rejected with 403.
 ALLOWED_HOSTS: dict[str, set[str]] = {
-    "naukri": {"naukri.com", "www.naukri.com", "m.naukri.com"},
-    # Phase 2:
-    # "linkedin":  {"linkedin.com", "www.linkedin.com", "in.linkedin.com"},
-    # "indeed":    {"indeed.com", "in.indeed.com", "www.indeed.com"},
-    # "wellfound": {"wellfound.com", "www.wellfound.com"},
+    "naukri":     {"naukri.com", "www.naukri.com", "m.naukri.com"},
+    "linkedin":   {"linkedin.com", "www.linkedin.com", "in.linkedin.com"},
+    "indeed":     {"indeed.com", "www.indeed.com", "in.indeed.com"},
+    "wellfound":  {"wellfound.com", "www.wellfound.com"},
+    # ATS boards live on per-tenant subdomains. We allow the canonical hosts
+    # and use ATS-specific path-prefix matching to verify it's actually a job
+    # page (path must contain /jobs/<id> or similar).
+    "greenhouse": {"boards.greenhouse.io", "job-boards.greenhouse.io"},
+    "lever":      {"jobs.lever.co"},
+    "ashby":      {"jobs.ashbyhq.com"},
 }
 
 # ── Path patterns we NEVER capture (across all hosts) ───────────────────────
+# These are matched against `urlparse(url).path` regardless of source. Adding
+# a pattern here blocks it everywhere — safe since these path prefixes are
+# universally "private" semantics (DMs, profile pages, etc.) across portals.
 BLOCKED_PATH_PATTERNS: list[re.Pattern[str]] = [
+    # Generic — apply to all platforms
     re.compile(r"^/messages?(?:/|$)"),
+    re.compile(r"^/messaging(?:/|$)"),     # LinkedIn DMs
     re.compile(r"^/notifications?(?:/|$)"),
     re.compile(r"^/connections?(?:/|$)"),
     re.compile(r"^/inbox(?:/|$)"),
     re.compile(r"^/profile(?:/|$)"),
     re.compile(r"^/myaccount(?:/|$)"),
+    re.compile(r"^/account(?:/|$)"),       # Indeed account settings
+    # Naukri-specific
     re.compile(r"^/m/profile(?:/|$)"),
-    re.compile(r"^/recruit(?:/|$)"),       # Naukri recruiter dashboard pages
-    re.compile(r"^/m/jobseeker"),          # Naukri mobile profile/saved-jobs paths
+    re.compile(r"^/recruit(?:/|$)"),
+    re.compile(r"^/m/jobseeker"),
+    # LinkedIn-specific
+    re.compile(r"^/in/"),                  # LinkedIn user profile (linkedin.com/in/<user>)
+    re.compile(r"^/me(?:/|$)"),            # LinkedIn own-profile shortcut
+    re.compile(r"^/feed(?:/|$)"),          # LinkedIn news feed (not a job page)
+    re.compile(r"^/learning(?:/|$)"),      # LinkedIn Learning courses
+    re.compile(r"^/sales(?:/|$)"),         # LinkedIn Sales Navigator
+    re.compile(r"^/recruiter(?:/|$)"),     # LinkedIn Recruiter dashboard
+    # Indeed-specific
+    re.compile(r"^/applied(?:/|$)"),       # Indeed "Applied" tab
+    re.compile(r"^/saved(?:/|$)"),         # Indeed "Saved jobs" tab
+    re.compile(r"^/career-advice(?:/|$)"), # Indeed articles
+    # Wellfound-specific
+    re.compile(r"^/applications(?:/|$)"),
 ]
 
 # ── Markers signalling private content snuck into jd_text or raw_payload ────

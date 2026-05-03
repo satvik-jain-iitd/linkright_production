@@ -58,15 +58,85 @@ def test_disallowed_host_blocked():
     assert "not in allowlist" in reason
 
 
-def test_phase2_source_blocked_in_phase1():
-    """LinkedIn source is allowed by the model but no host allowlist entry yet → blocked."""
+def test_linkedin_source_with_correct_host_allowed():
+    """LinkedIn was Phase-2 disabled when shipped; the multi-portal expansion
+    PR widened ALLOWED_HOSTS so linkedin.com is now accepted."""
     cap = _make_capture(
         source="linkedin",
-        job_url="https://www.linkedin.com/jobs/view/123",
+        job_url="https://www.linkedin.com/jobs/view/4123456789",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"linkedin should be allowed now, got blocked: {reason}"
+
+
+def test_source_with_wrong_host_still_blocked():
+    """Sending source='linkedin' with a non-linkedin host must still be blocked —
+    the allowlist is per-source, not blanket."""
+    cap = _make_capture(
+        source="linkedin",
+        job_url="https://evil.example.com/jobs/view/123",
     )
     blocked, reason = is_blocked(cap)
     assert blocked
     assert "not in allowlist" in reason
+
+
+def test_indeed_job_url_allowed():
+    cap = _make_capture(
+        source="indeed",
+        job_url="https://www.indeed.com/viewjob?jk=abc123",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"indeed should be allowed, got: {reason}"
+
+
+def test_greenhouse_board_url_allowed():
+    cap = _make_capture(
+        source="greenhouse",
+        job_url="https://boards.greenhouse.io/anthropic/jobs/4123456789",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"greenhouse should be allowed, got: {reason}"
+
+
+def test_lever_board_url_allowed():
+    cap = _make_capture(
+        source="lever",
+        job_url="https://jobs.lever.co/cred/abcd1234-5678-9012-3456-789012345678",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"lever should be allowed, got: {reason}"
+
+
+def test_ashby_board_url_allowed():
+    cap = _make_capture(
+        source="ashby",
+        job_url="https://jobs.ashbyhq.com/openai/abcd1234-5678-9012-3456-789012345678",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"ashby should be allowed, got: {reason}"
+
+
+def test_linkedin_messaging_path_blocked_even_with_valid_host():
+    """LinkedIn DM path matches global blocked-paths regex even though host is allowlisted."""
+    cap = _make_capture(
+        source="linkedin",
+        job_url="https://www.linkedin.com/messaging/threads/abc123",
+    )
+    blocked, reason = is_blocked(cap)
+    assert blocked
+    assert "/messaging" in reason
+
+
+def test_linkedin_in_profile_path_blocked():
+    """LinkedIn user profile /in/<user> blocked by /in/ pattern in BLOCKED_PATH_PATTERNS."""
+    cap = _make_capture(
+        source="linkedin",
+        job_url="https://www.linkedin.com/in/satvik-jain/",
+    )
+    blocked, reason = is_blocked(cap)
+    assert blocked
+    assert "/in/" in reason
 
 
 # ── Path blocklist tests ─────────────────────────────────────────────────────

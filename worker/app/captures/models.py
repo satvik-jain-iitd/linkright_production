@@ -19,7 +19,15 @@ MAX_SALARY_TEXT_LEN  = 200
 MAX_JD_TEXT_LEN      = 50_000     # 50 KB — covers very long JDs without bloating Oracle PG
 MAX_RAW_PAYLOAD_LEN  = 100_000    # 100 KB — debug payload; truncated above this
 
-CaptureSource  = Literal["naukri", "linkedin", "indeed", "wellfound"]
+CaptureSource  = Literal[
+    "naukri",
+    "linkedin",
+    "indeed",
+    "wellfound",
+    "greenhouse",   # boards.greenhouse.io / job-boards.greenhouse.io (per-tenant ATS)
+    "lever",        # jobs.lever.co (per-tenant ATS)
+    "ashby",        # jobs.ashbyhq.com (per-tenant ATS)
+]
 DedupStatus    = Literal["new", "updated", "skipped"]
 CompanyStatus  = Literal["matched_existing", "created_new"]
 
