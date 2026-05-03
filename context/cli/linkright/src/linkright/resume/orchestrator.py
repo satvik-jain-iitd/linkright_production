@@ -3746,11 +3746,14 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     )
 
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
+    # Default = pure black-and-white (Satvik design spec 2026-05-03).
+    # User opts in to color via `linkright resume brand` post-tailor; otherwise
+    # all 3 brand vars stay #000000 → divider gradient resolves to solid black,
+    # metric <b> tags render bold black. No regression for B&W users.
     colors = parsed_p12.get("theme_colors") or {
-        "brand_primary": "#1B2A4A",
-        "brand_secondary": "#2563EB",
-        "brand_tertiary": "#6B7280",
-        "brand_quaternary": "#FFFFFF",
+        "brand_primary": "#000000",
+        "brand_secondary": "#000000",
+        "brand_tertiary": "#000000",
     }
     contact = parsed_p12.get("contact_info", {}) or {}
     # 2026-05-02 — NEW-7: prefer user-confirmed contact (Truth Engine Layer 1)
@@ -4702,10 +4705,9 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     color_override = f"""
 <style>
 :root {{
-  --brand-primary-color: {colors.get('brand_primary', '#1B2A4A')};
-  --brand-secondary-color: {colors.get('brand_secondary', '#2563EB')};
-  --brand-tertiary-color: {colors.get('brand_tertiary', '#6B7280')};
-  --brand-quaternary-color: {colors.get('brand_quaternary', '#FFFFFF')};
+  --brand-primary-color: {colors.get('brand_primary', '#000000')};
+  --brand-secondary-color: {colors.get('brand_secondary', '#000000')};
+  --brand-tertiary-color: {colors.get('brand_tertiary', '#000000')};
   /* 2026-05-02: dynamic header font size from _compute_header_font_size().
      Both .name and .role inherit via --font-size-role: var(--font-size-name). */
   --font-size-name: {_header_size_pt_str} !important;

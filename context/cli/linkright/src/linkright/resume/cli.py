@@ -19,6 +19,7 @@ import click
 
 from ..config import Config
 from ..cli_aliases import AliasedGroup
+from .brand import brand_cmd
 
 
 @click.group(cls=AliasedGroup, name="resume")
@@ -442,9 +443,13 @@ def hypothesis_test_cmd(resume_path, jd_path, hypothesis, variant_env_pairs,
 # Industry pattern: high-frequency commands get short aliases; long names
 # always stay valid. `linkright resume t` ≡ `linkright resume tailor`.
 
+resume_group.add_command(brand_cmd)
+
 resume_group.add_aliases({
     # tailor / t
     "t":      "tailor",
+    # brand / b — optional company-branded design (post-tailor step)
+    "b":      "brand",
     # improve / imp / i
     "imp":    "improve",
     "i":      "improve",
