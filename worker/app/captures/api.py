@@ -71,7 +71,14 @@ async def post_capture(
     if not expected:
         logger.error("captures: LINKRIGHT_CAPTURE_KEY not configured on server")
         raise HTTPException(status_code=503, detail="server misconfigured: capture key not set")
-    if not secrets.compare_digest(x_linkright_capture_key, expected):
+    # secrets.compare_digest raises TypeError on non-ASCII codepoints (HTTP
+    # headers are Latin-1 decoded by Starlette, so a malicious 0xFF byte in the
+    # header would otherwise produce an unhandled 500 instead of a clean 401).
+    try:
+        match = secrets.compare_digest(x_linkright_capture_key, expected)
+    except TypeError:
+        match = False
+    if not match:
         raise HTTPException(status_code=401, detail="invalid or missing capture key")
 
     # 2. Rate limit. tenant_id derived from key prefix so limiter buckets

@@ -99,6 +99,17 @@ async def test_missing_server_key_returns_503(monkeypatch):
     assert "not set" in str(excinfo.value.detail)
 
 
+@pytest.mark.asyncio
+async def test_non_ascii_capture_key_returns_401_not_500():
+    """Regression: secrets.compare_digest crashes on non-ASCII codepoints —
+    must be caught and surfaced as a clean 401, not bubbled up as a 500."""
+    bad_key = "ÿ" + "garbage"  # leading non-ASCII byte (Latin-1 0xFF)
+    with pytest.raises(HTTPException) as excinfo:
+        await post_capture(_make_capture(), bad_key)
+    assert excinfo.value.status_code == 401, \
+        "non-ASCII header byte must produce 401, not bubble up as 500"
+
+
 # ── Privacy filter (via handler) ─────────────────────────────────────────────
 
 @pytest.mark.asyncio
