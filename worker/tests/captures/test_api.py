@@ -202,8 +202,9 @@ async def test_schedule_slug_discovery_handles_no_match_silently():
 
     with patch("app.oracle.slug_discovery.discover_ats",
                new=AsyncMock(return_value=fake_result)):
-        # Must complete without raising
-        await schedule_slug_discovery("xyz" * 14, "UnknownCo", None)
+        # Must complete without raising. canonical_id must be 40 chars to match
+        # production sha256(...).hexdigest()[:40] semantics (FK to companies).
+        await schedule_slug_discovery("a" * 40, "UnknownCo", None)
 
 
 @pytest.mark.asyncio
@@ -214,5 +215,6 @@ async def test_schedule_slug_discovery_swallows_exceptions():
 
     with patch("app.oracle.slug_discovery.discover_ats",
                new=AsyncMock(side_effect=RuntimeError("simulated network failure"))):
-        # Must complete without raising — exception is logged, not propagated
-        await schedule_slug_discovery("abc" * 14, "FlakyCo", "https://flakyco.com")
+        # Must complete without raising — exception is logged, not propagated.
+        # 40-char canonical_id matches production sha256(...).hexdigest()[:40].
+        await schedule_slug_discovery("b" * 40, "FlakyCo", "https://flakyco.com")

@@ -191,10 +191,16 @@ async def schedule_slug_discovery(
     ats_provider=NULL, identical to today's behavior, and the Layer 4 self-heal
     cron (when wired) would retry on its next nightly run.
 
-    Idempotent: if discovery races (e.g., user browses two jobs from the same
-    new company simultaneously), Sprint B's `_persist_result` upserts on
-    `(company_canonical_id, attempt_number)` so duplicate attempts produce
-    one extra slug_discovery_cache row, not corruption.
+    Race semantics (when user browses two jobs from the same new company
+    in the same second and BackgroundTasks fires twice):
+      - Both tasks compute the same ``next_attempt = MAX(attempt_number) + 1``
+        (= 1 for a brand-new company; both see no prior rows).
+      - Both INSERT into slug_discovery_cache with attempt_number=1.
+      - PRIMARY KEY (company_canonical_id, attempt_number) → first writer wins.
+      - Second task hits ``ON CONFLICT DO NOTHING`` and silently no-ops.
+      - First-completed discovery's result is preserved; second's discarded.
+      - Worse-case loss: one task's HTTP work to greenhouse/lever/ashby is
+        wasted. NEVER data corruption.
     """
     try:
         from ..oracle.slug_discovery import discover_ats

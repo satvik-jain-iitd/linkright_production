@@ -518,15 +518,16 @@ async def _persist_result(
                     company_canonical_id, attempt_number, ats_provider, ats_slug,
                     http_status, jobs_count, source_tier, evidence_url, notes
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-                ON CONFLICT (company_canonical_id, attempt_number) DO UPDATE SET
-                    ats_provider = EXCLUDED.ats_provider,
-                    ats_slug = EXCLUDED.ats_slug,
-                    http_status = EXCLUDED.http_status,
-                    jobs_count = EXCLUDED.jobs_count,
-                    source_tier = EXCLUDED.source_tier,
-                    evidence_url = EXCLUDED.evidence_url,
-                    notes = EXCLUDED.notes
+                ON CONFLICT (company_canonical_id, attempt_number) DO NOTHING
                 """,
+                # Race semantics: when two concurrent discovery tasks both compute
+                # the same `next_attempt` (e.g. PR #59's BackgroundTasks fire two
+                # tasks for the same new-company race in `_lookup_or_create_company`),
+                # the FIRST writer wins; the SECOND silently NO-OPs. This prevents
+                # a slower-second-task with a worse result (e.g. tier3 fallback
+                # while the first found via tier1) from overwriting the first
+                # successful discovery. Worse-case loss: one wasted task; never
+                # data corruption.
                 cid,
                 next_attempt,
                 result.ats_provider,
