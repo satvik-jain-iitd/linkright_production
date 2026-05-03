@@ -182,6 +182,71 @@ class TestMarkdownToBrandedHtml:
         assert "<b>40%</b>" in out
         # Brand var set on body via CSS — bolds inherit
         assert "--brand-primary-color: #635BFF" in out
+        # CRITICAL (AR round-2 blocker fix): assert the CSS rule that wires
+        # <b> to the brand color. Without this rule, bold renders black even
+        # when a non-black brand color is set. Test must fail if the rule
+        # is removed from the CSS template in brand.py.
+        assert "color: var(--brand-primary-color)" in out
+        assert "b {" in out  # rule selector exists
+
+    # ── Metric auto-bolding (AR round-2 blocker fix) ─────────────────────
+
+    def test_metric_auto_bolding_in_plain_prose(self):
+        """Real CL pipeline produces prose without `**`. Brand command must
+        auto-detect metric tokens (with units) and bold them so the brand
+        color rule fires."""
+        md = "I drove $1.2M in savings and 40% engagement growth."
+        out = markdown_to_branded_html(md, "#635BFF")
+        assert "<b>$1.2M</b>" in out
+        assert "<b>40%</b>" in out
+
+    def test_metric_auto_bolding_skips_bare_numbers(self):
+        """Standalone digit runs (years, team sizes, page numbers) must NOT
+        be auto-bolded. Only tokens with metric units ($, %, K/M/B, x, etc.)."""
+        md = "I joined Anthropic in 2024 working on 5 different teams."
+        out = markdown_to_branded_html(md, "#635BFF")
+        assert "<b>2024</b>" not in out
+        assert "<b>5</b>" not in out
+        # Verify 2024 and 5 still appear (just not bolded)
+        assert "2024" in out
+        assert "5" in out
+
+    def test_metric_auto_bolding_preserves_existing_bold(self):
+        """Already-bolded segments must not be re-wrapped (would produce
+        nested <b><b> which is invalid HTML)."""
+        md = "Already **emphasized**. Plus $1.2M raw token."
+        out = markdown_to_branded_html(md, "#635BFF")
+        assert "<b>emphasized</b>" in out
+        assert "<b>$1.2M</b>" in out
+        # No double-wrapping
+        assert "<b><b>" not in out
+        # The pre-bolded `$1.2M` form should not be double-wrapped if it appears in **
+        md2 = "Already **$1.2M** prebold. Plus $50K raw."
+        out2 = markdown_to_branded_html(md2, "#635BFF")
+        assert "<b>$1.2M</b>" in out2
+        assert "<b>$50K</b>" in out2
+        assert "<b><b>" not in out2
+
+    def test_metric_auto_bolding_handles_diverse_units(self):
+        """Spec-supported metric units: $, %, K/M/B, x, ratio, time, +"""
+        md = (
+            "$2.5M ARR. 99% uptime. 100K users. 10x growth. 2,137:1 ratio. "
+            "100+ deals. 6 months runway. 3 years experience."
+        )
+        out = markdown_to_branded_html(md, "#635BFF")
+        for token in ["$2.5M", "99%", "100K", "10x", "2,137:1", "100+",
+                      "6 months", "3 years"]:
+            assert f"<b>{token}</b>" in out, f"missing bold on {token}"
+
+    def test_metric_auto_bolding_skips_quarter_codes(self):
+        """`Q4`, `S3`, `v2` etc. (letter-prefixed) must not be bolded."""
+        md = "Shipped in Q4. Worked on S3 buckets. Rolled out v2 release."
+        out = markdown_to_branded_html(md, "#635BFF")
+        # The `4`, `3`, `2` are preceded by letters → not metrics
+        assert "<b>Q4</b>" not in out
+        assert "<b>4</b>" not in out
+        assert "<b>3</b>" not in out
+        assert "<b>2</b>" not in out
 
     def test_html_special_chars_escaped(self):
         # `<script>` must NOT appear unescaped in output (XSS guard)

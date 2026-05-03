@@ -92,6 +92,50 @@ def apply_brand_to_html(
 
 _BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
 
+# Match metric tokens with EXPLICIT units only — $, %, K/M/B, x, ratio, time unit, +.
+# Stricter than orchestrator's `_METRIC_REBOLD_RE` (which also matches bare digits)
+# because cover letter prose contains many non-metric numbers (years, team sizes,
+# addresses) that should NOT be auto-bolded. Reviewer-mandated guard against false
+# positives like "joined in 2024" or "led 5 teams".
+_METRIC_AUTO_BOLD_RE = re.compile(
+    r"""
+    (?<![A-Za-z*])                   # not preceded by letter or `*` (avoid Q4, S3, **already-bold**)
+    (?:
+        \$\d+(?:[.,]\d+)*[KMB]?      # $1.2M, $50K, $100
+      | \d+(?:[.,]\d+)*\s*%          # 40%, 99.5%
+      | \d+(?:[.,]\d+)*[KMB](?!\w)   # 100K, 1.5M (no `$`)
+      | \d+(?:[.,]\d+)*x(?!\w)       # 2x, 10x
+      | \d+(?:,\d{3})*:\d+(?:,\d{3})*  # ratios — 2,137:1, 100:50
+      | \d+\+                        # 100+, 10+
+      | \d+\s*(?:hrs?|hours?|mins?|minutes?|days?|weeks?|months?|years?|wks?|yrs?)(?!\w)  # time units
+    )
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def _bold_metrics_in_markdown(md: str) -> str:
+    """Auto-wrap metric tokens in `**`, preserving existing `**bold**` segments.
+
+    Real cover-letter pipeline produces plain prose — the LLM is told "no
+    bullets, only flowing paragraphs" and is never instructed to bold metrics.
+    Without this pre-processor, the brand color rule on `<b>` would never
+    fire on real CL runs. Reviewer-blocker fix.
+
+    Strategy: split on `**...**` boundaries (preserving them), then auto-bold
+    metric tokens only in the non-bolded segments. Avoids double-wrapping.
+    """
+    parts = re.split(r"(\*\*[^*]+?\*\*)", md)
+    result: list[str] = []
+    for part in parts:
+        if part.startswith("**") and part.endswith("**"):
+            result.append(part)
+        else:
+            result.append(
+                _METRIC_AUTO_BOLD_RE.sub(lambda m: f"**{m.group(0)}**", part)
+            )
+    return "".join(result)
+
 
 def markdown_to_branded_html(md_text: str, primary: str) -> str:
     """Convert cover letter markdown to a minimal branded HTML page.
@@ -100,23 +144,28 @@ def markdown_to_branded_html(md_text: str, primary: str) -> str:
     surface is bolded metrics within paragraphs (matching the resume's
     bullet-metric rule). All other text stays black.
 
-    Markdown handled:
-    - Paragraphs (separated by blank lines)
-    - Bold via `**text**` → `<b>text</b>` (gets primary color)
-    - Hard line breaks within a paragraph (preserved as `<br>`)
-    - HTML special chars escaped
+    Pipeline:
+    1. Auto-wrap metric tokens (`$1.2M`, `40%`, `2,137:1`, etc.) in `**` —
+       the real CL LLM does not emit `**`, so without this step bold-coloring
+       would never fire. Existing `**bold**` segments are preserved.
+    2. Split on blank lines into paragraphs.
+    3. HTML-escape each paragraph (XSS guard).
+    4. Replace `**...**` → `<b>...</b>` (CSS rule colors `<b>` as primary).
+    5. Replace soft newlines with `<br>`.
 
     Lists, headers, links etc. are NOT supported — CLs do not need them.
     If the LLM produces `# Header` or `- bullet`, they render as plain text.
     """
+    md_with_bold_metrics = _bold_metrics_in_markdown(md_text)
+
     paragraphs: list[str] = []
-    for block in re.split(r"\n\s*\n", md_text.strip()):
+    for block in re.split(r"\n\s*\n", md_with_bold_metrics.strip()):
         block = block.strip()
         if not block:
             continue
         # Escape HTML special chars FIRST, then re-introduce <b> tags
         escaped = _html.escape(block)
-        # Now replace literal `**...**` (which became `**...**` after escape) with <b>
+        # Now replace literal `**...**` (which survived escape — `*` is not HTML special)
         body = _BOLD_RE.sub(r"<b>\1</b>", escaped)
         # Soft newlines within a paragraph → <br>
         body = body.replace("\n", "<br>\n")
