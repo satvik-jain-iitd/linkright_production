@@ -3,7 +3,7 @@
 > **Date**: 2026-05-03  
 > **Audience**: Satvik Jain (VPS owner)  
 > **Goal**: Provision a production-ready Postgres 16 instance on Oracle ARM VPS,
-> apply 4 migrations, seed 31 companies, return `ORACLE_PG_URL` to link LinkRight worker + CLI.
+> apply 5 migrations, seed 81 companies, return `ORACLE_PG_URL` to link LinkRight worker + CLI.
 
 ---
 
@@ -311,7 +311,7 @@ Add:
 | `FATAL: password authentication failed` | Wrong password | Step 4 — recreate user |
 | `SSL: wrong version number` | Client sending plain TCP to SSL port | Add `ssl=require` to connection params |
 | `extension "vector" does not exist` | pgvector not installed | Step 2 |
-| Smoke test: `Seed count 0 < 31` | Migration 004 not applied | Step 10 |
+| Smoke test: `Seed count 0 < 81` | Migration 004 or 005 not applied | Step 10 |
 | `asyncpg.InvalidCatalogNameError: database "linkright_jobs" does not exist` | DB name typo in URL | Step 4 |
 
 ---
