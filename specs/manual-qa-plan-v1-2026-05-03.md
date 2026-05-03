@@ -188,7 +188,62 @@ linkright cl -j .../jd.md
 # Verify: references your actual project context, has a "why this company" paragraph
 ```
 
-**Pillar 1 PASS = all 7 commands above produce expected output.**
+### 2.8 Brand-color resume + cover letter (PR #61, optional)
+
+Default tailor output is pure B&W. Opt in to company-branded design by piping
+1-3 hex codes via the new `linkright resume brand` subcommand.
+
+#### 2.8a Interactive (3 prompts)
+
+```bash
+linkright resume brand --run-id qa_test_*
+# Expect 3 sequential prompts:
+#   "Primary brand hex (required):"   # type #635BFF
+#   "Secondary brand hex (optional, press Enter to skip):"   # type #00D4FF
+#   "Accent brand hex (optional, press Enter to skip):"      # press Enter
+# Expect: "branded resume:        ~/.linkright/runs/qa_test_*/artifacts/15_final_resume_branded.pdf"
+# Open the PDF: only metric bolds + section dividers should be colored.
+# All other text (headings, body, dates, locations, bullets) MUST be black.
+```
+
+#### 2.8b Power-user flags
+
+```bash
+linkright resume brand --run-id qa_test_* --primary "#635BFF" --secondary "#00D4FF" --accent "#FF6B6B" --yes
+# Expect: same output as 2.8a but no prompts
+```
+
+#### 2.8c Cover letter branded too
+
+```bash
+linkright resume brand --run-id qa_test_* \
+    --primary "#635BFF" --yes \
+    --cover-letter ~/.linkright/runs/qa_test_*/artifacts/cover_letter.md
+# Expect: "branded cover letter:  ~/.linkright/runs/qa_test_*/artifacts/cover_letter_branded.pdf"
+# Open the CL PDF: bolded metrics ($1.2M, 40%, etc.) should be in primary color.
+# All other text remains black on white.
+```
+
+#### 2.8d B&W default unchanged
+
+```bash
+ls ~/.linkright/runs/qa_test_*/artifacts/15_final_resume.pdf
+# This is the ORIGINAL (B&W) PDF from `linkright resume tailor`. Open it.
+# Expect: pure black text on pure white, no navy/blue tints anywhere.
+# Verifies: brand subcommand does NOT modify the original — branded version is a separate file.
+```
+
+#### 2.8e Hex validation
+
+```bash
+linkright resume brand --run-id qa_test_* --primary "not-a-hex" --yes
+# Expect: ClickException — "--primary is required when --yes is set"
+# (invalid hex normalized to None, then --yes guard fires)
+linkright resume brand --run-id qa_test_* --primary "#GGGGGG" --yes
+# Expect: same — invalid hex chars rejected
+```
+
+**Pillar 1 PASS = all 8 commands above produce expected output.**
 
 ---
 
