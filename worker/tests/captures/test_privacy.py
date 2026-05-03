@@ -156,11 +156,120 @@ def test_linkedin_in_profile_path_blocked():
         "/m/jobseeker/profile",
     ],
 )
-def test_blocked_paths(blocked_path):
+def test_naukri_blocked_paths(blocked_path):
     cap = _make_capture(job_url=f"https://www.naukri.com{blocked_path}")
     blocked, reason = is_blocked(cap)
-    assert blocked, f"path {blocked_path!r} should be blocked but wasn't"
+    assert blocked, f"path {blocked_path!r} should be blocked for naukri but wasn't"
     assert "blocklist" in reason
+
+
+# ── LinkedIn-specific blocked paths (per-source dict) ───────────────────────
+
+@pytest.mark.parametrize(
+    "blocked_path",
+    [
+        "/messaging",
+        "/messaging/threads/abc",
+        "/in/satvik-jain",
+        "/me",
+        "/me/skills",
+        "/feed",
+        "/feed/update/urn:li:activity:123",
+        "/learning",
+        "/learning/courses/python",
+        "/sales",
+        "/recruiter",
+    ],
+)
+def test_linkedin_blocked_paths(blocked_path):
+    cap = _make_capture(source="linkedin", job_url=f"https://www.linkedin.com{blocked_path}")
+    blocked, reason = is_blocked(cap)
+    assert blocked, f"path {blocked_path!r} should be blocked for linkedin but wasn't"
+    assert "blocklist" in reason
+
+
+# ── Indeed-specific blocked paths ───────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "blocked_path",
+    [
+        "/account",
+        "/account/settings",
+        "/applied",
+        "/saved",
+        "/saved/jobs",
+        "/career-advice",
+        "/career-advice/article-slug",
+    ],
+)
+def test_indeed_blocked_paths(blocked_path):
+    cap = _make_capture(source="indeed", job_url=f"https://www.indeed.com{blocked_path}")
+    blocked, reason = is_blocked(cap)
+    assert blocked, f"path {blocked_path!r} should be blocked for indeed but wasn't"
+    assert "blocklist" in reason
+
+
+# ── Wellfound-specific blocked paths ────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "blocked_path",
+    ["/messages", "/profile", "/applications", "/applications/abc"],
+)
+def test_wellfound_blocked_paths(blocked_path):
+    cap = _make_capture(source="wellfound", job_url=f"https://wellfound.com{blocked_path}")
+    blocked, reason = is_blocked(cap)
+    assert blocked, f"path {blocked_path!r} should be blocked for wellfound but wasn't"
+
+
+# ── ATS sources MUST be exempt from per-source path filter ──────────────────
+# This is the regression-guard for the AR-flagged blocker: previously the path
+# filter was global, so e.g. `jobs.lever.co/sales/<uuid>` was 403'd because
+# `/sales` was a LinkedIn-private regex. ATS tenant slugs are arbitrary.
+
+@pytest.mark.parametrize(
+    "tenant_slug",
+    [
+        "sales", "learning", "recruiter", "applications", "applied",
+        "saved", "account", "messaging", "feed", "profile", "in",
+    ],
+)
+def test_lever_tenant_slug_collision_NOT_blocked(tenant_slug):
+    """A Lever tenant whose slug matches a LinkedIn/Indeed private path must
+    still be allowed — the path filter is per-source, ATS sources have no
+    entry, so `^/sales/<uuid>` etc. flow through cleanly."""
+    cap = _make_capture(
+        source="lever",
+        job_url=f"https://jobs.lever.co/{tenant_slug}/abcd1234-5678-9012-3456-789012345678",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, (
+        f"Lever tenant /{tenant_slug}/<uuid> wrongly blocked: {reason}.\n"
+        f"This is the AR-flagged regression — BLOCKED_PATH_PATTERNS is now per-source\n"
+        f"and ATS sources (lever/ashby/greenhouse) MUST NOT have global path filters."
+    )
+
+
+@pytest.mark.parametrize(
+    "tenant_slug",
+    ["sales", "learning", "applications", "messaging"],
+)
+def test_ashby_tenant_slug_collision_NOT_blocked(tenant_slug):
+    cap = _make_capture(
+        source="ashby",
+        job_url=f"https://jobs.ashbyhq.com/{tenant_slug}/abcd1234-5678-9012-3456-789012345678",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"Ashby tenant /{tenant_slug}/<uuid> wrongly blocked: {reason}"
+
+
+def test_greenhouse_tenant_named_account_not_blocked():
+    """Even if a Greenhouse tenant slug literally matches a private path name."""
+    cap = _make_capture(
+        source="greenhouse",
+        job_url="https://boards.greenhouse.io/account/jobs/4123456789",
+    )
+    blocked, reason = is_blocked(cap)
+    assert not blocked, f"Greenhouse tenant /account/jobs/<id> wrongly blocked: {reason}"
 
 
 def test_normal_job_listing_path_passes():

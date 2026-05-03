@@ -36,38 +36,56 @@ ALLOWED_HOSTS: dict[str, set[str]] = {
     "ashby":      {"jobs.ashbyhq.com"},
 }
 
-# ── Path patterns we NEVER capture (across all hosts) ───────────────────────
-# These are matched against `urlparse(url).path` regardless of source. Adding
-# a pattern here blocks it everywhere — safe since these path prefixes are
-# universally "private" semantics (DMs, profile pages, etc.) across portals.
-BLOCKED_PATH_PATTERNS: list[re.Pattern[str]] = [
-    # Generic — apply to all platforms
-    re.compile(r"^/messages?(?:/|$)"),
-    re.compile(r"^/messaging(?:/|$)"),     # LinkedIn DMs
-    re.compile(r"^/notifications?(?:/|$)"),
-    re.compile(r"^/connections?(?:/|$)"),
-    re.compile(r"^/inbox(?:/|$)"),
-    re.compile(r"^/profile(?:/|$)"),
-    re.compile(r"^/myaccount(?:/|$)"),
-    re.compile(r"^/account(?:/|$)"),       # Indeed account settings
-    # Naukri-specific
-    re.compile(r"^/m/profile(?:/|$)"),
-    re.compile(r"^/recruit(?:/|$)"),
-    re.compile(r"^/m/jobseeker"),
-    # LinkedIn-specific
-    re.compile(r"^/in/"),                  # LinkedIn user profile (linkedin.com/in/<user>)
-    re.compile(r"^/me(?:/|$)"),            # LinkedIn own-profile shortcut
-    re.compile(r"^/feed(?:/|$)"),          # LinkedIn news feed (not a job page)
-    re.compile(r"^/learning(?:/|$)"),      # LinkedIn Learning courses
-    re.compile(r"^/sales(?:/|$)"),         # LinkedIn Sales Navigator
-    re.compile(r"^/recruiter(?:/|$)"),     # LinkedIn Recruiter dashboard
-    # Indeed-specific
-    re.compile(r"^/applied(?:/|$)"),       # Indeed "Applied" tab
-    re.compile(r"^/saved(?:/|$)"),         # Indeed "Saved jobs" tab
-    re.compile(r"^/career-advice(?:/|$)"), # Indeed articles
-    # Wellfound-specific
-    re.compile(r"^/applications(?:/|$)"),
-]
+# ── Per-source blocked path patterns ────────────────────────────────────────
+# IMPORTANT: these are now PER-SOURCE, not global. The earlier global list
+# silently 403'd ATS captures whose tenant slug collided with a generic
+# "private path" name (e.g. `jobs.lever.co/sales/<uuid>` was blocked because
+# `^/sales` was a global LinkedIn-private regex). ATS boards have NO separate
+# private path space — every URL on them is `/<tenant>/<id>` style — so they
+# are intentionally ABSENT from this dict (= no path-filter for ATS sources;
+# host allowlist + URL pattern in the extractor is sufficient).
+BLOCKED_PATH_PATTERNS_BY_SOURCE: dict[str, list[re.Pattern[str]]] = {
+    "naukri": [
+        re.compile(r"^/messages?(?:/|$)"),
+        re.compile(r"^/notifications?(?:/|$)"),
+        re.compile(r"^/connections?(?:/|$)"),
+        re.compile(r"^/inbox(?:/|$)"),
+        re.compile(r"^/profile(?:/|$)"),
+        re.compile(r"^/myaccount(?:/|$)"),
+        re.compile(r"^/m/profile(?:/|$)"),
+        re.compile(r"^/recruit(?:/|$)"),       # Naukri recruiter dashboard
+        re.compile(r"^/m/jobseeker"),          # Naukri mobile profile/saved-jobs
+    ],
+    "linkedin": [
+        re.compile(r"^/messages?(?:/|$)"),
+        re.compile(r"^/messaging(?:/|$)"),     # LinkedIn DMs
+        re.compile(r"^/notifications?(?:/|$)"),
+        re.compile(r"^/connections?(?:/|$)"),
+        re.compile(r"^/in/"),                  # LinkedIn user profile (linkedin.com/in/<user>)
+        re.compile(r"^/me(?:/|$)"),            # LinkedIn own-profile shortcut
+        re.compile(r"^/feed(?:/|$)"),          # LinkedIn news feed
+        re.compile(r"^/learning(?:/|$)"),      # LinkedIn Learning courses
+        re.compile(r"^/sales(?:/|$)"),         # LinkedIn Sales Navigator
+        re.compile(r"^/recruiter(?:/|$)"),     # LinkedIn Recruiter dashboard
+    ],
+    "indeed": [
+        re.compile(r"^/messages?(?:/|$)"),
+        re.compile(r"^/account(?:/|$)"),       # Indeed account settings
+        re.compile(r"^/myaccount(?:/|$)"),
+        re.compile(r"^/applied(?:/|$)"),       # Indeed "Applied" tab
+        re.compile(r"^/saved(?:/|$)"),         # Indeed "Saved jobs" tab
+        re.compile(r"^/career-advice(?:/|$)"), # Indeed articles
+        re.compile(r"^/profile(?:/|$)"),
+    ],
+    "wellfound": [
+        re.compile(r"^/messages?(?:/|$)"),
+        re.compile(r"^/profile(?:/|$)"),
+        re.compile(r"^/applications(?:/|$)"),
+    ],
+    # ATS sources (greenhouse/lever/ashby) intentionally ABSENT — see comment
+    # above. Tenant slugs are arbitrary; a global path filter would false-
+    # positive on tenants like `jobs.lever.co/sales/<uuid>`.
+}
 
 # ── Markers signalling private content snuck into jd_text or raw_payload ────
 PRIVATE_CONTENT_MARKERS: list[str] = [
@@ -93,11 +111,13 @@ def is_blocked(capture: CaptureIn) -> tuple[bool, str]:
     if host not in allowed:
         return True, f"host {host!r} not in allowlist for source={capture.source!r}"
 
-    # Path blocklist
+    # Path blocklist — per-source. ATS sources (greenhouse/lever/ashby) have
+    # no entry, so the loop runs zero iterations for them — host-allowlist +
+    # extractor URL-pattern are sufficient for ATS boards.
     path = parsed.path or ""
-    for pattern in BLOCKED_PATH_PATTERNS:
+    for pattern in BLOCKED_PATH_PATTERNS_BY_SOURCE.get(capture.source, []):
         if pattern.search(path):
-            return True, f"path {path!r} matches blocklist pattern {pattern.pattern!r}"
+            return True, f"path {path!r} matches blocklist pattern {pattern.pattern!r} for source={capture.source!r}"
 
     # Content markers in jd_text
     if capture.jd_text:

@@ -145,18 +145,34 @@ def test_ashby_tenant_landing_not_detected():
 
 # ── Source-name contract: extractor sources MUST match server CaptureSource ─
 
-def test_extractor_sources_match_server_capture_source_literal():
-    """Every PORTAL_PATTERNS key MUST be a value in the server's CaptureSource
-    Literal in worker/app/captures/models.py — drift = silent 403 from server.
+def test_extractor_sources_match_expected_set():
+    """Asserts PORTAL_PATTERNS keys equal a HARDCODED snapshot of the server's
+    CaptureSource Literal as of 2026-05-03.
+
+    KNOWN LIMITATION (acknowledged tradeoff): this is one-directional — if the
+    server's CaptureSource Literal in worker/app/captures/models.py grows in a
+    future commit (e.g. adds 'glassdoor') without updating EXPECTED_SOURCES
+    here, this test will still PASS even though the CLI doesn't have the new
+    source. Cross-repo schema validation needs a shared sources module that
+    both worker and CLI import — out of scope for the multi-portal expansion
+    PR; tracked as follow-up.
+
+    What this test DOES catch reliably:
+      - Someone adds a key to PORTAL_PATTERNS that isn't in EXPECTED_SOURCES
+        → test fails (`extra` non-empty) → forces a coordinated update
+      - Someone removes a key from PORTAL_PATTERNS without updating tests
+        → test fails (`missing` non-empty)
     """
     from linkright.watch.extractor import PORTAL_PATTERNS
+    # Hardcoded snapshot — must be kept in sync with
+    # worker/app/captures/models.py:CaptureSource manually for now.
     EXPECTED_SOURCES = {"naukri", "linkedin", "indeed", "wellfound",
                         "greenhouse", "lever", "ashby"}
     keys = set(PORTAL_PATTERNS.keys())
     extra = keys - EXPECTED_SOURCES
     missing = EXPECTED_SOURCES - keys
-    assert not extra, f"PORTAL_PATTERNS has sources NOT in server CaptureSource: {extra}"
-    assert not missing, f"PORTAL_PATTERNS missing sources from server Literal: {missing}"
+    assert not extra, f"PORTAL_PATTERNS has sources NOT in EXPECTED_SOURCES snapshot: {extra}"
+    assert not missing, f"PORTAL_PATTERNS missing sources from EXPECTED_SOURCES snapshot: {missing}"
 
 
 # ── Junk + edge cases ────────────────────────────────────────────────────────
