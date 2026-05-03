@@ -109,3 +109,9 @@ dev = [
 where = ["src", "."]
 include = ["linkright*", "harness*"]
 exclude = ["harness.runs*", "harness.test*", "tests*"]
+
+[tool.pytest.ini_options]
+# Ensure pytest collection imports the worktree's src/linkright/ before any
+# stale editable install in the active Python env. Without this, tests
+# silently load a different worktree's package and miss new code.
+pythonpath = ["src"]
