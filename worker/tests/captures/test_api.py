@@ -156,3 +156,65 @@ async def test_persist_exception_becomes_500():
             await post_capture(_make_capture(), VALID_KEY)
     assert excinfo.value.status_code == 500
     assert "persist failed" in str(excinfo.value.detail)
+
+
+# ── Sprint B trigger: schedule_slug_discovery ──────────────────────────────
+
+@pytest.mark.asyncio
+async def test_schedule_slug_discovery_calls_discover_ats_on_success():
+    """Background task: success path — discover_ats invoked with the right args."""
+    from app.captures.persist import schedule_slug_discovery
+    from app.oracle.slug_discovery import SlugDiscoveryResult
+
+    fake_result = SlugDiscoveryResult(company_name="TestCo")
+    fake_result.success = True
+    fake_result.ats_provider = "greenhouse"
+    fake_result.ats_slug = "testco"
+    fake_result.jobs_count = 42
+    fake_result.source_tier = "tier1_html"
+
+    with patch("app.oracle.slug_discovery.discover_ats",
+               new=AsyncMock(return_value=fake_result)) as mock_discover:
+        await schedule_slug_discovery(
+            canonical_id="abc123" * 6 + "abcd",  # 40-char canonical_id
+            company_name="TestCo",
+            company_website="https://testco.com",
+        )
+
+    mock_discover.assert_called_once()
+    call_kwargs = mock_discover.call_args.kwargs
+    assert call_kwargs["company_name"] == "TestCo"
+    assert call_kwargs["website"] == "https://testco.com"
+    assert call_kwargs["persist"] is True
+    assert call_kwargs["company_canonical_id"] == "abc123" * 6 + "abcd"
+
+
+@pytest.mark.asyncio
+async def test_schedule_slug_discovery_handles_no_match_silently():
+    """When discover_ats returns success=False (all 3 tiers failed), the
+    background task logs + returns. NO exception bubbles up."""
+    from app.captures.persist import schedule_slug_discovery
+    from app.oracle.slug_discovery import SlugDiscoveryResult
+
+    fake_result = SlugDiscoveryResult(company_name="UnknownCo")
+    fake_result.success = False
+    fake_result.notes = "all 3 tiers failed"
+
+    with patch("app.oracle.slug_discovery.discover_ats",
+               new=AsyncMock(return_value=fake_result)):
+        # Must complete without raising. canonical_id must be 40 chars to match
+        # production sha256(...).hexdigest()[:40] semantics (FK to companies).
+        await schedule_slug_discovery("a" * 40, "UnknownCo", None)
+
+
+@pytest.mark.asyncio
+async def test_schedule_slug_discovery_swallows_exceptions():
+    """Unexpected error in discover_ats (network, etc.) MUST NOT bubble up —
+    user's capture already succeeded, this is best-effort enrichment."""
+    from app.captures.persist import schedule_slug_discovery
+
+    with patch("app.oracle.slug_discovery.discover_ats",
+               new=AsyncMock(side_effect=RuntimeError("simulated network failure"))):
+        # Must complete without raising — exception is logged, not propagated.
+        # 40-char canonical_id matches production sha256(...).hexdigest()[:40].
+        await schedule_slug_discovery("b" * 40, "FlakyCo", "https://flakyco.com")

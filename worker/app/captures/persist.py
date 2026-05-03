@@ -171,3 +171,66 @@ async def persist_capture(capture: CaptureIn) -> CaptureOut:
         company_status=company_status,
         notes=None,
     )
+
+
+# ── Sprint B trigger: auto-discover ATS slug for newly-created companies ────
+async def schedule_slug_discovery(
+    canonical_id: str,
+    company_name: str,
+    company_website: Optional[str],
+) -> None:
+    """Background task: fire Sprint B's 3-tier slug auto-discovery for a
+    newly-captured company. Called from FastAPI BackgroundTasks AFTER the
+    capture POST returned 201, so the user's request is unaffected by
+    discovery latency.
+
+    The capture itself already succeeded (companies row + job_discoveries row
+    persisted with NULL ats_provider). This task does best-effort enrichment:
+    on success, the row is UPDATEd with the discovered ats_provider/ats_slug
+    via Sprint B's persist path. On failure, we log + move on — the row stays
+    ats_provider=NULL, identical to today's behavior, and the Layer 4 self-heal
+    cron (when wired) would retry on its next nightly run.
+
+    Race semantics (when user browses two jobs from the same new company
+    in the same second and BackgroundTasks fires twice):
+      - Both tasks compute the same ``next_attempt = MAX(attempt_number) + 1``
+        (= 1 for a brand-new company; both see no prior rows).
+      - Both INSERT into slug_discovery_cache with attempt_number=1.
+      - PRIMARY KEY (company_canonical_id, attempt_number) → first writer wins.
+      - Second task hits ``ON CONFLICT DO NOTHING`` and silently no-ops.
+      - First-completed discovery's result is preserved; second's discarded.
+      - Worse-case loss: one task's HTTP work to greenhouse/lever/ashby is
+        wasted. NEVER data corruption.
+    """
+    try:
+        from ..oracle.slug_discovery import discover_ats
+        logger.info(
+            "captures: scheduling slug discovery for new company %r (canonical=%s)",
+            company_name, canonical_id[:12],
+        )
+        result = await discover_ats(
+            company_name=company_name,
+            website=company_website,
+            persist=True,
+            company_canonical_id=canonical_id,
+        )
+        if result.success:
+            logger.info(
+                "captures: slug discovery succeeded for %r → %s/%s (%d jobs, tier=%s)",
+                company_name, result.ats_provider, result.ats_slug,
+                result.jobs_count, result.source_tier,
+            )
+        else:
+            logger.info(
+                "captures: slug discovery found nothing for %r — row stays ats=NULL "
+                "(Layer 4 self-heal will retry nightly): %s",
+                company_name, result.notes or "all 3 tiers failed",
+            )
+    except Exception:
+        # Catch broadly — we MUST NOT let a discovery failure crash the
+        # background-task event loop or surface to the user (whose capture
+        # already succeeded).
+        logger.exception(
+            "captures: slug discovery background task failed for %r — row stays "
+            "ats=NULL (Layer 4 self-heal will retry nightly)", company_name,
+        )
