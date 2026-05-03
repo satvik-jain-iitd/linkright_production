@@ -45,6 +45,7 @@ dependencies = [
     "numpy>=1.24",
     "rich>=13.0",
     "questionary>=2.0",
+    "websockets>=12.0",  # Sprint D: `linkright watch` CDP WebSocket client
 ]
 
 [project.urls]

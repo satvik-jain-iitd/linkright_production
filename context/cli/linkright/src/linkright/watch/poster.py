@@ -1,0 +1,130 @@
+"""HTTP POST helper for `/api/captures` with retry and dedup-aware logging.
+
+Reads the worker URL + capture key from `~/.linkright/.env` (already used by
+the Sprint C Phase 1 Tampermonkey userscript) so the two input channels share
+configuration.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_ENDPOINT = "https://sync-resume-engine.onrender.com/api/captures"
+DEFAULT_TIMEOUT_SEC = 30.0
+RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY_SEC = 2.0
+
+
+def _read_env_file(env_path: Path) -> dict[str, str]:
+    """Parse a simple KEY=VALUE env file. Returns {} if file missing."""
+    if not env_path.exists():
+        return {}
+    out: dict[str, str] = {}
+    try:
+        for raw in env_path.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, sep, value = line.partition("=")
+            if sep != "=":
+                continue
+            out[key.strip()] = value.strip().strip('"').strip("'")
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("failed to parse %s: %s", env_path, exc)
+    return out
+
+
+def load_capture_config(env_file: Optional[Path] = None) -> tuple[str, str]:
+    """Return ``(endpoint_url, capture_key)``. Raises ValueError if key missing.
+
+    Lookup order: explicit env vars > ``~/.linkright/.env`` > defaults.
+    """
+    env_path = env_file or (Path.home() / ".linkright" / ".env")
+    file_env = _read_env_file(env_path)
+
+    endpoint = (
+        os.environ.get("LINKRIGHT_CAPTURE_ENDPOINT")
+        or file_env.get("LINKRIGHT_CAPTURE_ENDPOINT")
+        or DEFAULT_ENDPOINT
+    )
+    key = (
+        os.environ.get("LINKRIGHT_CAPTURE_KEY")
+        or file_env.get("LINKRIGHT_CAPTURE_KEY")
+        or ""
+    )
+    if not key:
+        raise ValueError(
+            f"LINKRIGHT_CAPTURE_KEY not set in env or {env_path}. "
+            f"Add it via: echo 'LINKRIGHT_CAPTURE_KEY=...' >> {env_path} && chmod 600 {env_path}"
+        )
+    return endpoint, key
+
+
+async def post_capture(
+    payload: dict,
+    *,
+    endpoint: str,
+    capture_key: str,
+    client: Optional[httpx.AsyncClient] = None,
+) -> tuple[bool, str]:
+    """POST a single capture. Returns ``(ok, message)``.
+
+    Retries up to ``RETRY_ATTEMPTS`` on 5xx / network errors with exponential
+    backoff. 4xx errors (auth/privacy/validation) are NOT retried — those are
+    permanent client-side issues that need fixing, not waiting.
+    """
+    body = json.dumps(payload, default=str).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "X-LinkRight-Capture-Key": capture_key,
+    }
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_SEC)
+
+    try:
+        for attempt in range(RETRY_ATTEMPTS):
+            try:
+                resp = await client.post(endpoint, content=body, headers=headers)
+            except (httpx.RequestError, httpx.TimeoutException) as exc:
+                if attempt == RETRY_ATTEMPTS - 1:
+                    return False, f"network: {exc}"
+                await asyncio.sleep(RETRY_BASE_DELAY_SEC * (2 ** attempt))
+                continue
+
+            if 200 <= resp.status_code < 300:
+                try:
+                    parsed = resp.json()
+                    dedup = parsed.get("dedup_status", "?")
+                    return True, f"{resp.status_code} dedup={dedup}"
+                except (json.JSONDecodeError, ValueError):
+                    return True, f"{resp.status_code} (non-JSON body)"
+
+            # 4xx = permanent client-side issue, no retry
+            if 400 <= resp.status_code < 500:
+                return False, f"{resp.status_code} {resp.text[:200]}"
+
+            # 5xx = retry with backoff
+            if attempt == RETRY_ATTEMPTS - 1:
+                return False, f"{resp.status_code} {resp.text[:200]}"
+            await asyncio.sleep(RETRY_BASE_DELAY_SEC * (2 ** attempt))
+
+        return False, "exhausted retries"
+    finally:
+        if own_client:
+            await client.aclose()
+
+
+def now_iso() -> str:
+    """Return current UTC time as RFC 3339 string (matches CaptureIn schema)."""
+    return datetime.now(timezone.utc).isoformat()
