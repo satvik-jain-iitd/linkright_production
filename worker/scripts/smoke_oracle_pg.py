@@ -8,7 +8,7 @@ Checks:
   1. Connect + server version
   2. Extensions: vector, pg_trgm
   3. Tables: companies, slug_discovery_cache, enriched_jobs_cache
-  4. Seed count: >= 31 rows in companies
+  4. Seed count: >= 81 rows in companies (31 from migration 004 + 50 from migration 005)
   5. Round-trip: INSERT test row + DELETE
 
 Exit code 0 = all checks PASS.
@@ -31,7 +31,7 @@ RST   = "\033[0m"
 ORACLE_PG_URL = os.environ.get("ORACLE_PG_URL", "")
 EXPECTED_TABLES = {"companies", "slug_discovery_cache", "enriched_jobs_cache"}
 EXPECTED_EXTENSIONS = {"vector", "pg_trgm"}
-MIN_SEED_ROWS = 31
+MIN_SEED_ROWS = 81  # 31 from migration 004 + 50 from migration 005
 
 
 def _ok(msg: str) -> None:
@@ -137,7 +137,7 @@ async def run_smoke() -> bool:
         try:
             count = await conn.fetchval("SELECT COUNT(*) FROM companies")
             if count < MIN_SEED_ROWS:
-                _fail(f"Seed count {count} < {MIN_SEED_ROWS} — run migration 004")
+                _fail(f"Seed count {count} < {MIN_SEED_ROWS} — run migrations 004 + 005")
                 all_pass = False
             else:
                 _ok(f"Seed rows: {count} (>= {MIN_SEED_ROWS} required)")
