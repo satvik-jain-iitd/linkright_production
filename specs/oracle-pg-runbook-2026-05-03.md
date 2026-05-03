@@ -3,7 +3,7 @@
 > **Date**: 2026-05-03  
 > **Audience**: Satvik Jain (VPS owner)  
 > **Goal**: Provision a production-ready Postgres 16 instance on Oracle ARM VPS,
-> apply 4 migrations, seed 31 companies, return `ORACLE_PG_URL` to link LinkRight worker + CLI.
+> apply 5 migrations, seed 81 companies, return `ORACLE_PG_URL` to link LinkRight worker + CLI.
 
 ---
 
@@ -224,13 +224,18 @@ psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/001_companies_table.sq
 psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/002_slug_discovery_cache.sql
 psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/003_enriched_jobs_cache.sql
 psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/004_seed_31_companies.sql
+psql "$ORACLE_PG_URL" -f repo/worker/db/oracle_migrations/005_seed_expansion_50_2026_05_03.sql
 ```
 
-Expected output for 004:
+Expected output for 004 + 005:
 ```
 NOTICE:  Seed migration 004 complete: 31 companies inserted/updated
 INSERT 0 31
+INSERT 0 50
 ```
+
+After both seed migrations, `companies` should have 81 rows (smoke test
+asserts `MIN_SEED_ROWS = 81`).
 
 ---
 
@@ -249,7 +254,7 @@ Oracle PG Smoke Test
   PASS  Connected — PostgreSQL 16.x ...
   PASS  Extensions present: pg_trgm, vector
   PASS  Tables present: companies, enriched_jobs_cache, slug_discovery_cache
-  PASS  Seed rows: 31 (>= 31 required)
+  PASS  Seed rows: 81 (>= 81 required)
   PASS  Round-trip INSERT/SELECT/DELETE complete
 ========================================
 
@@ -306,7 +311,7 @@ Add:
 | `FATAL: password authentication failed` | Wrong password | Step 4 — recreate user |
 | `SSL: wrong version number` | Client sending plain TCP to SSL port | Add `ssl=require` to connection params |
 | `extension "vector" does not exist` | pgvector not installed | Step 2 |
-| Smoke test: `Seed count 0 < 31` | Migration 004 not applied | Step 10 |
+| Smoke test: `Seed count 0 < 81` | Migration 004 or 005 not applied | Step 10 |
 | `asyncpg.InvalidCatalogNameError: database "linkright_jobs" does not exist` | DB name typo in URL | Step 4 |
 
 ---
