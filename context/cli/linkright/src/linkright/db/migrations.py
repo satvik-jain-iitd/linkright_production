@@ -27,6 +27,10 @@ def _ensure_indices(db) -> None:
     db["runs"].create_index([("user_id", 1), ("pillar", 1), ("created_at", -1)])
     db["predicted_questions"].create_index("interview_id")
     db["mock_sessions"].create_index("interview_id")
+    db["career_stories"].create_index([("user_id", 1), ("title", 1)])
+    db["career_stories"].create_index([("user_id", 1), ("tags", 1)])
+    db["career_stories"].create_index([("user_id", 1), ("jd_requirement_ids", 1)])
+    db["career_stories"].create_index([("user_id", 1), ("last_used_at", -1)])
     db["content_items"].create_index([("user_id", 1), ("status", 1), ("scheduled_for", 1)])
 
 
