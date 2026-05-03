@@ -12,18 +12,18 @@
            ==========================================================================
         */
         :root {
-            /* BRAND IDENTITY COLORS */
-            --brand-primary-color: #4285F4;    /* Primary Brand Color (e.g., Google Blue) */
-            --brand-secondary-color: #EA4335;  /* Secondary Brand Color (e.g., Google Red) */
-            --brand-tertiary-color: #FBBC05;   /* Tertiary Brand Color (e.g., Google Yellow) */
-            --brand-quaternary-color: #34A853; /* Quaternary Brand Color (e.g., Google Green) */
+            /* BRAND IDENTITY COLORS — defaults to BLACK (B&W) per Satvik design spec
+               2026-05-03. User opts in to color via `linkright resume brand`. */
+            --brand-primary-color: #000000;    /* User-configurable: metric bolds + gradient stop 1 */
+            --brand-secondary-color: #000000;  /* User-configurable: gradient mid-stop */
+            --brand-tertiary-color: #000000;   /* User-configurable: gradient end-stop */
 
-            /* UI & CANVAS COLORS */
-            --ui-canvas-bg-color: #F1F3F4;     /* Environment/Viewer background */
+            /* UI & CANVAS COLORS — fixed pure B&W; never tinted by user branding */
+            --ui-canvas-bg-color: #FFFFFF;     /* Environment/Viewer background */
             --ui-page-bg-color: #FFFFFF;       /* Document surface color */
-            --ui-text-primary-color: #202124;  /* High-contrast body text */
-            --ui-text-secondary-color: #5F6368;/* Lower-contrast meta text */
-            --ui-divider-color: #DADCE0;       /* Hairline structural dividers */
+            --ui-text-primary-color: #000000;  /* All body text (locked black) */
+            --ui-text-secondary-color: #000000;/* All meta text (locked black) */
+            --ui-divider-color: #000000;       /* Hairline structural dividers */
 
             /* PROFESSIONAL TYPOGRAPHY (Strict PT) */
             --font-size-name: 20pt;
@@ -72,15 +72,6 @@
             @page { size: A4; margin: 0; }
         }
 
-        /* IDENTITY HORIZON */
-        .identity-horizon {
-            position: absolute; top: 0; left: 0; width: 100%; height: 3pt; display: flex;
-        }
-        .color-1 { flex: 1; background: var(--brand-primary-color); }
-        .color-2 { flex: 1; background: var(--brand-secondary-color); }
-        .color-3 { flex: 1; background: var(--brand-tertiary-color); }
-        .color-4 { flex: 1; background: var(--brand-quaternary-color); }
-
         /* HEADER */
         .header { margin-top: 1mm; margin-bottom: 4mm; }
         .header-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
@@ -115,10 +106,10 @@
 
         /* SECTION STYLING */
         .section { margin-bottom: var(--section-spacing); }
-        .section-title { font-size: var(--font-size-header); font-weight: 500; color: var(--brand-primary-color); display: flex; flex-direction: column; margin-bottom: 2mm; }
+        .section-title { font-size: var(--font-size-header); font-weight: 500; color: var(--ui-text-primary-color); display: flex; flex-direction: column; margin-bottom: 2mm; }
         .section-divider {
             height: 1pt; width: 100%; margin-top: 0.5mm; opacity: 0.7;
-            background: linear-gradient(to right, var(--brand-primary-color) 25%, var(--brand-secondary-color) 25%, var(--brand-secondary-color) 50%, var(--brand-tertiary-color) 50%, var(--brand-tertiary-color) 75%, var(--brand-quaternary-color) 75%);
+            background: linear-gradient(90deg, var(--brand-primary-color), var(--brand-secondary-color), var(--brand-tertiary-color));
         }
 
         /* ENTRIES */
@@ -170,7 +161,7 @@
            before Phase 5 width optimization is reliable. Multi-line bullets
            are acceptable; users can run click-to-compress on specific ones. */
         li { display: flex; align-items: baseline; width: 100%; margin-bottom: 1mm; }
-        li::before { content: "\2022"; color: var(--brand-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
+        li::before { content: "\2022"; color: var(--ui-text-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
         /* li-content: no hard justification by default — wrapping stays clean.
            Phase 5 (width optimization) applies .li-content--justified ONLY when
            every experience bullet in the resume lands in 95-100% of the budget.
@@ -187,10 +178,6 @@
 <body>
 
 <div class="page">
-    <div class="identity-horizon">
-        <div class="color-1"></div><div class="color-2"></div><div class="color-3"></div><div class="color-4"></div>
-    </div>
-
     <!-- HEADER -->
     <div class="header">
         <div class="header-top">

@@ -7,16 +7,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --brand-primary-color: #4285F4;
-            --brand-secondary-color: #EA4335;
-            --brand-tertiary-color: #FBBC05;
-            --brand-quaternary-color: #34A853;
+            --brand-primary-color: #000000;
+            --brand-secondary-color: #000000;
+            --brand-tertiary-color: #000000;
 
-            --ui-canvas-bg-color: #F1F3F4;
+            --ui-canvas-bg-color: #FFFFFF;
             --ui-page-bg-color: #FFFFFF;
-            --ui-text-primary-color: #202124;
-            --ui-text-secondary-color: #5F6368;
-            --ui-divider-color: #DADCE0;
+            --ui-text-primary-color: #000000;
+            --ui-text-secondary-color: #000000;
+            --ui-divider-color: #000000;
 
             --font-size-name: 20pt;
             --font-size-header: 13pt;
@@ -63,14 +62,6 @@
             @page { size: A4; margin: 0; }
         }
 
-        .identity-horizon {
-            position: absolute; top: 0; left: 0; width: 100%; height: 3pt; display: flex;
-        }
-        .color-1 { flex: 1; background: var(--brand-primary-color); }
-        .color-2 { flex: 1; background: var(--brand-secondary-color); }
-        .color-3 { flex: 1; background: var(--brand-tertiary-color); }
-        .color-4 { flex: 1; background: var(--brand-quaternary-color); }
-
         .header { margin-top: 1mm; margin-bottom: 4mm; }
         .header-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
         .name { font-size: var(--font-size-name); font-weight: 700; color: var(--ui-text-primary-color); letter-spacing: -0.2px; }
@@ -98,10 +89,10 @@
         .professional-summary .summary-line { display: block; margin-bottom: 1mm; }
 
         .section { margin-bottom: var(--section-spacing); }
-        .section-title { font-size: var(--font-size-header); font-weight: 500; color: var(--brand-primary-color); display: flex; flex-direction: column; margin-bottom: 2mm; }
+        .section-title { font-size: var(--font-size-header); font-weight: 500; color: var(--ui-text-primary-color); display: flex; flex-direction: column; margin-bottom: 2mm; }
         .section-divider {
             height: 1pt; width: 100%; margin-top: 0.5mm; opacity: 0.7;
-            background: linear-gradient(to right, var(--brand-primary-color) 25%, var(--brand-secondary-color) 25%, var(--brand-secondary-color) 50%, var(--brand-tertiary-color) 50%, var(--brand-tertiary-color) 75%, var(--brand-quaternary-color) 75%);
+            background: linear-gradient(90deg, var(--brand-primary-color), var(--brand-secondary-color), var(--brand-tertiary-color));
         }
 
         .entry { margin-bottom: var(--entry-spacing); }
@@ -129,7 +120,7 @@
         ul { list-style-type: none; }
         .entry ul + ul { margin-top: var(--ul-group-gap); }
         li { display: flex; align-items: baseline; width: 100%; margin-bottom: 1mm; }
-        li::before { content: "\2022"; color: var(--brand-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
+        li::before { content: "\2022"; color: var(--ui-text-primary-color); font-weight: bold; margin-right: 3mm; flex-shrink: 0; }
         .li-content { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
         .li-content-natural { flex-grow: 1; font-size: var(--font-size-body); line-height: var(--line-height-standard); }
         .li-content--justified { text-align: justify; text-align-last: justify; }
@@ -150,10 +141,6 @@
 <body>
 
 <div class="page">
-    <div class="identity-horizon">
-        <div class="color-1"></div><div class="color-2"></div><div class="color-3"></div><div class="color-4"></div>
-    </div>
-
     <!-- HEADER -->
     <div class="header">
         <div class="header-top">
