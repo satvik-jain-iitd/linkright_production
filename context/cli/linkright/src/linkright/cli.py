@@ -33,6 +33,7 @@ from linkright.interview.cli import interview_group
 from linkright.content.cli import content_group
 from linkright.coverletter.cli import coverletter_group
 from linkright.watch.cli import watch_group
+from linkright.stories.cli import stories_group
 
 
 _EPILOG = """\
@@ -78,6 +79,7 @@ main.add_command(content_group)
 main.add_command(coverletter_group)     # name="cover-letter"
 main.add_command(coverletter_group, name="cl")  # top-level alias
 main.add_command(watch_group, name="watch")     # Sprint D — passive job-page capture via Chrome CDP
+main.add_command(stories_group)         # Pillar 3 Story Bank — STAR-format career narratives
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────

@@ -7,7 +7,7 @@ Collections:
   Shared:       nuggets, user_context, runs
   Pillar 1:     jds, bullets_history
   Pillar 2:     evaluations, applications
-  Pillar 3:     interviews, predicted_questions, mock_sessions
+  Pillar 3:     interviews, predicted_questions, mock_sessions, career_stories
   Pillar 4:     content_items, content_calendar
 """
 from __future__ import annotations
@@ -145,6 +145,32 @@ class MockSession(Base):
     feedback: str = ""
 
 
+class CareerStory(Base):
+    """STAR-format career narrative — Pillar 3 Story Bank.
+
+    Persistent reusable stories that bridge resume bullets (atomic
+    achievements, see Nugget) to interview prep (mock simulator, predicted
+    questions). Each story tagged with skill domains + JD requirement IDs
+    so retrieval can filter by JD-relevance.
+
+    Title + S/T/A/R fields chosen per Satvik 2026-05-03 spec ("Rich" option):
+    persistent narratives with usage tracking (last_used_at / use_count) and
+    JD-requirement linkage so `tailor` step_08 + `interview practice` can
+    surface stories tied to the current JD's specific requirements.
+    """
+    title: str                                                          # short label, e.g. "AmEx AI Oracle Save"
+    situation: str = ""                                                 # context — what was the setup
+    task: str = ""                                                      # what was the explicit ask
+    action: str                                                         # what YOU did (verbs, tools, decisions)
+    result: str                                                         # outcome with metrics
+    tags: list[str] = Field(default_factory=list)                       # skill domains, e.g. ["python", "leadership"]
+    jd_requirement_ids: list[str] = Field(default_factory=list)         # links to JD requirement IDs
+    last_used_at: Optional[datetime] = None                             # when last surfaced in tailor/practice
+    use_count: int = 0                                                  # how many times retrieved
+    source_nugget_ids: list[str] = Field(default_factory=list)          # if --from-nugget, track origin
+    emb: Optional[list[float]] = None                                   # 768/384-dim embedding for vector retrieval
+
+
 # ── Pillar 4: Social Content ───────────────────────────────────────────
 
 class ContentItem(Base):
@@ -177,6 +203,7 @@ COLLECTIONS: dict[str, type[Base]] = {
     "interviews": Interview,
     "predicted_questions": PredictedQuestion,
     "mock_sessions": MockSession,
+    "career_stories": CareerStory,
     "content_items": ContentItem,
     "content_calendar": ContentCalendar,
 }
@@ -187,5 +214,6 @@ VECTOR_COLLECTIONS: dict[str, str] = {
     "user_context": "emb",
     "jds": "jd_emb",
     "bullets_history": "emb",
+    "career_stories": "emb",
     "content_items": "emb",
 }
