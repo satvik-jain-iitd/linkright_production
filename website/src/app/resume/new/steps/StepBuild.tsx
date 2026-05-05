@@ -75,6 +75,10 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
   const [cancelling, setCancelling] = useState(false);
   const [streamedBullets, setStreamedBullets] = useState<string[]>([]);
   const seenBullets = useRef<Set<string>>(new Set());
+  // Pipeline review gates (8 phase-boundary checkpoints, 3 editable, 5 read-only).
+  const [gate, setGate] = useState<{ name: string; artifacts: Record<string, unknown>; editable: boolean } | null>(null);
+  const [gateNotes, setGateNotes] = useState("");
+  const [gateContinuing, setGateContinuing] = useState(false);
   const started = useRef(false);
   const subStepsRef = useRef<SubStep[]>([]);
 
@@ -226,6 +230,21 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
               row.draft_html as string | null
             );
 
+            // Gate detection: worker pauses by setting status=awaiting_user_input.
+            // Editable gates (3) get an optional notes textarea; read-only (5) just Continue.
+            const EDITABLE_GATES = ["gate_contact", "gate_strategy_review", "gate_final_critique"];
+            if (row.status === "awaiting_user_input" && row.current_gate) {
+              const gateName = row.current_gate as string;
+              setGate({
+                name: gateName,
+                artifacts: (row.gate_artifacts as Record<string, unknown>) || {},
+                editable: EDITABLE_GATES.includes(gateName),
+              });
+            } else if (row.status === "processing" || row.status === "completed") {
+              setGate(null);
+              setGateNotes("");
+            }
+
             if (row.status === "completed") {
               applyUpdate("done", 100, 999);
               teardown();
@@ -250,6 +269,20 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
             job.phase_number || 0,
             job.draft_html
           );
+
+          // Gate detection (polling mirror of realtime branch above).
+          const EDITABLE_GATES_POLL = ["gate_contact", "gate_strategy_review", "gate_final_critique"];
+          if (job.status === "awaiting_user_input" && job.current_gate) {
+            setGate({
+              name: job.current_gate as string,
+              artifacts: (job.gate_artifacts as Record<string, unknown>) || {},
+              editable: EDITABLE_GATES_POLL.includes(job.current_gate as string),
+            });
+          } else if (job.status === "processing" || job.status === "completed") {
+            setGate(null);
+            setGateNotes("");
+          }
+
           if (job.status === "completed") {
             applyUpdate("done", 100, 999);
             teardown();
@@ -286,6 +319,34 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
   const phaseLabel = PHASE_LABELS[phase] || phase;
 
   const isAlreadyGenerating = error?.toLowerCase().includes("already have a resume");
+
+  const handleGateContinue = async () => {
+    if (!data.job_id) return;
+    setGateContinuing(true);
+    try {
+      const edits: Record<string, unknown> = {};
+      if (gate?.editable && gateNotes.trim()) {
+        edits.notes = gateNotes.trim();
+      }
+      const resp = await fetch("/api/resume/gate-continue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: data.job_id, edits }),
+      });
+      if (!resp.ok) {
+        const result = await resp.json().catch(() => ({}));
+        setError(friendlyError(result.error, "Failed to continue past checkpoint"));
+        return;
+      }
+      // Optimistic: realtime/poll will catch up; clear local gate state now.
+      setGate(null);
+      setGateNotes("");
+    } catch {
+      setError("Network error continuing past checkpoint.");
+    } finally {
+      setGateContinuing(false);
+    }
+  };
 
   const handleCancelAndRetry = async () => {
     setCancelling(true);
@@ -368,6 +429,60 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      {/* Gate overlay: pause-and-review at phase boundaries */}
+      {gate && (
+        <div className="rounded-xl border border-accent/40 bg-accent/5 p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-accent">
+            {gate.editable ? "Review & continue" : "Checkpoint"}
+          </p>
+          <h3 className="mt-1 text-base font-bold text-foreground">
+            {(gate.artifacts.label as string) || gate.name}
+          </h3>
+          {gate.artifacts.description ? (
+            <p className="mt-1 text-sm text-muted">{gate.artifacts.description as string}</p>
+          ) : null}
+          <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs">
+            {Object.entries(gate.artifacts)
+              .filter(
+                ([k, v]) =>
+                  !["label", "description"].includes(k) &&
+                  (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+              )
+              .slice(0, 6)
+              .map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="font-medium text-muted">{k}</dt>
+                  <dd className="text-foreground">{String(v)}</dd>
+                </div>
+              ))}
+          </dl>
+          {gate.editable && (
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-muted" htmlFor="gate-notes">
+                Notes / suggestions (optional)
+              </label>
+              <textarea
+                id="gate-notes"
+                value={gateNotes}
+                onChange={(e) => setGateNotes(e.target.value)}
+                rows={3}
+                className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                placeholder="Anything you want to flag for this stage..."
+              />
+            </div>
+          )}
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={handleGateContinue}
+              disabled={gateContinuing}
+              className="rounded-lg bg-cta px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-cta-hover disabled:opacity-50"
+            >
+              {gateContinuing ? "Continuing..." : "Continue"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Preview: streaming bullets during build, full iframe when done */}
       {phase === "done" && draftHtml ? (
