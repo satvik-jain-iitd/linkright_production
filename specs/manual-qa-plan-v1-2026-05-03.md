@@ -1,7 +1,7 @@
 # LinkRight v1 — Manual QA Plan
 
-> **Date**: 2026-05-03
-> **Audience**: Satvik (sole tester for v1 pre-public-GitHub release)
+> **Date**: 2026-05-03 (updated 2026-05-05)
+> **Audience**: LinkRight v1 tester — run Sections 0–8 in order (user-facing flows). Admin/infrastructure checks are isolated in Section A at the very end.
 > **Scope**: every user-facing CLI command + every cross-cutting flow shipped through PRs #50–#62 (Sprint D watch + Pillar 2 dual-read + brand-color + Story Bank). Deferred items (e.g., tailor pipeline reading stories alongside nuggets) are explicitly called out as v0.5 work, not v1 gaps.
 > **Goal**: sit at terminal, run each section in order, verify expected output, log any deviations using the bug template at the end
 
@@ -37,40 +37,14 @@ linkright --version
 
 ```bash
 ls -la ~/.linkright/
-# Expect: .env (mode 600), .env.oracle (mode 600), config.yaml, profile/, runs/, cache/
+# Expect: .env (mode 600), config.yaml, profile/, runs/, cache/
 
 grep -E "^(LINKRIGHT_CAPTURE_KEY|GROQ_API_KEY|GEMINI_API_KEY)" ~/.linkright/.env | cut -d= -f1
 # Expect lines printed for each key — values redacted by cut
 # At minimum: LINKRIGHT_CAPTURE_KEY, GROQ_API_KEY (or any LLM provider)
-
-grep "^ORACLE_PG_URL" ~/.linkright/.env.oracle
-# Expect: ORACLE_PG_URL=postgres://linkright_app:...@80.225.198.184:5432/linkright_jobs?sslmode=prefer
 ```
 
 **If anything missing**: stop, fix, then continue.
-
-### 0.4 Backend reachability
-
-```bash
-curl -sS -m 30 https://sync-resume-engine.onrender.com/health
-# Expect: {"status":"ok","service":"linkright-sync-worker", ...}
-# (First request may take 30-60s — Render free-plan cold start)
-
-set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
-python3 -c "
-import asyncio, asyncpg, os
-async def main():
-    pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
-    async with pool.acquire() as conn:
-        v = await conn.fetchval('SELECT version()')
-        c = await conn.fetchval('SELECT COUNT(*) FROM companies')
-        j = await conn.fetchval('SELECT COUNT(*) FROM job_discoveries')
-        print(f'PG: {v[:50]}... | companies={c} | job_discoveries={j}')
-    await pool.close()
-asyncio.run(main())
-"
-# Expect: PG version line | companies=81 (or higher if you've browsed) | job_discoveries=N
-```
 
 ---
 
@@ -103,7 +77,7 @@ linkright watch status
 # Expect 4 lines (with ✓ or ✗ prefixes):
 #   ✓ capture key:   set (len=49)
 #   ✓ endpoint:      https://sync-resume-engine.onrender.com/api/captures
-#   ✗ chrome CDP:    NOT reachable    [✗ EXPECTED if Chrome is not started with --remote-debugging-port=9222 yet]
+#   ✗ chrome CDP:    NOT reachable    [✗ EXPECTED if Chrome not started with --remote-debugging-port=9222 yet]
 #   ✓ worker health: ... → 200
 ```
 
@@ -372,7 +346,7 @@ HH:MM:SS   ✓ Senior Product Manager — 201 dedup=new
 
 Press ctrl-C to stop. Should exit cleanly (PR #60: KeyboardInterrupt → exit 0).
 
-### 4.5 Verify capture landed in Oracle PG
+### 4.5 Verify capture landed in list
 
 ```bash
 linkright watch list --since "5 minutes" --top 5
@@ -436,55 +410,9 @@ linkright watch list --since "1 minute" --json | jq '.[].job_url'
 # Expect: NO URL containing /notifications/ or /messaging/ or /inbox/
 ```
 
-If a private path appears: BUG (file via section 9).
+If a private path appears: BUG (file via section 8).
 
-### 4.9 Sprint B trigger on NEW company (PR #59)
-
-Browse a Naukri job at a company you've never seen before — pick something niche, NOT Stripe/Anthropic/Razorpay (those are in the 81-seed). E.g. some local Indian startup job.
-
-```bash
-# Wait 10-15 sec after browsing for the BackgroundTask to complete
-# Then:
-linkright admin companies stats
-# Expect: total companies count > 81 (you just added a new one)
-
-# Spot-check the new company's ats_provider was filled:
-set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
-python3 -c "
-import asyncio, asyncpg, os
-async def main():
-    pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(\"SELECT name, ats_provider, ats_slug, ingested_at FROM companies WHERE 'passive_capture_naukri' = ANY(source) ORDER BY ingested_at DESC LIMIT 5\")
-        for r in rows: print(dict(r))
-    await pool.close()
-asyncio.run(main())
-"
-# Expect: most recent newly-captured company has ats_provider filled (e.g. 'greenhouse', 'lever', 'ashby')
-# OR ats_provider=None — meaning Sprint B's 3 tiers couldn't find it (Indian unicorns often miss; expected)
-```
-
-### 4.10 Edge cases
-
-```bash
-# Bad URL for /api/captures (privacy filter test)
-curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
-  -H "Content-Type: application/json" \
-  -H "X-LinkRight-Capture-Key: $(grep '^LINKRIGHT_CAPTURE_KEY=' ~/.linkright/.env | cut -d= -f2-)" \
-  -d '{"source":"naukri","job_url":"https://www.naukri.com/messages/inbox/123","title":"x","company_name":"x","captured_at":"2026-05-03T12:00:00Z"}' \
-  -w "\nHTTP %{http_code}\n"
-# Expect: HTTP 403 + "blocked by privacy filter: path '/messages/inbox/123' matches blocklist..."
-
-# Wrong auth key
-curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
-  -H "Content-Type: application/json" \
-  -H "X-LinkRight-Capture-Key: wrong-key" \
-  -d '{"source":"naukri","job_url":"https://www.naukri.com/job-listings-test","title":"x","company_name":"x","captured_at":"2026-05-03T12:00:00Z"}' \
-  -w "\nHTTP %{http_code}\n"
-# Expect: HTTP 401 + "invalid or missing capture key"
-```
-
-**Sprint D PASS = setup, listener, list, daemon, multi-portal, privacy filter, Sprint B trigger ALL work end-to-end.**
+**Sprint D PASS = setup, listener, list, daemon, multi-portal, privacy filter ALL work end-to-end.**
 
 ---
 
@@ -610,55 +538,13 @@ linkright content draft
 
 ---
 
-## 7 — Admin commands (power-user / builder) (5 min, optional)
+## 7 — Cross-cutting regression checks (5 min)
 
-### 7.1 Slug discovery
-
-```bash
-linkright admin slug-discovery single Anthropic
-# Expect: ATS provider/slug detected via tier1_html
-linkright admin slug-discovery stats
-# Expect: last-24h discovery stats
-linkright admin slug-discovery validate-all --max 3
-# Expect: re-validates 3 stale companies, shows validated/healed/marked-zero counts
-```
-
-### 7.2 Companies stats
-
-```bash
-linkright admin companies stats
-# Expect: total count, by industry, by ATS provider
-```
-
-**Admin PASS = all 4 admin commands produce output without error.**
-
----
-
-## 8 — Cross-cutting regression checks (5 min)
-
-### 8.1 Captures actually persist
-
-```bash
-set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
-python3 -c "
-import asyncio, asyncpg, os
-async def main():
-    pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
-    async with pool.acquire() as conn:
-        n = await conn.fetchval('SELECT COUNT(*) FROM job_discoveries')
-        n_today = await conn.fetchval(\"SELECT COUNT(*) FROM job_discoveries WHERE captured_at > NOW() - INTERVAL '1 day'\")
-        print(f'job_discoveries total: {n} | today: {n_today}')
-    await pool.close()
-asyncio.run(main())
-"
-# Expect: numbers match what you've been browsing
-```
-
-### 8.2 jobs find dedup behavior
+### 7.1 jobs find dedup behavior
 
 If you applied to a job via 3.4 (which marks it in Supabase), then browse the SAME URL via Chrome (which captures it to Oracle PG), `linkright jobs find` should NOT show it twice — Supabase row should win the merge dedup.
 
-### 8.3 watch list filters
+### 7.2 watch list filters
 
 ```bash
 linkright watch list --since "1 day"
@@ -669,7 +555,7 @@ linkright watch list --since "1 day; DROP TABLE x"
 
 ---
 
-## 9 — Known limitations (skip-verify items)
+## 8 — Known limitations (skip-verify items)
 
 These are documented gaps. Don't waste time testing — they won't work today.
 
@@ -685,7 +571,7 @@ These are documented gaps. Don't waste time testing — they won't work today.
 
 ---
 
-## 10 — Bug-reporting template
+## 9 — Bug-reporting template
 
 For ANY deviation from expected behavior, paste this in chat:
 
@@ -718,9 +604,8 @@ Additional context: <env vars, screenshots, logs>
 - [ ] All Sprint D commands produce expected output (Section 4) — **highest weight; brand new code**
 - [ ] Pillar 3 practice + Story Bank works (Section 5) — bank CRUD + interview prep bridge verified
 - [ ] Pillar 4 commands run (Section 6)
-- [ ] Admin commands produce output (Section 7)
-- [ ] Cross-cutting regression OK (Section 8)
-- [ ] No surprise blockers beyond the documented limitations (Section 9)
+- [ ] Cross-cutting regression OK (Section 7)
+- [ ] No surprise blockers beyond the documented limitations (Section 8)
 
 When all above sections pass + 4 operational-debt items closed (PyPI v0.4.0 upload, watchlist UX demotion docs, Layer 4 cron deployment, manual QA pass itself), **v1 is ready for public GitHub release**.
 
@@ -737,7 +622,131 @@ When all above sections pass + 4 operational-debt items closed (PyPI v0.4.0 uplo
 | 4 — Sprint D | 15-20 min |
 | 5 — Pillar 3 + Story Bank (5.1-5.11) | 8 min |
 | 6 — Pillar 4 | 3 min |
-| 7 — Admin | 5 min (optional) |
-| 8 — Regression | 5 min |
-| **Total (sum of row ranges)** | **~76-91 min** |
+| 7 — Regression | 5 min |
+| **Total (sum of row ranges)** | **~71-86 min** |
 | **With buffer for re-runs / debugging** | **~75-95 min** |
+| **Admin section (A) — run separately** | **~15 min** |
+
+---
+
+---
+
+# A — Admin Commands Only
+
+> **Run this section LAST, separately from the user-facing flow above.**
+> These commands require infrastructure access: Oracle Postgres credentials, backend API keys, asyncpg library. A regular end user never runs any of these.
+
+---
+
+## A.1 Oracle PG URL config
+
+```bash
+grep "^ORACLE_PG_URL" ~/.linkright/.env.oracle
+# Expect: ORACLE_PG_URL=postgres://linkright_app:...@80.225.198.184:5432/linkright_jobs?sslmode=prefer
+```
+
+## A.2 Backend reachability
+
+```bash
+curl -sS -m 30 https://sync-resume-engine.onrender.com/health
+# Expect: {"status":"ok","service":"linkright-sync-worker", ...}
+# (First request may take 30-60s — Render free-plan cold start)
+
+set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
+python3 -c "
+import asyncio, asyncpg, os
+async def main():
+    pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
+    async with pool.acquire() as conn:
+        v = await conn.fetchval('SELECT version()')
+        c = await conn.fetchval('SELECT COUNT(*) FROM companies')
+        j = await conn.fetchval('SELECT COUNT(*) FROM job_discoveries')
+        print(f'PG: {v[:50]}... | companies={c} | job_discoveries={j}')
+    await pool.close()
+asyncio.run(main())
+"
+# Expect: PG version line | companies=81 (or higher if you've browsed) | job_discoveries=N
+```
+
+## A.3 Captures persist in Oracle PG
+
+```bash
+set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
+python3 -c "
+import asyncio, asyncpg, os
+async def main():
+    pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
+    async with pool.acquire() as conn:
+        n = await conn.fetchval('SELECT COUNT(*) FROM job_discoveries')
+        n_today = await conn.fetchval(\"SELECT COUNT(*) FROM job_discoveries WHERE captured_at > NOW() - INTERVAL '1 day'\")
+        print(f'job_discoveries total: {n} | today: {n_today}')
+    await pool.close()
+asyncio.run(main())
+"
+# Expect: numbers match what you've been browsing in Section 4
+```
+
+## A.4 Sprint B trigger on NEW company (PR #59)
+
+Browse a Naukri job at a company you've never seen before — pick something niche, NOT Stripe/Anthropic/Razorpay (those are in the 81-seed). E.g. some local Indian startup job.
+
+```bash
+# Wait 10-15 sec after browsing for the BackgroundTask to complete
+linkright admin companies stats
+# Expect: total companies count > 81 (you just added a new one)
+
+# Spot-check the new company's ats_provider was filled:
+set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
+python3 -c "
+import asyncio, asyncpg, os
+async def main():
+    pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(\"SELECT name, ats_provider, ats_slug, ingested_at FROM companies WHERE 'passive_capture_naukri' = ANY(source) ORDER BY ingested_at DESC LIMIT 5\")
+        for r in rows: print(dict(r))
+    await pool.close()
+asyncio.run(main())
+"
+# Expect: most recent newly-captured company has ats_provider filled (e.g. 'greenhouse', 'lever', 'ashby')
+# OR ats_provider=None — meaning Sprint B's 3 tiers couldn't find it (Indian unicorns often miss; expected)
+```
+
+## A.5 API edge cases — privacy filter + auth (PR #57)
+
+```bash
+# Bad URL for /api/captures (privacy filter test)
+curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
+  -H "Content-Type: application/json" \
+  -H "X-LinkRight-Capture-Key: $(grep '^LINKRIGHT_CAPTURE_KEY=' ~/.linkright/.env | cut -d= -f2-)" \
+  -d '{"source":"naukri","job_url":"https://www.naukri.com/messages/inbox/123","title":"x","company_name":"x","captured_at":"2026-05-03T12:00:00Z"}' \
+  -w "\nHTTP %{http_code}\n"
+# Expect: HTTP 403 + "blocked by privacy filter: path '/messages/inbox/123' matches blocklist..."
+
+# Wrong auth key
+curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
+  -H "Content-Type: application/json" \
+  -H "X-LinkRight-Capture-Key: wrong-key" \
+  -d '{"source":"naukri","job_url":"https://www.naukri.com/job-listings-test","title":"x","company_name":"x","captured_at":"2026-05-03T12:00:00Z"}' \
+  -w "\nHTTP %{http_code}\n"
+# Expect: HTTP 401 + "invalid or missing capture key"
+```
+
+## A.6 Slug discovery CLI
+
+```bash
+linkright admin slug-discovery single Anthropic
+# Expect: ATS provider/slug detected via tier1_html
+linkright admin slug-discovery stats
+# Expect: last-24h discovery stats
+linkright admin slug-discovery validate-all --max 3
+# Expect: re-validates 3 stale companies, shows validated/healed/marked-zero counts
+```
+
+## A.7 Companies stats
+
+```bash
+linkright admin companies stats
+# Expect: total count, by industry, by ATS provider
+```
+
+**Admin PASS = all A.1–A.7 checks produce expected output without error.**
