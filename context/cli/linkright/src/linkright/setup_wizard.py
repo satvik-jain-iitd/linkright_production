@@ -255,14 +255,58 @@ def run_wizard() -> int:
     print("║   LinkRight setup — 3 quick choices                ║")
     print("╚════════════════════════════════════════════════════╝")
     print()
-    print("First: a free Groq API key powers the resume pipeline.")
-    print("Then: embedder + PDF renderer choices (⭐ = recommended).")
+
+    # ── Detect existing config (for migration prompt) ──────────────
+    cfg_path = Path.home() / ".linkright" / "config.yaml"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    old_mode = None
+    if cfg_path.exists():
+        try:
+            existing = yaml.safe_load(cfg_path.read_text()) or {}
+            old_mode = existing.get("default_llm_mode")
+        except Exception:
+            existing = {}
+
+    # ── v0.4.0 migration: detect old agent-mode config from 0.3.0 wizard ──
+    # Done BEFORE Decision 1 so agent-mode users who decline can skip the
+    # Groq key prompt entirely (no point asking for a key they won't use).
+    migrate = True  # default for new installs / non-agent configs
+    if old_mode == "agent":
+        print("⚠ Detected: your existing config uses agent mode (claude/opencode/gemini-cli).")
+        print("  v0.4.0 default is direct mode (free Groq llama-3.1-8b — 14,400 req/day).")
+        print()
+        migrate = questionary.confirm(
+            "Switch to direct mode? (recommended)",
+            default=True,
+        ).ask()
+        if migrate is None:
+            sys.exit(1)
+        if migrate:
+            existing.pop("agent_backend", None)
+            existing.pop("default_skill_mode", None)
+            print("  ✓ Migrating to direct mode (your old agent_backend is removed).")
+            print()
+        else:
+            print("  ✓ Keeping agent mode. Skipping Groq key step.")
+            print("  Tip: edit ~/.linkright/config.yaml to switch later.")
+            print()
+
+    needs_groq = not (old_mode == "agent" and not migrate)
+    if needs_groq:
+        print("First: a free Groq API key powers the resume pipeline.")
+        print("Then: embedder + PDF renderer choices (⭐ = recommended).")
+    else:
+        print("Continuing with: embedder + PDF renderer choices (⭐ = recommended).")
     print()
 
-    # ── Decision 1: Groq API key ───────────────────────────────────
-    print("1/3 — Groq API key (powers the 16-step resume pipeline)")
-    print()
-    groq_key, ok_groq, msg_groq = _ask_groq_key()
+    # ── Decision 1: Groq API key (skip if user kept agent mode) ────
+    if needs_groq:
+        print("1/3 — Groq API key (powers the 16-step resume pipeline)")
+        print()
+        groq_key, ok_groq, msg_groq = _ask_groq_key()
+    else:
+        groq_key, ok_groq, msg_groq = "", True, "skipped (agent mode kept)"
 
     # ── Decision 2: Embedder ───────────────────────────────────────
     print()
@@ -273,7 +317,8 @@ def run_wizard() -> int:
 
     print()
     print("──────────────────────────────────────────────────────")
-    print(f"Picks  →  LLM: direct (Groq)  •  embedder: {embedder['key']}  •  PDF: {pdf['key']}")
+    mode_label = "direct (Groq)" if needs_groq else "agent (kept from 0.3.0)"
+    print(f"Picks  →  LLM: {mode_label}  •  embedder: {embedder['key']}  •  PDF: {pdf['key']}")
     print("──────────────────────────────────────────────────────")
     print()
 
@@ -327,39 +372,7 @@ def run_wizard() -> int:
         ok_pdf = True
         print("  PDF:                 — skipped (HTML-only output)")
 
-    # ── Write config ────────────────────────────────────────────────
-    cfg_path = Path.home() / ".linkright" / "config.yaml"
-    cfg_path.parent.mkdir(parents=True, exist_ok=True)
-    existing: dict = {}
-    old_mode = None
-    if cfg_path.exists():
-        try:
-            existing = yaml.safe_load(cfg_path.read_text()) or {}
-            old_mode = existing.get("default_llm_mode")
-        except Exception:
-            existing = {}
-
-    # v0.4.0 migration: detect old agent-mode config from 0.3.0 wizard
-    migrate = True  # default for new installs / non-agent configs
-    if old_mode == "agent":
-        print()
-        print("⚠ Detected: your existing config uses agent mode (claude/opencode/gemini-cli).")
-        print("  v0.4.0 default is direct mode (Groq BYOK — free 14,400 req/day).")
-        print()
-        migrate = questionary.confirm(
-            "Switch to direct mode? (recommended)",
-            default=True,
-        ).ask()
-        if migrate is None:
-            sys.exit(1)
-        if migrate:
-            # Strip deprecated fields so they don't ghost-route the pipeline
-            existing.pop("agent_backend", None)
-            existing.pop("default_skill_mode", None)
-            print("  ✓ Migrating to direct mode (your old agent_backend is removed).")
-        else:
-            print("  Keeping agent mode. Tip: edit ~/.linkright/config.yaml to switch later.")
-
+    # ── Write config (existing/old_mode/migrate detected earlier in flow) ──
     update_dict = {
         "user_id": existing.get("user_id", "local"),
         "embedder_tier": embedder["key"],
@@ -415,6 +428,15 @@ def run_check() -> int:
     cfg = yaml.safe_load(cfg_path.read_text()) or {}
     groq_key = os.environ.get("GROQ_API_KEY", "")
     masked = (groq_key[:6] + "…" + groq_key[-4:]) if len(groq_key) > 12 else "(not set)"
+
+    # Warn if user is still on legacy agent mode (v0.3.0 default)
+    if cfg.get("default_llm_mode") == "agent":
+        print()
+        print("⚠ You are on agent mode (legacy from 0.3.0).")
+        print("  v0.4.0 default is direct mode (Groq BYOK — free 14,400 req/day).")
+        print("  Re-run `linkright setup` to migrate.")
+        print()
+
     print(f"Config:  {cfg_path}")
     print(f"  LLM mode:  {cfg.get('default_llm_mode', '(unset)')} (Groq key: {masked})")
     print(f"  Embedder:  {cfg.get('embedder_tier', '(unset)')}")
