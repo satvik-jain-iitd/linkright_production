@@ -125,6 +125,7 @@ async def post_capture(
                         f"\n⚠ Capture key rejected ({_consecutive_403_count} consecutive 403s).\n"
                         f"  Verify your LINKRIGHT_CAPTURE_KEY: linkright watch status\n\n"
                     )
+                    sys.stderr.flush()  # daemon stderr is block-buffered to file; force flush
                     _consecutive_403_count = 0  # reset after warning — clean slate per batch
                 return False, "403 forbidden (capture key rejected)"
 
