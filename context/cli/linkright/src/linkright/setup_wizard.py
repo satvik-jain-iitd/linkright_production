@@ -142,7 +142,7 @@ def _write_env_key(key_name: str, value: str) -> None:
     env_path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     if env_path.exists():
-        lines = env_path.read_text().splitlines()
+        lines = [l for l in env_path.read_text().splitlines() if l]  # drop blank lines
     updated = False
     for i, line in enumerate(lines):
         if line.startswith(f"{key_name}=") or line.startswith(f"{key_name} ="):
