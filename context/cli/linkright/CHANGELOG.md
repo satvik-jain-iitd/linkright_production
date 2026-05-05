@@ -13,6 +13,12 @@ narratives.
 > and 0.3.0 (cover letter sub-tool) were released without CHANGELOG entries.
 > See PR history (#48, #49) for those changes.
 
+> **⚠️ BREAKING for users upgrading from 0.3.0**: Default LLM mode changed
+> from `agent` (subprocess to claude/opencode/gemini-cli) to `direct` (HTTP
+> calls to Groq/Cerebras with BYOK keys). Run `linkright setup` after
+> upgrading — the wizard will detect your old config and prompt to migrate.
+> Direct mode is free up to 14,400 Groq req/day (most users won't hit it).
+
 > **NOTICE — visual change for existing users**: default brand colors flipped
 > from navy palette (`#1B2A4A` etc.) to pure `#000000`. If you previously ran
 > `linkright resume tailor` and got navy section titles + bullet markers, the
@@ -96,10 +102,21 @@ narratives.
   in step_08 retrieval. Deferred to v0.5 — needs proper RCA evaluation
   on bullet-quality per memory `feedback_one_resume_at_a_time` before
   prompt-context wiring lands.
-- Layer 4 self-heal validator: code merged (admin CLI subcommand
-  available as `linkright admin slug-discovery validate-all [--max N]`),
-  but Oracle VPS cron / systemd schedule for nightly automatic runs has
-  not yet been deployed. Until then, run the validator manually.
+- **Layer 4 self-heal validator runs manually only**: code is merged
+  (`linkright admin slug-discovery validate-all [--max N]`), but the
+  Oracle VPS cron / systemd timer for nightly auto-runs has not been
+  deployed. Run manually as needed; without it, slug staleness
+  accumulates over time.
+- **`linkright jobs import <csv>` requires backend deployment**: CSV
+  validation works (`--dry-run` previews rows), but live import POSTs
+  to a Supabase `/api/discoveries` endpoint that is not yet deployed.
+  Calling the live import currently returns 405 Method Not Allowed.
+  Deferred to a follow-up release.
+- **Wizard config migration is one-shot**: existing 0.3.0 users will
+  see a one-time prompt on first `linkright setup` after upgrade to
+  switch from agent mode to direct mode. If you decline, your old
+  `default_llm_mode: agent` and `agent_backend` are preserved; switch
+  later by editing `~/.linkright/config.yaml` and re-running setup.
 
 ## [0.1.0] - 2026-04-24
 
