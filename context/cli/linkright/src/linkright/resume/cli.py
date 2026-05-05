@@ -83,7 +83,12 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
     click.echo("    linkright practice          → Interview prep cards from your bullets")
     click.echo("")
     if pdf_path.exists():
-        click.echo(f"  Open the PDF: open {pdf_path}")
+        # AR R1 fixes: (1) cross-platform opener — `open` is macOS-only;
+        # Linux uses `xdg-open`, Windows uses `start`. (2) shell-quote the
+        # path so users with custom --run-id containing spaces can copy-paste
+        # the suggestion without it breaking on the unquoted whitespace.
+        opener = {"darwin": "open", "linux": "xdg-open", "win32": "start"}.get(sys.platform, "open")
+        click.echo(f'  Open the PDF: {opener} "{pdf_path}"')
         click.echo("")
 
 
