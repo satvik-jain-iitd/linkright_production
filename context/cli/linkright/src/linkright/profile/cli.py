@@ -147,7 +147,6 @@ def status_cmd() -> None:
     click.echo(f"Profile dir:  {profile_dir}")
     click.echo(f"Created:      {meta.get('created_at')}")
     click.echo(f"Embedder:     {meta.get('embedder_tier')} ({meta.get('embedder_model')}, dim={meta.get('dim')})")
-    click.echo(f"Source PDF:   sha256={meta.get('source_pdf_sha256', '')[:16]}…")
     click.echo(f"Nuggets:      {meta.get('n_nuggets')}")
     click.echo(f"  embedded:   {meta.get('n_embedded')}")
     click.echo(f"  highlights: {meta.get('n_highlights')}")
@@ -158,7 +157,12 @@ def status_cmd() -> None:
         click.echo(f"Contact:")
         for k in ("name", "phone", "email", "linkedin", "portfolio"):
             v = contact.get(k) or "(blank)"
-            click.echo(f"  {k:<10}: {v}")
+            line = f"  {k:<10}: {v}"
+            # AR walkthrough A.6 fix: surface the action when a field is blank
+            # so the user knows the next move (don't make them search docs).
+            if v == "(blank)" and k == "portfolio":
+                line += "  (set with: linkright contact)"
+            click.echo(line)
 
 
 # ── edit-contact ────────────────────────────────────────────────────────────

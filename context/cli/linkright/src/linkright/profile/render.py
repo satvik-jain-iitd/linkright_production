@@ -36,19 +36,48 @@ def show_profile(profile_dir: Optional[Path] = None) -> None:
         console.print("[yellow]No nuggets in this profile.[/]")
         return
 
-    # Group by company → role
+    # Group by company → role.
+    # AR walkthrough A.5 fix: defensively treat literal "none"/"None" as missing.
+    # Some upstream LLM extractions write the literal string "none" instead of
+    # leaving the field blank — caused tree to render `none → none → ...`.
     grouped: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
     untagged: list[dict] = []
     for n in nuggets:
         company = (n.get("company") or "").strip()
         role = (n.get("role") or "").strip()
+        if company.lower() in ("", "none", "null", "n/a"):
+            company = ""
+        if role.lower() in ("", "none", "null", "n/a"):
+            role = ""
         if company:
-            grouped[company][role or "(role unknown)"].append(n)
+            grouped[company][role or "(role unspecified)"].append(n)
         else:
             untagged.append(n)
 
+    # AR walkthrough A.5 fix: priority-badge legend so users know what
+    # P0/P1/P2 mean at a glance (no surprise jargon).
+    console.print(
+        "[dim]Priority: [bold red]P0[/]=core  [bold yellow]P1[/]=strong  "
+        "[dim italic]P2[/]=supporting  [dim italic]P3[/]=context-only[/]"
+    )
+
+    # AR walkthrough A.5 fix: hard-cap title length so rich.tree's terminal
+    # wrapping never produces mid-word truncation like "at American Ex".
+    def _truncate_title(s: str, limit: int = 120) -> str:
+        s = s.strip()
+        if len(s) <= limit:
+            return s
+        # Cut at last whole word before limit
+        cut = s[:limit].rsplit(" ", 1)[0]
+        return f"{cut}…"
+
     tree = Tree("[bold cyan]Career outline[/]")
     for company, roles in sorted(grouped.items(), key=lambda kv: kv[0].lower()):
+        # AR walkthrough A.5 fix: skip companies that ended up with zero
+        # nuggets (defensive — should not happen with current grouping logic
+        # but keeps the tree clean if upstream changes).
+        if not any(roles.values()):
+            continue
         co_node = tree.add(f"[bold]{company}[/]")
         for role, items in roles.items():
             role_node = co_node.add(f"[italic]{role}[/]  [dim]({len(items)} nugget{'s' if len(items)!=1 else ''})[/]")
@@ -56,11 +85,13 @@ def show_profile(profile_dir: Optional[Path] = None) -> None:
                 imp = (n.get("importance") or "").upper()
                 badge = {"P0": "[bold red]P0[/]", "P1": "[bold yellow]P1[/]",
                          "P2": "[dim]P2[/]", "P3": "[dim]P3[/]"}.get(imp, "")
-                title = (n.get("nugget_text") or n.get("answer", "")[:80] or "(untitled)").strip()
+                raw_title = n.get("nugget_text") or n.get("answer", "") or "(untitled)"
+                title = _truncate_title(raw_title)
                 role_node.add(f"{badge} {title}")
     if untagged:
-        u_node = tree.add(f"[dim](no company tag)[/]  [dim]({len(untagged)} nugget{'s' if len(untagged)!=1 else ''})[/]")
+        u_node = tree.add(f"[dim italic](Other / Independent)[/]  [dim]({len(untagged)} nugget{'s' if len(untagged)!=1 else ''})[/]")
         for n in untagged:
-            title = (n.get("nugget_text") or n.get("answer", "")[:80] or "(untitled)").strip()
+            raw_title = n.get("nugget_text") or n.get("answer", "") or "(untitled)"
+            title = _truncate_title(raw_title)
             u_node.add(title)
     console.print(tree)
