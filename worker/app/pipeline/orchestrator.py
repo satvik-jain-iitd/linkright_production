@@ -350,17 +350,118 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     # Keep oracle_with_fallback for Phase 5 (width rewriting) — Oracle OK there
     oracle_with_fallback = _FallbackLLM(_oracle, heavy_fallback) if _oracle else heavy_fallback
 
+    # ── Gate 1: Contact verify (EDIT gate — before JD analysis) ─────────────
+    # Surfaces phone/email/LinkedIn/portfolio from career_text for user to confirm.
+    # Backwards-compat: ctx.career_text always set; gate fires for all new jobs.
+    _contact_snippet = ctx.career_text[:1500] if ctx.career_text else ""
+    _contact_edits = await _gate_pause(ctx, sb, "gate_contact", {
+        "label": "Confirm your contact details",
+        "description": "Before we tailor your resume, please verify that your contact info is correct.",
+        "career_preview": _contact_snippet,
+    })
+    # Apply contact edits if user provided corrections (v1: log + store for reference)
+    if _contact_edits:
+        logger.info("gate_contact edits received: %s", list(_contact_edits.keys()))
+        ctx.stats["gate_contact_edits"] = _contact_edits
+
     await phase_1_parse_and_strategy(ctx, sb, gemini_with_fallback)      # quality-critical JSON parsing
+
+    # ── Gate 2: JD analyzed (READ gate) ─────────────────────────────────────
+    await _gate_pause(ctx, sb, "gate_jd_analyzed", {
+        "label": "Job description analyzed",
+        "strategy": ctx.strategy,
+        "career_level": getattr(ctx, "career_level", ""),
+        "jd_keywords": (ctx.jd_keywords or [])[:10],
+        "description": f"Strategy selected: {ctx.strategy}. Top keywords extracted.",
+    })
+
     await phase_2_5_vector_retrieval(ctx, sb)
+
+    # ── Gate 3: Career retrieved (READ gate) ─────────────────────────────────
+    _nugget_count = len(getattr(ctx, "_nuggets", []))
+    _companies = [c.get("name", "") if isinstance(c, dict) else str(c)
+                  for c in (ctx._parsed.get("companies", []) if hasattr(ctx, "_parsed") and ctx._parsed else [])]
+    await _gate_pause(ctx, sb, "gate_career_retrieved", {
+        "label": "Career profile retrieved",
+        "nugget_count": _nugget_count,
+        "companies": _companies[:5],
+        "description": f"Found {_nugget_count} career highlights across {len(_companies)} roles.",
+    })
+
     await phase_3_page_fit(ctx, sb)
     await phase_3_5_stencil_draft(ctx, sb)
+
+    # ── Gate 4: Strategy review (EDIT gate — after stencil) ──────────────────
+    _layout_companies = [c.get("name", "") if isinstance(c, dict) else str(c)
+                         for c in (ctx._parsed.get("companies", []) if hasattr(ctx, "_parsed") and ctx._parsed else [])]
+    _budget = getattr(ctx, "_bullet_budget", {})
+    _strategy_edits = await _gate_pause(ctx, sb, "gate_strategy_review", {
+        "label": "Review resume strategy",
+        "description": "Review the layout outline and bullet budget before we write your bullets.",
+        "strategy": getattr(ctx, "strategy", ""),
+        "companies": _layout_companies[:5],
+        "bullet_budget": _budget,
+        "section_order": getattr(ctx, "_section_order", []),
+    })
+    # Apply strategy edits if user changed section_order or bullet budget
+    if _strategy_edits:
+        logger.info("gate_strategy_review edits received: %s", list(_strategy_edits.keys()))
+        if "section_order" in _strategy_edits and isinstance(_strategy_edits["section_order"], list):
+            ctx._section_order = _strategy_edits["section_order"]
+        if "bullet_budget" in _strategy_edits and isinstance(_strategy_edits["bullet_budget"], dict):
+            ctx._bullet_budget = _strategy_edits["bullet_budget"]
+        ctx.stats["gate_strategy_edits"] = _strategy_edits
+
     await phase_4a_verbose_bullets(ctx, sb, gemini_with_fallback)        # quality-critical XYZ writing
+
+    # ── Gate 5: Bullets drafted (READ gate) ──────────────────────────────────
+    _verbose_count = len(getattr(ctx, "_verbose_bullets", []))
+    await _gate_pause(ctx, sb, "gate_bullets_drafted", {
+        "label": "Bullet points drafted",
+        "verbose_count": _verbose_count,
+        "description": f"Wrote {_verbose_count} verbose bullet drafts. Ranking by relevance next.",
+    })
+
     await phase_4b_ranking(ctx, sb)
     await phase_4c_condense_bullets(ctx, sb, quality_with_fallback)      # quality-critical condensing (was Oracle)
+
+    # ── Gate 6: Bullets condensed (READ gate) ────────────────────────────────
+    _condensed_count = len(getattr(ctx, "_raw_bullets", []))
+    await _gate_pause(ctx, sb, "gate_bullets_condensed", {
+        "label": "Bullets condensed",
+        "condensed_count": _condensed_count,
+        "description": f"Condensed to {_condensed_count} final bullets. Finalizing layout next.",
+    })
+
     await phase_3_5a_professional_summary(ctx, sb, quality_with_fallback)  # quality-critical summary (was Oracle)
+
+    # ── Gate 7: Layout drafted (READ gate — after summary + stencil finalized) ─
+    await _gate_pause(ctx, sb, "gate_layout_drafted", {
+        "label": "Layout and summary ready",
+        "description": "Professional summary written. Running final width optimization.",
+        "draft_html_available": bool(getattr(ctx, "draft_html", None)),
+    })
+
     await phase_5_width_opt(ctx, sb, oracle_with_fallback)               # Oracle OK for width tweaks if enabled
     await phase_6_scoring(ctx, sb)
     await phase_7_validation(ctx, sb)
+
+    # ── Gate 8: Final critique (EDIT gate — after scoring + validation) ───────
+    _avg_brs = ctx.stats.get("avg_brs", 0)
+    _quality_score = ctx.stats.get("quality_score", 0)
+    _grade = ctx.stats.get("quality_grade", "")
+    _critique_edits = await _gate_pause(ctx, sb, "gate_final_critique", {
+        "label": "Review your resume",
+        "description": "Pipeline complete. Review quality scores before final assembly.",
+        "avg_brs": _avg_brs,
+        "quality_score": _quality_score,
+        "quality_grade": _grade,
+        "draft_html_available": bool(getattr(ctx, "draft_html", None)),
+    })
+    if _critique_edits:
+        logger.info("gate_final_critique edits received: %s", list(_critique_edits.keys()))
+        ctx.stats["gate_critique_edits"] = _critique_edits
+
     await phase_8_assembly(ctx, sb, llm)
 
     # Aggregate token/timing stats
@@ -377,6 +478,55 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     ctx.current_phase = phase
     ctx.phase_message = msg
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
+
+
+GATE_POLL_INTERVAL_S = 3
+GATE_TIMEOUT_S = 3600  # 1 hour
+
+
+async def _gate_pause(
+    ctx: "PipelineContext",
+    sb: Client,
+    gate_name: str,
+    artifacts: dict,
+) -> dict:
+    """Pause pipeline at a phase boundary until the website flips gate_resume_at.
+
+    Backwards-compat: only called for NEW jobs dispatched after migration 045.
+    Old in-flight jobs have current_gate=NULL and never reach a gate call site.
+
+    Returns gate_edits dict (may be empty for read-only gates).
+    Raises RuntimeError on user Cancel; TimeoutError after GATE_TIMEOUT_S.
+    """
+    update_job(
+        sb, ctx.job_id,
+        status="awaiting_user_input",
+        current_gate=gate_name,
+        gate_artifacts=artifacts,
+        gate_resume_at=None,
+    )
+    deadline = time.time() + GATE_TIMEOUT_S
+    while time.time() < deadline:
+        await asyncio.sleep(GATE_POLL_INTERVAL_S)
+        try:
+            row = (
+                sb.table("resume_jobs")
+                .select("gate_resume_at, gate_edits, status")
+                .eq("id", ctx.job_id)
+                .single()
+                .execute()
+                .data
+            )
+        except Exception as _poll_err:
+            logger.warning("_gate_pause: poll error for %s: %s", gate_name, _poll_err)
+            continue
+        if row.get("status") == "failed":
+            raise RuntimeError(f"Pipeline cancelled by user at gate {gate_name}")
+        if row.get("gate_resume_at") is not None:
+            # Resume: clear gate state, flip back to processing
+            update_job(sb, ctx.job_id, status="processing", current_gate=None)
+            return row.get("gate_edits") or {}
+    raise TimeoutError(f"Gate {gate_name} timed out after {GATE_TIMEOUT_S}s — job marked failed")
 
 
 # ── Package B (honest bullets) — Phase 4A hallucination filter ───────────
