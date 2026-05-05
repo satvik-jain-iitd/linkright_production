@@ -33,7 +33,8 @@ narratives.
   to job pages, extracts JD + posts to `/api/captures` on the LinkRight backend.
   7 portals supported: LinkedIn, Naukri, Indeed, Wellfound, Greenhouse, Lever,
   Ashby. Subcommands: `watch` (foreground), `watch setup` (Chrome remote-debug
-  setup), `watch service` (background daemon), `watch status` (one-shot health
+  setup), `watch install-service` / `watch uninstall-service` (background
+  daemon), `watch status` (one-shot health
   check), `watch list` (recent captures from Oracle PG). Per-source path
   blocklist prevents accidental private-page captures.
 - **Pillar 2 dual-read** — `linkright jobs find` now merges Supabase scored

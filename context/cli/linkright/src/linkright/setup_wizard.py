@@ -252,7 +252,7 @@ def run_wizard() -> int:
     """Returns shell exit code (0 OK, 1 user-cancel, 2 install/smoke fail)."""
     print()
     print("╔════════════════════════════════════════════════════╗")
-    print("║   LinkRight setup — 3 quick choices                ║")
+    print("║   LinkRight setup wizard                           ║")
     print("╚════════════════════════════════════════════════════╝")
     print()
 
@@ -293,7 +293,9 @@ def run_wizard() -> int:
             print()
 
     needs_groq = not (old_mode == "agent" and not migrate)
+    total_steps = 3 if needs_groq else 2  # AR fix: count is dynamic — skips Groq step if user keeps agent mode
     if needs_groq:
+        print(f"You'll see {total_steps} quick choices.")
         print("First: a free Groq API key powers the resume pipeline.")
         print("Then: embedder + PDF renderer choices (⭐ = recommended).")
     else:
@@ -310,10 +312,10 @@ def run_wizard() -> int:
 
     # ── Decision 2: Embedder ───────────────────────────────────────
     print()
-    embedder = _pick("2/3 — Which embedder?", EMBEDDER_OPTIONS)
+    embedder = _pick(f"{2 if needs_groq else 1}/{total_steps} — Which embedder?", EMBEDDER_OPTIONS)
 
     # ── Decision 3: PDF render ─────────────────────────────────────
-    pdf = _pick("3/3 — Render PDFs from generated resumes?", PDF_OPTIONS)
+    pdf = _pick(f"{3 if needs_groq else 2}/{total_steps} — Render PDFs from generated resumes?", PDF_OPTIONS)
 
     print()
     print("──────────────────────────────────────────────────────")
