@@ -248,12 +248,20 @@ def tldr_cmd() -> None:
 # ── doctor — environment + config + deps health check ─────────────────────
 
 @main.command("doctor")
-def doctor_cmd() -> None:
+@click.option("--auto-fix", "auto_fix", is_flag=True,
+              help="After detecting failures, prompt to run the suggested fix command for each "
+                   "(confirm-each-step). Skips failures with no auto-fix available. "
+                   "Note: runs `pip install` in your CURRENT Python environment — "
+                   "if you use conda/pipx, install manually for cleanest results.")
+def doctor_cmd(auto_fix: bool) -> None:
     """Health check — config, API keys, deps, embedder, MongoDB, render path.
 
     Prints a table of green/red checks. Run this whenever something feels
     broken — it's the fastest way to localize the problem to a specific
     layer (network, missing key, bad install, etc.).
+
+    Pair with --auto-fix to opt into running the suggested fix commands
+    (each prompted individually).
     """
     import os
     import shutil as _shutil
@@ -309,8 +317,16 @@ def doctor_cmd() -> None:
         fastembed_ok = True
     except Exception:
         pass
-    rows.append(("Embedder (fastembed)", fastembed_ok,
-                 "installed" if fastembed_ok else "pip install fastembed (or set ORACLE_BACKEND_URL)"))
+    if fastembed_ok:
+        embedder_detail = "installed"
+    elif os.environ.get("ORACLE_BACKEND_URL"):
+        # AR walkthrough F-PRE-3 / X-2 fix: tell the user the fallback is
+        # active. Anxiety-without-agency pattern eliminated — they know what's
+        # actually running, and they know how to upgrade if they want speed.
+        embedder_detail = "using Oracle fallback (slower, network-dependent). pip install fastembed for offline + 5x speed."
+    else:
+        embedder_detail = "pip install fastembed (or set ORACLE_BACKEND_URL for hosted fallback)"
+    rows.append(("Embedder (fastembed)", fastembed_ok, embedder_detail))
 
     # 5. PDF render path — playwright OR weasyprint
     pw_ok = False
@@ -387,10 +403,84 @@ def doctor_cmd() -> None:
     click.echo("")
     if failures == 0:
         click.echo(f"{GREEN}All checks passed.{RST} You're good to run `linkright tailor`.")
+        return
+
+    # AR walkthrough F-PRE-2 fix: pluralization
+    issue_word = "issue" if failures == 1 else "issues"
+    click.echo(
+        f"{RED}{failures} {issue_word} above.{RST} "
+        f"Run `linkright doctor --auto-fix` to attempt the suggested fixes "
+        f"(prompted per step), or `linkright setup` for the wizard."
+    )
+
+    if auto_fix:
+        _run_doctor_auto_fix(rows)
+        return
+
+    sys.exit(1)
+
+
+# AR walkthrough X-2 fix: smoke-check failures now have an OPT-IN auto-fix path
+# (default off, prompted-per-step). Eliminates the "diagnostic without agency"
+# anti-pattern — user has a path forward without leaving the terminal.
+
+_PIP_FIX_RE = __import__("re").compile(
+    r"(pip install [\w\-\[\]\.]+(?:\s*&&\s*[\w\-\s]+)?)",
+    __import__("re").IGNORECASE,
+)
+
+
+def _extract_fix_command(detail: str) -> "str | None":
+    """Parse a doctor row's detail string for an auto-runnable shell command.
+
+    Heuristic: match the FIRST `pip install <pkg>` (optionally followed by
+    `&& <follow-up>` like `&& playwright install chromium`). Returns the
+    command string for shell execution, or None if no recognized fix.
+    """
+    if not detail:
+        return None
+    m = _PIP_FIX_RE.search(detail)
+    return m.group(1) if m else None
+
+
+def _run_doctor_auto_fix(rows: "list[tuple[str, bool, str]]") -> None:
+    """Prompt-and-run the suggested fix command for each failed row.
+
+    Per Decision 5 of the polish-plan alignment session: confirm-each-step
+    rather than --auto-fix --yes silent, to match Unix tradition (don't
+    mutate the user's env without explicit confirmation).
+    """
+    import subprocess
+    click.echo("")
+    click.echo("--auto-fix: prompting per failed check (Ctrl+C to abort the loop)...")
+    attempted = 0
+    for label, ok, detail in rows:
+        if ok:
+            continue
+        cmd = _extract_fix_command(detail)
+        if not cmd:
+            click.echo(f"  ⊝  {label}: no auto-fix available (manual: {detail})")
+            continue
+        click.echo("")
+        if click.confirm(f"  Run `{cmd}` for `{label}`?", default=False):
+            attempted += 1
+            try:
+                proc = subprocess.run(cmd, shell=True, capture_output=False)
+                if proc.returncode == 0:
+                    click.echo(f"  ✓  fix succeeded for `{label}`")
+                else:
+                    click.echo(f"  ✗  fix exited {proc.returncode} for `{label}`")
+            except Exception as exc:
+                click.echo(f"  ✗  fix subprocess failed: {exc}")
+        else:
+            click.echo(f"  ⊝  skipped `{label}`")
+
+    click.echo("")
+    if attempted:
+        click.echo(f"{attempted} fix(es) attempted. Re-run `linkright doctor` to verify.")
     else:
-        click.echo(f"{RED}{failures} issue(s) above.{RST} "
-                   f"Run `linkright setup` to auto-fix common ones, or `linkright tldr` for the cheat sheet.")
-        sys.exit(1)
+        click.echo("No fixes applied (all skipped or no auto-fix available).")
+    sys.exit(1 if attempted == 0 else 0)
 
 
 @main.command("setup")
