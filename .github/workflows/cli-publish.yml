@@ -1,0 +1,75 @@
+name: cli-publish
+
+# Auto-publish the linkright CLI to PyPI on tag push.
+#
+# Trigger: `git tag v0.4.1 && git push --tags`
+# Action:  builds wheel + sdist from context/cli/linkright/, uploads to PyPI
+#          via API token stored in repository secrets (PYPI_API_TOKEN).
+#
+# Pre-flight (one-time setup, owner only):
+#   1. Create PyPI API token at https://pypi.org/manage/account/token/
+#      Scope: project = "linkright"
+#   2. Add the token as a GitHub Actions secret named PYPI_API_TOKEN at
+#      https://github.com/satvik-jain-iitd/linkright_production/settings/secrets/actions
+#
+# Safety: the workflow VERIFIES the git tag version matches the pyproject.toml
+# version BEFORE uploading. A mismatch (e.g. tagged v0.5.0 but pyproject says
+# 0.4.1) fails the build — never publishes a confused version.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-publish:
+    name: Build wheel + upload to PyPI
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: context/cli/linkright
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Verify tag version matches pyproject.toml
+        # Prevents publishing a confused version (e.g. tag v0.5.0 with pyproject 0.4.1).
+        # Extracts the version from the tag (`v1.2.3` -> `1.2.3`) and compares to the
+        # `version = "X.Y.Z"` line in pyproject.toml. Exits non-zero on mismatch.
+        run: |
+          tag_version="${GITHUB_REF#refs/tags/v}"
+          pyproject_version=$(grep -E '^version = ' pyproject.toml | head -1 | cut -d'"' -f2)
+          echo "Tag version:        $tag_version"
+          echo "pyproject version:  $pyproject_version"
+          if [ "$tag_version" != "$pyproject_version" ]; then
+            echo "::error::Tag version ($tag_version) does not match pyproject.toml ($pyproject_version). Bump pyproject.toml + commit + re-tag."
+            exit 1
+          fi
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: python -m twine upload --non-interactive --verbose dist/*
+
+      - name: Summary
+        run: |
+          echo "### ✓ Published to PyPI" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: \`${GITHUB_REF#refs/tags/}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Project page: https://pypi.org/project/linkright/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Users can upgrade with: \`pip install --upgrade linkright\`" >> $GITHUB_STEP_SUMMARY

@@ -2,6 +2,74 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.4.1] - 2026-05-06
+
+CLI polish pass — 5 PRs of UX improvements with no behavioral regressions.
+Plus the foundation for `pip install --upgrade linkright` to actually work
+for the first time (PyPI auto-publish CI on tag push).
+
+### Changed
+
+- **`linkright` (no-args)** now shows the cheat-sheet content directly
+  instead of the alphabetical command list. Industry convention (git,
+  kubectl, docker, npm) — no-args shows curated content; `linkright
+  --help` continues to show the alphabetical command list as escape
+  valve for power users. (#79)
+- **`linkright tailor`** ends with a structured success card showing
+  PDF path + score + duration + 3-step next-action nudge, instead of
+  `✓ Done — see <path>`. Cross-platform `open` suggestion (uses
+  `xdg-open` on Linux, `start` on Windows). Path is shell-quoted so
+  copy-paste works for `--run-id` values containing spaces. (#80)
+- **`linkright profile show`** adds a P0/P1/P2/P3 priority legend at
+  the top of the tree. Long bullet text truncates at word-boundary
+  with ellipsis (no more mid-character cuts). Literal "none"
+  company/role placeholders normalized to "Other / Independent" /
+  "(role unspecified)". Empty companies hidden. (#81)
+- **`linkright profile status`** drops the SHA256 hash from default
+  output (was internal cache-invalidation detail). When portfolio
+  field is blank, status output now shows `(set with: linkright
+  contact)` inline. (#81)
+- **`linkright doctor`** — pluralization fix (`1 issue above` instead
+  of `1 issue(s) above`). Embedder failure line states "using Oracle
+  fallback (slower, network-dependent). pip install fastembed for
+  offline + 5x speed." when fastembed is missing AND
+  `ORACLE_BACKEND_URL` is set — eliminates the
+  anxiety-without-agency pattern on the failure. (#82)
+- **Help-text cleanup** across `critique`, `fill`, `practice`,
+  `improve`, `strategy-review`, `edit-contact`: drops "Per Satvik
+  <date>" attributions, "Truth Engine Layer N" framing, internal
+  artifact paths (e.g. `<run>/artifacts/15b_interview_prep.json`),
+  and "magnitude tier 0.5" jargon. Reads as user-facing product copy
+  now. STAR auto-expands inline as `STAR (Situation / Task / Action
+  / Result)` so new users aren't lost on the acronym. (#83)
+- **`linkright tailor --help`** docstring rewritten as user copy
+  ("typically 2-4 minutes" + quickstart) instead of the "16-step
+  pipeline" implementation-detail framing. (#79)
+
+### Added
+
+- **`linkright doctor --auto-fix`** flag — opt-in, confirm-each-step.
+  Detects fixable failures (e.g., missing fastembed), prompts the user
+  per-failure, runs `pip install <pkg>` via subprocess on `y`. Caveat
+  documented in `--help`: runs in your CURRENT Python env; conda/pipx
+  users should install manually. (#82)
+- **PyPI auto-publish on tag push** — `.github/workflows/cli-publish.yml`
+  watches for tags matching `v*`. On push, validates the tag version
+  matches `pyproject.toml`, builds wheel + sdist, uploads to PyPI via
+  the `PYPI_API_TOKEN` secret. After this 0.4.1 release lands on PyPI,
+  every user can run `pip install --upgrade linkright`. Foundational
+  for the v1 ship.
+
+### Notes
+
+> **Action required for repository owner (one-time, ~3 min):**
+> 1. Create a PyPI API token at <https://pypi.org/manage/account/token/>
+>    (scope: project = "linkright").
+> 2. Add it to GitHub Actions secrets as `PYPI_API_TOKEN` at
+>    <https://github.com/satvik-jain-iitd/linkright_production/settings/secrets/actions>.
+> 3. After this PR merges, run `git tag v0.4.1 && git push --tags`
+>    locally — the CI workflow auto-publishes 0.4.1 to PyPI.
+
 ## [0.4.0] - 2026-05-03
 
 Pillar 2 + Pillar 3 push toward v1 ship. New `linkright watch` (Chrome-attached
