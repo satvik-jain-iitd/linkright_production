@@ -833,20 +833,99 @@ async def _llm_call(ctx: PipelineContext, llm, system: str, user: str, phase: in
 
 
 def _parse_json(text: str) -> dict:
-    """Extract JSON from LLM response, handling markdown fences and trailing commas."""
+    """Extract JSON from LLM response — robust to commentary wrappers,
+    markdown fences (anywhere in text), and trailing commas.
+
+    Failure-mode coverage (observed empirically when 8B fallback fires for
+    Phase 1+2, 4A, 4C in production):
+      1. Pure JSON                                        → fast path
+      2. ```json\\n{...}\\n```                            → strip fence
+      3. "Sure, here's the JSON: ```json\\n{...}\\n```"   → strip commentary
+                                                            + strip fence
+      4. "{...}\\nLet me know if you need anything..."    → greedy extract
+                                                            first balanced
+                                                            {...} or [...]
+      5. Trailing commas in JSON                          → regex fix-up
+    """
     import re
     text = text.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        start = 1 if lines[0].startswith("```") else 0
-        end = -1 if lines[-1].strip() == "```" else len(lines)
-        text = "\n".join(lines[start:end])
+
+    # Fast path: clean JSON
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Fix trailing commas (common with smaller models): ,} → } and ,] → ]
-        fixed = re.sub(r',\s*([}\]])', r'\1', text)
-        return json.loads(fixed)
+        pass
+
+    # Strip markdown fence (anywhere in text, not just at start) — handles
+    # 8B's "Here is the JSON for X:\n```json\n{...}\n```\nThanks!" pattern.
+    fence_match = re.search(r"```(?:json|JSON)?\s*\n(.*?)\n\s*```", text, re.DOTALL)
+    if fence_match:
+        candidate = fence_match.group(1).strip()
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    # Greedy extract first balanced {...} or [...] via brace-counting.
+    # Respects JSON string literals so a `{` inside `"..."` doesn't bump depth.
+    candidate = _extract_json_block(text)
+    if candidate:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            # Trailing-comma fix on the extracted block
+            fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
+            try:
+                return json.loads(fixed)
+            except json.JSONDecodeError:
+                pass
+
+    # Last resort: trailing-comma fix on whole text
+    fixed = re.sub(r",\s*([}\]])", r"\1", text)
+    return json.loads(fixed)
+
+
+def _extract_json_block(text: str) -> str:
+    """Find the first balanced {...} or [...] block in `text`, respecting JSON
+    string literals (a `{` inside `"..."` does NOT bump the depth counter).
+
+    Returns the substring (e.g. `'{"foo": "bar"}'`) or empty string if no
+    balanced block found. Used by `_parse_json` to extract structured data
+    from LLM commentary wrappers like "Sure, here it is: {...} let me know..."
+    """
+    if not text:
+        return ""
+    n = len(text)
+    i = 0
+    while i < n and text[i] not in "{[":
+        i += 1
+    if i >= n:
+        return ""
+    open_char = text[i]
+    close_char = "}" if open_char == "{" else "]"
+    depth = 0
+    in_string = False
+    escaped = False
+    j = i
+    while j < n:
+        c = text[j]
+        if escaped:
+            escaped = False
+        elif c == "\\":
+            escaped = True
+        elif in_string:
+            if c == '"':
+                in_string = False
+        elif c == '"':
+            in_string = True
+        elif c == open_char:
+            depth += 1
+        elif c == close_char:
+            depth -= 1
+            if depth == 0:
+                return text[i:j + 1]
+        j += 1
+    return ""  # unmatched open brace
 
 
 def _load_template(template_id: str) -> str:
@@ -2000,10 +2079,44 @@ async def phase_4a_verbose_bullets(ctx: PipelineContext, sb: Client, llm):
             model=resp.model, system_prompt=system_msg, user_input=user_msg,
             output=resp.text, user_id=ctx.user_id,
         )
+        # linkright-7jz fix: 1 retry with explicit JSON-only instruction, then
+        # SKIP this company on second failure. A single 8B parse fail should
+        # NEVER kill the whole pipeline — 7 of 8 companies' bullets is far
+        # better than 0 of 8. Pre-fix, this raised ValueError + aborted.
+        data = None
         try:
             data = _parse_json(resp.text)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Phase 4A ({co_name}): invalid JSON — {e}") from e
+        except json.JSONDecodeError as parse_err:
+            logger.warning(
+                f"Job {ctx.job_id}: Phase 4A {co_name} — first parse failed "
+                f"({parse_err}); retrying with explicit JSON-only instruction"
+            )
+            retry_user = (
+                user_msg
+                + "\n\nIMPORTANT: Your previous response was not valid JSON. "
+                "Output ONLY the JSON object, no commentary, no markdown fence, "
+                "no preamble. Start with `{` and end with `}`."
+            )
+            try:
+                retry_resp = await _llm_call(
+                    ctx, llm, system_msg, retry_user, phase=4, temperature=0.2,
+                )
+                data = _parse_json(retry_resp.text)
+                logger.info(
+                    f"Job {ctx.job_id}: Phase 4A {co_name} — retry succeeded"
+                )
+            except Exception as retry_err:
+                logger.error(
+                    f"Job {ctx.job_id}: Phase 4A {co_name} — retry also failed "
+                    f"({retry_err}); skipping this company. Pipeline continues."
+                )
+                ctx.stats.setdefault("phase_4a_skipped_companies", []).append(
+                    {
+                        "company": co_name,
+                        "reason": f"json_parse_failed_x2: {str(parse_err)[:120]}",
+                    }
+                )
+                continue  # next company; don't kill pipeline
 
         # Package B validator: drop hallucinated / templated paragraphs BEFORE
         # they get into the resume. Skipped when company_valid_ids is empty
