@@ -18,27 +18,19 @@ which python3
 python3 --version          # expect: 3.9+ (3.12.7 confirmed working)
 which pip
 which linkright            # expect: path inside your env, NOT /usr/local/bin
-linkright --version        # expect: 0.3.0 or 0.4.0 depending on PyPI release status
+linkright --version        # expect: 0.4.0
 ```
 
 ### 0.2 Editable install of the latest local code
 
+> **Note (2026-05-05)**: CLI source lives in the OUTER repo (`linkright_production`), NOT inside `repo/` (which is the website inner repo). Install from the `release-v04` worktree which has the verified 0.4.0 code.
+
 ```bash
-cd ~/Documents/linkright_production/repo
-git status
-# Confirm: clean working tree, branch=main, up-to-date with origin/main
+/Library/Frameworks/Python.framework/Versions/3.13/bin/pip3 install -e \
+  ~/Documents/linkright-wt/release-v04/context/cli/linkright/
 
-git log --oneline -5
-# Top commits should include:
-#   feat(captures): trigger Sprint B slug auto-discovery on new-company captures (#59)
-#   feat(jobsearch): dual-read in 'jobs find' — Supabase scored feed + Oracle PG captures merged (#58)
-#   feat(captures): widen coverage to 7 portals — ... (#57)
-#   feat(watch): linkright watch list — ... (#56)
-#   feat(cli): linkright watch — ... (#55)
-
-pip install -e context/cli/linkright/
 linkright --version
-# Should now load FROM the editable install at ~/Documents/linkright_production/repo/...
+# Expect: linkright, version 0.4.0
 ```
 
 ### 0.3 Config file presence
