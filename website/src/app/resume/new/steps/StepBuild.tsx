@@ -455,18 +455,58 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
           ) : null}
           <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs">
             {Object.entries(gate.artifacts)
-              .filter(
-                ([k, v]) =>
-                  !["label", "description"].includes(k) &&
-                  (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
-              )
-              .slice(0, 6)
-              .map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="font-medium text-muted">{k}</dt>
-                  <dd className="text-foreground">{String(v)}</dd>
-                </div>
-              ))}
+              .filter(([k]) => !["label", "description"].includes(k))
+              .slice(0, 8)
+              .map(([k, v]) => {
+                // AR-fix R2: render ALL value types, not just primitives.
+                // Worker emits arrays (jd_keywords, companies, section_order)
+                // and objects (bullet_budget) — those must surface, not drop.
+                let display: string;
+                if (v === null || v === undefined) {
+                  display = "—";
+                } else if (
+                  typeof v === "string" ||
+                  typeof v === "number" ||
+                  typeof v === "boolean"
+                ) {
+                  display = String(v);
+                } else if (Array.isArray(v)) {
+                  if (v.length === 0) {
+                    display = "—";
+                  } else if (
+                    v.every(
+                      (item) =>
+                        typeof item === "string" ||
+                        typeof item === "number" ||
+                        typeof item === "boolean"
+                    )
+                  ) {
+                    display = v.join(", ");
+                  } else {
+                    display = `${v.length} item${v.length === 1 ? "" : "s"}`;
+                  }
+                } else if (typeof v === "object") {
+                  const entries = Object.entries(v as Record<string, unknown>).slice(0, 5);
+                  display =
+                    entries.length === 0
+                      ? "—"
+                      : entries
+                          .map(
+                            ([ek, ev]) =>
+                              `${ek}: ${typeof ev === "object" && ev !== null ? "…" : String(ev)}`
+                          )
+                          .join(", ");
+                } else {
+                  display = String(v);
+                }
+                if (display.length > 200) display = display.slice(0, 197) + "…";
+                return (
+                  <div key={k} className="contents">
+                    <dt className="font-medium text-muted">{k}</dt>
+                    <dd className="text-foreground">{display}</dd>
+                  </div>
+                );
+              })}
           </dl>
           {gate.editable && (
             <div className="mt-4">
