@@ -74,6 +74,16 @@ def main(ctx: click.Context) -> None:
     # `linkright --help` for users who want the full surface.
     if ctx.invoked_subcommand is None:
         click.echo(_TLDR)
+        # Silent version-check: hits PyPI (cached 24h) + appends a small
+        # update-available notice. Fully fail-silent on offline / PyPI down /
+        # cache corruption. See linkright.lib.version_check for design.
+        try:
+            from linkright.lib.version_check import update_notice
+            notice = update_notice()
+            if notice:
+                click.echo(notice)
+        except Exception:
+            pass  # never let version-check block CLI usage
         ctx.exit(0)
 
 
@@ -390,7 +400,29 @@ def doctor_cmd(auto_fix: bool) -> None:
         rows.append((f"Agent backend `{backend}` on PATH", bin_present,
                      "installed" if bin_present else f"`{backend}` not on PATH"))
 
-    # 9. Render the table
+    # 10. Latest version on PyPI (silent fail if offline / cache miss).
+    #     Always ok=True because "update available" is informational, not a
+    #     blocking failure — we don't want doctor to exit 1 just because user
+    #     is one polish-PR behind. Detail line conveys the state clearly.
+    try:
+        from linkright.lib.version_check import (
+            get_installed_version, get_latest_version, is_newer,
+        )
+        _installed_v = get_installed_version()
+        _latest_v = get_latest_version()
+        if _latest_v is None:
+            rows.append(("Latest version (PyPI)", True,
+                         f"{_installed_v} installed (PyPI check unavailable — offline?)"))
+        elif is_newer(_latest_v, _installed_v):
+            rows.append(("Latest version (PyPI)", True,
+                         f"{_installed_v} → {_latest_v} available. Run: linkright update"))
+        else:
+            rows.append(("Latest version (PyPI)", True,
+                         f"{_installed_v} (latest)"))
+    except Exception:
+        pass  # version-check is fully optional; no crash if helper fails
+
+    # 11. Render the table
     GREEN = "\033[32m"; RED = "\033[31m"; DIM = "\033[2m"; RST = "\033[0m"
     width = max(len(label) for label, _, _ in rows)
     click.echo("LinkRight doctor — environment & deps check\n")
