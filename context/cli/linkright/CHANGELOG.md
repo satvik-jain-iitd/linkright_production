@@ -17,7 +17,9 @@ narratives.
 > from `agent` (subprocess to claude/opencode/gemini-cli) to `direct` (HTTP
 > calls to Groq/Cerebras with BYOK keys). Run `linkright setup` after
 > upgrading — the wizard will detect your old config and prompt to migrate.
-> Direct mode is free up to 14,400 Groq req/day (most users won't hit it).
+> Direct mode is free on Groq's `llama-3.1-8b-instant` free tier
+> (14,400 req/day). If the pipeline ever escalates to `llama-3.3-70b`, the
+> daily cap drops to 1,000 req — but that's atypical for resume tailoring.
 
 > **NOTICE — visual change for existing users**: default brand colors flipped
 > from navy palette (`#1B2A4A` etc.) to pure `#000000`. If you previously ran
@@ -31,7 +33,8 @@ narratives.
   to job pages, extracts JD + posts to `/api/captures` on the LinkRight backend.
   7 portals supported: LinkedIn, Naukri, Indeed, Wellfound, Greenhouse, Lever,
   Ashby. Subcommands: `watch` (foreground), `watch setup` (Chrome remote-debug
-  setup), `watch service` (background daemon), `watch status` (one-shot health
+  setup), `watch install-service` / `watch uninstall-service` (background
+  daemon), `watch status` (one-shot health
   check), `watch list` (recent captures from Oracle PG). Per-source path
   blocklist prevents accidental private-page captures.
 - **Pillar 2 dual-read** — `linkright jobs find` now merges Supabase scored
@@ -112,11 +115,12 @@ narratives.
   to a Supabase `/api/discoveries` endpoint that is not yet deployed.
   Calling the live import currently returns 405 Method Not Allowed.
   Deferred to a follow-up release.
-- **Wizard config migration is one-shot**: existing 0.3.0 users will
-  see a one-time prompt on first `linkright setup` after upgrade to
-  switch from agent mode to direct mode. If you decline, your old
-  `default_llm_mode: agent` and `agent_backend` are preserved; switch
-  later by editing `~/.linkright/config.yaml` and re-running setup.
+- **Wizard prompts to migrate on each setup run while agent mode is configured**:
+  existing 0.3.0 users will see a migration prompt every time they run
+  `linkright setup` until they accept the switch (or manually edit
+  `~/.linkright/config.yaml`). Declining preserves `default_llm_mode: agent`
+  and `agent_backend`; you can keep declining indefinitely. `linkright setup
+  --check` also warns when agent mode is detected so you don't forget.
 
 ## [0.1.0] - 2026-04-24
 
