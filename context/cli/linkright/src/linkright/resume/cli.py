@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +36,55 @@ def resume_group() -> None:
     Tip: prefix matching works (git-style). `linkright resume tail` →
     tailor when no other tail* exists.
     """
+
+
+def _render_success_card(run_dir: Path, started_at: float) -> None:
+    """Print the end-of-tailor success summary card.
+
+    Replaces the previous one-line `✓ Done — see <path>` with a structured
+    summary that surfaces (a) the PDF path, (b) the score if scorecard.json
+    exists, (c) wall-clock duration, and (d) suggested next-step commands.
+    Per the peak-end rule, the END of a long-running command is the user's
+    highest-emotion moment — celebrate the win + nudge the natural next move.
+
+    Best-effort: if scorecard.json is missing or unparseable, the score line
+    is silently dropped (no crash, no scary error).
+    """
+    duration = time.monotonic() - started_at
+    mins, secs = divmod(int(duration), 60)
+    duration_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+
+    pdf_path = run_dir / "artifacts" / "15_final_resume.pdf"
+    pdf_line = str(pdf_path) if pdf_path.exists() else "(PDF not produced — see logs/pipeline.log)"
+
+    score_line = None
+    scorecard_path = run_dir / "scorecard.json"
+    if scorecard_path.exists():
+        try:
+            data = json.loads(scorecard_path.read_text())
+            score = data.get("overall_score")
+            grade = data.get("overall_grade", "")
+            if score is not None:
+                score_line = f"{score:.1f}/100  ({grade})" if grade else f"{score:.1f}/100"
+        except Exception:
+            pass  # graceful degrade — no score line is OK
+
+    click.echo("")
+    click.echo(f"✓ Resume tailored — {run_dir.name}")
+    click.echo("")
+    click.echo(f"  📄 PDF:        {pdf_line}")
+    if score_line:
+        click.echo(f"  📊 Score:      {score_line}")
+    click.echo(f"  ⏱  Took:       {duration_str}")
+    click.echo("")
+    click.echo("  Next steps:")
+    click.echo("    linkright critique          → LLM review (5 actionable issues + fix UI)")
+    click.echo("    linkright fill              → Resolve missing-metric gaps")
+    click.echo("    linkright practice          → Interview prep cards from your bullets")
+    click.echo("")
+    if pdf_path.exists():
+        click.echo(f"  Open the PDF: open {pdf_path}")
+        click.echo("")
 
 
 @resume_group.command("tailor")
@@ -72,6 +122,7 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
     test runs (--deterministic / --seed), or fresh re-extraction
     (--no-cache).
     """
+    _started_at = time.monotonic()
     cfg = Config.load()
     llm_mode = llm_mode or cfg.default_llm_mode
     mode = mode or cfg.default_skill_mode
@@ -174,7 +225,7 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
         except Exception as e:  # noqa: BLE001
             click.echo(f"Pipeline error: {e}", err=True)
             raise click.Abort()
-        click.echo(f"✓ Done — see {run_dir}")
+        _render_success_card(run_dir, _started_at)
     else:
         raise click.BadParameter(f"Unknown llm-mode: {llm_mode}")
 
