@@ -240,7 +240,13 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
                 artifacts: (row.gate_artifacts as Record<string, unknown>) || {},
                 editable: EDITABLE_GATES.includes(gateName),
               });
-            } else if (row.status === "processing" || row.status === "completed") {
+            } else if (
+              row.status === "processing" ||
+              row.status === "completed" ||
+              row.status === "failed"
+            ) {
+              // AR-fix: also clear on `failed` (timeout / cancel / worker crash)
+              // so the gate overlay doesn't co-exist with the error banner.
               setGate(null);
               setGateNotes("");
             }
@@ -278,7 +284,12 @@ export function StepBuild({ data, update, next, onReset, onRetry, onSubSteps, on
               artifacts: (job.gate_artifacts as Record<string, unknown>) || {},
               editable: EDITABLE_GATES_POLL.includes(job.current_gate as string),
             });
-          } else if (job.status === "processing" || job.status === "completed") {
+          } else if (
+            job.status === "processing" ||
+            job.status === "completed" ||
+            job.status === "failed"
+          ) {
+            // AR-fix: also clear on `failed` (timeout / cancel / worker crash).
             setGate(null);
             setGateNotes("");
           }

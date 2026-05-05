@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     .from("resume_jobs")
     .update({ status: "failed", error_message: "Cancelled by user" })
     .eq("user_id", user.id)
-    .in("status", ["queued", "processing"]);
+    .in("status", ["queued", "processing", "awaiting_user_input"]);
 
   if (error) {
     return Response.json({ error: "Failed to cancel jobs" }, { status: 500 });

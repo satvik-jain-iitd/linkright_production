@@ -353,11 +353,13 @@ async def run_pipeline(ctx: PipelineContext, sb: Client) -> None:
     # ── Gate 1: Contact verify (EDIT gate — before JD analysis) ─────────────
     # Surfaces phone/email/LinkedIn/portfolio from career_text for user to confirm.
     # Backwards-compat: ctx.career_text always set; gate fires for all new jobs.
-    _contact_snippet = ctx.career_text[:1500] if ctx.career_text else ""
+    # AR-fix: surface PARSED contact fields (phone/email/LinkedIn/portfolio),
+    # not raw 1500-char career_text — per spec memory personal_details_verify_at_start.
+    _contact_parsed = _extract_contact_preview(ctx.career_text or "")
     _contact_edits = await _gate_pause(ctx, sb, "gate_contact", {
         "label": "Confirm your contact details",
-        "description": "Before we tailor your resume, please verify that your contact info is correct.",
-        "career_preview": _contact_snippet,
+        "description": "Verify phone / email / LinkedIn / portfolio before we tailor your resume.",
+        **_contact_parsed,
     })
     # Apply contact edits if user provided corrections (v1: log + store for reference)
     if _contact_edits:
@@ -480,8 +482,31 @@ async def _progress(ctx: PipelineContext, sb: Client, phase: int, msg: str, pct:
     update_job(sb, ctx.job_id, current_phase=msg, phase_number=phase, progress_pct=pct)
 
 
+def _extract_contact_preview(career_text: str) -> dict:
+    """Best-effort regex extraction of phone / email / LinkedIn / portfolio from
+    the first ~10 lines of career_text. Surfaced at gate_contact (Truth Engine
+    layer 1) so user confirms parsed fields, not raw resume text.
+
+    Per spec memory feedback_personal_details_verify_at_start.md: surface
+    structured fields — never hallucinate. Returns empty dict if nothing matches.
+    """
+    if not career_text:
+        return {}
+    head = career_text[:600]  # contact info is virtually always in the header
+    out: dict = {}
+    m = re.search(r"[\w._%+-]+@[\w.-]+\.[A-Za-z]{2,}", head)
+    if m: out["email"] = m.group(0)
+    m = re.search(r"(?:\+?\d[\d\s\-\(\)]{7,18}\d)", head)
+    if m: out["phone"] = re.sub(r"\s+", " ", m.group(0).strip())
+    m = re.search(r"(?:linkedin\.com/(?:in|pub)/[\w\-]+)", head, re.IGNORECASE)
+    if m: out["linkedin"] = m.group(0)
+    m = re.search(r"https?://(?!.*linkedin)[\w\-./?=&%#]+", head)
+    if m: out["portfolio"] = m.group(0)
+    return out
+
+
 GATE_POLL_INTERVAL_S = 3
-GATE_TIMEOUT_S = 3600  # 1 hour
+GATE_TIMEOUT_S = 600  # 10 min per gate (outer pipeline timeout is 30 min in main.py)
 
 
 async def _gate_pause(
@@ -506,6 +531,7 @@ async def _gate_pause(
         gate_resume_at=None,
     )
     deadline = time.time() + GATE_TIMEOUT_S
+    consecutive_poll_failures = 0  # AR-fix: bound retry on permanent Supabase errors
     while time.time() < deadline:
         await asyncio.sleep(GATE_POLL_INTERVAL_S)
         try:
@@ -517,16 +543,32 @@ async def _gate_pause(
                 .execute()
                 .data
             )
+            consecutive_poll_failures = 0
         except Exception as _poll_err:
-            logger.warning("_gate_pause: poll error for %s: %s", gate_name, _poll_err)
+            consecutive_poll_failures += 1
+            logger.warning("_gate_pause: poll error #%d for %s: %s",
+                           consecutive_poll_failures, gate_name, _poll_err)
+            if consecutive_poll_failures >= 5:
+                # Permanent error (network down, row deleted, schema mismatch).
+                # Fail fast rather than blocking for the full GATE_TIMEOUT_S.
+                update_job(sb, ctx.job_id, status="failed",
+                           error_message=f"Gate {gate_name} poll-failed 5x consecutively")
+                raise RuntimeError(f"Gate {gate_name} poll failed 5 times consecutively") from _poll_err
             continue
         if row.get("status") == "failed":
             raise RuntimeError(f"Pipeline cancelled by user at gate {gate_name}")
         if row.get("gate_resume_at") is not None:
-            # Resume: clear gate state, flip back to processing
-            update_job(sb, ctx.job_id, status="processing", current_gate=None)
+            # Resume: clear gate state, flip back to processing.
+            # AR-fix: also reset gate_resume_at=None so a stale non-NULL doesn't
+            # leak into the next gate's poll window.
+            update_job(sb, ctx.job_id, status="processing",
+                       current_gate=None, gate_resume_at=None)
             return row.get("gate_edits") or {}
-    raise TimeoutError(f"Gate {gate_name} timed out after {GATE_TIMEOUT_S}s — job marked failed")
+    # AR-fix: explicitly mark failed BEFORE raising so the row never leaks
+    # as awaiting_user_input even momentarily.
+    update_job(sb, ctx.job_id, status="failed",
+               error_message=f"Gate {gate_name} timed out after {GATE_TIMEOUT_S}s of inactivity")
+    raise TimeoutError(f"Gate {gate_name} timed out after {GATE_TIMEOUT_S}s")
 
 
 # ── Package B (honest bullets) — Phase 4A hallucination filter ───────────
