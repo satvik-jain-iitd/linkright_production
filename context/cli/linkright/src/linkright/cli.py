@@ -58,14 +58,23 @@ Pillars (full names — short aliases also work):
 """
 
 
-@click.group(cls=AliasedGroup, epilog=_EPILOG)
+@click.group(cls=AliasedGroup, epilog=_EPILOG, invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="linkright")
-def main() -> None:
+@click.pass_context
+def main(ctx: click.Context) -> None:
     """LinkRight — local-first, agent-native career OS.
 
     \b
     Try first: linkright tldr
     """
+    # When invoked with no subcommand (just `linkright`), render the cheat
+    # sheet directly instead of click's default --help wall. Industry
+    # convention (git, kubectl, docker, npm) — show curated content first;
+    # the alphabetical command list stays one keystroke away as
+    # `linkright --help` for users who want the full surface.
+    if ctx.invoked_subcommand is None:
+        click.echo(_TLDR)
+        ctx.exit(0)
 
 
 # ── Pillars ─────────────────────────────────────────────────────────────
