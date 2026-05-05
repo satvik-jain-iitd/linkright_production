@@ -259,6 +259,18 @@ def add_cmd(
             if not result:
                 result = nugget_text
         else:
+            # Distinguish "no profile at all" from "profile exists, no match"
+            try:
+                from linkright.profile.pipeline import _profile_dir
+                nuggets_jsonl = _profile_dir() / "nuggets.jsonl"
+                profile_exists = nuggets_jsonl.exists()
+            except Exception:
+                profile_exists = False
+            if not profile_exists:
+                raise click.ClickException(
+                    "No profile found. Run `linkright profile create -r resume.pdf` first.\n"
+                    "Then `--from-nugget` can pre-fill stories from your career nuggets."
+                )
             click.echo(f"  (No nugget matched '{from_nugget}' — proceeding with empty fields)")
 
     if not yes:
