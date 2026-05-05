@@ -66,10 +66,9 @@ class Config:
     mongo_db: str = "linkright"
     oracle_url: str = ""
     oracle_secret: str = ""
-    default_llm_mode: str = "agent"  # agent | direct
+    default_llm_mode: str = "direct"  # direct | agent
     default_skill_mode: str = "product_manager"
-    # Set by `linkright setup` wizard. Read by resume/cli.py to set
-    # LR_AGENT_BACKEND env var so the pipeline routes through the user's pick.
+    # Used when default_llm_mode="agent" (manual override). Wizard no longer sets this.
     agent_backend: str = "claude"           # claude | opencode | gemini | ollama | custom
     embedder_tier: str = "fastembed"        # fastembed | sentence_transformers | oracle
     render_pdf: bool = True                 # if False, skip Playwright step_15
