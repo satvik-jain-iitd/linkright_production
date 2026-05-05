@@ -51,7 +51,8 @@ def resume_group() -> None:
 @click.option("--deterministic", is_flag=True,
               help="Pin temperature=0 + seed across all LLM calls. Pairs with hypothesis-test for variance reduction.")
 @click.option("--seed", default=42, type=int, help="Seed for deterministic mode (default 42). Honoured by Groq/Cerebras/OpenRouter; Gemini ignores.")
-def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int) -> None:
+@click.option("--no-pause", "no_pause", is_flag=True, help="Skip phase-boundary review checkpoints (CI / non-interactive mode).")
+def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int, no_pause: bool) -> None:
     """Tailor resume for a JD via the 16-step pipeline."""
     cfg = Config.load()
     llm_mode = llm_mode or cfg.default_llm_mode
@@ -62,6 +63,10 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
         os.environ["LR_DETERMINISTIC"] = "1"
         os.environ["LR_SEED"] = str(seed)
         click.echo(f"Deterministic mode ON (seed={seed}) — temperature pinned to 0 across all LLM calls.")
+
+    if no_pause:
+        os.environ["LR_NO_PAUSE"] = "1"
+        click.echo("Pause checkpoints disabled (--no-pause).")
 
     run_dir = cfg.runs_dir() / run_id
     (run_dir / "inputs").mkdir(parents=True, exist_ok=True)
