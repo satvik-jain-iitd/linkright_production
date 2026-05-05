@@ -1333,6 +1333,18 @@ def chat_with_fallback(
         return text, usage
     except LLMError as e:
         attempts.append({"provider": "openrouter", "error": str(e)[:200]})
+        # Detect "no keys configured" pattern — every attempt failed with "API_KEY not set".
+        # This usually means the user pip-installed but never ran `linkright setup`.
+        all_no_key = all(
+            "_API_KEY not set" in (a.get("error") or "")
+            for a in attempts
+        ) and len(attempts) > 0
+        if all_no_key:
+            raise LLMError(
+                "No LLM API keys configured. Run `linkright setup` to add a free Groq key "
+                "(https://console.groq.com — covers ~14,400 tailoring requests/day on the "
+                "llama-3.1-8b free tier)."
+            )
         # If it's a 402 credits error, the whole cascade is blocked. Surface clearly.
         if "402" in str(e) or "credits" in str(e).lower():
             raise LLMError(

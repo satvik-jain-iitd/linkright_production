@@ -139,6 +139,7 @@ def _login_jwt(save_session_fn) -> None:
     exp_dt = None
     sub = ""
     user_email = ""
+    missing_exp = False
     try:
         import base64
         parts = jwt_token.split(".")
@@ -146,17 +147,28 @@ def _login_jwt(save_session_fn) -> None:
             padding = 4 - len(parts[1]) % 4
             padded = parts[1] + ("=" * padding)
             payload = json.loads(base64.urlsafe_b64decode(padded))
-            exp_ts = payload.get("exp", 0)
+            exp_ts = payload.get("exp")
             sub = payload.get("sub", "")
             user_email = payload.get("email", "")
-            if exp_ts:
+            if exp_ts is None:
+                missing_exp = True
+            elif exp_ts:
                 exp_dt = datetime.fromtimestamp(exp_ts, tz=timezone.utc)
     except Exception:
         pass
 
+    if missing_exp:
+        click.echo(
+            "Invalid JWT: missing 'exp' field. This token can't be validated.\n"
+            "Get a fresh JWT from sync.linkright.in (DevTools → Application → Local Storage).",
+            err=True,
+        )
+        sys.exit(1)
+
     if exp_dt and exp_dt <= datetime.now(timezone.utc):
         click.echo(
-            "Warning: that JWT is already expired. Please log in fresh at sync.linkright.in.",
+            f"Warning: that JWT expired at {exp_dt.isoformat()}.\n"
+            "Please log in fresh at sync.linkright.in.",
             err=True,
         )
         sys.exit(1)
