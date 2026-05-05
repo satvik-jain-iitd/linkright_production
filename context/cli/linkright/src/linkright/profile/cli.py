@@ -167,10 +167,9 @@ def status_cmd() -> None:
 def edit_contact_cmd() -> None:
     """Re-verify / edit personal contact details (phone, email, LinkedIn, etc.).
 
-    Truth Engine Layer 1 — per Satvik 2026-05-02 (memory
-    feedback_personal_details_verify_at_start): wrong contact info = silent
-    failure (recruiter can't reach candidate). Use this when phone changes,
-    LinkedIn URL updates, or you add a portfolio.
+    Use this when your phone changes, LinkedIn URL updates, or you add
+    a portfolio. Wrong contact info is the worst kind of resume bug —
+    the recruiter can't reach you, and you'll never know.
     """
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
