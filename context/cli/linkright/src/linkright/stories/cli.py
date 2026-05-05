@@ -259,14 +259,15 @@ def add_cmd(
             if not result:
                 result = nugget_text
         else:
-            # Distinguish "no profile at all" from "profile exists, no match"
-            try:
-                from linkright.profile.pipeline import _profile_dir
-                nuggets_jsonl = _profile_dir() / "nuggets.jsonl"
-                profile_exists = nuggets_jsonl.exists()
-            except Exception:
-                profile_exists = False
-            if not profile_exists:
+            # Distinguish "no profile at all" from "profile exists, no match".
+            # Directory-level check (NOT nuggets.jsonl): in partial-create states
+            # (PDF ingested but extraction failed mid-run), the file is absent
+            # but inputs/resume.pdf is still there — telling the user to re-run
+            # `profile create` would wipe their inputs via the default _wipe path.
+            # ImportError must NOT be silently swallowed — that would mask a
+            # broken install as "no profile found".
+            from linkright.profile.pipeline import _profile_dir
+            if not _profile_dir().exists():
                 raise click.ClickException(
                     "No profile found. Run `linkright profile create -r resume.pdf` first.\n"
                     "Then `--from-nugget` can pre-fill stories from your career nuggets."
