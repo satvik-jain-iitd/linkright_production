@@ -53,7 +53,25 @@ def resume_group() -> None:
 @click.option("--seed", default=42, type=int, help="Seed for deterministic mode (default 42). Honoured by Groq/Cerebras/OpenRouter; Gemini ignores.")
 @click.option("--no-pause", "no_pause", is_flag=True, help="Skip phase-boundary review checkpoints (CI / non-interactive mode).")
 def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int, no_pause: bool) -> None:
-    """Tailor resume for a JD via the 16-step pipeline."""
+    """Tailor your resume for a job description (typically 2-4 minutes).
+
+    \b
+    Quick start:
+      linkright tailor -r resume.pdf -j jd.md
+
+    The command parses your resume + JD, retrieves matching career nuggets,
+    drafts bullets via LLM, scores + ranks, and renders a final PDF.
+
+    \b
+    Most users only need:
+      -r / --resume <PATH>     Your resume PDF
+      -j / --jd <PATH>         Job description (markdown)
+
+    Other flags below are advanced — needed only for non-PM roles
+    (--mode), CI / non-interactive runs (--no-pause / --yes), repeatable
+    test runs (--deterministic / --seed), or fresh re-extraction
+    (--no-cache).
+    """
     cfg = Config.load()
     llm_mode = llm_mode or cfg.default_llm_mode
     mode = mode or cfg.default_skill_mode
