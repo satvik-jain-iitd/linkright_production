@@ -331,18 +331,45 @@ def run_wizard() -> int:
     cfg_path = Path.home() / ".linkright" / "config.yaml"
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     existing: dict = {}
+    old_mode = None
     if cfg_path.exists():
         try:
             existing = yaml.safe_load(cfg_path.read_text()) or {}
+            old_mode = existing.get("default_llm_mode")
         except Exception:
             existing = {}
-    existing.update({
+
+    # v0.4.0 migration: detect old agent-mode config from 0.3.0 wizard
+    migrate = True  # default for new installs / non-agent configs
+    if old_mode == "agent":
+        print()
+        print("⚠ Detected: your existing config uses agent mode (claude/opencode/gemini-cli).")
+        print("  v0.4.0 default is direct mode (Groq BYOK — free 14,400 req/day).")
+        print()
+        migrate = questionary.confirm(
+            "Switch to direct mode? (recommended)",
+            default=True,
+        ).ask()
+        if migrate is None:
+            sys.exit(1)
+        if migrate:
+            # Strip deprecated fields so they don't ghost-route the pipeline
+            existing.pop("agent_backend", None)
+            existing.pop("default_skill_mode", None)
+            print("  ✓ Migrating to direct mode (your old agent_backend is removed).")
+        else:
+            print("  Keeping agent mode. Tip: edit ~/.linkright/config.yaml to switch later.")
+
+    update_dict = {
         "user_id": existing.get("user_id", "local"),
-        "default_llm_mode": "direct",
         "embedder_tier": embedder["key"],
         "render_pdf": pdf["key"] == "playwright",
         "schema_version": 2,
-    })
+    }
+    # Only write default_llm_mode if not preserving user's choice to keep agent mode
+    if not (old_mode == "agent" and not migrate):
+        update_dict["default_llm_mode"] = "direct"
+    existing.update(update_dict)
     cfg_path.write_text(yaml.safe_dump(existing, sort_keys=False))
     print()
     print(f"Saved config →  {cfg_path}")
@@ -365,8 +392,13 @@ def run_wizard() -> int:
         print("   linkright setup --check")
         return 2
 
-    print("✅  Setup complete. Try this:")
+    print("✅  Setup complete.")
     print()
+    print("Recommended next step (one-time, ~30s):")
+    print("   linkright profile create -r path/to/resume.pdf")
+    print("   → caches your resume so every tailor run is 30-60s faster")
+    print()
+    print("Then tailor for any job:")
     print("   linkright resume tailor -r path/to/resume.pdf -j path/to/jd.md")
     print()
     print("To re-run the wizard later:  linkright setup")
