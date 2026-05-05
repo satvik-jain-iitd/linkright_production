@@ -259,14 +259,19 @@ def add_cmd(
             if not result:
                 result = nugget_text
         else:
-            # Distinguish three states (R3 — addresses AR concerns 1-3):
+            # Distinguish three states (R4 — fixes R3 reviewer concern about
+            # fictional --no-wipe flag; correct safe-recovery cmd is
+            # `linkright profile refresh` per profile/cli.py:215):
             #   (a) no profile dir → "run profile create" (clean install path)
             #   (b) profile dir exists but nuggets.jsonl missing → partial-create
             #       state (PDF ingested, extraction failed mid-run); inputs/resume.pdf
-            #       is still there, so DON'T tell user to re-run `profile create`
-            #       (default _wipe() would delete their inputs).
-            #   (c) profile dir + nuggets.jsonl both exist → genuine no-match;
-            #       fall through to the silent yellow note (current behavior).
+            #       is still there. Recovery: `linkright profile refresh` re-parses
+            #       inputs/resume.pdf in place (does NOT call _wipe()). Both
+            #       `profile create --force` and `profile rebuild` WOULD wipe — so
+            #       DON'T point users at those for recovery.
+            #   (c) profile dir + nuggets.jsonl both exist → no nugget matched
+            #       (or MongoDB returned a doc with text=None — pre-existing edge
+            #       in _resolve_nugget). Fall through to silent yellow note.
             try:
                 from linkright.profile.pipeline import _profile_dir
             except ImportError as exc:
@@ -284,9 +289,10 @@ def add_cmd(
             if not nuggets_file.exists():
                 raise click.ClickException(
                     f"Profile directory exists at {profile_dir} but nuggets.jsonl is missing.\n"
-                    "Extraction may have failed mid-run. Inspect inputs/ and re-run extraction "
-                    "manually — avoid `linkright profile create` without --no-wipe, which would "
-                    "delete your inputs/resume.pdf."
+                    "Extraction may have failed mid-run. Run `linkright profile refresh` to "
+                    "re-parse the existing inputs/resume.pdf without wiping it.\n"
+                    "(Avoid `linkright profile create --force` and `linkright profile rebuild` "
+                    "for recovery — both wipe inputs/ before rebuilding.)"
                 )
             click.echo(f"  (No nugget matched '{from_nugget}' — proceeding with empty fields)")
 
