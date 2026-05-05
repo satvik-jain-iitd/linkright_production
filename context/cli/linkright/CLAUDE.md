@@ -179,7 +179,7 @@ metadata.yaml                      (created_at, embedder_tier, embedder_model, d
 2. **Bullets follow XYZ format**: "Impact X, achieving Y, by doing Z" — width 95-100% of column.
 3. **1-page PDF guaranteed** via `fit_loop` (max 5 iterations, escalating strategies).
 4. **v8/v9 fabrication guards** must run on bullet output before publish.
-5. **agent-mode is the canonical LLM dispatch**; direct mode is for power users with API keys.
+5. **direct-mode is the canonical LLM dispatch** (Groq API key, BYOK via `~/.linkright/.env`); agent-mode is opt-in for users who want to route through a CLI tool (claude/opencode/gemini).
 6. **fastembed is the default embedder**; Oracle is opt-in via env.
 7. **Telemetry mandatory**: every run writes `16_telemetry.json` with token count + cost. Agent-mode tracked via `cost_usd` field in usage dict.
 8. **No fabrication**: jd_keyphrase guard rejects bullets with JD-keywords absent from source nuggets; metric_extract guard rejects bullets with numbers absent from source.
