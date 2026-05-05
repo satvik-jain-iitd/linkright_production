@@ -143,6 +143,109 @@ async def test_post_capture_network_error_retries():
     assert mock_client.post.call_count == poster.RETRY_ATTEMPTS
 
 
+# ── 403 consecutive-failure counter (added 2026-05-05 after silent-403 review) ──
+
+@pytest.fixture(autouse=True)
+def _reset_403_counter():
+    """Reset module-level 403 counter before EACH test so order doesn't matter."""
+    poster._consecutive_403_count = 0
+    yield
+    poster._consecutive_403_count = 0
+
+
+def _payload():
+    return {"source": "naukri", "job_url": "x", "title": "y", "company_name": "z",
+            "captured_at": "2026-05-03T00:00:00Z"}
+
+
+@pytest.mark.asyncio
+async def test_post_capture_403_increments_counter_no_warning_below_threshold(capsys):
+    """First 2 of 3 consecutive 403s increment counter but do NOT emit warning."""
+    mock_resp = httpx.Response(403, text="forbidden")
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_resp)
+
+    for i in range(2):
+        ok, msg = await poster.post_capture(
+            _payload(), endpoint="https://x", capture_key="bad", client=mock_client,
+        )
+        assert ok is False
+        assert "403" in msg
+
+    assert poster._consecutive_403_count == 2
+    captured = capsys.readouterr()
+    assert "Capture key rejected" not in captured.err
+
+
+@pytest.mark.asyncio
+async def test_post_capture_403_warns_at_threshold_and_resets(capsys):
+    """3rd consecutive 403 emits stderr warning and resets counter to 0."""
+    mock_resp = httpx.Response(403, text="forbidden")
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_resp)
+
+    for _ in range(3):
+        await poster.post_capture(
+            _payload(), endpoint="https://x", capture_key="bad", client=mock_client,
+        )
+
+    captured = capsys.readouterr()
+    assert "Capture key rejected (3 consecutive 403s)" in captured.err
+    assert "linkright watch status" in captured.err
+    # Counter resets after warning so next batch warns again
+    assert poster._consecutive_403_count == 0
+
+
+@pytest.mark.asyncio
+async def test_post_capture_success_resets_403_counter():
+    """A successful 200/201 between 403s resets the counter."""
+    mock_403 = httpx.Response(403, text="forbidden")
+    mock_201 = httpx.Response(201, json={"ok": True, "dedup_status": "new"})
+
+    # Two 403s, then a 201, then the counter must be 0
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=[mock_403, mock_403, mock_201])
+
+    for _ in range(3):
+        await poster.post_capture(
+            _payload(), endpoint="https://x", capture_key="k", client=mock_client,
+        )
+
+    assert poster._consecutive_403_count == 0
+
+
+@pytest.mark.asyncio
+async def test_post_capture_other_4xx_does_not_increment_403_counter():
+    """A 401/404/etc. response does NOT touch the 403 counter."""
+    mock_resp = httpx.Response(401, text="invalid key")
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_resp)
+
+    for _ in range(5):
+        await poster.post_capture(
+            _payload(), endpoint="https://x", capture_key="bad", client=mock_client,
+        )
+
+    assert poster._consecutive_403_count == 0
+
+
+@pytest.mark.asyncio
+async def test_post_capture_403_warning_uses_stderr_not_stdout(capsys):
+    """The 403 warning must go to stderr (not stdout) so daemon log routes correctly."""
+    mock_resp = httpx.Response(403, text="forbidden")
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_resp)
+
+    for _ in range(3):
+        await poster.post_capture(
+            _payload(), endpoint="https://x", capture_key="bad", client=mock_client,
+        )
+
+    captured = capsys.readouterr()
+    assert "Capture key rejected" in captured.err
+    assert "Capture key rejected" not in captured.out
+
+
 def test_now_iso_returns_utc_string():
     iso = poster.now_iso()
     assert "T" in iso
