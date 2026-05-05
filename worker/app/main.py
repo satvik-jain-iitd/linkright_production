@@ -160,12 +160,13 @@ async def process_job(req: JobRequest):
 
         hb_task = asyncio.create_task(_heartbeat())
         try:
-            # Pipeline-level timeout: 300s is 3.3× our observed p95 (~90s) —
-            # generous enough for cold LLM starts yet bounds user wait time.
-            # 8 min — lets retry backoff handle a full 60s rate-limit window
-            # multiple times without the outer kill-switch firing. Users still
-            # get a deterministic upper bound.
-            await asyncio.wait_for(run_pipeline(ctx, sb), timeout=480)
+            # Pipeline-level timeout: 30 min — accommodates the 8 phase-boundary
+            # review gates added in feat/pipeline-gates. Each gate can pause up
+            # to GATE_TIMEOUT_S (600s = 10 min) waiting for user Continue. Math:
+            # 8 × 10min worst case at gates + ~5min compute = up to 85 min, but
+            # typical use is 30s-2min per gate (~10-20 min total). 30 min covers
+            # 99% of users; truly-abandoned jobs die deterministically.
+            await asyncio.wait_for(run_pipeline(ctx, sb), timeout=1800)
         finally:
             hb_task.cancel()
             try:
@@ -187,11 +188,11 @@ async def process_job(req: JobRequest):
         )
     except asyncio.TimeoutError:
         duration = int((time.time() - started) * 1000)
-        logger.error(f"Job {req.job_id}: TIMED OUT after {duration}ms (5min cap)")
+        logger.error(f"Job {req.job_id}: TIMED OUT after {duration}ms (30min cap)")
         update_job(
             sb, req.job_id,
             status="failed",
-            error_message="Pipeline exceeded 5-minute time limit. Please try again — this usually resolves on retry. If it persists, contact support.",
+            error_message="Pipeline exceeded 30-minute time limit (likely abandoned at a review gate). Please try again — if you need more time at a checkpoint, finish promptly so the pipeline doesn't time out. If it persists, contact support.",
             duration_ms=duration,
         )
     except Exception as e:

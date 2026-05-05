@@ -113,12 +113,14 @@ export async function POST(request: Request) {
     .in("status", ["queued", "processing"])
     .lt("created_at", tenMinAgo);
 
-  // Per-user throttle: max 1 concurrent job (checked AFTER stale cleanup)
+  // Per-user throttle: max 1 concurrent job (checked AFTER stale cleanup).
+  // Includes awaiting_user_input so a paused-at-gate job blocks new starts —
+  // user must resume or cancel via /api/resume/cancel before tailoring again.
   const { count: activeCount } = await supabase
     .from("resume_jobs")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .in("status", ["queued", "processing"]);
+    .in("status", ["queued", "processing", "awaiting_user_input"]);
 
   if (activeCount && activeCount >= 1) {
     return Response.json(
