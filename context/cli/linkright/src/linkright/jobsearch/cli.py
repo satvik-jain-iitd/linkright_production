@@ -462,7 +462,8 @@ def apply_cmd(discovery_id: str, no_status: bool) -> None:
                 click.secho(
                     "  Tailor done, but mark-applied failed (401).\n"
                     "  Re-login: linkright auth login\n"
-                    f"  Then mark applied: linkright jobs status {resolved_id} applied",
+                    "  Then mark applied via the website: https://sync.linkright.in/jobs\n"
+                    f"  (or re-run `linkright jobs apply {resolved_id}` — will re-tailor + mark).",
                     fg="yellow",
                 )
             else:

@@ -1206,6 +1206,8 @@ def chat_with_fallback(
                 _mark_cooling("groq_70b", "429")
             elif "rate" in str(e).lower() or "quota" in str(e).lower():
                 _mark_cooling("groq_70b", "rate/quota")
+            elif "not set" in str(e):
+                pass  # missing key — fall through to next provider in cascade
             else:
                 raise
     elif _is_cooling("groq_70b"):
@@ -1228,6 +1230,8 @@ def chat_with_fallback(
             attempts.append({"provider": "cerebras", "error": str(e)[:200]})
             if "429" in str(e) or "quota" in str(e).lower() or "rate" in str(e).lower():
                 _mark_cooling("cerebras", "429/queue")
+            elif "not set" in str(e):
+                pass  # missing key — fall through to next provider in cascade
             else:
                 raise
     elif _is_cooling("cerebras"):
@@ -1335,8 +1339,12 @@ def chat_with_fallback(
         attempts.append({"provider": "openrouter", "error": str(e)[:200]})
         # Detect "no keys configured" pattern — every attempt failed with "API_KEY not set".
         # This usually means the user pip-installed but never ran `linkright setup`.
+        # Match any "<KEY_NAME> not set" / "API_TOKEN not set" / parenthetical-alias
+        # variant — covers Groq/Cerebras (API_KEY), Cloudflare (API_TOKEN), Z.ai
+        # ("ZHIPU_API_KEY (or Z_AI_API_KEY) not set"). Substring match instead of
+        # full-pattern equality so any provider's "<NAME> not set" message qualifies.
         all_no_key = all(
-            "_API_KEY not set" in (a.get("error") or "")
+            "not set" in (a.get("error") or "")
             for a in attempts
         ) and len(attempts) > 0
         if all_no_key:
