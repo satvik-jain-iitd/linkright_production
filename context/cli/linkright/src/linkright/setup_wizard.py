@@ -25,8 +25,6 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
-
 import questionary
 import yaml
 
@@ -175,6 +173,8 @@ def _smoke_groq_key(key: str) -> tuple[bool, str]:
             return True, "Groq API key valid ✓"
         if resp.status_code == 401:
             return False, "Invalid key (401 Unauthorized)"
+        if resp.status_code == 404:
+            return True, "Key valid (model name may have changed — harmless)"
         if resp.status_code == 429:
             return True, "Rate-limited but key is valid (429)"
         return False, f"Unexpected status {resp.status_code}"
@@ -183,7 +183,12 @@ def _smoke_groq_key(key: str) -> tuple[bool, str]:
 
 
 def _ask_groq_key() -> tuple[str, bool, str]:
-    """Prompt user for Groq key, validate format, run smoke test. Returns (key, ok, msg)."""
+    """Prompt user for Groq key, validate format, save to .env, run smoke test.
+
+    Key is saved to ~/.linkright/.env as soon as format is valid — the smoke
+    test is advisory only (network may be down during setup on VPN/firewall).
+    Returns (key, smoke_ok, msg).
+    """
     print("  Get a free key at: https://console.groq.com → API Keys → Create key")
     print("  (Free tier: 14,400 req/day — enough for hundreds of resumes)")
     print()
@@ -193,6 +198,9 @@ def _ask_groq_key() -> tuple[str, bool, str]:
     key = key.strip()
     if not key.startswith("gsk_") or len(key) < 20:
         return key, False, "Key format invalid (should start with 'gsk_')"
+    # Save immediately — format is valid; don't gate on network reachability
+    _write_env_key("GROQ_API_KEY", key)
+    print("  ✓  Saved GROQ_API_KEY → ~/.linkright/.env")
     print("  Verifying key with a live Groq call…")
     ok, msg = _smoke_groq_key(key)
     return key, ok, msg
@@ -307,11 +315,6 @@ def run_wizard() -> int:
             else:
                 print("     ✓ done")
 
-    # ── Write Groq key to .env ─────────────────────────────────────
-    if groq_key and ok_groq:
-        _write_env_key("GROQ_API_KEY", groq_key)
-        print(f"  ✓  Saved GROQ_API_KEY → ~/.linkright/.env")
-
     print()
     print("Smoke-testing your picks…")
     print(f"  Groq API key:        {'✓' if ok_groq else '✗'}  {msg_groq}")
@@ -349,7 +352,10 @@ def run_wizard() -> int:
     if failures or not ok_groq or not ok_emb or not ok_pdf:
         print("⚠️  Setup completed with warnings.")
         if not ok_groq:
-            print("   • Groq API key not working. Get a free key at: https://console.groq.com")
+            if "format invalid" in msg_groq:
+                print("   • Groq key format invalid — re-run `linkright setup` with a valid gsk_... key.")
+            else:
+                print(f"   • Groq smoke test failed ({msg_groq}). Key is saved — try `linkright setup --check` once network is available.")
         if not ok_emb:
             print(f"   • Embedder `{embedder['key']}` smoke failed.")
         if not ok_pdf:
