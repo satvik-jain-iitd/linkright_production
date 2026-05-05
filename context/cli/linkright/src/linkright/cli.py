@@ -257,9 +257,22 @@ def update_cmd(check_only: bool, yes: bool) -> None:
     """
     import subprocess
     import sys as _sys
-    from linkright.lib.version_check import (
-        get_installed_version, get_latest_version, is_newer,
-    )
+
+    # Defensive import: lib.version_check ships in PR-B (#85). If this PR (PR-C)
+    # somehow lands without PR-B (e.g. user pinned to a frankenstein version),
+    # show a human-readable message instead of a raw ModuleNotFoundError.
+    try:
+        from linkright.lib.version_check import (
+            get_installed_version, get_latest_version, is_newer,
+        )
+    except ImportError:
+        click.echo(
+            "✗ `linkright update` needs the version-check helper "
+            "(linkright.lib.version_check) which ships in linkright >= 0.4.1.\n"
+            "  Upgrade manually:\n"
+            f"  {_sys.executable} -m pip install --upgrade linkright"
+        )
+        _sys.exit(1)
 
     installed = get_installed_version()
     latest = get_latest_version(force_refresh=True)  # always-fresh for `update`
@@ -280,10 +293,10 @@ def update_cmd(check_only: bool, yes: bool) -> None:
     click.echo("")
 
     if check_only:
-        click.echo(f"--check: skipping install. Run `linkright update` to upgrade.")
+        click.echo("--check: skipping install. Run `linkright update` (without --check) to upgrade.")
         return
 
-    if not yes and not click.confirm("Proceed with upgrade?", default=True):
+    if not yes and not click.confirm("Proceed with upgrade?", default=False):
         click.echo("Aborted.")
         return
 
