@@ -1,29 +1,106 @@
 # LinkRight v1 — Manual QA Plan
 
 > **Date**: 2026-05-03 (updated 2026-05-05)
-> **Audience**: LinkRight v1 tester — run Sections 0–8 in order (user-facing flows). Admin/infrastructure checks are isolated in Section A at the very end.
-> **Scope**: every user-facing CLI command + every cross-cutting flow shipped through PRs #50–#62 (Sprint D watch + Pillar 2 dual-read + brand-color + Story Bank). Deferred items (e.g., tailor pipeline reading stories alongside nuggets) are explicitly called out as v0.5 work, not v1 gaps.
-> **Goal**: sit at terminal, run each section in order, verify expected output, log any deviations using the bug template at the end
-
-This is a **runnable checklist**, not a document. Each section is "Do X → Expect Y → Log if not Y". Estimated total run-time: 75-95 min if everything works first try (see breakdown table at end).
+> **Structure**: Section 1 = what a real new user runs. Admin sections (QA + Infra) = what only Satvik runs for pre-ship verification.
 
 ---
 
-## 0 — Pre-flight (one-time, ~5 min)
+## 1 — User Onboarding Flow (~10 min)
 
-### 0.1 Tooling sanity
+> This is the exact journey a new job seeker will take after finding LinkRight on GitHub. Run this first — if this breaks, nothing else matters.
+
+### 1.1 Install
 
 ```bash
-which python3
-python3 --version          # expect: 3.9+ (3.12.7 confirmed working)
-which pip
-which linkright            # expect: path inside your env, NOT /usr/local/bin
-linkright --version        # expect: 0.4.0
+pip install 'linkright[full]'
+linkright --version
+# Expect: linkright, version 0.4.0
 ```
 
-### 0.2 Editable install of the latest local code
+### 1.2 Setup wizard (one-time)
 
-> **Note (2026-05-05)**: CLI source lives in the OUTER repo (`linkright_production`), NOT inside `repo/` (which is the website inner repo). Install from the `release-v04` worktree which has the verified 0.4.0 code.
+```bash
+linkright setup
+# Expect: interactive wizard — picks LLM provider, embedder, PDF renderer
+# At minimum: enter one free Groq API key when prompted
+# Should complete in ~1 min
+```
+
+### 1.3 Health check
+
+```bash
+linkright doctor
+# Expect: green ticks for config, API keys, deps, embedder, MongoDB
+# Any RED item = stop and fix before continuing
+```
+
+### 1.4 Profile creation
+
+```bash
+linkright profile create -r /path/to/your/resume.pdf
+# Expect: ~30-60s, "Profile saved with N nuggets"
+```
+
+### 1.5 Tailor a resume
+
+```bash
+linkright tailor -j /path/to/jd.md
+# Expect: 16-step pipeline, ~2 min
+# Final: "Score: XX.X (Grade: X)" + PDF path printed
+# Open the PDF — verify it looks right
+```
+
+### 1.6 Cover letter
+
+```bash
+linkright cl -j /path/to/jd.md
+# Expect: ~250-word cover letter, ~90 sec
+```
+
+### 1.7 Job search
+
+```bash
+linkright auth login
+# Opens browser → OAuth → "Logged in as ..."
+
+linkright jobs find
+# Expect: ranked job table with scores
+```
+
+### 1.8 Watch setup (passive job capture)
+
+```bash
+linkright watch setup
+# Expect: Chrome alias written to ~/.zshrc + next steps shown
+```
+
+### 1.9 Story Bank (interview prep)
+
+```bash
+linkright stories add
+# Interactive prompts: Title, Situation, Task, Action, Result, Tags
+# Expect: "✓ Story saved"
+
+linkright stories list
+# Expect: table with your story
+```
+
+**User Onboarding PASS = all 9 steps above work without error. This is the v1 ship bar.**
+
+---
+---
+
+# Admin — QA Verification (Satvik only)
+
+> Everything below is Satvik's pre-ship verification checklist. A regular user never runs any of this. Run after confirming Section 1 passes.
+
+---
+
+## QA-0 — Pre-flight (~5 min)
+
+### QA-0.1 Editable install from source
+
+> For QA runs, install from source worktree (not PyPI) to test the exact code being shipped.
 
 ```bash
 /Library/Frameworks/Python.framework/Versions/3.13/bin/pip3 install -e \
@@ -33,24 +110,21 @@ linkright --version
 # Expect: linkright, version 0.4.0
 ```
 
-### 0.3 Config file presence
+### QA-0.2 Config file presence
 
 ```bash
 ls -la ~/.linkright/
 # Expect: .env (mode 600), config.yaml, profile/, runs/, cache/
 
 grep -E "^(LINKRIGHT_CAPTURE_KEY|GROQ_API_KEY|GEMINI_API_KEY)" ~/.linkright/.env | cut -d= -f1
-# Expect lines printed for each key — values redacted by cut
-# At minimum: LINKRIGHT_CAPTURE_KEY, GROQ_API_KEY (or any LLM provider)
+# Expect: GROQ_API_KEY, GEMINI_API_KEY, LINKRIGHT_CAPTURE_KEY (+ rotation keys)
 ```
-
-**If anything missing**: stop, fix, then continue.
 
 ---
 
-## 1 — Smoke tests (5 min)
+## QA-1 — Smoke tests (~5 min)
 
-### 1.1 Help / version surface
+### QA-1.1 Help / version surface
 
 ```bash
 linkright --help
@@ -62,590 +136,389 @@ linkright tldr
 # Expect: one-page cheat sheet of common commands
 ```
 
-### 1.2 Doctor (existing health-check)
-
-```bash
-linkright doctor
-# Expect: green ticks for config, API keys, deps, embedder, MongoDB
-# Note any RED items — they may indicate setup gaps
-```
-
-### 1.3 watch status (NEW PR #55 + PR #60)
+### QA-1.2 watch status
 
 ```bash
 linkright watch status
 # Expect 4 lines (with ✓ or ✗ prefixes):
 #   ✓ capture key:   set (len=49)
 #   ✓ endpoint:      https://sync-resume-engine.onrender.com/api/captures
-#   ✗ chrome CDP:    NOT reachable    [✗ EXPECTED if Chrome not started with --remote-debugging-port=9222 yet]
+#   ✗ chrome CDP:    NOT reachable    [expected if Chrome not started with --remote-debugging-port=9222]
 #   ✓ worker health: ... → 200
 ```
 
 ---
 
-## 2 — Pillar 1: Resume + Cover Letter (20-25 min)
+## QA-2 — Pillar 1: Resume + Cover Letter (~20-25 min)
 
 > Pre-existing functionality from v0.3.0; verifying nothing regressed.
 
-### 2.1 Profile already exists?
+### QA-2.1 Tailor a resume (full pipeline)
 
 ```bash
-linkright profile show
-# If output: shows your nuggets/career data → skip 2.2
-# If error "no profile": run 2.2 first
-```
-
-### 2.2 Profile creation (only if 2.1 said "no profile")
-
-```bash
-linkright profile create
-# Interactive wizard — feed your resume PDF, answer prompts
-# Expected: ~30-60s, output "Profile saved with N nuggets"
-```
-
-### 2.3 Tailor a resume
-
-```bash
-# Use the sample JD that ships with the repo — find one:
 ls ~/Documents/linkright_production/context/data/assets/resume-applications/ | head -3
 # Pick any folder with a jd.md inside, e.g. highlevel_pm-workflows
 
 linkright resume tailor \
   -j ~/Documents/linkright_production/context/data/assets/resume-applications/highlevel_pm-workflows/jd.md \
   --run-id qa_test_$(date +%s)
-# Expect: 16-step pipeline runs, ~2 min wall time
-# Final lines should show: "Score: XX.X (Grade: X)" + "PDF: ~/.linkright/runs/.../15_final_resume.pdf"
-# Verify the PDF: open it manually, check for:
-#   - Header has your name + role title (no clipping)
-#   - 4-6 bullets per role, all metrics bold, no placeholder X% / $YM
-#   - 1-page output, no overflow
+# Expect: 16-step pipeline, ~2 min wall time
+# Final: "Score: XX.X (Grade: X)" + "PDF: ~/.linkright/runs/.../15_final_resume.pdf"
+# Open PDF: header not clipped, bullets have metric bolds only, 1-page output
 ```
 
-### 2.4 Score a tailored PDF
+### QA-2.2 Score
 
 ```bash
 linkright score -r ~/.linkright/runs/qa_test_*/15_final_resume.pdf -j .../jd.md
 # Expect: 16-dimension scorecard, total ≥ 90
 ```
 
-### 2.5 Critique (Truth Engine layer 3)
+### QA-2.3 Critique
 
 ```bash
 linkright critique --run-id qa_test_*
 # Expect: 5 issues + 3 fix options each (one being "manual edit")
-# Don't have to apply — just verify the LLM produced sensible output
 ```
 
-### 2.6 Fill metrics (interactive)
+### QA-2.4 Fill metrics
 
 ```bash
 linkright fill --run-id qa_test_*
-# Expect: prompts for any bullet with X% / $YM placeholders
-# For each: shows 3 categories (actual / placeholder / drop), you pick one
-# Verify: no fabricated numbers in final output
+# Expect: prompts for bullets with X% / $YM placeholders
+# For each: 3 categories (actual / placeholder / drop)
+# Verify: no fabricated numbers
 ```
 
-### 2.7 Cover letter
+### QA-2.5 Cover letter
 
 ```bash
 linkright cl -j .../jd.md
-# Or: linkright cover-letter -j .../jd.md
 # Expect: ~250-word cover letter PDF, 90 sec wall time
-# Verify: references your actual project context, has a "why this company" paragraph
+# Verify: references actual project context, has "why this company" paragraph
 ```
 
-### 2.8 Brand-color resume + cover letter (PR #61, optional)
+### QA-2.6 Brand-color resume + cover letter (PR #61)
 
-Default tailor output is pure B&W. Opt in to company-branded design by piping
-1-3 hex codes via the new `linkright resume brand` subcommand.
-
-#### 2.8a Interactive (3 prompts)
+#### QA-2.6a Interactive
 
 ```bash
 linkright resume brand --run-id qa_test_*
-# Expect 3 sequential prompts (Click appends ": " to each label):
+# Prompts:
 #   "  Primary brand hex: "                                       # type #635BFF
 #   "  Secondary brand hex (optional, press Enter to skip): "    # type #00D4FF
 #   "  Accent brand hex (optional, press Enter to skip): "       # press Enter
-# (Note: the first prompt has no "(required)" suffix — it is distinguished
-#  from the optional ones by ABSENCE of "(optional, ...)".)
-# Expect: "branded resume:        ~/.linkright/runs/qa_test_*/artifacts/15_final_resume_branded.pdf"
-# Open the PDF: only metric bolds + section dividers should be colored.
-# All other text (headings, body, dates, locations, bullets) MUST be black.
+# Expect: branded PDF at artifacts/15_final_resume_branded.pdf
+# Open PDF: ONLY metric bolds + section dividers colored. All other text black.
 ```
 
-#### 2.8b Power-user flags
+#### QA-2.6b Power-user flags
 
 ```bash
 linkright resume brand --run-id qa_test_* --primary "#635BFF" --secondary "#00D4FF" --accent "#FF6B6B" --yes
-# Expect: same output as 2.8a but no prompts
+# Expect: same output, no prompts
 ```
 
-#### 2.8c Cover letter branded too
+#### QA-2.6c Cover letter branded
 
 ```bash
 linkright resume brand --run-id qa_test_* \
     --primary "#635BFF" --yes \
     --cover-letter ~/.linkright/runs/qa_test_*/artifacts/cover_letter.md
-# Expect: "branded cover letter:  ~/.linkright/runs/qa_test_*/artifacts/cover_letter_branded.pdf"
-# Open the CL PDF: bolded metrics ($1.2M, 40%, etc.) should be in primary color.
-# All other text remains black on white.
+# Expect: branded cover letter PDF — metric bolds in primary color, all else black
 ```
 
-#### 2.8d B&W default unchanged
+#### QA-2.6d B&W default unchanged
 
 ```bash
 ls ~/.linkright/runs/qa_test_*/artifacts/15_final_resume.pdf
-# This is the ORIGINAL (B&W) PDF from `linkright resume tailor`. Open it.
-# Expect: pure black text on pure white, no navy/blue tints anywhere.
-# Verifies: brand subcommand does NOT modify the original — branded version is a separate file.
+# Open it — expect pure B&W. Brand command must NOT modify the original.
 ```
 
-#### 2.8e Hex validation
+#### QA-2.6e Hex validation
 
 ```bash
 linkright resume brand --run-id qa_test_* --primary "not-a-hex" --yes
-# Expect exact error: "Error: --primary is required when --yes is set (no interactive prompt)"
-# (invalid hex normalized to None, then --yes guard fires)
+# Expect: "Error: --primary is required when --yes is set (no interactive prompt)"
 linkright resume brand --run-id qa_test_* --primary "#GGGGGG" --yes
-# Expect: same exact error — invalid hex chars normalize to None
+# Expect: same error — invalid hex chars normalize to None
 ```
-
-**Pillar 1 PASS = all 8 commands above produce expected output.**
 
 ---
 
-## 3 — Pillar 2: Job Search (10-15 min)
+## QA-3 — Pillar 2: Job Search (~10-15 min)
 
-### 3.1 Auth login
+### QA-3.1 Auth
 
 ```bash
 linkright auth login
-# Expect: opens browser to sync.linkright.in OAuth flow
-# After consent: terminal shows "Logged in as ..."
-
 linkright auth status
 # Expect: "Logged in as <email>"
 ```
 
-### 3.2 Jobs find — the new dual-read (PR #58)
+### QA-3.2 Jobs find — dual-read (PR #58)
 
-#### 3.2a Captures-only mode (no auth scenario)
+#### QA-3.2a Captures-only (no auth)
 
 ```bash
 linkright auth logout
 linkright jobs find --top 5
-# Expect: "⚠ not logged in to sync.linkright.in — showing captures only..."
-# Then either:
-#   - Empty: "Error: No jobs available. Either: ... auth login OR watch setup"
-#   - Or: rich table with rows from Oracle PG captures
-linkright auth login   # restore session for next steps
+# Expect: "⚠ not logged in — showing captures only..." then empty or capture rows
+linkright auth login
 ```
 
-#### 3.2b Both-sources mode
+#### QA-3.2b Both sources
 
 ```bash
 linkright jobs find --top 10
-# Expect: rich table with columns: Rank, Grade, Title, Company, Location, Score, Source, Action
-# Bottom line: "X scored + Y from captures. Use 'linkright jobs show <id>' for full detail."
+# Expect: table with Rank / Grade / Title / Company / Score / Source
+# Bottom: "X scored + Y from captures"
 ```
 
-#### 3.2c Filters
+#### QA-3.2c Filters
 
 ```bash
 linkright jobs find --location bangalore --top 5
 linkright jobs find --grade A --top 5
 linkright jobs find --top 5 --json | jq '.[].job_discoveries.title'
-# Expect: filters apply correctly; --json produces parseable JSON output
 ```
 
-### 3.3 Show job detail
+### QA-3.3 Show / apply / status
 
 ```bash
-# Take an ID from the find output, e.g. first 8 chars
 linkright jobs show <id-prefix>
-# Expect: full JD detail view — title, company, location, score breakdown, JD text
-```
-
-### 3.4 Apply flow
-
-```bash
-linkright jobs apply <id-prefix>
-# Expect: tailors resume + cover letter for that JD, marks status='applied'
-# (May take 2-3 min — full Pillar 1 pipeline runs)
-```
-
-### 3.5 Update status
-
-```bash
+linkright jobs apply <id-prefix>          # full tailor pipeline runs
 linkright jobs status <id-prefix> interviewing
-# Expect: "Updated to status=interviewing"
 ```
-
-### 3.6 CSV import (optional power-user flow)
-
-```bash
-# Use any CSV with at least: title, company_name, job_url columns
-linkright jobs import path/to/jobs.csv
-# Expect: "Imported N rows"
-```
-
-**Pillar 2 PASS = jobs find shows captures + scored merge, show/apply/status work end-to-end.**
 
 ---
 
-## 4 — Sprint D / `linkright watch` (15-20 min — THE HOTTEST NEW STUFF)
+## QA-4 — Sprint D / `linkright watch` (~15-20 min)
 
-### 4.1 One-time setup (skip if already done)
+### QA-4.1 Setup
 
 ```bash
 linkright watch setup
-# Expect: detects Chrome path + writes alias to ~/.zshrc (or .bashrc)
-# Output: 4 lines starting with ✓ + Next steps section
-
-source ~/.zshrc       # or restart terminal
-which chrome           # expect: chrome alias defined
+source ~/.zshrc
+which chrome
 ```
 
-### 4.2 Restart Chrome via the alias
+### QA-4.2 Chrome CDP
 
 ```bash
-# Quit Chrome COMPLETELY (cmd-Q on Mac)
+# Quit Chrome completely (cmd-Q), then:
 chrome
-# Expect: Chrome opens, you can see your tabs etc.
-# Behind the scenes: started with --remote-debugging-port=9222
-
-# Verify CDP is exposed:
 curl -sS http://localhost:9222/json/version
-# Expect: JSON with "Browser":"Chrome/...","webSocketDebuggerUrl":"ws://..."
+# Expect: JSON with webSocketDebuggerUrl
 ```
 
-### 4.3 watch status — should now show all green
+### QA-4.3 Status — all green
 
 ```bash
 linkright watch status
-# Expect: 4 ✓ lines (chrome CDP now reachable)
+# Expect: 4 ✓ lines
 ```
 
-### 4.4 Foreground listener test
+### QA-4.4 Foreground listener
 
-In one terminal:
 ```bash
-linkright watch -v   # -v for verbose log
-# Expect: "🔍 linkright watch — listening on localhost:9222 ..."
-# Then: silence (waiting for events)
+linkright watch -v
+# Browse a Naukri job page in Chrome
+# Expect log: "✓ <title> — 201 dedup=new"
+# ctrl-C → exit 0
 ```
 
-In your Chrome, browse a Naukri job page (any job listing).
-
-Back in the terminal, expect a log line like:
-```
-HH:MM:SS → naukri — https://www.naukri.com/job-listings-...
-HH:MM:SS   ✓ Senior Product Manager — 201 dedup=new
-```
-
-Press ctrl-C to stop. Should exit cleanly (PR #60: KeyboardInterrupt → exit 0).
-
-### 4.5 Verify capture landed in list
+### QA-4.5 Capture list
 
 ```bash
 linkright watch list --since "5 minutes" --top 5
-# Expect: rich table showing the job(s) you just browsed
-# Columns: #, Captured, Source, Company, Title, Location
-
 linkright watch list --since "5 minutes" --json | jq '.[].job_url'
-# Expect: list of URLs you browsed
 ```
 
-### 4.6 Background daemon
+### QA-4.6 Background daemon
 
 ```bash
 linkright watch install-service
-# Expect: ✓ installed ~/Library/LaunchAgents/in.linkright.watch.plist + loaded into launchd
-# Output mentions log paths
-
-# Verify it's running
-launchctl list | grep linkright
-# Expect: "0  -  in.linkright.watch" (the 0 = clean exit; daemon is alive)
-
-tail -f ~/.linkright/watch.log
-# Expect: capture log lines as you browse Naukri pages
-# Press ctrl-C to stop watching the log
-
+launchctl list | grep linkright     # Expect: "0  -  in.linkright.watch"
+tail -f ~/.linkright/watch.log      # ctrl-C to stop
 linkright watch uninstall-service
-# Then re-install to leave the daemon running for ongoing tests
 linkright watch install-service
 ```
 
-### 4.7 Multi-portal verification (PR #57 — 7 portals)
+### QA-4.7 Multi-portal (PR #57 — 7 portals)
 
-For EACH of these, browse one job page in Chrome and confirm `linkright watch list` shows it within 10 sec:
+Browse one job page per portal, confirm each appears in `linkright watch list`:
 
-| Portal | Test URL pattern | Expected source_type |
+| Portal | URL pattern | Expected source_type |
 |---|---|---|
 | Naukri | `naukri.com/job-listings-*` | capture_naukri |
 | LinkedIn | `linkedin.com/jobs/view/<id>` | capture_linkedin |
 | Indeed | `indeed.com/viewjob?jk=<key>` | capture_indeed |
-| Greenhouse | `boards.greenhouse.io/<tenant>/jobs/<id>` (e.g. `anthropic`) | capture_greenhouse |
+| Greenhouse | `boards.greenhouse.io/<tenant>/jobs/<id>` | capture_greenhouse |
 | Lever | `jobs.lever.co/<tenant>/<uuid>` | capture_lever |
 | Ashby | `jobs.ashbyhq.com/<tenant>/<uuid>` | capture_ashby |
 | Wellfound | `wellfound.com/jobs/<id>-<slug>` | capture_wellfound |
 
-**Tip**: search "anthropic careers" in Google to find a real Greenhouse board, "openai careers" for Ashby, etc.
-
 ```bash
-# After browsing all 7, verify each appeared:
 linkright watch list --json | jq -r '.[].source_type' | sort -u
-# Expect: each capture_* type listed
+# Expect: all 7 capture_* types listed
 ```
 
-### 4.8 Privacy regression — should BLOCK
-
-In Chrome, visit `https://www.naukri.com/notifications` or `https://www.linkedin.com/messaging/`.
-
-Background daemon should NOT capture these. Verify:
+### QA-4.8 Privacy regression
 
 ```bash
+# Browse linkedin.com/messaging/ or naukri.com/notifications in Chrome
 linkright watch list --since "1 minute" --json | jq '.[].job_url'
-# Expect: NO URL containing /notifications/ or /messaging/ or /inbox/
+# Expect: NO private-path URLs
 ```
-
-If a private path appears: BUG (file via section 8).
-
-**Sprint D PASS = setup, listener, list, daemon, multi-portal, privacy filter ALL work end-to-end.**
 
 ---
 
-## 5 — Pillar 3: Interview Prep + Story Bank (8 min)
+## QA-5 — Pillar 3: Story Bank (~8 min)
 
-### 5.1 Practice cards (existing flow)
+### QA-5.1 Practice cards
 
 ```bash
 linkright practice
-# OR: linkright interview practice
-# Expect: STAR-format prep cards generated from your career nuggets matched to a JD
+# Expect: STAR-format prep cards from career nuggets
 ```
 
-### 5.2 Story Bank — list (empty state)
+### QA-5.2–5.9 Story Bank CRUD
 
 ```bash
-linkright stories list
-# Expect first time: "No stories yet — run `linkright stories add` to create one."
-# Aliases also work: `linkright stories ls`
+linkright stories list                         # empty state: "No stories yet"
+linkright stories add                          # fill 6 prompts → "✓ Story saved"
+linkright stories add --from-nugget "AML"      # pre-fills result from nugget
+linkright stories list                         # populated table
+linkright stories search "AML"                 # matching stories printed
+linkright stories edit "My Test"               # change one field → "✓ Updated 1 fields"
+linkright stories delete "My Test"             # type n → "Cancelled."
+linkright stories delete "My Test" --yes       # "✓ Deleted"
 ```
 
-### 5.3 Story Bank — add via interactive prompts
-
-```bash
-linkright stories add
-# Expect 6 sequential prompts: Title, Situation, Task, Action, Result, Tags
-# Type:  My Test Story / Pipeline broke / Restore in 24h / Built oracle / $1.2M saved / python, leadership
-# Expect: "✓ Story saved: <ObjectId>" in green
-```
-
-### 5.4 Story Bank — add from existing resume nugget (Truth Engine flow)
-
-```bash
-linkright stories add --from-nugget "AML"
-# Pre-condition: profile must have a nugget containing "AML" (run `linkright profile show` to check)
-# Expect: "Pre-filling `result` from nugget: <text>..." then prompts for Title, Situation, Task, Action
-# (Result is pre-filled with the nugget text — accept or edit)
-# Expect: "✓ Story saved: <ObjectId>"
-```
-
-### 5.5 Story Bank — list (populated state)
-
-```bash
-linkright stories list
-# Expect: rich table — ID (8 hex chars) | Title | Tags | Used (count) | Last (date)
-# Most recent stories first
-```
-
-### 5.6 Story Bank — search (text + vector)
-
-```bash
-linkright stories search "AML"
-# Expect: matching stories printed with title + Action excerpt + Result excerpt + Tags
-# Aliases: `linkright stories find "AML"`
-```
-
-### 5.7 Story Bank — edit
-
-```bash
-linkright stories edit "My Test"
-# Expect: "Editing: My Test Story\nPress Enter to keep existing value."
-# Walk through 6 prompts; change ONE field (e.g., Action), Enter for the rest
-# Expect: "✓ Updated 1 fields" in green
-```
-
-### 5.8 Story Bank — delete (with confirmation)
-
-```bash
-linkright stories delete "My Test"
-# Expect: "Delete story 'My Test Story'? This cannot be undone. [y/N]:"
-# Type: n
-# Expect: "Cancelled."
-# Repeat with --yes flag:
-linkright stories delete "My Test" --yes
-# Expect: "✓ Deleted: My Test Story" in red
-```
-
-### 5.9 Story Bank ↔ Interview Prep bridge
+### QA-5.10 Interview prep bridge
 
 ```bash
 linkright interview prep
-# After adding stories above, expect: prep cards now surface YOUR Story Bank entries
-# (not just generic STAR scaffolds)
-# Verifies: retrieve_stars() reads `career_stories` collection (PR #62)
-# Legacy `user_context` debriefs (if any) merge in below career_stories ranking
+# Expect: prep cards surface Story Bank entries (PR #62)
 ```
 
-### 5.10 Story Bank — duplicate-title guard
+### QA-5.11 Duplicate-title guard
 
 ```bash
 linkright stories add --yes --title "Dup Test" --action "x" --result "y"
-# Expect: ✓ saved
-linkright stories add --yes --title "Dup Test" --action "different" --result "different"
-# Expect: ClickException — "A story titled 'Dup Test' already exists. Use `linkright stories edit \"<title>\"`..."
-# Cleanup:
+linkright stories add --yes --title "Dup Test" --action "diff" --result "diff"
+# Expect: ClickException — title already exists
 linkright stories delete "Dup Test" --yes
 ```
 
-### 5.11 Story Bank — whitespace input rejection
+### QA-5.12 Whitespace rejection
 
 ```bash
 linkright stories add --yes --title "   " --action "A" --result "R"
-# Expect: ClickException — "title + action + result are required and must be non-empty"
-linkright stories add --yes --title "T" --action " " --result "R"
-# Expect: same error citing action
+# Expect: ClickException — title + action + result required and non-empty
 ```
-
-**Pillar 3 v1 PASS = practice cards work + 5.2 through 5.11 all behave as expected.**
 
 ---
 
-## 6 — Pillar 4: Content (basic scaffold) (3 min)
-
-### 6.1 Plan + draft
+## QA-6 — Pillar 4: Content (~3 min)
 
 ```bash
 linkright content plan
 linkright content draft
-# Expect: basic content plan / draft generation. Limited scope — Pillar 4 is not v1 priority.
+# Expect: commands run without error, output is a reasonable draft
 ```
-
-**Pillar 4 PASS = commands run without error, output is a reasonable starting draft.**
 
 ---
 
-## 7 — Cross-cutting regression checks (5 min)
+## QA-7 — Regression (~5 min)
 
-### 7.1 jobs find dedup behavior
+### QA-7.1 jobs find dedup
 
-If you applied to a job via 3.4 (which marks it in Supabase), then browse the SAME URL via Chrome (which captures it to Oracle PG), `linkright jobs find` should NOT show it twice — Supabase row should win the merge dedup.
+Apply a job via QA-3.3, then browse the SAME URL in Chrome. `linkright jobs find` must NOT show it twice — Supabase row wins.
 
-### 7.2 watch list filters
+### QA-7.2 watch list filters
 
 ```bash
 linkright watch list --since "1 day"
 linkright watch list --source capture_naukri
 linkright watch list --since "1 day; DROP TABLE x"
-# Last one: expect "✗ invalid --since value..." rejection (SQL injection guard)
+# Last: expect "✗ invalid --since value..." (SQL injection guard)
 ```
 
 ---
 
-## 8 — Known limitations (skip-verify items)
+## QA-8 — Known limitations (skip-verify)
 
-These are documented gaps. Don't waste time testing — they won't work today.
-
-| Limitation | Reason | Will be fixed |
+| Limitation | Reason | Fix |
 |---|---|---|
-| LinkedIn DOM extraction may fail on `/jobs/collections/` SPA URLs | LinkedIn pushState pattern; selectors not empirically validated | Phase 2 / soak data |
+| LinkedIn SPA URLs may miss | pushState pattern not empirically validated | Phase 2 |
 | Mobile browsing not captured | No CLI on iOS/Android | v2 |
-| Render free-plan cold start | First POST after 15-min idle takes 30-60s | Render paid plan eventually |
-| Some ATS captures show ats_provider=NULL after Sprint B trigger | Tier3 iframe pattern doesn't match all Indian portals | Phase 2 / Naukri tier1.5 |
-| Watchlist UX still pre-demotion in code | Code works, docs/onboarding flow not updated yet | Pre-ship cleanup PR |
-| Story Bank tailor bridge (resume bullets surface stories) | Locked v1 scope item — deferred to v0.5 pending RCA | Next sprint |
-| Mock Interview / Negotiation | v2 deferred per scope decision | v2 |
+| Render cold start 30-60s | Free plan idle | Render paid eventually |
+| ats_provider=NULL for Indian unicorns | Tier3 iframe pattern mismatch | Phase 2 |
+| Story Bank tailor bridge | Deferred to v0.5 per scope lock | Next sprint |
+| Mock Interview / Negotiation | v2 deferred | v2 |
 
 ---
 
-## 9 — Bug-reporting template
-
-For ANY deviation from expected behavior, paste this in chat:
+## QA-9 — Bug-reporting template
 
 ```
 [BUG] <one-line summary>
 
-Section: <e.g. 4.5 watch list>
-Command: <exact command you ran>
-Input/state: <what was the env state, what file etc.>
-
-Expected: <what the QA plan said should happen>
-Got: <what actually happened — paste the output>
+Section: <e.g. QA-4.5>
+Command: <exact command>
+Expected: <what QA plan said>
+Got: <actual output — paste it>
 
 Reproduction:
-  1. <step 1>
-  2. <step 2>
-  ...
+  1. ...
+  2. ...
 
 Severity: blocker | major | minor
-
-Additional context: <env vars, screenshots, logs>
 ```
 
 ---
 
-## v1 ship readiness — overall pass criteria
+## Ship readiness checklist
 
-- [ ] All Pillar 1 commands produce expected output (Section 2)
-- [ ] All Pillar 2 commands produce expected output (Section 3)
-- [ ] All Sprint D commands produce expected output (Section 4) — **highest weight; brand new code**
-- [ ] Pillar 3 practice + Story Bank works (Section 5) — bank CRUD + interview prep bridge verified
-- [ ] Pillar 4 commands run (Section 6)
-- [ ] Cross-cutting regression OK (Section 7)
-- [ ] No surprise blockers beyond the documented limitations (Section 8)
-
-When all above sections pass + 4 operational-debt items closed (PyPI v0.4.0 upload, watchlist UX demotion docs, Layer 4 cron deployment, manual QA pass itself), **v1 is ready for public GitHub release**.
+- [ ] Section 1 (User Onboarding) — full happy path works
+- [ ] QA-2 Pillar 1 — resume + CL + brand all pass
+- [ ] QA-3 Pillar 2 — jobs find dual-read + apply + status pass
+- [ ] QA-4 Sprint D — watch listener + daemon + 7 portals + privacy pass
+- [ ] QA-5 Pillar 3 — Story Bank CRUD + interview bridge pass
+- [ ] QA-6 Pillar 4 — content commands run
+- [ ] QA-7 Regression — dedup + SQL injection guard pass
+- [ ] Admin-Infra checks pass (Section below)
 
 ---
 
-## Run-time estimate by section
+## Run-time estimate
 
 | Section | Time |
 |---|---|
-| 0 — Pre-flight | 5 min |
-| 1 — Smoke tests | 5 min |
-| 2 — Pillar 1 (incl. brand-color 2.8a-2.8e) | 20-25 min |
-| 3 — Pillar 2 | 10-15 min |
-| 4 — Sprint D | 15-20 min |
-| 5 — Pillar 3 + Story Bank (5.1-5.11) | 8 min |
-| 6 — Pillar 4 | 3 min |
-| 7 — Regression | 5 min |
-| **Total (sum of row ranges)** | **~71-86 min** |
-| **With buffer for re-runs / debugging** | **~75-95 min** |
-| **Admin section (A) — run separately** | **~15 min** |
+| 1 — User Onboarding | 10 min |
+| QA-0 Pre-flight | 5 min |
+| QA-1 Smoke tests | 5 min |
+| QA-2 Pillar 1 (incl. brand QA-2.6a-e) | 20-25 min |
+| QA-3 Pillar 2 | 10-15 min |
+| QA-4 Sprint D | 15-20 min |
+| QA-5 Pillar 3 + Story Bank | 8 min |
+| QA-6 Pillar 4 | 3 min |
+| QA-7 Regression | 5 min |
+| **Total user-facing** | **~81-96 min** |
+| **Admin-Infra (below)** | **~15 min** |
+
+---
+---
+
+# Admin — Infrastructure (Satvik only)
+
+> Oracle Postgres, asyncpg, curl API checks. Run last, separately.
 
 ---
 
----
-
-# A — Admin Commands Only
-
-> **Run this section LAST, separately from the user-facing flow above.**
-> These commands require infrastructure access: Oracle Postgres credentials, backend API keys, asyncpg library. A regular end user never runs any of these.
-
----
-
-## A.1 Oracle PG URL config
-
-```bash
-grep "^ORACLE_PG_URL" ~/.linkright/.env.oracle
-# Expect: ORACLE_PG_URL=postgres://linkright_app:...@80.225.198.184:5432/linkright_jobs?sslmode=prefer
-```
-
-## A.2 Backend reachability
+## Infra-1 Backend reachability
 
 ```bash
 curl -sS -m 30 https://sync-resume-engine.onrender.com/health
@@ -665,10 +538,10 @@ async def main():
     await pool.close()
 asyncio.run(main())
 "
-# Expect: PG version line | companies=81 (or higher if you've browsed) | job_discoveries=N
+# Expect: PG version | companies=81+ | job_discoveries=N
 ```
 
-## A.3 Captures persist in Oracle PG
+## Infra-2 Captures persist in Oracle PG
 
 ```bash
 set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
@@ -679,48 +552,45 @@ async def main():
     async with pool.acquire() as conn:
         n = await conn.fetchval('SELECT COUNT(*) FROM job_discoveries')
         n_today = await conn.fetchval(\"SELECT COUNT(*) FROM job_discoveries WHERE captured_at > NOW() - INTERVAL '1 day'\")
-        print(f'job_discoveries total: {n} | today: {n_today}')
+        print(f'total: {n} | today: {n_today}')
     await pool.close()
 asyncio.run(main())
 "
-# Expect: numbers match what you've been browsing in Section 4
+# Expect: numbers match what you browsed in QA-4
 ```
 
-## A.4 Sprint B trigger on NEW company (PR #59)
+## Infra-3 Sprint B trigger (PR #59)
 
-Browse a Naukri job at a company you've never seen before — pick something niche, NOT Stripe/Anthropic/Razorpay (those are in the 81-seed). E.g. some local Indian startup job.
+Browse a Naukri job at an unknown niche company (NOT Stripe/Anthropic — those are seeded).
 
 ```bash
-# Wait 10-15 sec after browsing for the BackgroundTask to complete
 linkright admin companies stats
-# Expect: total companies count > 81 (you just added a new one)
+# Expect: total > 81
 
-# Spot-check the new company's ats_provider was filled:
 set -a && source ~/.linkright/.env.oracle && set +a && unset SUPABASE_URL SUPABASE_SERVICE_KEY
 python3 -c "
 import asyncio, asyncpg, os
 async def main():
     pool = await asyncpg.create_pool(os.environ['ORACLE_PG_URL'], min_size=1, max_size=1)
     async with pool.acquire() as conn:
-        rows = await conn.fetch(\"SELECT name, ats_provider, ats_slug, ingested_at FROM companies WHERE 'passive_capture_naukri' = ANY(source) ORDER BY ingested_at DESC LIMIT 5\")
+        rows = await conn.fetch(\"SELECT name, ats_provider, ingested_at FROM companies WHERE 'passive_capture_naukri' = ANY(source) ORDER BY ingested_at DESC LIMIT 5\")
         for r in rows: print(dict(r))
     await pool.close()
 asyncio.run(main())
 "
-# Expect: most recent newly-captured company has ats_provider filled (e.g. 'greenhouse', 'lever', 'ashby')
-# OR ats_provider=None — meaning Sprint B's 3 tiers couldn't find it (Indian unicorns often miss; expected)
+# Expect: new company row; ats_provider filled or NULL (Indian unicorns often NULL — expected)
 ```
 
-## A.5 API edge cases — privacy filter + auth (PR #57)
+## Infra-4 API edge cases — privacy filter + auth
 
 ```bash
-# Bad URL for /api/captures (privacy filter test)
+# Privacy filter test
 curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
   -H "Content-Type: application/json" \
   -H "X-LinkRight-Capture-Key: $(grep '^LINKRIGHT_CAPTURE_KEY=' ~/.linkright/.env | cut -d= -f2-)" \
   -d '{"source":"naukri","job_url":"https://www.naukri.com/messages/inbox/123","title":"x","company_name":"x","captured_at":"2026-05-03T12:00:00Z"}' \
   -w "\nHTTP %{http_code}\n"
-# Expect: HTTP 403 + "blocked by privacy filter: path '/messages/inbox/123' matches blocklist..."
+# Expect: HTTP 403 + "blocked by privacy filter..."
 
 # Wrong auth key
 curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
@@ -731,22 +601,22 @@ curl -sS -X POST https://sync-resume-engine.onrender.com/api/captures \
 # Expect: HTTP 401 + "invalid or missing capture key"
 ```
 
-## A.6 Slug discovery CLI
+## Infra-5 Slug discovery
 
 ```bash
 linkright admin slug-discovery single Anthropic
-# Expect: ATS provider/slug detected via tier1_html
+# Expect: ATS provider/slug detected
 linkright admin slug-discovery stats
-# Expect: last-24h discovery stats
+# Expect: last-24h stats
 linkright admin slug-discovery validate-all --max 3
-# Expect: re-validates 3 stale companies, shows validated/healed/marked-zero counts
+# Expect: validated/healed/marked-zero counts
 ```
 
-## A.7 Companies stats
+## Infra-6 Companies stats
 
 ```bash
 linkright admin companies stats
 # Expect: total count, by industry, by ATS provider
 ```
 
-**Admin PASS = all A.1–A.7 checks produce expected output without error.**
+**Infra PASS = all Infra-1 through Infra-6 produce expected output.**
