@@ -457,6 +457,15 @@ def apply_cmd(discovery_id: str, no_status: bool) -> None:
                 click.echo(" done.")
             elif status_resp.status_code == 409:
                 click.echo(" (already applied — OK).")
+            elif status_resp.status_code == 401:
+                click.echo(" failed (session expired).")
+                click.secho(
+                    "  Tailor done, but mark-applied failed (401).\n"
+                    "  Re-login: linkright auth login\n"
+                    "  Then mark applied via the website: https://sync.linkright.in/jobs\n"
+                    f"  (or re-run `linkright jobs apply {resolved_id}` — will re-tailor + mark).",
+                    fg="yellow",
+                )
             else:
                 click.echo(f" skipped (API returned {status_resp.status_code}).")
         except Exception as e:
