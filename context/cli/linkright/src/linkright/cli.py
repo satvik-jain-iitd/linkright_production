@@ -239,6 +239,81 @@ always work too.
 """
 
 
+@main.command("update")
+@click.option("--check", "check_only", is_flag=True,
+              help="Just print whether an update is available; don't install.")
+@click.option("--yes", "yes", is_flag=True,
+              help="Skip the confirmation prompt before running pip.")
+def update_cmd(check_only: bool, yes: bool) -> None:
+    """Upgrade linkright to the latest version on PyPI.
+
+    \b
+    Equivalent to:  python -m pip install --upgrade linkright
+    But uses YOUR exact Python (sys.executable) — handles users with
+    multiple Pythons (system / anaconda / venv) correctly.
+
+    Use --check to see if an update is available without installing.
+    Use --yes to skip the confirmation prompt (for scripted runs).
+    """
+    import subprocess
+    import sys as _sys
+    from linkright.lib.version_check import (
+        get_installed_version, get_latest_version, is_newer,
+    )
+
+    installed = get_installed_version()
+    latest = get_latest_version(force_refresh=True)  # always-fresh for `update`
+
+    if latest is None:
+        click.echo("✗ Couldn't reach PyPI (offline?). Try again later or upgrade manually:")
+        click.echo(f"  {_sys.executable} -m pip install --upgrade linkright")
+        _sys.exit(1)
+
+    if not is_newer(latest, installed):
+        click.echo(f"✓ linkright {installed} is already the latest. Nothing to do.")
+        return
+
+    click.echo(f"Update available: linkright {installed} → {latest}")
+    click.echo("")
+    click.echo(f"Will run: {_sys.executable} -m pip install --upgrade linkright")
+    click.echo("(in your CURRENT Python env; if you use conda/pipx, install manually)")
+    click.echo("")
+
+    if check_only:
+        click.echo(f"--check: skipping install. Run `linkright update` to upgrade.")
+        return
+
+    if not yes and not click.confirm("Proceed with upgrade?", default=True):
+        click.echo("Aborted.")
+        return
+
+    click.echo("")
+    click.echo("--- pip install --upgrade linkright ---")
+    proc = subprocess.run(
+        [_sys.executable, "-m", "pip", "install", "--upgrade", "linkright"],
+        capture_output=False,  # stream pip output to user
+    )
+    click.echo("--- end pip ---")
+    click.echo("")
+
+    if proc.returncode != 0:
+        click.echo(f"✗ pip exited with code {proc.returncode}. Upgrade failed.")
+        _sys.exit(proc.returncode)
+
+    # Importlib.metadata caches Distribution objects per Python session — the
+    # currently-running interpreter still reports the OLD version. Spawn a
+    # fresh subprocess to query the actual on-disk installed version.
+    fresh = subprocess.run(
+        [_sys.executable, "-c",
+         "from importlib.metadata import version; print(version('linkright'))"],
+        capture_output=True, text=True,
+    )
+    new_installed = fresh.stdout.strip() if fresh.returncode == 0 else latest
+
+    click.echo(f"✓ Upgraded: linkright {installed} → {new_installed}")
+    click.echo(f"  Changelog: https://github.com/satvik-jain-iitd/linkright_production/releases")
+
+
 @main.command("tldr")
 def tldr_cmd() -> None:
     """Print a one-page cheat sheet of the most-used commands."""
