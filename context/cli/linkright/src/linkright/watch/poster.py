@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,10 @@ DEFAULT_ENDPOINT = "https://sync-resume-engine.onrender.com/api/captures"
 DEFAULT_TIMEOUT_SEC = 30.0
 RETRY_ATTEMPTS = 3
 RETRY_BASE_DELAY_SEC = 2.0
+
+# -- 403 notification state --------------------------------------------------
+_consecutive_403_count: int = 0
+_NOTIFICATION_THRESHOLD: int = 3
 
 
 def _read_env_file(env_path: Path) -> dict[str, str]:
@@ -82,6 +87,7 @@ async def post_capture(
     backoff. 4xx errors (auth/privacy/validation) are NOT retried — those are
     permanent client-side issues that need fixing, not waiting.
     """
+    global _consecutive_403_count
     body = json.dumps(payload, default=str).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
@@ -103,6 +109,7 @@ async def post_capture(
                 continue
 
             if 200 <= resp.status_code < 300:
+                _consecutive_403_count = 0  # reset on success
                 try:
                     parsed = resp.json()
                     dedup = parsed.get("dedup_status", "?")
@@ -110,7 +117,18 @@ async def post_capture(
                 except (json.JSONDecodeError, ValueError):
                     return True, f"{resp.status_code} (non-JSON body)"
 
-            # 4xx = permanent client-side issue, no retry
+            # 403 = capture key rejection — track and warn user after threshold
+            if resp.status_code == 403:
+                _consecutive_403_count += 1
+                if _consecutive_403_count >= _NOTIFICATION_THRESHOLD:
+                    sys.stderr.write(
+                        f"\n⚠ Capture key rejected ({_consecutive_403_count} consecutive 403s).\n"
+                        f"  Verify your LINKRIGHT_CAPTURE_KEY: linkright watch status\n\n"
+                    )
+                    _consecutive_403_count = 0  # reset after warning — clean slate per batch
+                return False, "403 forbidden (capture key rejected)"
+
+            # other 4xx = permanent client-side issue, no retry, don't touch 403 counter
             if 400 <= resp.status_code < 500:
                 return False, f"{resp.status_code} {resp.text[:200]}"
 
