@@ -162,6 +162,11 @@ async def _import_companies_async(
         raise click.ClickException(
             f"Oracle PG connection failed: {exc}. Verify the host is reachable."
         )
+    except asyncpg.PostgresError as exc:
+        raise click.ClickException(
+            f"Oracle PG connection failed: {type(exc).__name__}: {exc}. "
+            "Verify ORACLE_PG_URL credentials and SSL config."
+        )
 
     _UPSERT = """
         INSERT INTO companies (
@@ -256,6 +261,11 @@ async def _stats_async(oracle_pg_url: str) -> None:
     except OSError as exc:
         raise click.ClickException(
             f"Oracle PG connection failed: {exc}. Verify the host is reachable."
+        )
+    except asyncpg.PostgresError as exc:
+        raise click.ClickException(
+            f"Oracle PG connection failed: {type(exc).__name__}: {exc}. "
+            "Verify ORACLE_PG_URL credentials and SSL config."
         )
     try:
         async with pool.acquire() as conn:
@@ -530,6 +540,11 @@ def slug_discovery_stats() -> None:
         except OSError as exc:
             raise click.ClickException(
                 f"Oracle PG connection failed: {exc}. Verify the host is reachable."
+            )
+        except asyncpg.PostgresError as exc:
+            raise click.ClickException(
+                f"Oracle PG connection failed: {type(exc).__name__}: {exc}. "
+                "Verify ORACLE_PG_URL credentials and SSL config."
             )
         try:
             async with pool.acquire() as conn:
