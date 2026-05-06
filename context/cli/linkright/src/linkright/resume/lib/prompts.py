@@ -171,7 +171,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 
 Parsing rules:
 - Extract 18-25 JD keywords as plain strings (skills, tools, action verbs, domain terms). When the JD names specific platform primitives verbatim (SSO, SCIM, RBAC, multi-tenancy, dashboards, audit logs, webhooks, etc.), include them VERBATIM as separate keywords — do not paraphrase or fold into broader terms.
-- HARD RULE (no contamination): jd_keywords MUST contain ONLY terms that appear LITERALLY in the JD text. NEVER include terms found only in the candidate's resume context (e.g., user's prior tech stack, user's past projects, user's domain) unless those terms ALSO appear word-for-word in the JD. The list represents the JOB's keyword profile — not the candidate's. Per Satvik 2026-05-02: "the resume terms (e.g., 'AML', 'NICE Actimize', 'SAS') leaking into JD keywords misleads downstream bullet-ranking + scoring."
+- HARD RULE (no contamination): jd_keywords MUST contain ONLY terms that appear LITERALLY in the JD text. NEVER include terms found only in the candidate's resume context (e.g., user's prior tech stack, user's past projects, user's domain) unless those terms ALSO appear word-for-word in the JD. The list represents the JOB's keyword profile — not the candidate's. Per Jane 2026-05-02: "the resume terms (e.g., 'AML', 'NICE Actimize', 'SAS') leaking into JD keywords misleads downstream bullet-ranking + scoring."
 - career_level: MUST reflect the CANDIDATE'S total years of work experience — NEVER the JD's target-role seniority label. Compute years by summing active durations across all entries in `companies[]` (reverse-chronological). Use these buckets:
   * 0 years → "fresher"
   * 1-2 years → "entry"
@@ -435,7 +435,7 @@ RULES:
    - `x_impact`: 4-12 words, the outcome (what got better)
    - `y_measure`: must contain at least one digit OR %, $, K, M, B — no prose-only metrics
    - `z_action`: 5-20 words, specific action the candidate took (not team-level passive)
-6. BOLDING RULE — bold ONLY numeric metrics with their symbols (per Satvik 2026-05-01).
+6. BOLDING RULE — bold ONLY numeric metrics with their symbols (per Jane 2026-05-01).
    - YES bold:    <b>70%</b>, <b>$1.2M</b>, <b>100M+</b>, <b>40 hrs</b>, <b>2,137:1</b>, <b>15+</b>
    - NO  bold:    impact verbs, action phrases, JD keywords, project names, technologies
    - Every digit, %, $, K, M, B, x, +, ratio in the bullet should be wrapped in <b>...</b>
@@ -570,7 +570,7 @@ Return JSON:
 
 1. For each company, produce EXACTLY `bullet_count` paragraphs (given in the user message).
 2. NEVER fabricate atom IDs — use ONLY the ones given in the company's pool.
-3. Preserve <b>...</b> tags ONLY on numeric metrics with symbols ($, %, K, M, B, x, +, ratio, hrs, etc.). If input has bolds elsewhere (impact verbs, keywords), STRIP those bolds and re-bold ONLY numeric metrics. Per Satvik 2026-05-01: "metrics-only bolding".
+3. Preserve <b>...</b> tags ONLY on numeric metrics with symbols ($, %, K, M, B, x, +, ratio, hrs, etc.). If input has bolds elsewhere (impact verbs, keywords), STRIP those bolds and re-bold ONLY numeric metrics. Per Jane 2026-05-01: "metrics-only bolding".
 4. Keep every number, proper noun, acronym VERBATIM.
 5. Group paragraphs into project_groups (0, 1, 2...) within each company.
 
@@ -695,7 +695,7 @@ JD context. Empty string OK when input lacks the field (backward compat).
 1. EXACTLY {STEP12_MIN_CHARS}-{STEP12_MAX_CHARS} rendered chars (plain text, no <b> tags counted). COUNT BEFORE RETURNING.
 2. Preserve XYZ structure (MANDATORY): impact/outcome FIRST, then metric, then action.
    A bullet missing any of X, Y, Z is REJECTED. Do not emit bullets without a concrete number.
-3. BOLDING RULE: ONLY numeric metrics with symbols get <b>...</b> tags ($, %, K, M, B, x, +, ratio, hrs, etc.). If input has bolds on verbs/keywords/phrases, STRIP those bolds in output and re-bold ONLY metrics. Per Satvik 2026-05-01.
+3. BOLDING RULE: ONLY numeric metrics with symbols get <b>...</b> tags ($, %, K, M, B, x, +, ratio, hrs, etc.). If input has bolds on verbs/keywords/phrases, STRIP those bolds in output and re-bold ONLY metrics. Per Jane 2026-05-01.
 4. Preserve every number, percentage, dollar, acronym, proper noun EXACTLY.
 5. Every bullet is a COMPLETE grammatical sentence (subject → verb → object — ends at a period or closes cleanly).
 6. Condense ALL {{paragraph_count}} paragraphs — one bullet per paragraph.

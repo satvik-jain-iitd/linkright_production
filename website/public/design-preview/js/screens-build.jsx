@@ -29,7 +29,7 @@ function Screen04_Upload() {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div className="iconTile" style={{ width: 36, height: 36 }}><Icon d={I.document} size={18}/></div>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>Satvik_Jain_Resume_2026.pdf</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Jane_Jain_Resume_2026.pdf</div>
                 <div style={{ fontSize: 12, color: "var(--color-muted)" }}>Parsed in 4.2s · 247 KB</div>
               </div>
             </div>
@@ -84,7 +84,7 @@ function Screen04_Upload() {
 
               <div style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--color-foreground)" }}>
                 <p style={{ margin: "0 0 12px", borderLeft: "2px solid rgba(139,92,246,0.3)", paddingLeft: 12 }}>
-                  <b>At AcmeBank,</b> I led a 12-person team redesigning the returns flow for Indian merchants. The core problem was a 40% drop-off at the reason-code step. I ran 8 user interviews, rebuilt the UX around three primary reasons instead of fourteen, and shipped the rollout in six weeks. <b>The outcome was an 18% lift in completion and a 22% reduction in support tickets.</b>
+                  <b>At Acme Bank,</b> I led a 12-person team redesigning the returns flow for Indian merchants. The core problem was a 40% drop-off at the reason-code step. I ran 8 user interviews, rebuilt the UX around three primary reasons instead of fourteen, and shipped the rollout in six weeks. <b>The outcome was an 18% lift in completion and a 22% reduction in support tickets.</b>
                 </p>
                 <p style={{ margin: "0 0 12px", borderLeft: "2px solid rgba(139,92,246,0.3)", paddingLeft: 12 }}>
                   <b>Before that at TechCo SaaS,</b> I was the PM for enterprise content moderation. My favourite ship was the real-time policy engine. I spent three weeks embedded with the Walmart legal team to understand their escalation tree, then built a decision layer that cut moderator overhead by 34%.
@@ -108,8 +108,8 @@ function Screen04_Upload() {
 
 function Screen05_Profile() {
   const highlights = [
-    { type: "role", src: "from your AcmeBank role", t: "Led 12-person redesign of the returns flow", d: "18% conversion lift, 22% fewer support tickets" },
-    { type: "role", src: "from your AcmeBank role", t: "Shipped refund SLA automation", d: "Cut merchant wait time from 5 days to 8 hours" },
+    { type: "role", src: "from your Acme Bank role", t: "Led 12-person redesign of the returns flow", d: "18% conversion lift, 22% fewer support tickets" },
+    { type: "role", src: "from your Acme Bank role", t: "Shipped refund SLA automation", d: "Cut merchant wait time from 5 days to 8 hours" },
     { type: "role", src: "from your TechCo SaaS role", t: "36 enterprise implementations", d: "Walmart, Samsung, Cisco, Marriott, Shell" },
     { type: "role", src: "from your TechCo SaaS role", t: "Built the real-time policy engine", d: "Cut moderator overhead by 34%" },
     { type: "project", src: "from your projects", t: "Open-sourced a Chrome extension", d: "LinkedIn filter for applied roles. 2k active users." },
@@ -201,7 +201,7 @@ function Screen06_HighlightModal() {
           {/* Header */}
           <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(139,92,246,0.18)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(180deg, rgba(139,92,246,0.06), transparent)" }}>
             <div>
-              <span className="chip" style={{ background: "rgba(139,92,246,0.12)", color: "#5A36AB", border: "1px solid rgba(139,92,246,0.3)" }}>from your AcmeBank role</span>
+              <span className="chip" style={{ background: "rgba(139,92,246,0.12)", color: "#5A36AB", border: "1px solid rgba(139,92,246,0.3)" }}>from your Acme Bank role</span>
               <h3 style={{ fontSize: 16, fontWeight: 600, margin: "10px 0 0", letterSpacing: "-0.01em" }}>Led 12-person redesign of the returns flow</h3>
             </div>
             <button style={{ width: 32, height: 32, border: "none", background: "transparent", color: "var(--color-muted)", cursor: "default" }}><Icon d={I.x}/></button>

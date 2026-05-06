@@ -1,6 +1,6 @@
 """End-of-pipeline critique step — Truth Engine Layer 3.
 
-Per Satvik 2026-05-02 (memory feedback_end_of_pipeline_critique_step):
+Per Jane 2026-05-02 (memory feedback_end_of_pipeline_critique_step):
 After step_15 PDF render, run an LLM critique pass that:
   1. Reads the rendered resume HTML + JD
   2. Lists ≤5 actionable issues with severity

@@ -105,7 +105,7 @@ def _s_metric_density(ctx: dict[str, Any]) -> float:
 
 
 def _s_page_fit(ctx: dict[str, Any]) -> float:
-    """Phase 1.2 — score ~90% utilization as ideal per Satvik 2026-05-02 update.
+    """Phase 1.2 — score ~90% utilization as ideal per Jane 2026-05-02 update.
 
     User's words 2026-05-02: "lets target 90% height instead of 95% that way
     we will have breathing space at the bottom of the resume". IDEAL band

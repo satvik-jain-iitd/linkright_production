@@ -343,13 +343,12 @@ INSERT INTO companies (
   ARRAY['seed_migration_004'], 'high', NOW()
 )
 
-ON CONFLICT (canonical_id) DO UPDATE SET
-  name            = EXCLUDED.name,
-  ats_provider    = EXCLUDED.ats_provider,
-  ats_slug        = EXCLUDED.ats_slug,
-  hiring_active   = EXCLUDED.hiring_active,
-  confidence      = EXCLUDED.confidence,
-  updated_at      = NOW();
+-- ON CONFLICT DO NOTHING: this seed runs only against an empty table.
+-- Re-running against a populated companies table must NEVER overwrite
+-- existing rows — production canonical_id rows are authoritative.
+-- (Earlier version used DO UPDATE which would have silently overwritten
+-- real company rows if seed values drifted from production values.)
+ON CONFLICT (canonical_id) DO NOTHING;
 
 -- Verify seed count (informational — does not fail migration)
 DO $$

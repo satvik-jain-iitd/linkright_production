@@ -11,7 +11,7 @@ through per-bullet practice:
 
 No LLM critique in v1 — that's a v2 add (LLM rates user's STAR answer).
 
-Per Satvik 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
+Per Jane 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
 "every bullet must serve as baseline narrative for Round 1 / HR screening
 rounds for common questions that are always asked always". This command
 operationalizes that — each bullet → narrate-able story for screening.

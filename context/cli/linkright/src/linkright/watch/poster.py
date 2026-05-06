@@ -154,7 +154,7 @@ def load_oracle_pg_url(extra_files: Optional[list[Path]] = None) -> str:
 
     Lookup order:
       1. ``os.environ["ORACLE_PG_URL"]``
-      2. ``~/.linkright/.env.oracle``     (where Satvik's setup actually stores it)
+      2. ``~/.linkright/.env.oracle``     (where Jane's setup actually stores it)
       3. ``~/.linkright/.env``            (fallback for older configs)
 
     Raises ``ValueError`` with concrete remediation steps if not found.

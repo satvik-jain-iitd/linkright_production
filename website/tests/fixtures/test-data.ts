@@ -14,7 +14,7 @@ export const RESUME_TEXT = `Jane Doe PRODUCT MANAGER
 Phone: +1-555-0123 Email: jane.doe@example.com LinkedIn: Jane Doe
 Professional Summary
 Product Manager with 3.5+ years owning business outcomes at enterprise SaaS scale. Led segment-level delivery across 100M+
-accounts & 40+ markets (AcmeBank) & 1,500+ SaaS clients (TechCo SaaS). Builds & mentors product teams. B.Tech Civil Engineering, IIT
+accounts & 40+ markets (Acme Bank) & 1,500+ SaaS clients (TechCo SaaS). Builds & mentors product teams. B.Tech Civil Engineering, IIT
 Delhi.
 Professional Experience
 Acme Bank 07/2024 – Present
@@ -23,7 +23,7 @@ Senior Associate Product Manager
 • Drove 20+ UX research sessions with compliance analysts across 6 regions, designing 3 AML capability UIs end-to-end
 • Shipped Asset Manager, rule builder, and sandbox versioning across 40+ markets, cutting score errors from 18% to 2%
 • Mentored 2 POs on zero-to-one execution; hired and now manage UX designer through 12-round competitive selection
-• Captained 8-member team to rank #21 of 400+ teams in AcmeBank Growth Hack, building Rally AI meeting intelligence bot
+• Captained 8-member team to rank #21 of 400+ teams in Acme Bank Growth Hack, building Rally AI meeting intelligence bot
 TechCo SaaS 04/2022 – 07/2024
 Senior Product Analyst
 • Grew Use Case Hub adoption from 35% to 85% across 1,500+ SaaS clients, enabling self-serve setup for 15 industries

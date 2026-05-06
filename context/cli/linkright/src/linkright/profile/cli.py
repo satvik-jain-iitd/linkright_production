@@ -99,7 +99,7 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
     click.echo(f"  Dim:         {meta.get('dim')}")
 
     # Truth-engine Layer 1: contact-info verification — runs FIRST (before
-    # highlights loop). Per Satvik 2026-05-02
+    # highlights loop). Per Jane 2026-05-02
     # (memory feedback_personal_details_verify_at_start): wrong contact info =
     # silent failure (recruiter can't reach candidate). Verify always; only
     # `--yes` skips (batch flows / scripted profile creation).

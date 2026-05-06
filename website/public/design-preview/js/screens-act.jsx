@@ -34,7 +34,7 @@ function Screen08_FindRoles() {
 
                 <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
                   {[
-                    "Your AcmeBank payments work is a direct match for this JD",
+                    "Your Acme Bank payments work is a direct match for this JD",
                     "Your 36 enterprise shipments at TechCo SaaS line up with their merchant scale",
                     "Hybrid in Bangalore matches your preferences",
                   ].map(r => (
@@ -277,7 +277,7 @@ function Screen10_LiveWriting() {
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 14 }}>Summary</div>
               <p style={{ margin: "4px 0", fontSize: 9.5, lineHeight: 1.45 }}>
-                Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the AcmeBank India returns redesign (+18% conversion), led 36 enterprise deployments at TechCo SaaS.
+                Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the Acme Bank India returns redesign (+18% conversion), led 36 enterprise deployments at TechCo SaaS.
               </p>
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 12 }}>Experience</div>
@@ -389,7 +389,7 @@ function Screen11_Review() {
                 <div style={{ fontSize: 9, color: "#4A5568", marginTop: 2 }}>Senior Product Manager · Bangalore · satvik@linkright.in · +91 98xxx xxxxx</div>
               </div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 14 }}>Summary</div>
-              <p style={{ margin: "4px 0", fontSize: 9.5, lineHeight: 1.45 }}>Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the AcmeBank India returns redesign (+18% conversion), led 36 enterprise deployments at TechCo SaaS managing $14M ARR.</p>
+              <p style={{ margin: "4px 0", fontSize: 9.5, lineHeight: 1.45 }}>Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the Acme Bank India returns redesign (+18% conversion), led 36 enterprise deployments at TechCo SaaS managing $14M ARR.</p>
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 12 }}>Experience</div>
               <div style={{ marginTop: 6 }}>
@@ -398,7 +398,7 @@ function Screen11_Review() {
                   <li>Redesigned returns flow for 14,200 Indian merchants, lifting completion 18% and cutting tickets 22% within 6 weeks</li>
                   <li>Automated refund SLA engine. Merchant wait dropped from 5 days to 8 hours across all onboarded partners.</li>
                   <li style={{ background: "rgba(15,190,175,0.12)", outline: "2px solid var(--color-accent)", outlineOffset: 2, borderRadius: 2 }}>Shipped v3 merchant onboarding with KYC auto-verify. Onboarding time dropped 72h to 6h, NPS 34 to 58.</li>
-                  <li>Ran discovery for UPI-AcmeBank rails partnership. Signed term sheet with 3 bank partners.</li>
+                  <li>Ran discovery for UPI-Acme Bank rails partnership. Signed term sheet with 3 bank partners.</li>
                 </ul>
               </div>
               <div style={{ marginTop: 8 }}>

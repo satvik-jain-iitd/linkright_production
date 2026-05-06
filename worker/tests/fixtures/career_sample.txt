@@ -64,7 +64,7 @@ Domain: Credit risk decisioning, FinTech regulation (ECOA, FCRA, PCI-DSS), SaaS 
 CERTIFICATIONS & ACHIEVEMENTS
 
 • SAFe 6.0 Certified Product Owner / Product Manager (2023)
-• Internal AcmeBank Hackathon Winner — "PromptRisk" GenAI credit risk explainer (2023)
+• Internal Acme Bank Hackathon Winner — "PromptRisk" GenAI credit risk explainer (2023)
 • Dean's List, IIT Delhi — 3 semesters
 
 ---

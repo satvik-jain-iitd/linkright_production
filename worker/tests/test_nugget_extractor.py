@@ -155,7 +155,7 @@ def test_extraction_returns_list(httpx_mock, fake_sb):
 
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_extraction_count_15_to_25(httpx_mock, fake_sb):
-    """Satvik fixture text → Groq returns 20 nuggets → list has 15-25 nuggets."""
+    """Jane fixture text → Groq returns 20 nuggets → list has 15-25 nuggets."""
     fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
     with open(os.path.join(fixtures_dir, "career_sample.txt"), encoding="utf-8") as fh:
         career_text = fh.read()

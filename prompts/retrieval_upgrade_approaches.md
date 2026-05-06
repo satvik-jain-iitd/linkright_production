@@ -19,7 +19,7 @@ Phase 2.5: For each company in resume:
 **Idea**: When generating a specific resume section, only search nuggets of that section_type.
 
 ```
-Generating "Work Experience" section for AcmeBank?
+Generating "Work Experience" section for Acme Bank?
   → Filter: section_type = 'work_experience' AND company = 'Acme Bank'
   → Then run vector search within this filtered set
 
@@ -43,7 +43,7 @@ Generating "Skills" section?
 **Idea**: Guarantee P0/P1 nuggets always appear, fill remaining slots with vector-ranked P2/P3.
 
 ```
-Step 1: SELECT * WHERE company = 'AcmeBank' AND importance IN ('P0','P1')
+Step 1: SELECT * WHERE company = 'Acme Bank' AND importance IN ('P0','P1')
   → These ALWAYS make it into context (no scoring needed)
 
 Step 2: Remaining slots (8 - len(step1)) filled by vector search
@@ -134,7 +134,7 @@ Company: Acme Bank (2021-2024)
   → Then vector search within date range
 ```
 
-**Why it's better**: Prevents nuggets from other time periods from contaminating company context. If someone worked at both TechCo SaaS (2019-2021) and AcmeBank (2021-2024), a date filter ensures TechCo SaaS achievements don't leak into AcmeBank section.
+**Why it's better**: Prevents nuggets from other time periods from contaminating company context. If someone worked at both TechCo SaaS (2019-2021) and Acme Bank (2021-2024), a date filter ensures TechCo SaaS achievements don't leak into Acme Bank section.
 
 **Implementation**: Requires event_date to be populated (currently 0% — fix this first). Add `date_from` and `date_to` params to the RPC. In Phase 2.5, use company tenure dates from the parsed career profile.
 

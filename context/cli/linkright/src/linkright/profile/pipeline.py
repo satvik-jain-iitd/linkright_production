@@ -221,7 +221,7 @@ def load_embeddings(profile_dir: Optional[Path] = None) -> tuple[np.ndarray, np.
 
 
 # ── Contact info — Truth Engine Layer 1 (start) ────────────────────────────
-# Per Satvik 2026-05-02 (memory feedback_personal_details_verify_at_start):
+# Per Jane 2026-05-02 (memory feedback_personal_details_verify_at_start):
 # wrong contact info = silent failure (recruiter can't reach candidate).
 # Verify each field with user at profile creation; never hallucinate.
 
@@ -305,7 +305,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
                         raw_text_fallback: str = "") -> dict:
     """Interactive contact verification — Truth Engine Layer 1.
 
-    Per Satvik 2026-05-02 (memory feedback_personal_details_verify_at_start):
+    Per Jane 2026-05-02 (memory feedback_personal_details_verify_at_start):
     Surface phone/email/LinkedIn/portfolio/name to user. User confirms each
     or types correction. Tool MUST NOT invent any value. Empty fields stay
     empty unless user types a value.

@@ -111,7 +111,7 @@ agent-mode adds ~10s per LLM call vs direct API → 11 calls × extra 5–10s �
 | opencode | ~5 hours | ~1.5 hours |
 | Direct API | ~1.5 hours | ~30 min |
 
-**Note:** Per Satvik's "one resume at a time" + "diversity-pattern" RCA discipline, batch runs should NOT be the default workflow. The 24-job corpus is for sampling diverse patterns SEQUENTIALLY with full RCA between each — not for parallel benchmarking.
+**Note:** Per Jane's "one resume at a time" + "diversity-pattern" RCA discipline, batch runs should NOT be the default workflow. The 24-job corpus is for sampling diverse patterns SEQUENTIALLY with full RCA between each — not for parallel benchmarking.
 
 ---
 

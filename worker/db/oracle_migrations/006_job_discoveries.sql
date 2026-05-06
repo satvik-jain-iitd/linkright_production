@@ -1,6 +1,6 @@
 -- Migration 006: Oracle PG `job_discoveries` table — Sprint C passive captures.
 --
--- Per LOCKED DB-split architectural rule (3× reaffirmed by Satvik 2026-05-03):
+-- Per LOCKED DB-split architectural rule (3× reaffirmed by Jane 2026-05-03):
 -- ALL new job-related write paths target Oracle PG, never Supabase — even when
 -- a Supabase legacy table already exists for the same domain. Rationale: the
 -- legacy Supabase `job_discoveries` will be migrated to Oracle PG in a future

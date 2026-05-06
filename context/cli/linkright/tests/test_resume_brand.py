@@ -1,6 +1,6 @@
 """Tests for `linkright resume brand` — Phase 1 brand-color feature.
 
-Per Satvik design spec 2026-05-03 (memory: feedback_brand_design_spec_2026_05_03):
+Per Jane design spec 2026-05-03 (memory: feedback_brand_design_spec_2026_05_03):
 - Default = pure black-and-white
 - User opt-in via 1-3 hex codes
 - Color lands in EXACTLY 2 places: bolded metrics + section dividers
@@ -433,7 +433,7 @@ def test_brand_cover_letter_renders_branded_pdf(runner, fake_run_dir, tmp_path):
     cl_dir.mkdir()
     cl_md = cl_dir / "cover_letter.md"
     cl_md.write_text(
-        "Dear Hiring Manager,\n\nI led work that drove **$1.2M ARR** in 6 months.\n\nSincerely,\nSatvik",
+        "Dear Hiring Manager,\n\nI led work that drove **$1.2M ARR** in 6 months.\n\nSincerely,\nJane",
         encoding="utf-8",
     )
 

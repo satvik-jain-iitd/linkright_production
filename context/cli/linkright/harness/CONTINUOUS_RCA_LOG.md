@@ -684,14 +684,14 @@ hypothesis: de-hardcode keeps quality + makes pipeline domain-agnostic
 **Adversarial test (code-only, no full pipeline):**
 - SWE markdown ("Built Kubernetes (K8s) clusters; Continuous Integration (CI)..."): learned K8s, CI, CD ✓
 - Designer markdown ("Augmented Reality (AR), Web Content Accessibility Guidelines (WCAG)..."): learned AR, WCAG ✓
-- Satvik markdown ("Anti-Money Laundering (AML), Common Data Layer (CDL)..."): learned AML, CDL ✓
+- Jane markdown ("Anti-Money Laundering (AML), Common Data Layer (CDL)..."): learned AML, CDL ✓
 - Orphan ("Used K8s extensively, no expansion defined"): learned NOTHING ✓ (correct graceful)
 
 **Pipeline runs:**
 | Run | Code state | Corpus state | Score |
 |---|---|---|---|
-| v5.7 | hardcoded dict (Satvik bias) | n/a | **B 81.2** (BIASED — luckily Satvik's domain matched dict) |
-| v5.8 | de-hardcode + auto-learn ONLY | empty | **C 79.6** (HONEST — Satvik's resume has no inline expansions, so auto-learn found 0 pairs) |
+| v5.7 | hardcoded dict (Jane bias) | n/a | **B 81.2** (BIASED — luckily Jane's domain matched dict) |
+| v5.8 | de-hardcode + auto-learn ONLY | empty | **C 79.6** (HONEST — Jane's resume has no inline expansions, so auto-learn found 0 pairs) |
 | v5.9 | de-hardcode + corpus seeded with [AML, CDL, TCV] | 3 pairs | **C 76.5** (logbook: "learned 3 acronym pair(s); expanded 3 on first use"; LLM variance regressed verb_diversity 100→66.7 and other dims) |
 
 **Deep insight — LLM variance dominates iteration noise:**
@@ -709,7 +709,7 @@ hypothesis: de-hardcode keeps quality + makes pipeline domain-agnostic
 
 **ROLLBACK candidates: NONE** — the score regression v5.7→v5.8 is principled (removing biased dict means honest assessment for users without inline expansions).
 
-**Cosmetic note:** Satvik's PDF now shows raw "AML" instead of "Anti-Money Laundering (AML)" because his resume doesn't define it inline. To recover the polished look:
+**Cosmetic note:** Jane's PDF now shows raw "AML" instead of "Anti-Money Laundering (AML)" because his resume doesn't define it inline. To recover the polished look:
 - Manual: user adds "(AML)" after "Anti-Money Laundering" once in resume → auto-learn picks up
 - Automated: run `python -m linkright.resume.scripts.enrich_corpus_oracle` once → Oracle gemma3:1b populates corpus → next runs benefit
 - Ongoing: weekly cron entry — corpus self-enriches over time
@@ -720,13 +720,13 @@ hypothesis: de-hardcode keeps quality + makes pipeline domain-agnostic
 | **A** | Phase 6 reproducibility — add `temperature=0.0` + `seed=42` to LLM calls; lock random.seed | 3-run variance ≤2 (was ±5) → real signal | 30 min |
 | B | Multi-sample expansion — introduce 2nd JD (Crypto/SWE) for cross-validation | reveals overfit | 1.5 hrs |
 | C | Phase 3 JD tier-1 keyword injection in Skills + bullet hints | kw 30→55+ → +4-6 | 1.5 hrs |
-| D | Run Component B (Oracle enrichment) against current corpus on a vocabulary-rich sample | corpus grows, Satvik's next runs auto-expand | 15 min |
+| D | Run Component B (Oracle enrichment) against current corpus on a vocabulary-rich sample | corpus grows, Jane's next runs auto-expand | 15 min |
 
 **Baseline updated:** v5.9 = 76.5 / C is new baseline (honest, de-hardcoded).
 
 ### 2026-04-26 — resume — Sanika sample v6 (cross-domain SWE + entity-fidelity guards + metric hallucination found)
 ```yaml
-sample: sanika_microsoft_swe2_compliance (NEW — first non-Satvik run; SWE not PM)
+sample: sanika_microsoft_swe2_compliance (NEW — first non-Jane run; SWE not PM)
 resume: Sanika Jain — Software Engineer @ Oracle + Google intern
 jd: Microsoft Software Engineer 2 — Commerce Platform Compliance
 llm_mode: direct (auto-approve nuggets enabled)
@@ -761,7 +761,7 @@ Source nugget metrics: ['1', '1.5', '10', '100', '1410', '19', '20', '21', '22',
 metric_fidelity dim correctly returned 28.6 (5 of 7 bullets have non-traceable numbers).
 
 **Cross-domain insight:**
-- Non-Satvik resume scored similarly (C 76.4 vs Satvik's recent C 76.5) — pipeline IS domain-generalizable
+- Non-Jane resume scored similarly (C 76.4 vs Jane's recent C 76.5) — pipeline IS domain-generalizable
 - All universal dims (entity, near_dup, structure, contrast, tense, etc.) scored 100
 - Domain-quality dims (keyword, metric_density, page_fit) regressed similarly
 
@@ -788,7 +788,7 @@ metric_fidelity dim correctly returned 28.6 (5 of 7 bullets have non-traceable n
 | B | Stronger PHASE_4A prompt rules: "STRICT: every number in your bullet MUST appear in nugget pool. Hallucinated numbers = REJECTED" | maybe +2-3 (prompt-only) | 15 min |
 | C | Drop high-school entries from Education when total experience > 1 yr (Sanika has 2 schools rendered) | structure_integrity stays, cleaner output | 30 min |
 
-**Baseline note:** Sanika v6 = 76.4 C (first cross-domain validation). Satvik most recent = 76.5 C. Within ±5 of each other → pipeline IS domain-agnostic but fabrication issue persists.
+**Baseline note:** Sanika v6 = 76.4 C (first cross-domain validation). Jane most recent = 76.5 C. Within ±5 of each other → pipeline IS domain-agnostic but fabrication issue persists.
 
 ### 2026-04-26 — resume — Sanika v7 (bullet count cap fix)
 ```yaml
@@ -876,7 +876,7 @@ hypothesis: replace "skip entirely" with "qualitative fallback" — recover v8's
 **Predicted Δ:** +5-15pp coverage_pct.
 
 **Test setup:**
-- Resume: Satvik's PDF (cached profile, fastembed 384-dim, 17 nuggets locked)
+- Resume: Jane's PDF (cached profile, fastembed 384-dim, 17 nuggets locked)
 - JD: JPMorgan Chase PM (`linkedin_jobs.json[0]`)
 - Backend: claude CLI agent-mode
 - n=3 each (baseline at 0.5, H1 at 0.4)

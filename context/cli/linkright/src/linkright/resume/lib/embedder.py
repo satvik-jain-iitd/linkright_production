@@ -2,7 +2,7 @@
 
 Priority order (highest → lowest):
 
-  1. Oracle /lifeos/embed (nomic-embed-text 768-dim) — Satvik's specific setup.
+  1. Oracle /lifeos/embed (nomic-embed-text 768-dim) — Jane's specific setup.
      Activated only when both ORACLE_BACKEND_URL and ORACLE_BACKEND_SECRET env
      vars are present. Provides best quality but requires bespoke infra.
 

@@ -146,13 +146,13 @@ src/linkright/
 
 Three parsers cover ~95% of CLIs: `plain_text`, `json_envelope`, `jsonl_events`. Adding a CLI = adding a spec dict — no code change.
 
-**Note:** Hermes Agent is Satvik's Oracle-side tool (replacement for `openclaw` on his VPS) — NOT a LinkRight backend. Don't conflate. LinkRight's intended agent backends are: claude / opencode / gemini. Other CLIs can be added by users via `~/.linkright/agents.yaml`, but built-in specs stay focused on those three.
+**Note:** Hermes Agent is Jane's Oracle-side tool (replacement for `openclaw` on his VPS) — NOT a LinkRight backend. Don't conflate. LinkRight's intended agent backends are: claude / opencode / gemini. Other CLIs can be added by users via `~/.linkright/agents.yaml`, but built-in specs stay focused on those three.
 
 ## Embedder tier system (auto-detect, sticky per process)
 
 | Priority | Tier | Dim | Cost | Speed | Activation |
 |---|---|---|---|---|---|
-| 1 | Oracle nomic-embed-text | 768 | Free (Satvik's VPS) | Slow (~2 s) | `ORACLE_BACKEND_URL` + `ORACLE_BACKEND_SECRET` env |
+| 1 | Oracle nomic-embed-text | 768 | Free (Jane's VPS) | Slow (~2 s) | `ORACLE_BACKEND_URL` + `ORACLE_BACKEND_SECRET` env |
 | 2 | **fastembed BAAI/bge-small-en-v1.5** | **384** | **Free** | **~50 ms** | **DEFAULT** (pip install fastembed) |
 | 3 | sentence-transformers | 768 | Free | Slow (~200 ms first, ~50ms after) | `LR_USE_SENTENCE_TRANSFORMERS=1` env |
 | 4 | stub SHA-256 | 768 | Free | <1 ms | Last resort — NOT semantic |

@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// Cost reduction 2026-04-18 (per Satvik): remove LLM fallback for brand
+// Cost reduction 2026-04-18 (per Jane): remove LLM fallback for brand
 // colours. Source of truth:
 //   1. `company_brand_colors` DB table (admin-managed)
 //   2. Brandfetch API (if key set) — deterministic lookup, no LLM

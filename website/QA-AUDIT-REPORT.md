@@ -113,7 +113,7 @@ Overall Noise Ratio:       34%
 - The actual differentiator is invisible
 
 **J0-F7: Trust section has builder credentials, not product proof**
-- "Built by PM at AcmeBank" and "36+ implementations at TechCo SaaS"
+- "Built by PM at Acme Bank" and "36+ implementations at TechCo SaaS"
 - No user testimonials, no before/after resume examples, no stats
 
 **J0-F8: Stat cards are unanchored claims**
@@ -369,7 +369,7 @@ Overall Noise Ratio:       34%
 - Zero mention of career interview system, smart matching — the real differentiator
 
 🟡 **FRICTION: Trust section has builder credentials, not product proof**
-- "Built by PM at AcmeBank" and "36+ implementations at TechCo SaaS"
+- "Built by PM at Acme Bank" and "36+ implementations at TechCo SaaS"
 - No user testimonials, no before/after resume examples, no success metrics
 
 🟡 **FRICTION: Stat cards are unanchored**

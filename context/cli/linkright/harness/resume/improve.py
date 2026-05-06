@@ -1,6 +1,6 @@
 """linkright resume improve — REFINE existing bullets, NOT regenerate.
 
-Conceptual distinction (per Satvik 2026-05-01):
+Conceptual distinction (per Jane 2026-05-01):
   - SCRATCH REGEN (linkright resume tailor): run pipeline → generate NEW bullets
     from nuggets. Each call produces fresh content.
   - IMPROVE (this command): read EXISTING bullets, identify what's MISSING vs
@@ -116,7 +116,7 @@ def improve_width(run_dir: Path, dry_run: bool = False) -> dict:
 
             # 2026-05-02: deterministic article + phrase + numeral tweaks BEFORE LLM.
             # Zero-fabrication, fast, free. If tweaks alone land in band, no LLM needed.
-            # Per Satvik 2026-05-02: commit ANY partial gain even if not fully in band,
+            # Per Jane 2026-05-02: commit ANY partial gain even if not fully in band,
             # so incremental progress is never lost — the LLM fallback (if it runs)
             # operates on the tweaked baseline, not the original.
             if direction == "expand":
@@ -164,7 +164,7 @@ def improve_width(run_dir: Path, dry_run: bool = False) -> dict:
             # 2026-05-02 NEW-4: mask bolds with sentinels BEFORE LLM call so
             # LLM cannot mangle them by construction. Restore after. This
             # eliminates the prior LLM-changes-bold-content failure mode that
-            # validation kept rejecting. Per Satvik's directive to find
+            # validation kept rejecting. Per Jane's directive to find
             # full-proof solutions, not pattern-on-pattern band-aids.
             masked_html, bold_spans_for_restore = _protect_bolds(html)
             sys_prompt = (
@@ -401,7 +401,7 @@ from linkright.resume.lib.width_config import (
 def improve_skills_keyword_fill(run_dir: Path, dry_run: bool = False) -> dict:
     """Append missing JD keywords to Skills section + rescue any dropped by step_07.
 
-    Per Satvik 2026-05-01: "if keywords can't be naturally fitted into bullets,
+    Per Jane 2026-05-01: "if keywords can't be naturally fitted into bullets,
     put them in Skills section in clean comma-separated format without
     categorization." Skills section is the ATS keyword dump zone — bullets
     stay narrative + metric-rich, Skills carries keyword coverage.
@@ -510,7 +510,7 @@ def improve_skills_keyword_fill(run_dir: Path, dry_run: bool = False) -> dict:
 
 
 # Acronym candidates that take a definite article ("the AML risk engine").
-# Per Satvik 2026-05-02 (memory `feedback_expand_deterministic_dictionaries`):
+# Per Jane 2026-05-02 (memory `feedback_expand_deterministic_dictionaries`):
 # comprehensive coverage across all common job domains so the deterministic
 # width-tweak toolkit works on any resume, not just current samples.
 # ~250 acronyms grouped by domain.
@@ -626,7 +626,7 @@ _LOGICAL_STOPWORDS = {
 def _logical_sanity_check(html: str) -> tuple[bool, str]:
     """Reject if a non-stopword non-metric word repeats 3+ times.
 
-    Per Satvik 2026-05-02: "should make sense logically, should not be
+    Per Jane 2026-05-02: "should make sense logically, should not be
     illogical." A bullet with three "across" or three identical content
     words reads as a tweak-overshoot — revert.
     """
@@ -675,7 +675,7 @@ def _restore_bolds(masked: str, spans: list[str]) -> str:
 def _apply_width_expand_tweaks(html: str, target_min: int, target_max: int) -> tuple[str, list[str]]:
     """Deterministic width-expansion via articles, contractions, prep swaps.
 
-    Per Satvik 2026-05-02: zero-fabrication width expansion. Bold spans are
+    Per Jane 2026-05-02: zero-fabrication width expansion. Bold spans are
     masked before transformation so every <b>...</b> stays byte-identical —
     rule pollution into metrics is impossible. Returns (new_html, applied).
     Stops once plain length lands in [target_min, target_max].
@@ -757,7 +757,7 @@ def _apply_width_expand_tweaks(html: str, target_min: int, target_max: int) -> t
 
 
 # Comprehensive verb-synonym dictionary covering ~16 action categories
-# generalizable across job domains. Per Satvik 2026-05-02: "expand your word
+# generalizable across job domains. Per Jane 2026-05-02: "expand your word
 # dictionary to like maybe double just to ensure that all the unique possible
 # combinations are covered. Like not just for some selected jobs, but for any
 # jobs that you can come across, even in the future."
@@ -1040,7 +1040,7 @@ def improve_page_fit(run_dir: Path, dry_run: bool = False) -> dict:
     keywords + role context. Cheapest densification — one LLM call, fully
     reversible by run_improve's auto-rollback if overall score regresses.
 
-    Per Satvik 2026-05-02: aim 99% overall; page_fit is the highest-leverage
+    Per Jane 2026-05-02: aim 99% overall; page_fit is the highest-leverage
     gap (weight 0.09 × 70-pt swing = +6.3 weighted). Summary at 23 words
     is the shallowest density signal — expanding to 50-60 words adds 2-3
     rendered lines and pulls util upward without touching bullets.
@@ -1192,7 +1192,7 @@ def run_improve(run_id: Optional[str] = None, target_dim: Optional[str] = None,
         counts = improve_width(run_dir, dry_run=dry_run)
         print(f"\nCounts: {counts}", file=sys.stderr)
     elif target_dim == "keyword_coverage":
-        # 2026-05-01: 2-stage approach per Satvik strategy:
+        # 2026-05-01: 2-stage approach per Jane strategy:
         # (1) try natural keyword incorporation in bullets (small success rate)
         # (2) ALWAYS dump remaining missing keywords into Skills section
         print("\nStage 1 — attempt natural keyword incorporation in bullets...", file=sys.stderr)

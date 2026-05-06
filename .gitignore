@@ -57,8 +57,8 @@ linkright-blueprint.jsx
 *.textClipping
 
 # Legacy resume files (not part of engine)
-Satvik*.pdf
-Satvik*.html
+*-resume.pdf
+*-resume.html
 resume-attentive*.html
 
 # Miscellaneous
@@ -91,4 +91,4 @@ playwright_automation/
 # Test prompt harness — local-only env and reports
 worker/tests/prompts/.env.local
 worker/tests/prompts/reports/
-worker/tests/prompts/fixtures/satvik_career_text.txt
+worker/tests/prompts/fixtures/career_text_local.txt

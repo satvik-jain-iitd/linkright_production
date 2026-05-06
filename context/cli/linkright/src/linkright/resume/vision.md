@@ -403,7 +403,7 @@ id: 623426F5
 ```
 
 **Root-cause hypothesis:**
-If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If AcmeBank missing, company-tagging rule is failing on 'Acme Bank — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
+If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If Acme Bank missing, company-tagging rule is failing on 'Acme Bank — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
 
 ```text
 [2026-05-01T08:13:47Z] step_03_embed_nuggets — starting
@@ -519,7 +519,7 @@ id: 26A54BE7
 ```
 
 **Root-cause hypothesis:**
-If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If AcmeBank missing, company-tagging rule is failing on 'Acme Bank — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
+If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If Acme Bank missing, company-tagging rule is failing on 'Acme Bank — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
 
 ```text
 [2026-05-01T11:59:45Z] step_03_embed_nuggets — cache_hit

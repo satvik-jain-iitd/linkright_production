@@ -68,7 +68,7 @@ def _run_one_pipeline(
     env["LR_SEED"] = str(seed)
     # 2026-05-01 critical fix: hypothesis-test ALWAYS forces direct mode,
     # never agent-mode. Agent-mode = claude subscription per-token billing,
-    # which burned ~$14 of Satvik's quota in one session before this guard.
+    # which burned ~$14 of Jane's quota in one session before this guard.
     # Per `feedback_never_agent_mode_for_hypothesis_tests`: zero tolerance.
     env["LR_LLM_MODE"] = "direct"
     if extra_env:

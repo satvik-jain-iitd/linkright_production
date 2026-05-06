@@ -84,7 +84,7 @@ class RotatingGeminiProvider(LLMProvider):
 # Core fixtures — data identity, paths
 # ---------------------------------------------------------------------------
 
-SATVIK_USER_ID = "7cc942ba-5ca8-4a43-83d7-14ebd968d46a"
+JANE_USER_ID = "00000000-0000-0000-0000-000000000001"
 FIXTURES_DIR = _HARNESS_DIR / "fixtures"
 REPORTS_DIR = _HARNESS_DIR / "reports"
 VARIANTS_DIR = FIXTURES_DIR / "prompt_variants"
@@ -92,7 +92,7 @@ VARIANTS_DIR = FIXTURES_DIR / "prompt_variants"
 
 @pytest.fixture(scope="session")
 def satvik_user_id() -> str:
-    return SATVIK_USER_ID
+    return JANE_USER_ID
 
 
 @pytest.fixture(scope="session")
@@ -103,7 +103,7 @@ def target_jds() -> list[dict]:
 
 @pytest.fixture(scope="session")
 def career_text_live() -> str:
-    """Satvik's career text. Prefer harness-local copy, fall back to /tmp."""
+    """Jane's career text. Prefer harness-local copy, fall back to /tmp."""
     local = FIXTURES_DIR / "satvik_career_text.txt"
     if local.exists():
         return local.read_text()

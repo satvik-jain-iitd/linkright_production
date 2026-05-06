@@ -9,7 +9,7 @@ function Screen12_Dashboard() {
         <div style={{ padding: "32px 48px 56px", maxWidth: 1200, marginInline: "auto" }}>
           {/* Welcome */}
           <div style={{ marginBottom: 28 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.015em", margin: 0 }}>Good morning, Satvik.</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.015em", margin: 0 }}>Good morning, Jane.</h1>
             <p style={{ color: "var(--color-muted)", margin: "6px 0 0", fontSize: 14 }}>5 new matches since Tuesday.</p>
           </div>
 
@@ -94,7 +94,7 @@ function Screen12_Dashboard() {
                     <div className="iconTile iconTile-sage"><Icon d={I.bolt}/></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>Product-sense warmup · 8 questions</div>
-                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>Tailored to your AcmeBank payments work. 12 minutes.</div>
+                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>Tailored to your Acme Bank payments work. 12 minutes.</div>
                     </div>
                     <button className="pill pill-ghost pill-sm">Start</button>
                   </div>
@@ -350,7 +350,7 @@ function Screen16_InsightsBrowser() {
   const filters = ["Wins", "Learnings", "Takes", "Failures", "Shipped"];
   const insights = [
     { c: "teal", src: "from your diary · 3 days ago", t: "The reason-code drop-off insight", d: "Users couldn't map their issue to our 14-option taxonomy. Compressed it to three, completion jumped 18%.", type: "Win" },
-    { c: "gold", src: "from your AcmeBank role", t: "What Walmart taught me about escalations", d: "3 weeks embedded changed how I think about legal UX forever. A policy engine is a language translator, not a rulebook.", type: "Learning" },
+    { c: "gold", src: "from your Acme Bank role", t: "What Walmart taught me about escalations", d: "3 weeks embedded changed how I think about legal UX forever. A policy engine is a language translator, not a rulebook.", type: "Learning" },
     { c: "pink", src: "from your diary · yesterday", t: "My roadmap template is broken", d: "Realised today we're tracking outputs, not bets. Rewriting for Q2.", type: "Take" },
     { c: "purple", src: "from your TechCo SaaS role", t: "Why 6 of 36 enterprise shipments slipped", d: "Every one missed discovery depth. The pattern is obvious in retrospect.", type: "Failure" },
     { c: "teal", src: "shipped 2 weeks ago", t: "Refund SLA automation is live", d: "5 days → 8 hours across 14,200 merchants. Three weeks from spec to ship.", type: "Shipped" },

@@ -20,7 +20,7 @@ type Insight = {
   kind: "nugget" | "diary";
   title: string;
   body: string;
-  source: string;   // "from your AcmeBank role" / "from your diary · 3 days ago"
+  source: string;   // "from your Acme Bank role" / "from your diary · 3 days ago"
   type: string;     // "Win" | "Learning" | "Take" | "Failure" | "Shipped"
   accent: "teal" | "purple" | "gold" | "pink";
   created_at: string;

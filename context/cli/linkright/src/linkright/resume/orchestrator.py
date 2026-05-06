@@ -814,7 +814,7 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
         "each tagged with company, role, importance, answer, tags",
     )
 
-    # Use the raw career text as input (production batches at 3000 chars; Satvik's is 3009 — single batch)
+    # Use the raw career text as input (production batches at 3000 chars; Jane's is 3009 — single batch)
     try:
         md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
@@ -1092,7 +1092,7 @@ def step_06_role_scores(nuggets: list[dict], reqs: list[dict], experiences: list
         step, "starting",
         "replicating scoreRolesAgainstRequirements() from jd/analyze/route.ts; "
         "greedy bipartite matching with cosine threshold 0.50 (post-recalibration); "
-        "years-of-experience hard check: Satvik ~4 yrs vs JD 5+ → '5+ years' req auto-gap",
+        "years-of-experience hard check: Jane ~4 yrs vs JD 5+ → '5+ years' req auto-gap",
     )
 
     threshold = float(os.environ.get("COSINE_THRESHOLD", "0.50"))
@@ -1308,7 +1308,7 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
         step, "starting",
         "calling LLM with PHASE_1_2 prompt; returns career_level, jd_keywords, "
         "strategy, theme_colors, section_order, bullet_budget; expecting "
-        "career_level=mid (Satvik has ~4 yrs) and bullet_budget totaling 12-15",
+        "career_level=mid (Jane has ~4 yrs) and bullet_budget totaling 12-15",
     )
 
     strategies_json = P.STRATEGIES_JSON  # vendored
@@ -3110,7 +3110,7 @@ def step_13_width_skip(condensed: dict) -> dict:
 
 # ────────────────────────────────────────────────────────────────────────────
 # Step 14 helpers — bolding rule + header shrink-to-fit
-# Per Satvik 2026-05-02 milestone validation:
+# Per Jane 2026-05-02 milestone validation:
 #   1. Bold ONLY metric tokens (numbers + adjacent symbols). Strip verbs/phrases
 #      from <b>...</b> regardless of what step_10/12 LLM produced.
 #   2. Header role can be long (e.g. "Product Manager — Workflows Team
@@ -3142,7 +3142,7 @@ _METRIC_REBOLD_RE = re.compile(
 def _metric_only_rebold(html: str) -> str:
     """Strip every existing <b>...</b> then re-bold ONLY metric tokens.
 
-    Per Satvik 2026-05-02: "I want only the numbers to be in bold. Numbers and
+    Per Jane 2026-05-02: "I want only the numbers to be in bold. Numbers and
     supporting characters like 100M+, 70%, 20+." Verbs, action phrases, JD
     keywords, and named entities must stay PLAIN regardless of upstream LLM
     output.
@@ -3169,7 +3169,7 @@ def _trim_skills_to_target_lines(
 ) -> tuple[list[str], list[str]]:
     """Trim Skills section to a target char-budget + render in TIER order.
 
-    Per Satvik 2026-05-02 (memory `feedback_skills_trim_before_width_fill`):
+    Per Jane 2026-05-02 (memory `feedback_skills_trim_before_width_fill`):
     Skills max 3-5 lines (≤120c per line); drop generics FIRST.
     Per 2026-05-02 update: "ordering of skills should also be must have >
     nice to have > just inferred skills based on the job".
@@ -3316,7 +3316,7 @@ def _trim_skills_to_target_lines(
 
 # ────────────────────────────────────────────────────────────────────────────
 # NEW-6 v1: deterministic per-bullet signal derivation + interview-prep
-# Per Satvik 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
+# Per Jane 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
 # every bullet must (1) signal "right fit" in 6-second top-1/3 scan,
 # (2) seed a Round 1 interview story. v1 derives signal heuristically from
 # bullet content + maps to common interview questions. v2 (deferred) replaces
@@ -3554,7 +3554,7 @@ def _llm_classify_signal(bullet_text: str, jd_text: str) -> tuple[str, str]:
     returned generic 'execution' (i.e., regex couldn't find a discriminating
     pattern).
 
-    Per Satvik 2026-05-02 (memory feedback_no_hardcoded_jd_specifics):
+    Per Jane 2026-05-02 (memory feedback_no_hardcoded_jd_specifics):
     regex is closed-vocabulary; LLM is needed for semantic understanding
     that extrapolates to novel domains/phrasings. Constrained output
     (must pick from _VALID_SIGNALS enum) prevents hallucination.
@@ -3717,7 +3717,7 @@ def _compute_header_font_size(name: str, role: str, max_width_mm: float = 175.0)
     Roboto Medium baseline: ~0.51mm char-width per 1pt font-size (matches
     bullet-width.ts CHAR_WIDTH_PER_PT empirical ratio).
 
-    Per Satvik 2026-05-02: shrink BOTH name + role in lockstep (they share
+    Per Jane 2026-05-02: shrink BOTH name + role in lockstep (they share
     --font-size-name CSS variable). Floor at 14pt — header must remain
     visually larger than 12pt section-headings. NEVER wrap, NEVER truncate.
 
@@ -3745,7 +3745,7 @@ def _compute_header_font_size(name: str, role: str, max_width_mm: float = 175.0)
     fit_pt = max_width_mm / (chars * CHAR_WIDTH_PER_PT)
     fit_pt = round(fit_pt * 2) / 2  # snap to 0.5pt
     if fit_pt < MIN_PT:
-        # Slight overflow at floor is preferable to wrap/truncate per Satvik
+        # Slight overflow at floor is preferable to wrap/truncate per Jane
         # 2026-05-02. Caller logs warning; PDF still renders.
         return f"{MIN_PT:.0f}pt", False
     return f"{fit_pt:.1f}pt", True
@@ -3764,7 +3764,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     )
 
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
-    # Default = pure black-and-white (Satvik design spec 2026-05-03).
+    # Default = pure black-and-white (Jane design spec 2026-05-03).
     # User opts in to color via `linkright resume brand` post-tailor; otherwise
     # all 3 brand vars stay #000000 → divider gradient resolves to solid black,
     # metric <b> tags render bold black. No regression for B&W users.
@@ -4534,7 +4534,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         """For each LEARNED acronym, expand first occurrence in text.
 
         2026-05-02: width-aware skip — if expanding would push the containing
-        bullet `<li>` over 120c plain-text, skip that expansion. Per Satvik
+        bullet `<li>` over 120c plain-text, skip that expansion. Per Jane
         2026-05-02: bullets must fit one line each; acronym-expansion adding
         20+ chars to an already-near-band bullet causes 2-line spill.
         """
@@ -4588,7 +4588,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     summary_html = f'<div class="summary-line">{summary}</div>'
 
     # 2026-05-02: Header shrink-to-fit MUST run BEFORE placeholder substitution
-    # so the (possibly shortened) target_role is what gets injected. Per Satvik
+    # so the (possibly shortened) target_role is what gets injected. Per Jane
     # 2026-05-02: NO wrap, NO truncate, side-by-side preserved. Both name + role
     # shrink in lockstep via --font-size-name CSS var. Min floor 14pt. If still
     # overflows at 14pt, drop team-name suffix after em-dash so recruiter sees

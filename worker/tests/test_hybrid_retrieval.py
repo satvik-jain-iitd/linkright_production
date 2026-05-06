@@ -135,7 +135,7 @@ class FakeHybridSupabaseClient:
 def _nugget_row(
     nid: str,
     importance: str = "P2",
-    company: str = "AcmeBank",
+    company: str = "Acme Bank",
     resume_relevance: float = 0.9,
     answer: str = "Led 18-member team reducing errors from 18% to 2%",
     section_type: str = "work_experience",
@@ -241,8 +241,8 @@ def test_result_limit():
 
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 async def test_company_scoped_query(httpx_mock):
-    """company='AcmeBank' → AcmeBank nugget appears in results."""
-    amex_row = _nugget_row("n1", company="AcmeBank")
+    """company='Acme Bank' → Acme Bank nugget appears in results."""
+    amex_row = _nugget_row("n1", company="Acme Bank")
 
     # Oracle embed mock: handles calls when ORACLE_BACKEND_URL is set (env pollution
     # from test_lock_embed_isolation.py which sets it at module level without cleanup).
@@ -274,7 +274,7 @@ async def test_company_scoped_query(httpx_mock):
 
     with mock.patch.dict(os.environ, {"JINA_API_KEY": "fake-key"}):
         results, method = await hybrid_retrieve(
-            sb, "user-123", "risk scoring", company="AcmeBank", limit=5
+            sb, "user-123", "risk scoring", company="Acme Bank", limit=5
         )
 
     assert method in ("hybrid", "bm25_only")

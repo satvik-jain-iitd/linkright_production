@@ -79,7 +79,7 @@ If a nugget is about work at TechCo SaaS as a Senior Product Analyst in 2022:
 
 ### Rule 2: Every work_experience nugget MUST have company AND role
 
-- company: Full legal/common name (e.g., "Acme Bank", not "AcmeBank")
+- company: Full legal/common name (e.g., "Acme Bank", not "Acme Bank")
 - role: Exact title at the time (e.g., "Senior Associate Product Manager", not "PM")
 - If the source text says "at my company" without naming it, infer from context or mark as "Unknown Company" — NEVER leave null for work items
 
@@ -105,7 +105,7 @@ If the source text says "reduced churn from 13% to 9%", BOTH numbers must appear
 ### Rule 6: Consistent company naming
 
 Use the SAME company name across all nuggets for the same employer:
-- Always "Acme Bank", never mix "AcmeBank" / "AcmeBank" / "AMEX"
+- Always "Acme Bank", never mix "Acme Bank" / "Acme Bank" / "AMEX"
 - Always "TechCo SaaS", never "techco_saas"
 - Always "GoGoGo", never "Go Go Go"
 
@@ -134,7 +134,7 @@ CORRECT extraction:
 {
   "nugget_text": "Reduced config change speed-to-market from 10 days to 3 days at Acme Bank",
   "question": "How did the person improve configuration deployment speed at Acme Bank?",
-  "alt_questions": ["What process improvements were made at AcmeBank?", "What was the speed-to-market reduction for config changes?"],
+  "alt_questions": ["What process improvements were made at Acme Bank?", "What was the speed-to-market reduction for config changes?"],
   "answer": "At Acme Bank as Senior Associate Product Manager (2024), reduced the speed-to-market for configuration changes from 10 days to 3 days by streamlining the deployment pipeline and automating approval workflows.",
   "primary_layer": "A",
   "section_type": "work_experience",

@@ -153,7 +153,7 @@ class CareerStory(Base):
     questions). Each story tagged with skill domains + JD requirement IDs
     so retrieval can filter by JD-relevance.
 
-    Title + S/T/A/R fields chosen per Satvik 2026-05-03 spec ("Rich" option):
+    Title + S/T/A/R fields chosen per Jane 2026-05-03 spec ("Rich" option):
     persistent narratives with usage tracking (last_used_at / use_count) and
     JD-requirement linkage so `tailor` step_08 + `interview practice` can
     surface stories tied to the current JD's specific requirements.

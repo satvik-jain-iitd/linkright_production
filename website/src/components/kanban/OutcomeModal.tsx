@@ -13,7 +13,7 @@ const PROMPTS: Record<Outcome, { title: string; sub: string; ph: string }> = {
   interview: {
     title: "Interview scheduled. What do you know so far?",
     sub: "Who's on the panel, what they care about, what you want to emphasise.",
-    ph: "Second round with Priya (VP) — she led a similar returns rebuild at PhonePe. Plan to lead with the AcmeBank metric and ask about their India roadmap.",
+    ph: "Second round with Priya (VP) — she led a similar returns rebuild at PhonePe. Plan to lead with the Acme Bank metric and ask about their India roadmap.",
   },
   offer: {
     title: "Offer landed. What tipped it?",
