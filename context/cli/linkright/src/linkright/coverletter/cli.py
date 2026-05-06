@@ -48,9 +48,12 @@ def coverletter_group(
 ) -> None:
     """Pillar 1 — Generate a personalized cover letter from a JD.
 
+    Run with no flags to be prompted for the JD (file path or paste).
+
     \b
     Quick start:
-      linkright cover-letter -j jd.md
+      linkright cl                              (prompts for JD)
+      linkright cl -j jd.md                     (power-user: skip prompts)
       linkright cl -j jd.md --tone formal
       linkright cl --from-discovery abc123
 
@@ -67,11 +70,16 @@ def coverletter_group(
     if ctx.invoked_subcommand:
         return
 
-    # Need at least one of: jd_path or discovery_id
+    # Bare-command UX: if neither -j nor --from-discovery, prompt
+    # interactively (file path first, paste fallback).
+    pasted_jd_text: str = ""
     if not jd_path and not discovery_id:
-        click.echo(ctx.get_help())
-        click.echo("\nError: provide either -j <jd.md> or --from-discovery <id>", err=True)
-        sys.exit(1)
+        from linkright.prompts import prompt_for_jd_input
+        kind, value = prompt_for_jd_input(flag_hint="-j/--jd")
+        if kind == "file":
+            jd_path = value
+        else:  # paste — pasted text used directly, no need to write tempfile
+            pasted_jd_text = value
 
     import time as _time
     from rich.console import Console
@@ -85,6 +93,8 @@ def coverletter_group(
         jd_text = jd_path.read_text(encoding="utf-8", errors="replace")
     elif discovery_id:
         jd_text = _fetch_discovery_jd(discovery_id)
+    elif pasted_jd_text:
+        jd_text = pasted_jd_text
 
     if not jd_text.strip():
         raise click.ClickException("JD text is empty — cannot generate cover letter.")

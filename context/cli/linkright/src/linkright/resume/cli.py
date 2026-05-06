@@ -93,10 +93,10 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
 
 
 @resume_group.command("tailor")
-@click.option("--resume", "-r", "resume_path", type=click.Path(exists=True, path_type=Path), required=True,
-              help="Resume PDF or career_signals.yaml")
-@click.option("--jd", "-j", "jd_path", type=click.Path(exists=True, path_type=Path), required=True,
-              help="Job description markdown file")
+@click.option("--resume", "-r", "resume_path", type=click.Path(exists=True, path_type=Path), required=False, default=None,
+              help="(optional) Resume PDF or career_signals.yaml — prompted if omitted")
+@click.option("--jd", "-j", "jd_path", type=click.Path(exists=True, path_type=Path), required=False, default=None,
+              help="(optional) Job description markdown file — prompted if omitted")
 @click.option("--mode", default=None, help="Skill mode: product_manager | swe | ds | designer | generic")
 @click.option("--llm-mode", type=click.Choice(["agent", "direct", "mcp"]), default=None,
               help="LLM routing: agent (MCP, default) | direct (user's key) | mcp (alias)")
@@ -107,26 +107,40 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
               help="Pin temperature=0 + seed across all LLM calls. Pairs with hypothesis-test for variance reduction.")
 @click.option("--seed", default=42, type=int, help="Seed for deterministic mode (default 42). Honoured by Groq/Cerebras/OpenRouter; Gemini ignores.")
 @click.option("--no-pause", "no_pause", is_flag=True, help="Skip phase-boundary review checkpoints (CI / non-interactive mode).")
-def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int, no_pause: bool) -> None:
+def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int, no_pause: bool) -> None:
     """Tailor your resume for a job description (typically 2-4 minutes).
+
+    Run with no flags to be prompted interactively. Pass flags to skip prompts.
 
     \b
     Quick start:
-      linkright tailor -r resume.pdf -j jd.md
+      linkright tailor                       (prompted for resume + JD)
+      linkright tailor -r resume.pdf -j jd.md   (power-user: skip prompts)
 
     The command parses your resume + JD, retrieves matching career nuggets,
     drafts bullets via LLM, scores + ranks, and renders a final PDF.
-
-    \b
-    Most users only need:
-      -r / --resume <PATH>     Your resume PDF
-      -j / --jd <PATH>         Job description (markdown)
-
-    Other flags below are advanced — needed only for non-PM roles
-    (--mode), CI / non-interactive runs (--no-pause / --yes), repeatable
-    test runs (--deterministic / --seed), or fresh re-extraction
-    (--no-cache).
     """
+    # Bare-command UX: prompt for any missing required input.
+    if resume_path is None:
+        from linkright.prompts import prompt_for_existing_path
+        resume_path = prompt_for_existing_path(
+            "Path to your resume (PDF or .md):",
+            must_be_file=True,
+            flag_hint="-r/--resume",
+        )
+    if jd_path is None:
+        from linkright.prompts import prompt_for_jd_input
+        kind, value = prompt_for_jd_input(flag_hint="-j/--jd")
+        if kind == "file":
+            jd_path = value
+        else:  # paste — stage pasted text to a temp .md so existing copy works
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+            tmp.write(value)
+            tmp.close()
+            jd_path = Path(tmp.name)
+            click.echo(f"  Staged pasted JD → {jd_path}")
+
     _started_at = time.monotonic()
     cfg = Config.load()
     llm_mode = llm_mode or cfg.default_llm_mode
@@ -236,10 +250,13 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
 
 
 @resume_group.command("verify")
-@click.argument("run_id")
+@click.argument("run_id", required=False, default=None)
 @click.option("--strict", is_flag=True, help="Exit non-zero if any canary fails.")
-def verify_cmd(run_id: str, strict: bool) -> None:
+def verify_cmd(run_id: str | None, strict: bool) -> None:
     """Run canary checks on a completed `tailor` run.
+
+    Run with no arg to be prompted from a picker of recent runs. Pass a
+    RUN_ID to skip the prompt.
 
     Catches silent failure modes (0% coverage despite exit 0, telemetry $0
     when LLM ran, all-zero cosines indicating broken embedder, etc.).
@@ -251,6 +268,33 @@ def verify_cmd(run_id: str, strict: bool) -> None:
         _sys.path.insert(0, str(_HARNESS_PARENT))
     from harness.canaries import run_all, format_report
     cfg = Config.load()
+
+    # Bare-command UX: pick from recent runs.
+    if run_id is None:
+        runs_dir = cfg.runs_dir()
+        if not runs_dir.exists():
+            click.echo("No runs found yet — try `linkright resume tailor` first.", err=True)
+            _sys.exit(1)
+        candidates = sorted(
+            [d for d in runs_dir.iterdir() if d.is_dir()],
+            key=lambda d: d.stat().st_mtime,
+            reverse=True,
+        )[:20]
+        if not candidates:
+            click.echo("No runs found yet — try `linkright resume tailor` first.", err=True)
+            _sys.exit(1)
+        from linkright.prompts import prompt_for_id_from_list
+        run_id = prompt_for_id_from_list(
+            candidates,
+            label_fn=lambda d: f"{d.name}  ({datetime.fromtimestamp(d.stat().st_mtime).strftime('%Y-%m-%d %H:%M')})",
+            id_fn=lambda d: d.name,
+            message="Pick a run to verify:",
+            flag_hint="RUN_ID",
+        )
+        if run_id is None:
+            click.echo("Cancelled.", err=True)
+            _sys.exit(1)
+
     run_dir = cfg.runs_dir() / run_id
     if not run_dir.exists():
         click.echo(f"Run dir not found: {run_dir}", err=True)
@@ -262,10 +306,34 @@ def verify_cmd(run_id: str, strict: bool) -> None:
 
 
 @resume_group.command("score")
-@click.option("--pdf", "pdf_path", type=click.Path(exists=True, path_type=Path), required=True)
-@click.option("--jd", "jd_path", type=click.Path(exists=True, path_type=Path), required=True)
-def score(pdf_path: Path, jd_path: Path) -> None:
-    """Score an existing PDF against a JD using the resume scorecard (stub — wires in Phase 4A-complete)."""
+@click.option("--pdf", "pdf_path", type=click.Path(exists=True, path_type=Path), required=False, default=None,
+              help="(optional) PDF resume to score — prompted if omitted")
+@click.option("--jd", "jd_path", type=click.Path(exists=True, path_type=Path), required=False, default=None,
+              help="(optional) Job description — prompted if omitted")
+def score(pdf_path: Path | None, jd_path: Path | None) -> None:
+    """Score an existing PDF against a JD using the resume scorecard (stub).
+
+    Run with no flags to be prompted. Pass --pdf and --jd to skip prompts.
+    """
+    if pdf_path is None:
+        from linkright.prompts import prompt_for_existing_path
+        pdf_path = prompt_for_existing_path(
+            "Path to the PDF resume to score:",
+            must_be_file=True,
+            flag_hint="--pdf",
+        )
+    if jd_path is None:
+        from linkright.prompts import prompt_for_jd_input
+        kind, value = prompt_for_jd_input(flag_hint="--jd")
+        if kind == "file":
+            jd_path = value
+        else:  # paste — stage to temp .md
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+            tmp.write(value)
+            tmp.close()
+            jd_path = Path(tmp.name)
+
     click.echo(f"Scorecard stub — pdf={pdf_path.name}, jd={jd_path.name}")
     click.echo("Resume scorecard harness: harness/resume/ (to be wired).")
 

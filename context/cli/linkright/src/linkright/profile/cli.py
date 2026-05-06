@@ -47,15 +47,30 @@ def profile_group() -> None:
 
 @profile_group.command("create")
 @click.option("--resume", "-r", "resume_path", type=click.Path(exists=True, path_type=Path),
-              required=False, help="Path to resume PDF.")
+              required=False, help="(optional) Path to resume PDF — prompted if omitted.")
 @click.option("--paste", is_flag=True, help="Interactive paste mode — type/paste resume text. (Day 2+)")
 @click.option("--from-folder", "from_folder", type=click.Path(exists=True, file_okay=False, path_type=Path),
-              required=False, help="Auto-detect first PDF in this folder.")
+              required=False, help="(optional) Folder to auto-detect first PDF.")
 @click.option("--yes", is_flag=True, help="Skip truth-engine confirmation; auto-lock all extracted nuggets.")
 @click.option("--force", is_flag=True, help="Overwrite existing profile without confirmation.")
 def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
-    """One-time: parse resume, extract nuggets, embed, persist to ~/.linkright/profile/."""
+    """One-time: parse resume, extract nuggets, embed, persist to ~/.linkright/profile/.
+
+    Run with no flags to be prompted for the resume source. Pass -r / --paste /
+    --from-folder to skip the prompt.
+    """
     profile_dir = _profile_dir()
+
+    # If no source flag given, prompt interactively (file / paste / folder).
+    if not resume_path and not paste and not from_folder:
+        from linkright.prompts import prompt_for_resume_source
+        kind, value = prompt_for_resume_source()
+        if kind == "file":
+            resume_path = value
+        elif kind == "paste":
+            paste = True  # falls through to existing 'Day 2' error below
+        else:  # folder
+            from_folder = value
 
     # Resolve resume source
     if paste:
@@ -238,10 +253,21 @@ def refresh_cmd(yes) -> None:
 
 @profile_group.command("rebuild")
 @click.option("--resume", "-r", "resume_path", type=click.Path(exists=True, path_type=Path),
-              required=True, help="Path to NEW resume PDF.")
+              required=False, help="(optional) Path to NEW resume PDF — prompted if omitted.")
 @click.option("--yes", is_flag=True, help="Skip confirmation (destructive).")
 def rebuild_cmd(resume_path, yes) -> None:
-    """Wipe existing profile (backed up) and start over from a new resume."""
+    """Wipe existing profile (backed up) and start over from a new resume.
+
+    Run with no flags to be prompted for the path. Pass -r to skip the prompt.
+    """
+    if resume_path is None:
+        from linkright.prompts import prompt_for_existing_path
+        resume_path = prompt_for_existing_path(
+            "Path to your NEW resume PDF:",
+            must_be_file=True,
+            flag_hint="-r/--resume",
+        )
+
     profile_dir = _profile_dir()
     if profile_dir.exists() and any(profile_dir.iterdir()):
         if not yes:
