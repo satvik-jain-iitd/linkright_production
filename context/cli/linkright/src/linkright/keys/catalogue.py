@@ -102,7 +102,7 @@ PROVIDERS: list[ProviderSpec] = [
         recommended=False,
         primary_env="CLOUDFLARE_API_TOKEN",
         # direct.py reads CLOUDFLARE_API_TOKEN_{1..4} paired with CLOUDFLARE_ACCOUNT_ID_{1..4}
-        extra_envs=["CLOUDFLARE_API_TOKEN_1", "CLOUDFLARE_API_TOKEN_2", "CLOUDFLARE_API_TOKEN_3"],
+        extra_envs=["CLOUDFLARE_API_TOKEN_1", "CLOUDFLARE_API_TOKEN_2", "CLOUDFLARE_API_TOKEN_3", "CLOUDFLARE_API_TOKEN_4"],
         paired_env="CLOUDFLARE_ACCOUNT_ID",
         paired_label="Cloudflare Account ID",
         key_prefix=None,

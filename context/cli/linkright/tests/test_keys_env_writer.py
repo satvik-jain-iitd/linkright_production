@@ -233,3 +233,23 @@ def test_atomic_write_survives_rename_failure(tmp_env):
     assert not tmp_files, (
         f"Temp file debris left after failed write: {[f.name for f in tmp_files]}"
     )
+
+
+# ── Cloudflare slot _4 round-trip (regression for 5-slot consistency) ────
+
+def test_cloudflare_token_4_is_managed_and_round_trips(tmp_env):
+    """CLOUDFLARE_API_TOKEN_4 is in _MANAGED_ENV_VARS and survives write→read
+    without raising ValueError.  Regression for the cycle-2 slot-mismatch fix."""
+    # Must be a known managed var — otherwise write_keys() raises ValueError
+    assert "CLOUDFLARE_API_TOKEN_4" in _MANAGED_ENV_VARS, (
+        "CLOUDFLARE_API_TOKEN_4 missing from _MANAGED_ENV_VARS; "
+        "catalogue.py extra_envs must include _4"
+    )
+    fake_val = "cfut_" + "x" * 35
+    # write_keys must not raise
+    write_keys({"CLOUDFLARE_API_TOKEN_4": fake_val}, env_path=tmp_env)
+    # read back round-trips correctly
+    managed = read_all_managed(env_path=tmp_env)
+    assert managed.get("CLOUDFLARE_API_TOKEN_4") == fake_val, (
+        "CLOUDFLARE_API_TOKEN_4 did not round-trip through write→read"
+    )
