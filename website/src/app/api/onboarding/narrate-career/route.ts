@@ -30,7 +30,7 @@ Ask yourself for each potential section:
 
 ATTRIBUTION RULES (never break these):
 1. Every paragraph body MUST start with: "At [Company], as [Role], [context]:"
-   Example: "At American Express, as Product Manager, on the Returns Flow Redesign:"
+   Example: "At Acme Bank, as Product Manager, on the Returns Flow Redesign:"
 2. If the experience has a named project, include it: "...on the [Project Name]:"
 3. If a phase of work happened in a distinct time period: "...during [year range]:"
 

@@ -34,8 +34,8 @@ function Screen08_FindRoles() {
 
                 <div style={{ marginTop: 20, display: "grid", gap: 8 }}>
                   {[
-                    "Your Amex payments work is a direct match for this JD",
-                    "Your 36 enterprise shipments at Sprinklr line up with their merchant scale",
+                    "Your AcmeBank payments work is a direct match for this JD",
+                    "Your 36 enterprise shipments at TechCo SaaS line up with their merchant scale",
                     "Hybrid in Bangalore matches your preferences",
                   ].map(r => (
                     <div key={r} style={{ display: "flex", gap: 10, fontSize: 13.5, alignItems: "flex-start" }}>
@@ -271,19 +271,19 @@ function Screen10_LiveWriting() {
             <div style={{ width: 560, aspectRatio: "1/1.414", background: "#fff", boxShadow: "0 12px 40px rgba(0,0,0,0.08)", borderRadius: 4, padding: 36, fontSize: 10, color: "#1A202C", fontFamily: "Inter, sans-serif" }}>
               {/* Header with brand color */}
               <div style={{ borderBottom: "2px solid #0D3B66", paddingBottom: 10 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#0D3B66", letterSpacing: "-0.015em" }}>Satvik Jain</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#0D3B66", letterSpacing: "-0.015em" }}>Jane Doe</div>
                 <div style={{ fontSize: 9, color: "#4A5568", marginTop: 2 }}>Senior Product Manager · Bangalore · satvik@linkright.in · +91 98xxx xxxxx</div>
               </div>
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 14 }}>Summary</div>
               <p style={{ margin: "4px 0", fontSize: 9.5, lineHeight: 1.45 }}>
-                Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the Amex India returns redesign (+18% conversion), led 36 enterprise deployments at Sprinklr.
+                Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the AcmeBank India returns redesign (+18% conversion), led 36 enterprise deployments at TechCo SaaS.
               </p>
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 12 }}>Experience</div>
 
               <div style={{ marginTop: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, American Express</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 to Present</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, Acme Bank</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 to Present</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
                   <li>Redesigned returns flow for Indian merchants, lifting completion 18% and reducing support tickets 22% within 6 weeks of rollout</li>
                   <li>Automated refund SLA engine, cutting merchant wait from 5 days to 8 hours across 14k onboarded partners</li>
@@ -296,7 +296,7 @@ function Screen10_LiveWriting() {
               </div>
 
               <div style={{ marginTop: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, Sprinklr Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 to 2024</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, TechCo SaaS Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 to 2024</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
                   <li>Drove 36 enterprise deployments across Walmart, Samsung, Cisco. Aggregate ARR of $14M.</li>
                   <li>Built real-time policy engine for content moderation, reducing moderator overhead by 34%</li>
@@ -385,24 +385,24 @@ function Screen11_Review() {
           <div style={{ padding: "40px 48px", background: "#F7FAFC", display: "flex", justifyContent: "center" }}>
             <div style={{ width: 560, aspectRatio: "1/1.414", background: "#fff", boxShadow: "0 12px 40px rgba(0,0,0,0.1)", borderRadius: 4, padding: 36, fontSize: 10, color: "#1A202C", position: "relative" }}>
               <div style={{ borderBottom: "2px solid #0D3B66", paddingBottom: 10 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#0D3B66", letterSpacing: "-0.015em" }}>Satvik Jain</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#0D3B66", letterSpacing: "-0.015em" }}>Jane Doe</div>
                 <div style={{ fontSize: 9, color: "#4A5568", marginTop: 2 }}>Senior Product Manager · Bangalore · satvik@linkright.in · +91 98xxx xxxxx</div>
               </div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 14 }}>Summary</div>
-              <p style={{ margin: "4px 0", fontSize: 9.5, lineHeight: 1.45 }}>Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the Amex India returns redesign (+18% conversion), led 36 enterprise deployments at Sprinklr managing $14M ARR.</p>
+              <p style={{ margin: "4px 0", fontSize: 9.5, lineHeight: 1.45 }}>Product Manager with 5 years across payments, marketplaces, and enterprise SaaS. Shipped the AcmeBank India returns redesign (+18% conversion), led 36 enterprise deployments at TechCo SaaS managing $14M ARR.</p>
 
               <div style={{ fontSize: 10, fontWeight: 700, color: "#0D3B66", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 12 }}>Experience</div>
               <div style={{ marginTop: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, American Express</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 to Present</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Product Manager, Acme Bank</span><span style={{ color: "#4A5568", fontWeight: 400 }}>Jul 2024 to Present</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
                   <li>Redesigned returns flow for 14,200 Indian merchants, lifting completion 18% and cutting tickets 22% within 6 weeks</li>
                   <li>Automated refund SLA engine. Merchant wait dropped from 5 days to 8 hours across all onboarded partners.</li>
                   <li style={{ background: "rgba(15,190,175,0.12)", outline: "2px solid var(--color-accent)", outlineOffset: 2, borderRadius: 2 }}>Shipped v3 merchant onboarding with KYC auto-verify. Onboarding time dropped 72h to 6h, NPS 34 to 58.</li>
-                  <li>Ran discovery for UPI-Amex rails partnership. Signed term sheet with 3 bank partners.</li>
+                  <li>Ran discovery for UPI-AcmeBank rails partnership. Signed term sheet with 3 bank partners.</li>
                 </ul>
               </div>
               <div style={{ marginTop: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, Sprinklr Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 to 2024</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 600 }}><span>Senior PM, TechCo SaaS Enterprise</span><span style={{ color: "#4A5568", fontWeight: 400 }}>2021 to 2024</span></div>
                 <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 9.5, lineHeight: 1.5 }}>
                   <li>Drove 36 enterprise deployments across Walmart, Samsung, Cisco. Aggregate ARR of $14M by close of 2023.</li>
                   <li>Built real-time policy engine for content moderation. Cut moderator overhead 34%, adopted by 8 global brands.</li>

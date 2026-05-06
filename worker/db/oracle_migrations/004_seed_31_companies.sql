@@ -198,11 +198,11 @@ INSERT INTO companies (
 
 (
   'seed_slintel_001',
-  'Sprinklr',
-  'https://sprinklr.com',
-  'https://www.linkedin.com/company/sprinklr',
+  'TechCo SaaS',
+  'https://techco_saas.com',
+  'https://www.linkedin.com/company/techco_saas',
   'SaaS', 'public_listed', 'New York', 'US',
-  'greenhouse', 'sprinklr',
+  'greenhouse', 'techco_saas',
   FALSE, TRUE,
   ARRAY['seed_migration_004'], 'high', NOW()
 ),

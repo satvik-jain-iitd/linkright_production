@@ -86,7 +86,7 @@ test.describe('Parse-resume hallucination guards (F-06, F-07)', () => {
     const response = await parseResumeWithRetry(request, { text: RESUME_TEXT });
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
-    expect(body.parsed.email?.toLowerCase()).toContain('satvik.jain@iitdalumni.com');
-    expect(body.parsed.phone?.replace(/[^0-9]/g, '')).toContain('7678296693');
+    expect(body.parsed.email?.toLowerCase()).toContain('jane.doe@example.com');
+    expect(body.parsed.phone?.replace(/[^0-9]/g, '')).toContain('5550123');
   });
 });

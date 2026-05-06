@@ -9,7 +9,7 @@ const SYSTEM_PROMPT = `You are drafting a cold email from a candidate to a recru
 
 Rules (non-negotiable):
 - Return valid JSON: {"subject": "string", "content": "string"}.
-- Subject: 6-10 words, specific to the role. Not "Application for {role}". Something like "{Company} {Role} — 18% lift on returns flow at Amex".
+- Subject: 6-10 words, specific to the role. Not "Application for {role}". Something like "{Company} {Role} — 18% lift on returns flow at AcmeBank".
 - Body: 120-220 words. 3 short paragraphs max.
   Para 1 — who you are, what you built that matches ONE real JD requirement (with a number).
   Para 2 — a second concrete signal from your profile that shows pattern, not one-off.

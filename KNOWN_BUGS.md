@@ -21,8 +21,8 @@
 - **Status:** Fixed (template defaults updated)
 - **Resume:** crypto-exchange_sr-pm-aml
 
-## Bug 4: Sukha Education Bullet Overflow (110.5%)
-- **Symptom:** Sukha Education bullet measured at 110.5% width on first draft
+## Bug 4: Sample NGO Bullet Overflow (110.5%)
+- **Symptom:** Sample NGO bullet measured at 110.5% width on first draft
 - **Root Cause:** Initial bullet text included too many details ("Google Workspace, Slack, and Salesforce implementation across 50+ volunteers, saving Rs. 60,000/yr via 12-week tech rollout")
 - **Fix:** Trimmed through 2 rounds of measure-rewrite: removed "Google Workspace", shortened phrasing → 99.3%
 - **Status:** Fixed

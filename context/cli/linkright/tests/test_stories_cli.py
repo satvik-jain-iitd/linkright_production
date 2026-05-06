@@ -216,7 +216,7 @@ class TestCareerStorySchema:
 
     def test_serialization_roundtrip(self):
         s = CareerStory(
-            title="AmEx Save", action="Built oracle", result="$1.2M saved",
+            title="AcmeBank Save", action="Built oracle", result="$1.2M saved",
             tags=["python", "leadership"], use_count=3,
         )
         as_dict = s.model_dump()
@@ -257,14 +257,14 @@ class TestListCmd:
 
     def test_populated(self, runner, fake_coll):
         fake_coll.insert_one({
-            "user_id": "local", "title": "AmEx Oracle Save",
+            "user_id": "local", "title": "AcmeBank Oracle Save",
             "action": "Built migration", "result": "$1.2M saved",
             "tags": ["python", "leadership"], "use_count": 3,
             "updated_at": datetime.now(timezone.utc), "last_used_at": None,
         })
         result = runner.invoke(stories_group, ["list"])
         assert result.exit_code == 0
-        assert "AmEx Oracle Save" in result.output
+        assert "AcmeBank Oracle Save" in result.output
         assert "python" in result.output
 
 
@@ -387,7 +387,7 @@ class TestAddCmd:
         # User accepts prefilled `result`, fills other fields
         result = runner.invoke(stories_group, [
             "add", "--from-nugget", "AML",
-            "--yes", "--title", "AmEx", "--action", "Built oracle",
+            "--yes", "--title", "AcmeBank", "--action", "Built oracle",
         ])
         assert result.exit_code == 0, result.output
         d = fake_coll.docs[0]
@@ -414,12 +414,12 @@ class TestAddCmd:
 class TestEditCmd:
     def test_edit_by_title_prefix(self, runner, fake_coll):
         fake_coll.insert_one({
-            "user_id": "local", "title": "AmEx Save",
+            "user_id": "local", "title": "AcmeBank Save",
             "action": "Old action", "result": "Old result",
             "situation": "", "task": "", "tags": ["x"],
         })
         # Edit: keep title, change action, keep rest
-        result = runner.invoke(stories_group, ["edit", "AmEx"], input=(
+        result = runner.invoke(stories_group, ["edit", "AcmeBank"], input=(
             "\n"                # title — keep
             "\n"                # situation — keep
             "\n"                # task — keep
@@ -547,7 +547,7 @@ class TestSearchCmd:
             "linkright.stories.cli.stories_group", stories_group,
         )
         fake_coll.insert_one({
-            "user_id": "local", "title": "AmEx Migration",
+            "user_id": "local", "title": "AcmeBank Migration",
             "action": "Built oracle to AML", "result": "$1.2M saved",
             "tags": ["python"],
         })
@@ -560,8 +560,8 @@ class TestSearchCmd:
         with patch.dict(sys.modules, {"linkright.llm.oracle": None}):
             result = runner.invoke(stories_group, ["search", "oracle"])
         assert result.exit_code == 0, result.output
-        # "AmEx Migration" matches via "oracle" in action
-        assert "AmEx Migration" in result.output
+        # "AcmeBank Migration" matches via "oracle" in action
+        assert "AcmeBank Migration" in result.output
         assert "Stripe API" not in result.output
 
     def test_search_no_match(self, runner, fake_coll):
@@ -658,7 +658,7 @@ class TestRetrieveStarsReadsCareerStories:
         career_coll = FakeCollection()
         career_coll.insert_one({
             "user_id": "local",
-            "title": "AmEx AML Save",
+            "title": "AcmeBank AML Save",
             "situation": "Pipeline broke", "task": "Restore in 24h",
             "action": "Built oracle", "result": "$1.2M saved",
             "tags": ["python"],
@@ -673,7 +673,7 @@ class TestRetrieveStarsReadsCareerStories:
 
         results = sr.retrieve_stars("AML pipeline")
         assert len(results) == 1
-        assert results[0]["title"] == "AmEx AML Save"
+        assert results[0]["title"] == "AcmeBank AML Save"
         # `body` is composed from STAR fields
         assert "Pipeline broke" in results[0]["body"]
         assert "Built oracle" in results[0]["body"]

@@ -181,7 +181,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                 <input
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="Amex"
+                  placeholder="AcmeBank"
                   className="mt-1 w-full rounded-[10px] border border-border bg-white px-3 py-2 text-sm focus:border-tertiary-500 focus:outline-none"
                 />
               </div>
@@ -232,7 +232,7 @@ export function HighlightEditorModal({ existing, mode, onClose }: Props) {
                 <input
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="Amex"
+                  placeholder="AcmeBank"
                   className="mt-1 w-full rounded-[10px] border border-border bg-white px-3 py-2 text-sm focus:border-tertiary-500 focus:outline-none"
                 />
               </div>

@@ -181,7 +181,7 @@ test.describe('full journey smoke — signup through customize', () => {
       bug({
         step: 'Onboarding outline',
         severity: 'major',
-        what: 'Company from fixture (Amex) not visible in outline',
+        what: 'Company from fixture (AcmeBank) not visible in outline',
         where: '/onboarding',
       });
     }

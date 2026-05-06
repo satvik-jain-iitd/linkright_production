@@ -3,8 +3,8 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 // Package C (F-27): company/role-aware retrieval.
 //
-// The walkthrough bug: a Q&A question about American Express pulled the
-// entire Sprinklr+Walmart narrative as "Auto-filled from profile" because
+// The walkthrough bug: a Q&A question about Acme Bank pulled the
+// entire TechCo SaaS+Walmart narrative as "Auto-filled from profile" because
 // keyword overlap alone matches "revenue impact" against any company's
 // bullets. Fix: when the question mentions a company the user actually
 // worked at, filter retrieval to nuggets tagged with that company first
@@ -22,7 +22,7 @@ function extractTargetCompanies(query: string, userCompanies: string[]): string[
   const ql = query.toLowerCase();
   const hits: string[] = [];
   for (const c of normalized) {
-    // Word-boundary match so "amex" doesn't match inside "tamexico".
+    // Word-boundary match so "acme_bank" doesn't match inside "tamexico".
     // For multi-word company names just substring-check.
     const hasBoundary = c.length < 10;
     const re = hasBoundary
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     // ── Package C (F-27): company-scoped pre-filter on nuggets ──
     // Pull the user's distinct companies; if the query mentions one of them,
     // search ONLY that company's nuggets first. Prevents asking about
-    // American Express and getting Sprinklr content.
+    // Acme Bank and getting TechCo SaaS content.
     let targetCompanies: string[] = [];
     try {
       const { data: companyRows } = await supabase

@@ -597,7 +597,7 @@ export function CareerOutlineView({
                 onChange={(e) => setEditBuffer(e.target.value)}
                 rows={18}
                 className="w-full resize-y rounded-xl border border-border bg-white/80 p-3 text-sm leading-relaxed text-foreground focus:border-accent focus:outline-none"
-                placeholder="At Amex, I led a 12-person team redesigning the returns flow…"
+                placeholder="At AcmeBank, I led a 12-person team redesigning the returns flow…"
               />
               <div className="mt-3 flex justify-end gap-2">
                 <button

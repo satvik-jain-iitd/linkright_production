@@ -14,3 +14,8 @@ build/
 
 # Pillar 2 — local auth session (contains JWT — never commit)
 session.json
+
+# Generated resume artifacts (PII)
+output/*.html
+output/*.pdf
+output/*.json

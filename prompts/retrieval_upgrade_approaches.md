@@ -19,8 +19,8 @@ Phase 2.5: For each company in resume:
 **Idea**: When generating a specific resume section, only search nuggets of that section_type.
 
 ```
-Generating "Work Experience" section for AmEx?
-  → Filter: section_type = 'work_experience' AND company = 'American Express'
+Generating "Work Experience" section for AcmeBank?
+  → Filter: section_type = 'work_experience' AND company = 'Acme Bank'
   → Then run vector search within this filtered set
 
 Generating "Education" section?
@@ -43,7 +43,7 @@ Generating "Skills" section?
 **Idea**: Guarantee P0/P1 nuggets always appear, fill remaining slots with vector-ranked P2/P3.
 
 ```
-Step 1: SELECT * WHERE company = 'AmEx' AND importance IN ('P0','P1')
+Step 1: SELECT * WHERE company = 'AcmeBank' AND importance IN ('P0','P1')
   → These ALWAYS make it into context (no scoring needed)
 
 Step 2: Remaining slots (8 - len(step1)) filled by vector search
@@ -65,12 +65,12 @@ Current embedding input:
   "Led a team of 8 consultants to deliver 120 dashboards"
 
 Proposed embedding input:
-  "At Sprinklr as Senior Product Analyst (2022). Work Experience. P1 achievement.
+  "At TechCo SaaS as Senior Product Analyst (2022). Work Experience. P1 achievement.
    Led a team of 8 consultants to deliver over 120 personalized dashboards for
    40 government ministries."
 ```
 
-**Why it's better**: Vector search for "leadership at Sprinklr" will have much higher cosine similarity when "Sprinklr" and "leadership" are literally in the embedded text. Currently, if the answer doesn't mention the company, vector search is searching blind.
+**Why it's better**: Vector search for "leadership at TechCo SaaS" will have much higher cosine similarity when "TechCo SaaS" and "leadership" are literally in the embedded text. Currently, if the answer doesn't mention the company, vector search is searching blind.
 
 **Implementation**: Change `nugget_embedder.py` line where it builds the text to embed:
 ```python
@@ -129,12 +129,12 @@ $$ LANGUAGE SQL STABLE;
 **Idea**: When you know a company tenure (2021-2024), only retrieve nuggets from that period.
 
 ```
-Company: American Express (2021-2024)
+Company: Acme Bank (2021-2024)
   → Filter: event_date BETWEEN '2021-01-01' AND '2024-12-31'
   → Then vector search within date range
 ```
 
-**Why it's better**: Prevents nuggets from other time periods from contaminating company context. If someone worked at both Sprinklr (2019-2021) and AmEx (2021-2024), a date filter ensures Sprinklr achievements don't leak into AmEx section.
+**Why it's better**: Prevents nuggets from other time periods from contaminating company context. If someone worked at both TechCo SaaS (2019-2021) and AcmeBank (2021-2024), a date filter ensures TechCo SaaS achievements don't leak into AcmeBank section.
 
 **Implementation**: Requires event_date to be populated (currently 0% — fix this first). Add `date_from` and `date_to` params to the RPC. In Phase 2.5, use company tenure dates from the parsed career profile.
 
@@ -169,10 +169,10 @@ Query: "Walmart Spark Driver project"
 **Idea**: Instead of embedding the query directly, ask an LLM to generate a hypothetical perfect answer, then embed THAT.
 
 ```
-Query: "American Express product management leadership"
+Query: "Acme Bank product management leadership"
 
 Step 1: LLM generates hypothetical answer:
-  "At American Express as Senior Associate Product Manager, led a cross-functional
+  "At Acme Bank as Senior Associate Product Manager, led a cross-functional
    team to define core platform capabilities, delivering MVP in 10 sprints and
    constructing a 3-year product roadmap."
 

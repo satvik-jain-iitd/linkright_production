@@ -52,7 +52,7 @@ def _canned_paragraphs() -> list[dict]:
     return [
         {
             "paragraph_index": 0,
-            "text_html": "<b>Reduced speed-to-market by 70%</b>, from 10 days to 3 days, by leading an 18-member scrum team across 10 consecutive zero-spillover PIs at American Express, delivering 60+ features without any direct supervision.",
+            "text_html": "<b>Reduced speed-to-market by 70%</b>, from 10 days to 3 days, by leading an 18-member scrum team across 10 consecutive zero-spillover PIs at Acme Bank, delivering 60+ features without any direct supervision.",
             "verb": "Reduced",
             "xyz": {"x_impact": "70% speed-to-market reduction", "y_measure": "10→3 days", "z_action": "led 18-member scrum across 10 PIs"},
         },
@@ -64,7 +64,7 @@ def _canned_paragraphs() -> list[dict]:
         },
         {
             "paragraph_index": 2,
-            "text_html": "<b>Grew Use Case Hub adoption from 35% to 85%</b> across 1,500+ SME SaaS clients at Sprinklr, by prioritizing 10 use cases across 3 MVPs using product adoption data and building a 'Listen, Learn, Act' framework.",
+            "text_html": "<b>Grew Use Case Hub adoption from 35% to 85%</b> across 1,500+ SME SaaS clients at TechCo SaaS, by prioritizing 10 use cases across 3 MVPs using product adoption data and building a 'Listen, Learn, Act' framework.",
             "verb": "Grew",
             "xyz": {"x_impact": "35→85% adoption growth", "y_measure": "1,500+ SME clients", "z_action": "prioritized via adoption data"},
         },
@@ -112,7 +112,7 @@ async def test_phase4c_condense(
     paragraph_sets = []
     for jd in target_jds:
         for variant in ("PROPOSED", "CURRENT"):
-            paras = phase4a_output_cache.get((jd["id"], "American Express", variant))
+            paras = phase4a_output_cache.get((jd["id"], "Acme Bank", variant))
             if paras:
                 paragraph_sets.append((f"{jd['id']}__m2_{variant}", paras))
 

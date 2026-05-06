@@ -110,8 +110,8 @@ async def test_phase4a_per_jd(
     """A/B test current vs proposed Phase 4a prompt."""
     report_path = report_writer("phase_4a_comparison")
 
-    # Pick one company to focus on — American Express has 9 nuggets, rich context
-    company = "American Express"
+    # Pick one company to focus on — Acme Bank has 9 nuggets, rich context
+    company = "Acme Bank"
     company_title = "Senior Associate Product Manager"
     company_dates = "Jul 2024 – Present"
     bullet_count = 4

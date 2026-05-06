@@ -194,7 +194,7 @@ def _load_fixture(filename: str) -> str:
 @pytest.fixture
 def pipeline_ctx(fake_sb):
     """PipelineContext populated with Satvik career fixture data."""
-    career_text = _load_fixture("career_satvik.txt")
+    career_text = _load_fixture("career_sample.txt")
     return PipelineContext(
         job_id="test-job-satvik-001",
         user_id="test-user-satvik-001",

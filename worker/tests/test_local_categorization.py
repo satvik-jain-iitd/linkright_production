@@ -345,7 +345,7 @@ async def run_benchmark() -> None:
     md_prompt, md_v = _get_prompt("nugget_extractor_md", _MD_PROMPT_FALLBACK)
 
     # Full resume fixture (raw resume text — first step input)
-    fixture_path = Path(__file__).parent / "fixtures" / "career_satvik.txt"
+    fixture_path = Path(__file__).parent / "fixtures" / "career_sample.txt"
     full_text = fixture_path.read_text()
     career_text = full_text[:3000]  # one batch — fair comparison across all models
 
@@ -354,7 +354,7 @@ async def run_benchmark() -> None:
     print("=" * 90)
     print(f"JSON prompt:     Langfuse 'nugget_extractor' v{json_v}  ({len(json_prompt)} chars)")
     print(f"Markdown prompt: Langfuse 'nugget_extractor_md' v{md_v}  ({len(md_prompt)} chars)")
-    print(f"Input:           career_satvik.txt — first 3000 chars of {len(full_text)}-char resume")
+    print(f"Input:           career_sample.txt — first 3000 chars of {len(full_text)}-char resume")
     print(f"Ollama URL:      {ollama_url}")
     print(f"\nMarkdown prompt:\n{md_prompt[:500]}...")
     print("=" * 90)

@@ -9,7 +9,7 @@ Usage:
 
   # From a local career text file (faster for testing):
   SUPABASE_URL=... SUPABASE_SERVICE_KEY=... GROQ_API_KEY=... JINA_API_KEY=... \
-    python3 -m scripts.ingest_nuggets --user-id <uuid> --career-file tests/fixtures/career_satvik.txt
+    python3 -m scripts.ingest_nuggets --user-id <uuid> --career-file tests/fixtures/career_sample.txt
 
 Required env vars:
   SUPABASE_URL          — Supabase project URL
