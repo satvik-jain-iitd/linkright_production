@@ -9,15 +9,15 @@ Design contract:
     (same content written back).
   - chmod 600 on the final file every write.
 
-Managed vars convention (matches direct.py exactly):
-  GROQ_API_KEY, GROQ_API_KEY_2..4
-  CEREBRAS_API_KEY, CEREBRAS_API_KEY_2..4
-  SAMBANOVA_API_KEY, SAMBANOVA_API_KEY_2..4
+Managed vars convention (matches direct.py _collect_keys exactly):
+  GROQ_API_KEY, GROQ_API_KEY_1..4       (primary + 4 rotation slots)
+  CEREBRAS_API_KEY, CEREBRAS_API_KEY_1..4
+  SAMBANOVA_API_KEY, SAMBANOVA_API_KEY_1..4
   CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_TOKEN_1..3  (direct.py uses _1..4 loop)
   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_ID_1..4
-  ZHIPU_API_KEY, ZHIPU_API_KEY_2..4
-  GEMINI_API_KEY, GEMINI_API_KEY_1..3   ← different suffix style per direct.py
-  OPENROUTER_API_KEY, OPENROUTER_API_KEY_2..4
+  ZHIPU_API_KEY, ZHIPU_API_KEY_1..4
+  GEMINI_API_KEY, GEMINI_API_KEY_1..3   ← direct.py reads KEY + _1/_2/_3 inline
+  OPENROUTER_API_KEY, OPENROUTER_API_KEY_1..4
 """
 from __future__ import annotations
 

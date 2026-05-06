@@ -3,6 +3,7 @@ and the exact env-var names that direct.py reads.
 
 URL verification status (verified 2026-05-06):
   groq:         VERIFIED  — console.groq.com/keys loads API key mgmt UI
+  NOTE: extra_envs start at _1 (not _2) to match _collect_keys in direct.py
   cerebras:     UNCONFIRMED — URL pattern inferred; platform requires login
   sambanova:    VERIFIED  — cloud.sambanova.ai/apis shows "Manage API Keys"
   cloudflare:   VERIFIED URL SHAPE — dash.cloudflare.com/profile/api-tokens is standard CF path (403 = auth wall, not 404)
@@ -43,7 +44,7 @@ class ProviderSpec:
         return [self.primary_env] + self.extra_envs
 
     def next_available_slot(self, existing_env: dict[str, str]) -> Optional[str]:
-        """Return the first unset env var slot name, or None if all 4 are used."""
+        """Return the first unset env var slot name, or None if all 5 are used (primary + _1.._4)."""
         for var in self.all_env_vars:
             if not existing_env.get(var):
                 return var
@@ -61,7 +62,7 @@ PROVIDERS: list[ProviderSpec] = [
         signup_url_verified=True,
         recommended=True,
         primary_env="GROQ_API_KEY",
-        extra_envs=["GROQ_API_KEY_2", "GROQ_API_KEY_3", "GROQ_API_KEY_4"],
+        extra_envs=["GROQ_API_KEY_1", "GROQ_API_KEY_2", "GROQ_API_KEY_3", "GROQ_API_KEY_4"],
         key_prefix="gsk_",
         key_min_len=40,
     ),
@@ -74,7 +75,7 @@ PROVIDERS: list[ProviderSpec] = [
         signup_url_verified=False,  # Could not confirm — requires login
         recommended=True,
         primary_env="CEREBRAS_API_KEY",
-        extra_envs=["CEREBRAS_API_KEY_2", "CEREBRAS_API_KEY_3", "CEREBRAS_API_KEY_4"],
+        extra_envs=["CEREBRAS_API_KEY_1", "CEREBRAS_API_KEY_2", "CEREBRAS_API_KEY_3", "CEREBRAS_API_KEY_4"],
         key_prefix=None,
         key_min_len=20,
     ),
@@ -87,7 +88,7 @@ PROVIDERS: list[ProviderSpec] = [
         signup_url_verified=True,
         recommended=False,
         primary_env="SAMBANOVA_API_KEY",
-        extra_envs=["SAMBANOVA_API_KEY_2", "SAMBANOVA_API_KEY_3", "SAMBANOVA_API_KEY_4"],
+        extra_envs=["SAMBANOVA_API_KEY_1", "SAMBANOVA_API_KEY_2", "SAMBANOVA_API_KEY_3", "SAMBANOVA_API_KEY_4"],
         key_prefix=None,
         key_min_len=20,
     ),
@@ -116,7 +117,7 @@ PROVIDERS: list[ProviderSpec] = [
         signup_url_verified=False,  # Domain confirmed; apikeys path inferred
         recommended=False,
         primary_env="ZHIPU_API_KEY",
-        extra_envs=["ZHIPU_API_KEY_2", "ZHIPU_API_KEY_3", "ZHIPU_API_KEY_4"],
+        extra_envs=["ZHIPU_API_KEY_1", "ZHIPU_API_KEY_2", "ZHIPU_API_KEY_3", "ZHIPU_API_KEY_4"],
         key_prefix=None,
         key_min_len=20,
     ),
@@ -142,7 +143,7 @@ PROVIDERS: list[ProviderSpec] = [
         signup_url_verified=True,
         recommended=False,
         primary_env="OPENROUTER_API_KEY",
-        extra_envs=["OPENROUTER_API_KEY_2", "OPENROUTER_API_KEY_3", "OPENROUTER_API_KEY_4"],
+        extra_envs=["OPENROUTER_API_KEY_1", "OPENROUTER_API_KEY_2", "OPENROUTER_API_KEY_3", "OPENROUTER_API_KEY_4"],
         key_prefix="sk-or-",
         key_min_len=40,
     ),

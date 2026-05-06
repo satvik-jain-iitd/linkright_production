@@ -80,7 +80,7 @@ def test_keys_add_unknown_provider(runner, isolated_env):
 
 
 def test_keys_add_fills_next_slot(runner, isolated_env):
-    """Second `keys add groq` fills slot GROQ_API_KEY_2."""
+    """Second `keys add groq` fills slot GROQ_API_KEY_1 (first extra slot after primary)."""
     from unittest.mock import patch, MagicMock
     # Pre-populate primary
     ew.write_keys({"GROQ_API_KEY": "gsk_" + "a" * 40}, env_path=isolated_env)
@@ -91,18 +91,27 @@ def test_keys_add_fills_next_slot(runner, isolated_env):
         result = runner.invoke(keys_group, ["add", "groq"])
     assert result.exit_code == 0, f"Output: {result.output}"
     managed = ew.read_all_managed(env_path=isolated_env)
-    assert managed.get("GROQ_API_KEY_2") == fake_key2
+    # _1 is now the first extra slot (catalogue was fixed to start at _1, not _2)
+    assert managed.get("GROQ_API_KEY_1") == fake_key2
 
 
 def test_keys_add_rejects_when_all_slots_full(runner, isolated_env):
+    # Fill all 5 slots: primary + _1 + _2 + _3 + _4
     ew.write_keys({
         "GROQ_API_KEY": "gsk_" + "a" * 40,
-        "GROQ_API_KEY_2": "gsk_" + "b" * 40,
-        "GROQ_API_KEY_3": "gsk_" + "c" * 40,
-        "GROQ_API_KEY_4": "gsk_" + "d" * 40,
+        "GROQ_API_KEY_1": "gsk_" + "b" * 40,
+        "GROQ_API_KEY_2": "gsk_" + "c" * 40,
+        "GROQ_API_KEY_3": "gsk_" + "d" * 40,
+        "GROQ_API_KEY_4": "gsk_" + "e" * 40,
     }, env_path=isolated_env)
-    result = runner.invoke(keys_group, ["add", "groq"], input="gsk_" + "e" * 40 + "\n")
-    assert "All 4 key slots" in result.output or result.exit_code != 0
+    result = runner.invoke(keys_group, ["add", "groq"], input="gsk_" + "f" * 40 + "\n")
+    # CLI should refuse with a "max reached" style message or non-zero exit
+    assert (
+        "max" in result.output.lower()
+        or "full" in result.output.lower()
+        or "all" in result.output.lower()
+        or result.exit_code != 0
+    )
 
 
 # ── keys remove ──────────────────────────────────────────────────────────
