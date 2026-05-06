@@ -124,14 +124,16 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
 # ── show ────────────────────────────────────────────────────────────────────
 
 @profile_group.command("show")
-def show_cmd() -> None:
-    """Render the profile outline (companies → roles → bullets) using rich."""
+@click.option("--full", "show_full", is_flag=True,
+              help="Show full bullet text (disable 120-char truncation).")
+def show_cmd(show_full: bool) -> None:
+    """Render the profile outline (resume sections → companies → roles → bullets) using rich."""
     from .render import show_profile
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
         click.echo("No profile found. Run `linkright profile create -r resume.pdf --yes` first.", err=True)
         sys.exit(1)
-    show_profile(profile_dir)
+    show_profile(profile_dir, full=show_full)
 
 
 # ── status (cheap non-render check) ─────────────────────────────────────────
