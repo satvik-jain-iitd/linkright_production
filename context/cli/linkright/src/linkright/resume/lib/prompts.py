@@ -92,7 +92,7 @@ tags: 2-5 lowercase labels for skills/themes
 
 RULES:
 - Every work_experience nugget MUST have company AND role set. If the immediate source line does not name a company, scan the nearest preceding ### header or ## section heading to identify the employer. NEVER emit "none" or empty for the company field on a work_experience nugget. If truly ambiguous, classify as independent_project or skill instead.
-- answer MUST be self-contained: one crisp sentence that includes the key metric and names the company briefly (e.g. "… at American Express …" mid-sentence). Keep it XYZ-style: lead with the impact/verb, not with context.
+- answer MUST be self-contained: one crisp sentence that includes the key metric and names the company briefly (e.g. "… at Acme Bank …" mid-sentence). Keep it XYZ-style: lead with the impact/verb, not with context.
 - Each nugget is atomic — one achievement per block
 - Write ONLY ## nugget blocks, no other text
 
@@ -103,8 +103,8 @@ RULES:
   Z = Action (what was done + briefly where/how)
 
 Good answer examples (XYZ, no preamble):
-  "Architected AML risk engine for 100M+ accounts at American Express across 40+ markets, cutting speed-to-market by 70%."
-  "Shipped DesignerAI self-serve onboarding at ContentStack, eliminating 12 manual setup steps."
+  "Architected AML risk engine for 100M+ accounts at Acme Bank across 40+ markets, cutting speed-to-market by 70%."
+  "Shipped DesignerAI self-serve onboarding at SampleCo, eliminating 12 manual setup steps."
 
 # NEGATIVE PROMPTS — these patterns REJECT the nugget
 
@@ -719,7 +719,7 @@ JD context. Empty string OK when input lacks the field (backward compat).
 # WORKED EXAMPLES — study these
 
 INPUT (long, 212 chars):
-  "In my role as Senior Product Manager at American Express, I <b>architected an AML risk engine</b>
+  "In my role as Senior Product Manager at Acme Bank, I <b>architected an AML risk engine</b>
   for 100M+ accounts across 40+ markets, cutting <b>speed-to-market by 70%</b> through modular,
   reusable design patterns for compliance engineering."
 

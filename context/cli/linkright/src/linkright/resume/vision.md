@@ -9,8 +9,8 @@ context: loading template cv-a4-mid-career.html; substituting header, contact, s
 context: dropped 2 companies with <2 bullets
 ```
 
-- ContentStack (had 0 bullets)
-- Sukha Education (had 0 bullets)
+- SampleCo (had 0 bullets)
+- Sample NGO (had 0 bullets)
 
 ```text
 [2026-04-24T03:24:40Z] step_14_assemble_html — eval
@@ -41,8 +41,8 @@ context: loading template cv-a4-mid-career.html; substituting header, contact, s
 context: dropped 2 companies with <2 bullets
 ```
 
-- ContentStack (had 0 bullets)
-- Sukha Education (had 0 bullets)
+- SampleCo (had 0 bullets)
+- Sample NGO (had 0 bullets)
 
 ```text
 [2026-04-24T03:26:06Z] step_14_assemble_html — eval
@@ -99,10 +99,10 @@ context: reconstructed companies list from parsed_resume.experiences (step_07 re
 context: filled 4 sparse companies from raw nuggets (generic-impact fallback)
 ```
 
-- American Express: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
-- Sprinklr: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
-- ContentStack: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
-- Sukha Education: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
+- Acme Bank: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
+- TechCo SaaS: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
+- SampleCo: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
+- Sample NGO: had 0 JD-aligned bullets, synthesized 2 more from top-importance raw nuggets
 
 ```text
 [2026-04-24T04:33:22Z] step_14_assemble_html — eval
@@ -146,7 +146,7 @@ context: pdf pass; 1 pages; 173512 bytes
 
 ```text
 [2026-05-01T06:35:40Z] step_00_ingest_pdf — starting
-context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, name Satvik Jain, email + phone present
+context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, name Jane Doe, email + phone present
 ```
 
 ```text
@@ -159,8 +159,8 @@ context: extraction pass; 2996 chars; gaps=0
 **Metrics:**
 - Character count: 2996
 - Contains name (case-insensitive): True
-- Email extracted: `satvik.jain@iitdalumni.com`
-- Phone extracted: `+91-7678296693`
+- Email extracted: `jane.doe@example.com`
+- Phone extracted: `+1-555-0123`
 - Bullet chars (• or ●): 15
 - pypdf corruption hits (acronym-splitting artifacts): 0
 - Sample corruption: `[]`
@@ -180,7 +180,7 @@ a P0 upstream finding that corrupts every downstream phase (nuggets extracted as
 
 **First 500 chars of extracted text:**
 ```
-SATVIK JAIN SENIOR PRODUCT MANAGER — AML & FINANCIAL CRIME Phone: +91-7678296693 Email: satvik.jain@iitdalumni.com LinkedIn: linkedin.com/in/satvik-jain-iitd Professional Experience American Express — Senior Associate Product Manager Gurugram | Jul 2024 – Present • Architected AML risk engine for 100M+ accounts across 40+ markets, cutting speed-to-market by 70% • Secured in-house platform sign-off over NICE Actimize and SAS by evaluating 3 vendors on AML configurability • Delivered 60+ features 
+JANE DOE SENIOR PRODUCT MANAGER — AML & FINANCIAL CRIME Phone: +1-555-0123 Email: jane.doe@example.com LinkedIn: linkedin.com/in/janedoe-example Professional Experience Acme Bank — Senior Associate Product Manager Gurugram | Jul 2024 – Present • Architected AML risk engine for 100M+ accounts across 40+ markets, cutting speed-to-market by 70% • Secured in-house platform sign-off over NICE Actimize and SAS by evaluating 3 vendors on AML configurability • Delivered 60+ features 
 ```
 
 ```text
@@ -196,7 +196,7 @@ context: parse pass; 4 companies; gaps=0
 **Artifact:** `artifacts/01_resume_parsed.json` (markdown + parsed dict)
 
 **Metrics:**
-- Companies parsed: ['American Express', 'Sprinklr', 'ContentStack', 'Sukha Education']
+- Companies parsed: ['Acme Bank', 'TechCo SaaS', 'SampleCo', 'Sample NGO']
 - Experience blocks: 4
 - Total bullets: 12
 - Total projects (in-role + top-level): 2
@@ -235,7 +235,7 @@ context: nuggets pass; 16 extracted; gaps=0
 
 **Metrics:**
 - Total nuggets: 16
-- Per-company distribution: {'american express': 6, 'sprinklr': 4, 'none': 5, 'indian institute of technology, delhi': 1}
+- Per-company distribution: {'american express': 6, 'techco_saas': 4, 'none': 5, 'indian institute of technology, delhi': 1}
 - Importance distribution: {'P0': 1, 'P1': 6, 'P2': 4, 'P3': 5}
 - LLM usage: {'provider': 'groq', 'model': 'llama-3.3-70b-versatile', 'latency_s': 2.77, 'prompt_tokens': 1440, 'completion_tokens': 1151, 'total_tokens': 2591, 'fallback_used': False}
 
@@ -246,8 +246,8 @@ context: nuggets pass; 16 extracted; gaps=0
 
 **Sample nugget (#0):**
 ```
-answer: Architected AML risk engine for 100M+ accounts at American Express across 40+ markets, cutting speed-to-market by 70%.
-company: American Express  role: Senior Associate Product Manager
+answer: Architected AML risk engine for 100M+ accounts at Acme Bank across 40+ markets, cutting speed-to-market by 70%.
+company: Acme Bank  role: Senior Associate Product Manager
 importance: P0  tags: aml, product management, risk engine
 id: 623426F5
 ```
@@ -275,14 +275,14 @@ context: embed partial; 16/16 ok; failures=0
 **Pairwise cosine sample (5 random nuggets, C(5,2)=10 pairs):**
 ```
   0.482  Built on-chain AML risk scorer using OFAC sanction ↔ Graduated with B.Tech in Civil Engineering from In
-  0.560  Built on-chain AML risk scorer using OFAC sanction ↔ Built GenAI root-cause product at Sprinklr, cuttin
+  0.560  Built on-chain AML risk scorer using OFAC sanction ↔ Built GenAI root-cause product at TechCo SaaS, cuttin
   0.671  Built on-chain AML risk scorer using OFAC sanction ↔ Architected AML risk engine for 100M+ accounts at 
   0.474  Built on-chain AML risk scorer using OFAC sanction ↔ Conducted 20+ UX sessions with compliance analysts
-  0.405  Graduated with B.Tech in Civil Engineering from In ↔ Built GenAI root-cause product at Sprinklr, cuttin
+  0.405  Graduated with B.Tech in Civil Engineering from In ↔ Built GenAI root-cause product at TechCo SaaS, cuttin
   0.377  Graduated with B.Tech in Civil Engineering from In ↔ Architected AML risk engine for 100M+ accounts at 
   0.376  Graduated with B.Tech in Civil Engineering from In ↔ Conducted 20+ UX sessions with compliance analysts
-  0.540  Built GenAI root-cause product at Sprinklr, cuttin ↔ Architected AML risk engine for 100M+ accounts at 
-  0.401  Built GenAI root-cause product at Sprinklr, cuttin ↔ Conducted 20+ UX sessions with compliance analysts
+  0.540  Built GenAI root-cause product at TechCo SaaS, cuttin ↔ Architected AML risk engine for 100M+ accounts at 
+  0.401  Built GenAI root-cause product at TechCo SaaS, cuttin ↔ Conducted 20+ UX sessions with compliance analysts
   0.571  Architected AML risk engine for 100M+ accounts at  ↔ Conducted 20+ UX sessions with compliance analysts
 ```
 
@@ -296,7 +296,7 @@ Embeddings generated cleanly via Oracle /lifeos/embed. Pairwise scores should sh
 
 ```text
 [2026-05-01T08:13:41Z] step_00_ingest_pdf — starting
-context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, name Satvik Jain, email + phone present
+context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, name Jane Doe, email + phone present
 ```
 
 ```text
@@ -309,8 +309,8 @@ context: extraction pass; 2996 chars; gaps=0
 **Metrics:**
 - Character count: 2996
 - Contains name (case-insensitive): True
-- Email extracted: `satvik.jain@iitdalumni.com`
-- Phone extracted: `+91-7678296693`
+- Email extracted: `jane.doe@example.com`
+- Phone extracted: `+1-555-0123`
 - Bullet chars (• or ●): 15
 - pypdf corruption hits (acronym-splitting artifacts): 0
 - Sample corruption: `[]`
@@ -330,7 +330,7 @@ a P0 upstream finding that corrupts every downstream phase (nuggets extracted as
 
 **First 500 chars of extracted text:**
 ```
-SATVIK JAIN SENIOR PRODUCT MANAGER — AML & FINANCIAL CRIME Phone: +91-7678296693 Email: satvik.jain@iitdalumni.com LinkedIn: linkedin.com/in/satvik-jain-iitd Professional Experience American Express — Senior Associate Product Manager Gurugram | Jul 2024 – Present • Architected AML risk engine for 100M+ accounts across 40+ markets, cutting speed-to-market by 70% • Secured in-house platform sign-off over NICE Actimize and SAS by evaluating 3 vendors on AML configurability • Delivered 60+ features 
+JANE DOE SENIOR PRODUCT MANAGER — AML & FINANCIAL CRIME Phone: +1-555-0123 Email: jane.doe@example.com LinkedIn: linkedin.com/in/janedoe-example Professional Experience Acme Bank — Senior Associate Product Manager Gurugram | Jul 2024 – Present • Architected AML risk engine for 100M+ accounts across 40+ markets, cutting speed-to-market by 70% • Secured in-house platform sign-off over NICE Actimize and SAS by evaluating 3 vendors on AML configurability • Delivered 60+ features 
 ```
 
 ```text
@@ -346,7 +346,7 @@ context: parse pass; 4 companies; gaps=0
 **Artifact:** `artifacts/01_resume_parsed.json` (markdown + parsed dict)
 
 **Metrics:**
-- Companies parsed: ['American Express', 'Sprinklr', 'ContentStack', 'Sukha Education']
+- Companies parsed: ['Acme Bank', 'TechCo SaaS', 'SampleCo', 'Sample NGO']
 - Experience blocks: 4
 - Total bullets: 12
 - Total projects (in-role + top-level): 2
@@ -385,7 +385,7 @@ context: nuggets partial; 17 extracted; gaps=1
 
 **Metrics:**
 - Total nuggets: 17
-- Per-company distribution: {'american express': 6, 'sprinklr': 4, 'contentstack': 1, 'sukha education': 1, 'none': 4, 'indian institute of technology, delhi': 1}
+- Per-company distribution: {'american express': 6, 'techco_saas': 4, 'sampleco': 1, 'sample_ngo': 1, 'none': 4, 'indian institute of technology, delhi': 1}
 - Importance distribution: {'P0': 2, 'P1': 5, 'P2': 4, 'P3': 6}
 - LLM usage: {'provider': 'groq', 'model': 'llama-3.3-70b-versatile', 'latency_s': 2.64, 'prompt_tokens': 1440, 'completion_tokens': 1215, 'total_tokens': 2655, 'fallback_used': False}
 
@@ -396,14 +396,14 @@ context: nuggets partial; 17 extracted; gaps=1
 
 **Sample nugget (#0):**
 ```
-answer: Architected AML risk engine for 100M+ accounts at American Express across 40+ markets, cutting speed-to-market by 70%.
-company: American Express  role: Senior Associate Product Manager
+answer: Architected AML risk engine for 100M+ accounts at Acme Bank across 40+ markets, cutting speed-to-market by 70%.
+company: Acme Bank  role: Senior Associate Product Manager
 importance: P0  tags: aml, product_management, risk_engine
 id: 623426F5
 ```
 
 **Root-cause hypothesis:**
-If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If Amex missing, company-tagging rule is failing on 'American Express — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
+If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If AcmeBank missing, company-tagging rule is failing on 'Acme Bank — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
 
 ```text
 [2026-05-01T08:13:47Z] step_03_embed_nuggets — starting
@@ -427,13 +427,13 @@ context: embed partial; 17/17 ok; failures=0
   0.623  Built on-chain AML risk scorer using OFAC sanction ↔ Engineered resume MCP server with 8 Python tools a
   0.671  Built on-chain AML risk scorer using OFAC sanction ↔ Architected AML risk engine for 100M+ accounts at 
   0.474  Built on-chain AML risk scorer using OFAC sanction ↔ Conducted 20+ UX sessions with compliance analysts
-  0.484  Built on-chain AML risk scorer using OFAC sanction ↔ Grew product adoption from 35% to 85% at Sprinklr 
+  0.484  Built on-chain AML risk scorer using OFAC sanction ↔ Grew product adoption from 35% to 85% at TechCo SaaS 
   0.445  Engineered resume MCP server with 8 Python tools a ↔ Architected AML risk engine for 100M+ accounts at 
   0.477  Engineered resume MCP server with 8 Python tools a ↔ Conducted 20+ UX sessions with compliance analysts
-  0.443  Engineered resume MCP server with 8 Python tools a ↔ Grew product adoption from 35% to 85% at Sprinklr 
+  0.443  Engineered resume MCP server with 8 Python tools a ↔ Grew product adoption from 35% to 85% at TechCo SaaS 
   0.560  Architected AML risk engine for 100M+ accounts at  ↔ Conducted 20+ UX sessions with compliance analysts
-  0.545  Architected AML risk engine for 100M+ accounts at  ↔ Grew product adoption from 35% to 85% at Sprinklr 
-  0.429  Conducted 20+ UX sessions with compliance analysts ↔ Grew product adoption from 35% to 85% at Sprinklr 
+  0.545  Architected AML risk engine for 100M+ accounts at  ↔ Grew product adoption from 35% to 85% at TechCo SaaS 
+  0.429  Conducted 20+ UX sessions with compliance analysts ↔ Grew product adoption from 35% to 85% at TechCo SaaS 
 ```
 
 **Evaluation:** PARTIAL
@@ -462,7 +462,7 @@ context: parse pass; 4 companies; gaps=0
 **Artifact:** `artifacts/01_resume_parsed.json` (markdown + parsed dict)
 
 **Metrics:**
-- Companies parsed: ['American Express', 'Sprinklr', 'ContentStack', 'Sukha Education']
+- Companies parsed: ['Acme Bank', 'TechCo SaaS', 'SampleCo', 'Sample NGO']
 - Experience blocks: 4
 - Total bullets: 12
 - Total projects (in-role + top-level): 2
@@ -501,7 +501,7 @@ context: nuggets partial; 21 extracted; gaps=1
 
 **Metrics:**
 - Total nuggets: 21
-- Per-company distribution: {'american express': 7, 'sprinklr': 5, 'contentstack': 1, 'sukha education': 1, 'none': 6, 'indian institute of technology, delhi': 1}
+- Per-company distribution: {'american express': 7, 'techco_saas': 5, 'sampleco': 1, 'sample_ngo': 1, 'none': 6, 'indian institute of technology, delhi': 1}
 - Importance distribution: {'P0': 3, 'P1': 8, 'P2': 10}
 - LLM usage: {'provider': 'agent_claude', 'fallback_used': False, 'prompt_tokens': 47141, 'completion_tokens': 2275, 'input_tokens': 6, 'output_tokens': 2275, 'cache_creation_input_tokens': 30375, 'cache_read_input_tokens': 16760, 'total_tokens': 49416, 'cost_usd': 0.25512875, 'duration_ms': 20710, 'deterministic_applied': False, 'deterministic_seed_supported': False, 'klass': 'A', 'intent': 'step_02_extract_nuggets'}
 
@@ -512,14 +512,14 @@ context: nuggets partial; 21 extracted; gaps=1
 
 **Sample nugget (#0):**
 ```
-answer: Architected AML risk engine for 100M+ accounts across 40+ markets at American Express, cutting speed-to-market by 70%.
-company: American Express  role: Senior Associate Product Manager
+answer: Architected AML risk engine for 100M+ accounts across 40+ markets at Acme Bank, cutting speed-to-market by 70%.
+company: Acme Bank  role: Senior Associate Product Manager
 importance: P0  tags: aml, risk-engine, platform, fincrime
 id: 26A54BE7
 ```
 
 **Root-cause hypothesis:**
-If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If Amex missing, company-tagging rule is failing on 'American Express — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
+If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If AcmeBank missing, company-tagging rule is failing on 'Acme Bank — Senior Associate Product M anager' header (note pypdf 'M anager' corruption).
 
 ```text
 [2026-05-01T11:59:45Z] step_03_embed_nuggets — cache_hit

@@ -65,7 +65,7 @@ def _invoke_critic_llm(rendered_text: str, jd_text: str) -> list[dict]:
         f'{{"issues": [\n'
         f'  {{"id": 1,\n'
         f'    "severity": "HIGH" | "MEDIUM" | "LOW",\n'
-        f'    "location": "Skills section" or "Bullet 3 of American Express role" etc.,\n'
+        f'    "location": "Skills section" or "Bullet 3 of <Company> role" etc.,\n'
         f'    "issue": "1-sentence description",\n'
         f'    "fix_a": "specific replacement text or action",\n'
         f'    "fix_b": "alternative replacement (different angle)",\n'

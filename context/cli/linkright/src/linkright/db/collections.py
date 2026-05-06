@@ -158,7 +158,7 @@ class CareerStory(Base):
     JD-requirement linkage so `tailor` step_08 + `interview practice` can
     surface stories tied to the current JD's specific requirements.
     """
-    title: str                                                          # short label, e.g. "AmEx AI Oracle Save"
+    title: str                                                          # short label, e.g. "AI Oracle Save (incident name)"
     situation: str = ""                                                 # context — what was the setup
     task: str = ""                                                      # what was the explicit ask
     action: str                                                         # what YOU did (verbs, tools, decisions)

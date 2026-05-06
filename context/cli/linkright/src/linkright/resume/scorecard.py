@@ -185,8 +185,8 @@ def _bullet_metrics(s: str) -> set:
     """Extract numeric tokens (e.g., '13%', '9%', '100M', '$1.2M', '36') from a bullet.
 
     Used to catch paraphrased duplicates that share the same metrics
-    (Sprinklr v5.3 had two bullets both citing '13% to 9% churn' with
-    different wording — Jaccard alone missed them, but metric overlap caught them).
+    (e.g. two bullets both citing '13% to 9% churn' with different wording —
+    Jaccard alone missed them, but metric overlap caught them).
     """
     return {m.group(0).strip() for m in _NUMERIC_TOKEN_RE.finditer(s.lower())}
 

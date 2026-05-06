@@ -67,12 +67,12 @@ def check_00_raw(run: Path) -> tuple[str, str, dict]:
         return "⏸", "file missing", {}
     text = p.read_text(encoding="utf-8", errors="ignore")
     n = len(text)
-    markers = sum(1 for m in ("American Express", "Credo AI", "Sprinklr", "ContentStack", "Sukha") if m in text)
+    # TODO: hardcoded user-specific company markers removed. Restore as
+    # profile-derived check in follow-up PR (read expected companies from
+    # profile metadata).
     if n < 2000:
         return "❌", f"too short: {n} chars", {"chars": n}
-    if markers == 0:
-        return "❌", "no expected company markers found", {"chars": n}
-    return "✅", f"{n} chars, {markers} markers", {"chars": n, "markers": markers}
+    return "✅", f"{n} chars", {"chars": n}
 
 
 def check_01_parsed(run: Path) -> tuple[str, str, dict]:

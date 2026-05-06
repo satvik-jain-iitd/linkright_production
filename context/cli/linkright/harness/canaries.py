@@ -60,7 +60,7 @@ def verify_embedder() -> list[CanaryResult]:
         ))
 
         # Semantically RELATED — same domain
-        v_a, _ = embedder.embed("Senior Product Manager with AML expertise at American Express")
+        v_a, _ = embedder.embed("Senior Product Manager with AML expertise at a major bank")
         v_b, _ = embedder.embed("Product manager focusing on financial crime risk and compliance")
         # Semantically UNRELATED
         v_c, _ = embedder.embed("The weather is sunny in New York today")
