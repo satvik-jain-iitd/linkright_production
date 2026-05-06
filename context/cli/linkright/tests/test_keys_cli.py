@@ -181,3 +181,37 @@ def test_keys_test_invalid(runner, isolated_env):
 
     assert result.exit_code == 0
     assert "invalid" in result.output
+
+
+# ── Dynamic "all slots used" message ─────────────────────────────────────
+
+def test_all_slots_used_message_shows_correct_count(runner, isolated_env):
+    """When all key slots for a provider are exhausted, the CLI message
+    must report the ACTUAL slot count — not the hardcoded '4'."""
+    from linkright.keys.catalogue import PROVIDERS
+
+    for spec in PROVIDERS:
+        if not spec.extra_envs:
+            continue  # single-slot providers (Gemini) — skip, they never hit this path
+
+        # Fill every slot for this provider
+        all_slots = spec.all_env_vars  # primary + extras
+        fake_keys = {}
+        for var in all_slots:
+            # Use a safe fake value long enough to pass min-len checks
+            fake_keys[var] = ("gsk_" if "GROQ" in var else "cfut_" if "CLOUDFLARE_API_TOKEN" in var else "snova_" if "SAMBANOVA" in var else "csk_aa" if "CEREBRAS" in var else "x") + "a" * 40
+        ew.write_keys(fake_keys, env_path=isolated_env)
+
+        result = runner.invoke(keys_group, ["add", spec.key], input="\n")
+        expected_count = len(all_slots)
+        assert str(expected_count) in result.output, (
+            f"Provider {spec.name!r}: expected '{expected_count}' in message, "
+            f"got: {result.output!r}"
+        )
+        assert f"All {expected_count} key slots for {spec.name}" in result.output, (
+            f"Provider {spec.name!r}: full message not found in output:\n{result.output}"
+        )
+
+        # Clean up for next provider
+        for var in all_slots:
+            ew.remove_key(var, env_path=isolated_env)

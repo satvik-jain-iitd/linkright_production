@@ -109,7 +109,7 @@ def keys_add(provider: str) -> None:
     managed = read_all_managed()
     slot = spec.next_available_slot(managed)
     if slot is None:
-        click.echo(f"{YELLOW}All 4 key slots for {spec.name} are already used.{RST}")
+        click.echo(f"{YELLOW}All {len(spec.all_env_vars)} key slots for {spec.name} are already used.{RST}")
         click.echo("  Use `linkright keys remove` to free a slot first.")
         sys.exit(1)
 
