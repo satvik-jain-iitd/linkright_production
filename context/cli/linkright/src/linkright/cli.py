@@ -372,7 +372,11 @@ def doctor_cmd(auto_fix: bool) -> None:
     home_lr = os.path.expanduser("~/.linkright")
     config_path = os.path.join(home_lr, "config.yaml")
     rows.append(("~/.linkright/ exists", os.path.isdir(home_lr), home_lr))
-    rows.append(("config.yaml present",  os.path.isfile(config_path), config_path))
+    rows.append((
+        "config.yaml present",
+        os.path.isfile(config_path),
+        config_path if os.path.isfile(config_path) else "run `linkright setup`",
+    ))
 
     # 2. Profile present
     profile_dir = os.path.join(home_lr, "profile")

@@ -23,11 +23,24 @@ ten minutes of manual setup steps.
 
 from __future__ import annotations
 
+import logging as _logging_setup
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+# Suppress HuggingFace telemetry + tqdm progress-bars during the embedder
+# smoke-test. These env vars are read at HF library import time; setting
+# them after `from fastembed import TextEmbedding` is too late.
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
+# Surgical filter — drop ONLY the HF_TOKEN warning record, leave real
+# errors (network failures, disk-full, auth issues) visible.
+_logging_setup.getLogger("huggingface_hub").addFilter(
+    lambda r: "HF_TOKEN" not in r.getMessage()
+)
 import questionary
 import yaml
 
@@ -216,6 +229,7 @@ def _ask_groq_key() -> tuple[str, bool, str]:
 def _smoke_embedder(opt: dict) -> tuple[bool, str]:
     key = opt["key"]
     if key == "fastembed":
+        print("  Downloading fastembed model from HuggingFace (~67 MB, one-time)…")
         try:
             from fastembed import TextEmbedding
             m = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
@@ -553,6 +567,7 @@ def run_wizard() -> int:
     print()
     embedder_step = 2 if needs_groq else 1
     embedder = _pick(f"{embedder_step}/{total_steps} — Which embedder?", EMBEDDER_OPTIONS)
+    print()  # visual separator between decisions
 
     # ── Decision 3: PDF render ─────────────────────────────────────
     pdf_step = 3 if needs_groq else 2
