@@ -120,8 +120,6 @@ Data lives at `~/.linkright/` (config, profile, runs, cache, .env).
 
 **v0.1.2** on PyPI (May 2026 — alpha). Active solo development by [@satvik-jain-iitd](https://github.com/satvik-jain-iitd).
 
-Built while holding a full-time PM role at American Express. Ships in public — every issue tracked in [Beads](https://github.com/gastownhall/beads), every change verifiable in `~/.linkright/runs/`.
-
 ---
 
 ## 📜 License
