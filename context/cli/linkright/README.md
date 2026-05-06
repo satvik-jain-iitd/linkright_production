@@ -66,6 +66,25 @@ linkright init                               # bootstrap ~/.linkright/ + Mongo c
 
 ---
 
+## Running commands
+
+**Every LinkRight command works without flags.** Just type the command —
+you'll be prompted for anything missing (resume path, JD, IDs, etc.).
+Same paste-the-API-key UX you see in `linkright setup`, applied
+everywhere.
+
+```bash
+linkright tailor          # prompts for resume + JD
+linkright cl              # prompts for JD
+linkright profile create  # prompts for resume source (file / paste / folder)
+linkright jobs apply      # picker over today's top-20 jobs
+```
+
+Power users / CI scripts can pass flags to skip prompts. Run any command
+with `--help` to see the optional flags. Non-interactive shells (CI
+pipelines, piped stdin) get a clean `click.UsageError` with the
+equivalent flag hint — no silent hangs.
+
 ## Quick start
 
 ```bash
@@ -86,6 +105,11 @@ linkright setup        # step 5 of the wizard prompts for keys interactively
 linkright keys add groq       # prompts securely, writes to ~/.linkright/.env
 linkright keys add cerebras   # add more providers for cascade redundancy
 linkright keys list           # see configured keys (masked)
+
+# Bare command — prompts for resume + JD (recommended for first-time users):
+linkright tailor
+
+# Power-user: pass flags to skip prompts:
 linkright resume tailor -r resume.pdf -j jds/noon.md --llm-mode direct
 ```
 

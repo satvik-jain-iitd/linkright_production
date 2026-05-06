@@ -2,6 +2,59 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.5.0] - 2026-05-07
+
+**No-flag default UX** — every flag-required command now prompts
+interactively when its flag is omitted. Bare `linkright tailor`,
+`linkright cl`, `linkright profile create`, `linkright jobs apply`,
+`linkright interview prep` etc. all just work. Power users with flags
+see no behavior change.
+
+### Added
+
+- **`src/linkright/prompts/`** — new shared module with 10 interactive
+  helpers (`prompt_for_existing_path`, `prompt_for_jd_input`,
+  `prompt_for_resume_source`, `prompt_for_id_from_list`, etc.). Path
+  prompts handle macOS Finder drag-drop (escaped spaces), tilde
+  expansion, surrounding quotes. Multi-line text via
+  `prompt_for_paste_block`. Single source of truth for the
+  recommended-marker and Ctrl+C contracts. (#93)
+- **CI / scripted-usage safety** — every prompt helper detects
+  `not sys.stdin.isatty()` and raises `click.UsageError` (exit 2)
+  with the equivalent flag hint. Scripts that previously got "Missing
+  option" now get a more useful error; behavior unchanged in spirit.
+- **`linkright resume verify`** — RUN_ID positional now optional;
+  bare command shows a picker over the 20 most-recent runs.
+- **`linkright jobs show / apply / status`** — bare commands show a
+  picker over today's top-20 jobs (uses the SAME endpoint as
+  `_resolve_id` — keeps rank-int → UUID resolution consistent).
+- **`linkright interview prep / mock / debrief`** — bare commands show
+  a picker over the 20 most-recent interviews from Mongo, with
+  graceful fallback to free-text ID prompt when Mongo is unavailable.
+
+### Changed
+
+- **16 commands** converted to "no-flag default" UX (Pillar 1: tailor,
+  score, verify, cover-letter, profile create, profile rebuild;
+  Pillar 2: jobs show, apply, status, import, evaluate, find-slug;
+  Pillar 3: interview schedule, prep, mock, debrief).
+- **Multi-line text input** (interview debrief notes) prompts for a
+  file path first; press Enter at the path prompt to switch to
+  multi-line paste mode (Esc + Enter to submit).
+- **`linkright tldr`** cheat-sheet rewritten — every example shows
+  the bare command first; flags demoted to "(optional)" footers.
+  Headline at top: "Every command works WITHOUT flags."
+- **Setup wizard `_pick`** moved from `setup_wizard.py` to
+  `linkright.prompts.prompt_for_choice` (canonical implementation).
+  setup_wizard re-exports under the legacy name; existing call sites
+  unchanged.
+
+### Excluded from this refactor
+
+- `resume hypothesis-test`, `resume batch`, and all `content/*`
+  commands keep flag-required behavior. These are scripting /
+  experiment tools where interactive prompting is a UX downgrade.
+
 ## [0.4.2] - 2026-05-06
 
 `linkright profile show` polish — three UX fixes from manual walkthrough.
