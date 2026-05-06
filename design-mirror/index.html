@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en" class="antialiased">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinkRight — AI-Powered Career Tools</title>
+  <meta name="description" content="Pixel-perfect resumes tailored to every job description. Built by a PM, for PMs." />
+
+  <!--
+    Single-file mirror of the LinkRight home page.
+    Source of truth: github.com/satvik-jain-iitd/linkright_production/blob/main/website/src/app/page.tsx
+    Generated 2026-05-06 from main branch.
+
+    Design tokens (from website/src/app/globals.css) are inlined below as
+    CSS custom properties so the design agent can read the exact palette
+    + typography without resolving Tailwind's @theme directive.
+  -->
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind config — mirrors the @theme block in globals.css so utility
+    // classes like bg-accent, text-cta, border-border, shadow-cta resolve
+    // to the same hex values the production site uses.
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Semantic tokens (light theme)
+            background: '#FAFBFC',
+            foreground: '#1A202C',
+            accent: '#0FBEAF',
+            'accent-hover': '#0C9A8E',
+            surface: '#FFFFFF',
+            'surface-hover': '#F7FAFC',
+            border: '#E2E8F0',
+            muted: '#718096',
+            // CTA — coral high-contrast action buttons
+            cta: '#FF5733',
+            'cta-hover': '#E04425',
+            // Accent palettes (subset used on landing)
+            purple: { 500: '#8B5CF6', 700: '#5A36AB' },
+            sage:   { 500: '#6B8346', 700: '#4A5D32' },
+            pink:   { 500: '#F05A79', 700: '#B13355' },
+            'brand-teal': '#1F5F6B',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+          },
+          boxShadow: {
+            sm: '0 1px 2px rgba(15, 23, 42, 0.04)',
+            md: '0 4px 12px rgba(15, 23, 42, 0.06)',
+            lg: '0 12px 32px rgba(15, 23, 42, 0.08)',
+            cta: '0 8px 24px rgba(255, 87, 51, 0.20)',
+            'cta-hover': '0 12px 32px rgba(255, 87, 51, 0.30)',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Body defaults — match website/src/app/globals.css */
+    body {
+      background: #FAFBFC;
+      color: #1A202C;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    html { scroll-behavior: smooth; }
+    ::selection { background: #0FBEAF; color: white; }
+
+    /* Hero radial gradient — exact value from page.tsx Hero() */
+    .hero-radial {
+      background: radial-gradient(ellipse at center, rgba(15, 190, 175, 0.08) 0%, transparent 70%);
+    }
+
+    /* Tile-tint helpers (from page.tsx TILE_TINT map) */
+    .tile-tint-purple { background: rgba(139, 92, 246, 0.10); color: #5A36AB; }
+    .tile-tint-teal   { background: rgba(15, 190, 175, 0.10); color: #0FBEAF; }
+    .tile-tint-sage   { background: rgba(107, 131, 70, 0.10);  color: #4A5D32; }
+    .tile-tint-pink   { background: rgba(240, 90, 121, 0.10);  color: #B13355; }
+    .tile-tint-coral  { background: rgba(255, 87, 51, 0.10);   color: #FF5733; }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+  <!-- ============================================================
+       AppNav (variant="landing")
+       Source: website/src/components/AppNav.tsx
+       Approximated from footer wordmark + landing page conventions.
+       ============================================================ -->
+  <nav class="border-b border-[color:#E2E8F0] bg-white/80 backdrop-blur-sm">
+    <div class="mx-auto flex max-w-[1080px] items-center justify-between px-6 py-4">
+      <a href="/" class="text-lg font-bold tracking-tight">
+        Link<span style="color:#0FBEAF">Right</span>
+      </a>
+      <div class="flex items-center gap-3">
+        <a href="/pricing" class="hidden text-sm text-[#718096] transition hover:text-[#1A202C] sm:inline-block">Pricing</a>
+        <a href="#how-it-works" class="hidden text-sm text-[#718096] transition hover:text-[#1A202C] sm:inline-block">How it works</a>
+        <a href="/auth?mode=signin" class="rounded-lg border border-[#E2E8F0] bg-white px-4 py-1.5 text-sm font-medium text-[#1A202C] transition hover:border-[#0FBEAF]">
+          Sign in
+        </a>
+        <a href="/auth?mode=signup" class="rounded-lg bg-[#FF5733] px-4 py-1.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(255,87,51,0.20)] transition hover:bg-[#E04425]">
+          Start for free
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       HERO
+       Source: page.tsx Hero()
+       ============================================================ -->
+  <section class="relative overflow-hidden px-6 pt-24 pb-20 text-center">
+    <div class="pointer-events-none absolute inset-0 hero-radial"></div>
+    <div class="relative z-10 mx-auto max-w-3xl">
+      <p class="mb-5 text-xs font-medium uppercase tracking-[0.14em]" style="color:#0FBEAF">
+        Career OS · built in India
+      </p>
+      <h1 class="text-4xl font-bold leading-[1.04] tracking-tight text-[#1A202C] sm:text-5xl md:text-[64px]">
+        One place for every career move.
+      </h1>
+      <p class="mx-auto mt-5 max-w-2xl text-[22px] font-medium leading-snug" style="color:#4A5568">
+        Apply sharper. Interview calmer. Show up consistently.
+      </p>
+      <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <a href="/auth?mode=signup" class="inline-flex items-center gap-2 rounded-lg bg-[#FF5733] px-7 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_rgba(255,87,51,0.20)] transition hover:bg-[#E04425]">
+          Start for free
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </a>
+        <a href="#how-it-works" class="rounded-lg border border-[#E2E8F0] bg-white px-7 py-3.5 text-base font-medium text-[#1A202C] transition hover:border-[#0FBEAF]">
+          See how it works
+        </a>
+      </div>
+      <p class="mt-5 text-xs" style="color:#718096">Takes 90 seconds. No credit card.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PROOF TILES — 4 value-prop cards
+       Source: page.tsx ProofTiles() + PROOF_TILES array
+       ============================================================ -->
+  <section class="px-6 pb-24">
+    <div class="mx-auto grid max-w-[1080px] gap-5 md:grid-cols-2 lg:grid-cols-4">
+
+      <!-- Tile 1: purple — "A profile that remembers you." -->
+      <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg tile-tint-purple">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+          </svg>
+        </div>
+        <h3 class="mt-3.5 text-[15px] font-semibold tracking-tight">A profile that remembers you.</h3>
+        <p class="mt-1.5 text-[13px] leading-relaxed" style="color:#718096">
+          Every win, every project, every hard lesson. It compounds with you, not against the clock.
+        </p>
+      </div>
+
+      <!-- Tile 2: teal — "Fewer tabs. Better shots." -->
+      <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg tile-tint-teal">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.25a.75.75 0 01.75.75v1.063A8.251 8.251 0 0120.937 11.25H22a.75.75 0 010 1.5h-1.063A8.251 8.251 0 0112.75 20.937V22a.75.75 0 01-1.5 0v-1.063A8.251 8.251 0 013.063 12.75H2a.75.75 0 010-1.5h1.063A8.251 8.251 0 0111.25 3.063V2.25a.75.75 0 01.75-.75zM12 9a3 3 0 100 6 3 3 0 000-6z" />
+          </svg>
+        </div>
+        <h3 class="mt-3.5 text-[15px] font-semibold tracking-tight">Fewer tabs. Better shots.</h3>
+        <p class="mt-1.5 text-[13px] leading-relaxed" style="color:#718096">
+          You've scrolled a hundred roles and applied to none. We bring the twenty worth your morning, each one answered in your voice.
+        </p>
+      </div>
+
+      <!-- Tile 3: sage — "Walk in, knowing what you'll say." -->
+      <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg tile-tint-sage">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+          </svg>
+        </div>
+        <h3 class="mt-3.5 text-[15px] font-semibold tracking-tight">Walk in, knowing what you'll say.</h3>
+        <p class="mt-1.5 text-[13px] leading-relaxed" style="color:#718096">
+          The panel is in three days. You haven't slept well since Tuesday. Drills pulled from your own wins, until the words are already yours.
+        </p>
+      </div>
+
+      <!-- Tile 4: pink — "Stay visible, without the grind." -->
+      <div class="rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg tile-tint-pink">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.129.164 2.27.294 3.423.39 1.1.092 1.907 1.056 1.907 2.16v4.773l3.423-3.423a1.125 1.125 0 01.8-.33 48.31 48.31 0 005.58-.498c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+          </svg>
+        </div>
+        <h3 class="mt-3.5 text-[15px] font-semibold tracking-tight">Stay visible, without the grind.</h3>
+        <p class="mt-1.5 text-[13px] leading-relaxed" style="color:#718096">
+          Opportunities find the people who show up. Drafts in your voice, from what you've actually shipped. You approve. We post.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       HOW IT WORKS — 3 numbered steps
+       Source: page.tsx HowItWorks() + STEPS array
+       ============================================================ -->
+  <section id="how-it-works" class="border-t border-[#E2E8F0] bg-white px-6 py-24">
+    <div class="mx-auto max-w-[1000px] text-center">
+      <p class="text-xs font-medium uppercase tracking-[0.14em]" style="color:#0FBEAF">How it works</p>
+      <h2 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Three steps. One daily ritual.</h2>
+      <div class="mt-12 flex flex-col items-stretch justify-center gap-4 sm:flex-row sm:items-start">
+
+        <div class="flex flex-1 flex-col items-center text-center sm:px-3">
+          <div class="relative flex items-center justify-center">
+            <div class="flex h-11 w-11 items-center justify-center rounded-full bg-[#0FBEAF] text-[14px] font-bold text-white">01</div>
+          </div>
+          <h3 class="mt-3.5 text-base font-semibold">Drop your resume</h3>
+          <p class="mt-1.5 text-sm leading-relaxed" style="color:#718096">
+            We parse it, show you what we understood, and start your profile.
+          </p>
+        </div>
+
+        <div class="flex flex-1 flex-col items-center text-center sm:px-3">
+          <div class="relative flex items-center justify-center">
+            <div class="flex h-11 w-11 items-center justify-center rounded-full bg-[#0FBEAF] text-[14px] font-bold text-white">02</div>
+          </div>
+          <h3 class="mt-3.5 text-base font-semibold">Pick a role</h3>
+          <p class="mt-1.5 text-sm leading-relaxed" style="color:#718096">
+            Honest match scores. We tell you why it's a fit and where the gaps are.
+          </p>
+        </div>
+
+        <div class="flex flex-1 flex-col items-center text-center sm:px-3">
+          <div class="relative flex items-center justify-center">
+            <div class="flex h-11 w-11 items-center justify-center rounded-full bg-[#0FBEAF] text-[14px] font-bold text-white">03</div>
+          </div>
+          <h3 class="mt-3.5 text-base font-semibold">Ship the application</h3>
+          <p class="mt-1.5 text-sm leading-relaxed" style="color:#718096">
+            Resume, cover letter, LinkedIn DM, recruiter email — all tailored.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FINAL CTA
+       Source: page.tsx FinalCta()
+       ============================================================ -->
+  <section class="border-t border-[#E2E8F0] px-6 py-20 text-center">
+    <div class="mx-auto max-w-xl">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Ready in 90 seconds.</h2>
+      <p class="mt-3 text-sm" style="color:#718096">Upload once. Ship applications for weeks.</p>
+      <a href="/auth?mode=signup" class="mt-7 inline-flex items-center gap-2 rounded-lg bg-[#FF5733] px-7 py-3.5 text-base font-semibold text-white shadow-[0_8px_24px_rgba(255,87,51,0.20)] transition hover:bg-[#E04425]">
+        Start for free
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+        </svg>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FOOTER
+       Source: page.tsx Footer()
+       ============================================================ -->
+  <footer class="border-t border-[#E2E8F0] px-6 py-10">
+    <div class="mx-auto flex max-w-[1080px] flex-col items-center justify-between gap-4 text-sm sm:flex-row" style="color:#718096">
+      <span class="text-base font-bold tracking-tight" style="color:#1A202C">
+        Link<span style="color:#0FBEAF">Right</span>
+      </span>
+      <div class="flex gap-6">
+        <a href="/pricing" class="transition hover:text-[#1A202C]">Pricing</a>
+        <a href="#how-it-works" class="transition hover:text-[#1A202C]">How it works</a>
+        <a href="/privacy" class="transition hover:text-[#1A202C]">Privacy</a>
+      </div>
+      <span>Made in India 🇮🇳</span>
+    </div>
+  </footer>
+
+</body>
+</html>
