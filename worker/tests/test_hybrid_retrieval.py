@@ -135,7 +135,7 @@ class FakeHybridSupabaseClient:
 def _nugget_row(
     nid: str,
     importance: str = "P2",
-    company: str = "AmEx",
+    company: str = "Acme Bank",
     resume_relevance: float = 0.9,
     answer: str = "Led 18-member team reducing errors from 18% to 2%",
     section_type: str = "work_experience",
@@ -241,8 +241,8 @@ def test_result_limit():
 
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 async def test_company_scoped_query(httpx_mock):
-    """company='AmEx' → AmEx nugget appears in results."""
-    amex_row = _nugget_row("n1", company="AmEx")
+    """company='Acme Bank' → Acme Bank nugget appears in results."""
+    amex_row = _nugget_row("n1", company="Acme Bank")
 
     # Oracle embed mock: handles calls when ORACLE_BACKEND_URL is set (env pollution
     # from test_lock_embed_isolation.py which sets it at module level without cleanup).
@@ -274,7 +274,7 @@ async def test_company_scoped_query(httpx_mock):
 
     with mock.patch.dict(os.environ, {"JINA_API_KEY": "fake-key"}):
         results, method = await hybrid_retrieve(
-            sb, "user-123", "risk scoring", company="AmEx", limit=5
+            sb, "user-123", "risk scoring", company="Acme Bank", limit=5
         )
 
     assert method in ("hybrid", "bm25_only")
@@ -440,7 +440,7 @@ def test_format_nuggets_for_llm():
             nugget_text="Led 18-member team",
             importance="P0",
             section_type="work_experience",
-            company="American Express",
+            company="Acme Bank",
             role="Sr Associate PM",
             tags=["leadership", "risk"],
             rrf_score=0.025,
@@ -452,7 +452,7 @@ def test_format_nuggets_for_llm():
             nugget_text="Benchmarking widget",
             importance="P1",
             section_type="work_experience",
-            company="Sprinklr",
+            company="TechCo SaaS",
             role="PM Intern",
             tags=["analytics"],
             rrf_score=0.020,
@@ -462,8 +462,8 @@ def test_format_nuggets_for_llm():
 
     output = format_nuggets_for_llm(results)
 
-    assert "American Express" in output
-    assert "Sprinklr" in output
+    assert "Acme Bank" in output
+    assert "TechCo SaaS" in output
     assert "Reduced risk errors" in output
     assert "4.7/5 CSAT" in output
     assert "## Company:" in output

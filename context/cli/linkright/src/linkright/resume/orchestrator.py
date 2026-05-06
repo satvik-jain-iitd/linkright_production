@@ -631,16 +631,17 @@ def step_00_ingest_pdf() -> str:
     logbook.append(
         step, "starting",
         "extracting plain text from inputs/resume.pdf via pypdf; "
-        "expecting > 1.5KB text, name Satvik Jain, email + phone present",
+        "expecting > 1.5KB text, email + phone present",
     )
 
     pdf_path = INPUTS / "resume.pdf"
     raw_text = extract_text(pdf_path)
     out_path.write_text(raw_text, encoding="utf-8")
 
-    # Evaluate (case-insensitive name check)
+    # Evaluate (basic structural checks; specific-name check removed as it
+    # was hardcoded to one user — generic email + phone presence is enough
+    # signal that the resume was parsed)
     length = len(raw_text)
-    has_name = "satvik" in raw_text.lower() and "jain" in raw_text.lower()
     email_match = re.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", raw_text)
     phone_match = re.search(r"\+?\d[\d\s\-]{7,}\d", raw_text)
     bullet_char_count = raw_text.count("•") + raw_text.count("●")
@@ -655,8 +656,6 @@ def step_00_ingest_pdf() -> str:
     gaps: list[str] = []
     if length < 1500:
         gaps.append(f"text length {length} < 1500 (PDF may be image-based or extract failed)")
-    if not has_name:
-        gaps.append("name 'Satvik Jain' not found")
     if not email_match:
         gaps.append("no email pattern detected")
     if not phone_match:
@@ -746,10 +745,10 @@ def step_01_parse_resume(raw_text: str) -> dict:
     total_projects = sum(len(e.get("projects", [])) for e in experiences) + len(parsed.get("projects", []))
 
     gaps: list[str] = []
-    if not any("amex" in c.lower() or "american express" in c.lower() for c in companies):
-        gaps.append("American Express not found in parsed companies")
-    if not any("sprinklr" in c.lower() for c in companies):
-        gaps.append("Sprinklr not found in parsed companies")
+    # TODO: company-presence sentinels removed — were hardcoded to one user's
+    # employers. Restore as profile-derived check in follow-up PR.
+    if not companies:
+        gaps.append("no companies parsed from resume")
     if len(experiences) < 2:
         gaps.append(f"only {len(experiences)} experience blocks extracted; expected 2–4")
     if total_bullets < 8:
@@ -815,7 +814,7 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
         "each tagged with company, role, importance, answer, tags",
     )
 
-    # Use the raw career text as input (production batches at 3000 chars; Satvik's is 3009 — single batch)
+    # Use the raw career text as input (production batches at 3000 chars; Jane's is 3009 — single batch)
     try:
         md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
@@ -889,13 +888,13 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
 
     gaps: list[str] = []
     if len(nuggets) < 10:
-        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 20-40 for a dense resume like Satvik's")
+        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 20-40 for a dense resume")
     if len(importance_counts) < 2:
         gaps.append(f"importance distribution collapsed: {importance_counts}")
     if multi_signal:
         gaps.append(f"{len(multi_signal)} nuggets appear multi-signal (should be atomized): {multi_signal[:5]}")
-    if not any("american express" in k or "amex" in k for k in per_company):
-        gaps.append("no nuggets attributed to American Express")
+    # TODO: per-company nugget attribution check removed — was hardcoded to
+    # one user's employer. Restore as profile-derived check in follow-up PR.
 
     status = "pass" if not gaps else "partial"
 
@@ -922,7 +921,7 @@ id: {sample.get('id', 'N/A')}
 ```
 
 **Root-cause hypothesis:**
-{"Atomization prompt is working as intended." if not gaps else "If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If Amex missing, company-tagging rule is failing on 'American Express — Senior Associate Product M anager' header (note pypdf 'M anager' corruption)."}
+{"Atomization prompt is working as intended." if not gaps else "If count is low, prompt may be too conservative at temp 0.3. If multi-signal is high, single-signal rule isn't firing — enforce via stricter prompt language. If a known company is missing, company-tagging rule may be failing on header parsing (watch for pypdf spacing corruption like 'M anager' → 'Manager')."}
 """
     logbook.append(step, "eval", f"nuggets {status}; {len(nuggets)} extracted; gaps={len(gaps)}", body_md)
     return nuggets
@@ -1093,7 +1092,7 @@ def step_06_role_scores(nuggets: list[dict], reqs: list[dict], experiences: list
         step, "starting",
         "replicating scoreRolesAgainstRequirements() from jd/analyze/route.ts; "
         "greedy bipartite matching with cosine threshold 0.50 (post-recalibration); "
-        "years-of-experience hard check: Satvik ~4 yrs vs JD 5+ → '5+ years' req auto-gap",
+        "years-of-experience hard check: Jane ~4 yrs vs JD 5+ → '5+ years' req auto-gap",
     )
 
     threshold = float(os.environ.get("COSINE_THRESHOLD", "0.50"))
@@ -1248,8 +1247,8 @@ def step_06_role_scores(nuggets: list[dict], reqs: list[dict], experiences: list
     # Evaluate
     primary = role_scores[0]["company"] if role_scores else "(none)"
     gaps_detected: list[str] = []
-    if role_scores and "american express" not in primary.lower() and "amex" not in primary.lower():
-        gaps_detected.append(f"primary role is '{primary}', expected 'American Express'")
+    # TODO: primary-role expectation check removed — was hardcoded to one
+    # user's employer. Restore as profile-derived check in follow-up PR.
     if coverage_pct == 0:
         gaps_detected.append("coverage 0% — threshold too strict OR embeddings broken OR matcher bug")
     if coverage_pct == 100:
@@ -1290,7 +1289,7 @@ def step_06_role_scores(nuggets: list[dict], reqs: list[dict], experiences: list
 {chr(10).join(f'- {g}' for g in gaps_detected) if gaps_detected else '- none'}
 
 **Root-cause hypothesis:**
-{"Scoring is producing honest, non-theatrical matches." if not gaps_detected else "If coverage 0% despite Step 3 showing healthy pairwise scores: either req-nugget pairs live in unrelated semantic neighborhoods (consider whether requirements are phrased too generically for Satvik's domain-specific nuggets), or threshold 0.50 still too strict for nomic. If primary ≠ Amex: Amex nuggets may be fewer (check Step 2 distribution) or their vector similarity to JD-domain reqs (platform/RBAC/multi-tenancy) is lower than Sprinklr's (more CX/SaaS-flavored nuggets score better against 'dashboards', 'collaboration')."}
+{"Scoring is producing honest, non-theatrical matches." if not gaps_detected else "If coverage 0% despite Step 3 showing healthy pairwise scores: req-nugget pairs may live in unrelated semantic neighborhoods (consider whether requirements are phrased too generically for the user's domain-specific nuggets), or threshold 0.50 still too strict for nomic. If primary role looks wrong: that company's nuggets may be fewer (check Step 2 distribution) or their vector similarity to JD-domain reqs is lower than another role's."}
 """
     logbook.append(step, "eval", f"role scoring {status}; coverage {coverage_pct}%; primary={primary}", body_md)
     return result
@@ -1309,7 +1308,7 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
         step, "starting",
         "calling LLM with PHASE_1_2 prompt; returns career_level, jd_keywords, "
         "strategy, theme_colors, section_order, bullet_budget; expecting "
-        "career_level=mid (Satvik has ~4 yrs) and bullet_budget totaling 12-15",
+        "career_level=mid (Jane has ~4 yrs) and bullet_budget totaling 12-15",
     )
 
     strategies_json = P.STRATEGIES_JSON  # vendored
@@ -1542,7 +1541,7 @@ def step_08_retrieve_per_company(parsed_p12: dict, nuggets: list[dict]) -> dict:
         s = re.sub(r"\s+", " ", (s or "").strip()).lower()
         s = re.sub(r"\s*\(.*?\)\s*$", "", s)
         # Iter-04: also strip common legal suffixes (Inc, Ltd, LLC, Corp) so
-        # "American Express Inc" and "American Express" collapse to one key.
+        # e.g. "Acme Corp Inc" and "Acme Corp" collapse to one key.
         s = re.sub(r"[\s,]+(inc\.?|ltd\.?|llc\.?|corp\.?|corporation|limited|co\.?)\s*$", "", s)
         return s
 
@@ -1575,8 +1574,8 @@ def step_08_retrieve_per_company(parsed_p12: dict, nuggets: list[dict]) -> dict:
             continue
         pool = by_co.get(norm(co_name), [])
         # Iter-04: if direct normalization miss, try substring matching as safety net.
-        # Handles cases where nugget's company field is "American Express US" but step_07
-        # says "American Express" (or vice versa).
+        # Handles cases where nugget's company field is "Acme Corp US" but step_07
+        # says "Acme Corp" (or vice versa).
         if not pool:
             co_norm = norm(co_name)
             for key, val in by_co.items():
@@ -3111,7 +3110,7 @@ def step_13_width_skip(condensed: dict) -> dict:
 
 # ────────────────────────────────────────────────────────────────────────────
 # Step 14 helpers — bolding rule + header shrink-to-fit
-# Per Satvik 2026-05-02 milestone validation:
+# Per Jane 2026-05-02 milestone validation:
 #   1. Bold ONLY metric tokens (numbers + adjacent symbols). Strip verbs/phrases
 #      from <b>...</b> regardless of what step_10/12 LLM produced.
 #   2. Header role can be long (e.g. "Product Manager — Workflows Team
@@ -3143,7 +3142,7 @@ _METRIC_REBOLD_RE = re.compile(
 def _metric_only_rebold(html: str) -> str:
     """Strip every existing <b>...</b> then re-bold ONLY metric tokens.
 
-    Per Satvik 2026-05-02: "I want only the numbers to be in bold. Numbers and
+    Per Jane 2026-05-02: "I want only the numbers to be in bold. Numbers and
     supporting characters like 100M+, 70%, 20+." Verbs, action phrases, JD
     keywords, and named entities must stay PLAIN regardless of upstream LLM
     output.
@@ -3170,7 +3169,7 @@ def _trim_skills_to_target_lines(
 ) -> tuple[list[str], list[str]]:
     """Trim Skills section to a target char-budget + render in TIER order.
 
-    Per Satvik 2026-05-02 (memory `feedback_skills_trim_before_width_fill`):
+    Per Jane 2026-05-02 (memory `feedback_skills_trim_before_width_fill`):
     Skills max 3-5 lines (≤120c per line); drop generics FIRST.
     Per 2026-05-02 update: "ordering of skills should also be must have >
     nice to have > just inferred skills based on the job".
@@ -3317,7 +3316,7 @@ def _trim_skills_to_target_lines(
 
 # ────────────────────────────────────────────────────────────────────────────
 # NEW-6 v1: deterministic per-bullet signal derivation + interview-prep
-# Per Satvik 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
+# Per Jane 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
 # every bullet must (1) signal "right fit" in 6-second top-1/3 scan,
 # (2) seed a Round 1 interview story. v1 derives signal heuristically from
 # bullet content + maps to common interview questions. v2 (deferred) replaces
@@ -3555,7 +3554,7 @@ def _llm_classify_signal(bullet_text: str, jd_text: str) -> tuple[str, str]:
     returned generic 'execution' (i.e., regex couldn't find a discriminating
     pattern).
 
-    Per Satvik 2026-05-02 (memory feedback_no_hardcoded_jd_specifics):
+    Per Jane 2026-05-02 (memory feedback_no_hardcoded_jd_specifics):
     regex is closed-vocabulary; LLM is needed for semantic understanding
     that extrapolates to novel domains/phrasings. Constrained output
     (must pick from _VALID_SIGNALS enum) prevents hallucination.
@@ -3718,7 +3717,7 @@ def _compute_header_font_size(name: str, role: str, max_width_mm: float = 175.0)
     Roboto Medium baseline: ~0.51mm char-width per 1pt font-size (matches
     bullet-width.ts CHAR_WIDTH_PER_PT empirical ratio).
 
-    Per Satvik 2026-05-02: shrink BOTH name + role in lockstep (they share
+    Per Jane 2026-05-02: shrink BOTH name + role in lockstep (they share
     --font-size-name CSS variable). Floor at 14pt — header must remain
     visually larger than 12pt section-headings. NEVER wrap, NEVER truncate.
 
@@ -3746,7 +3745,7 @@ def _compute_header_font_size(name: str, role: str, max_width_mm: float = 175.0)
     fit_pt = max_width_mm / (chars * CHAR_WIDTH_PER_PT)
     fit_pt = round(fit_pt * 2) / 2  # snap to 0.5pt
     if fit_pt < MIN_PT:
-        # Slight overflow at floor is preferable to wrap/truncate per Satvik
+        # Slight overflow at floor is preferable to wrap/truncate per Jane
         # 2026-05-02. Caller logs warning; PDF still renders.
         return f"{MIN_PT:.0f}pt", False
     return f"{fit_pt:.1f}pt", True
@@ -3765,7 +3764,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     )
 
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
-    # Default = pure black-and-white (Satvik design spec 2026-05-03).
+    # Default = pure black-and-white (Jane design spec 2026-05-03).
     # User opts in to color via `linkright resume brand` post-tailor; otherwise
     # all 3 brand vars stay #000000 → divider gradient resolves to solid black,
     # metric <b> tags render bold black. No regression for B&W users.
@@ -4535,7 +4534,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         """For each LEARNED acronym, expand first occurrence in text.
 
         2026-05-02: width-aware skip — if expanding would push the containing
-        bullet `<li>` over 120c plain-text, skip that expansion. Per Satvik
+        bullet `<li>` over 120c plain-text, skip that expansion. Per Jane
         2026-05-02: bullets must fit one line each; acronym-expansion adding
         20+ chars to an already-near-band bullet causes 2-line spill.
         """
@@ -4589,7 +4588,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     summary_html = f'<div class="summary-line">{summary}</div>'
 
     # 2026-05-02: Header shrink-to-fit MUST run BEFORE placeholder substitution
-    # so the (possibly shortened) target_role is what gets injected. Per Satvik
+    # so the (possibly shortened) target_role is what gets injected. Per Jane
     # 2026-05-02: NO wrap, NO truncate, side-by-side preserved. Both name + role
     # shrink in lockstep via --font-size-name CSS var. Min floor 14pt. If still
     # overflows at 14pt, drop team-name suffix after em-dash so recruiter sees
@@ -4632,7 +4631,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     # The template has placeholders like <!-- PLACEHOLDER: X --> — we'll do targeted replacements.
     out = template
     # Header — uses the (possibly shortened) _role_text computed above.
-    out = out.replace("<!-- PLACEHOLDER: Full Name -->", _name_text or "Satvik Jain")
+    out = out.replace("<!-- PLACEHOLDER: Full Name -->", _name_text or "Your Name")
     out = out.replace("<!-- PLACEHOLDER: Target Role Title -->", _role_text)
     # Contact — don't fabricate fallbacks; let empty fields disappear (S6-2).
     phone = (contact.get("phone") or "").strip()

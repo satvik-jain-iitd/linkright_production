@@ -1,6 +1,6 @@
 """End-of-pipeline critique step — Truth Engine Layer 3.
 
-Per Satvik 2026-05-02 (memory feedback_end_of_pipeline_critique_step):
+Per Jane 2026-05-02 (memory feedback_end_of_pipeline_critique_step):
 After step_15 PDF render, run an LLM critique pass that:
   1. Reads the rendered resume HTML + JD
   2. Lists ≤5 actionable issues with severity
@@ -65,7 +65,7 @@ def _invoke_critic_llm(rendered_text: str, jd_text: str) -> list[dict]:
         f'{{"issues": [\n'
         f'  {{"id": 1,\n'
         f'    "severity": "HIGH" | "MEDIUM" | "LOW",\n'
-        f'    "location": "Skills section" or "Bullet 3 of American Express role" etc.,\n'
+        f'    "location": "Skills section" or "Bullet 3 of <Company> role" etc.,\n'
         f'    "issue": "1-sentence description",\n'
         f'    "fix_a": "specific replacement text or action",\n'
         f'    "fix_b": "alternative replacement (different angle)",\n'

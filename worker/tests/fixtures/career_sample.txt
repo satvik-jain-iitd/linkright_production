@@ -1,15 +1,15 @@
-SATVIK JAIN
+JANE DOE
 Product Manager | FinTech & Risk | IIT Delhi
-satvik.jain@iitdalumni.com | LinkedIn: linkedin.com/in/satvikjain | New Delhi, India
+jane.doe@example.com | LinkedIn: linkedin.com/in/janedoe-example | New Delhi, India
 
 ---
 
 PROFESSIONAL EXPERIENCE
 
-American Express — New Delhi, India
+Acme Bank — New Delhi, India
 Senior Associate Product Manager, Credit Risk & Recommendations (CRR) | July 2022 – Present
 
-American Express's Credit Risk & Recommendations team owns the ML-powered decisioning platform that governs credit line assignments, risk scoring, and proactive account management across 100M+ global accounts. As Senior Associate PM, I lead product strategy and execution for the core risk intelligence layer, collaborating with data science, engineering, compliance, and regional business partners.
+Acme Bank's Credit Risk & Recommendations team owns the ML-powered decisioning platform that governs credit line assignments, risk scoring, and proactive account management across 100M+ global accounts. As Senior Associate PM, I lead product strategy and execution for the core risk intelligence layer, collaborating with data science, engineering, compliance, and regional business partners.
 
 Key Achievements:
 
@@ -28,10 +28,10 @@ Key Achievements:
 • Ran a structured A/B testing programme on credit bureau refresh cadences, discovering that biweekly refresh (vs monthly) reduced surprise delinquencies by 7% — recommendation was adopted globally.
 
 
-Sprinklr — New Delhi, India
+TechCo SaaS — New Delhi, India
 Product Management Intern | May 2021 – August 2021
 
-Sprinklr is an enterprise SaaS platform for unified customer experience management. During my internship on the Insights & Analytics product team, I worked on the social listening and sentiment analysis modules used by Fortune 500 brand teams.
+TechCo SaaS is an enterprise SaaS platform for unified customer experience management. During my internship on the Insights & Analytics product team, I worked on the social listening and sentiment analysis modules used by Fortune 500 brand teams.
 
 • Conducted 14 customer discovery interviews with marketing and CX teams at enterprise clients (including L'Oreal and Unilever), synthesizing findings into a prioritized feature backlog covering 3 core pain points: latency in sentiment refresh, lack of multilingual support, and poor drill-down UX for regional managers.
 
@@ -64,7 +64,7 @@ Domain: Credit risk decisioning, FinTech regulation (ECOA, FCRA, PCI-DSS), SaaS 
 CERTIFICATIONS & ACHIEVEMENTS
 
 • SAFe 6.0 Certified Product Owner / Product Manager (2023)
-• Internal AmEx Hackathon Winner — "PromptRisk" GenAI credit risk explainer (2023)
+• Internal Acme Bank Hackathon Winner — "PromptRisk" GenAI credit risk explainer (2023)
 • Dean's List, IIT Delhi — 3 semesters
 
 ---

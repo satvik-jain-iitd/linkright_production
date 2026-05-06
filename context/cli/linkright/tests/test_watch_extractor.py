@@ -58,7 +58,7 @@ def test_linkedin_job_url_detected(url):
 @pytest.mark.parametrize("url", [
     "https://www.linkedin.com/feed/",
     "https://www.linkedin.com/messaging/threads/123",
-    "https://www.linkedin.com/in/satvik-jain/",
+    "https://www.linkedin.com/in/janedoe-example/",
     "https://www.linkedin.com/me/",
     "https://www.linkedin.com/learning/something",
     # Collections list view (no currentJobId) is NOT a job-detail page

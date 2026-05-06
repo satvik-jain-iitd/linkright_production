@@ -61,7 +61,7 @@ hypothesis: 4 targeted orchestrator.py edits remove error text, enforce 4-role c
 **User-requested checks — ALL PASS:**
 - A. no "(no bullets…)"/"filter dropped" text anywhere in final HTML ✓
 - B. zero empty list skeletons ✓
-- C. every role has ≥2 bullets (AmEx 5, Sprinklr 5) ✓
+- C. every role has ≥2 bullets (CompA 5, TechCo SaaS 5) ✓
 - D. ≤4 role cap (2/4 selected) ✓
 - E. Projects populated with 2 real entries (On-Chain AML Risk Scorer, Sync); Certifications cleanly absent (source was ["None"] → filtered → section removed) ✓
 
@@ -91,10 +91,10 @@ hypothesis: v0.1.2 contract — NEVER drop a role user worked at. Fill sparse ro
 - step_10/12 never ran meaningfully (condensed empty)
 
 **Result: PDF generated with 4 companies, each with >=2 bullets, ZERO LLM cost at step_14 fallback layer.**
-- American Express: 2 bullets (L2 raw-nugget fallback)
-- Sprinklr: 2 bullets (L2)
-- ContentStack: 2 bullets (L2) — previously dropped by cosine floor
-- Sukha Education: 2 bullets (L2) — previously dropped
+- Company A: 2 bullets (L2 raw-nugget fallback)
+- TechCo SaaS: 2 bullets (L2)
+- SampleCo: 2 bullets (L2) — previously dropped by cosine floor
+- Sample NGO: 2 bullets (L2) — previously dropped
 - All 5 acceptance checks PASS (no error text, no empty ULs, all roles >=2 bullets, <=4 role cap)
 
 **3-layer fallback chain (in step_14 assemble_html):**
@@ -105,7 +105,7 @@ hypothesis: v0.1.2 contract — NEVER drop a role user worked at. Fill sparse ro
 
 **Reranker status:** code path exists and is gated by ENABLE_RERANKER=true. Couldn't validate against retrieval-success path because LLM exhaustion short-circuited before reranker could fire. Queued for next successful full-pipeline run.
 
-**Next:** wait for Gemini daily reset → re-run v5 with clean quota → confirm reranker firing + measure step_08 retrieval improvement on tail companies (ContentStack/Sukha).
+**Next:** wait for Gemini daily reset → re-run v5 with clean quota → confirm reranker firing + measure step_08 retrieval improvement on tail companies (SampleCo/Sample).
 
 ### 2026-04-24T11:56:01Z — resume — smoke_tether_v5 (first single-sample run post contract-lock)
 ```yaml
@@ -131,13 +131,13 @@ cost_inr: 0
 | 05 | Embed JD reqs | PASS | 10 reqs | — |
 | 06 | Role scores | PASS* | 6 scored; profile=None (bug?); included/excluded lists empty in artifact | artifact shape mismatch vs scorecard_context expectation |
 | 07 | Phase 1+2 | PASS (retry 1x) | target=Technical PM QVAC, strategy=METRIC_BOMBARDMENT, career_level=mid, kw=25, reqs=10 | retry fired after first ≤5-req return |
-| 08 | Retrieve + rerank | PASS | AmEx:5, Sprinklr:4, ContentStack:1, Sukha:1 — **RERANKER FIRED on all 4** (bge-reranker-v2-m3) | tail companies still single-nugget |
+| 08 | Retrieve + rerank | PASS | CompA:5, TechCo SaaS:4, SampleCo:1, Sample:1 — **RERANKER FIRED on all 4** (bge-reranker-v2-m3) | tail companies still single-nugget |
 | 09 | Summary | ERROR→synthesis_fallback | 300 chars written | All paid+free LLMs simultaneously 429; cooldown chain blocked primary path |
-| 10 | Verbose bullets | PASS | 3/3/1/1 paragraphs per company | ContentStack/Sukha 1-bullet fate set here |
+| 10 | Verbose bullets | PASS | 3/3/1/1 paragraphs per company | SampleCo/Sample 1-bullet fate set here |
 | 11 | Rank BRS | PASS | 3/3/1/1 ranked, brs scores populated | — |
 | 12 | Condense | PASS | 8 total bullets, 0/8 in 108-120 char band (all 140-160) | **width_hit_rate=0** — Cerebras over-condensed or wrong target; step_13 would have fixed this if enabled |
 | 13 | Width POC | SKIPPED | "condensed used as-is" | gated by ENABLE_WIDTH_POC — correctly off per v0.1.1 cost plan |
-| 14 | Assemble HTML | PASS w/ fallback | 4 roles rendered: 3/3/2/2 bullets; **L2 fallback fired for ContentStack + Sukha** (generic-impact from raw nuggets) | near-duplicate bullets for ContentStack/Sukha (L1 ≈ L2 for same nugget) |
+| 14 | Assemble HTML | PASS w/ fallback | 4 roles rendered: 3/3/2/2 bullets; **L2 fallback fired for SampleCo + Sample** (generic-impact from raw nuggets) | near-duplicate bullets for SampleCo/Sample (L1 ≈ L2 for same nugget) |
 | 15 | Render PDF | PASS | 1 page, 227KB | — |
 | 16 | Telemetry | PASS | 9726 tokens, ₹0, 1 fallback event, 31 Oracle calls | — |
 
@@ -163,7 +163,7 @@ A. ✅ no error text   B. ✅ no empty ULs   C. ✅ every role ≥2 bullets (3/3
 ## Findings + dispositions
 
 ### 1. KEEP: reranker fires correctly on all 4 companies (including tail)
-**Obs:** `rerank_score` field populated for all retrieved nuggets at step 08. ContentStack top score = 0.88 (highest of all 4). **RC:** Oracle `/lifeos/rerank` live; env gate worked. **Disposition:** KEEP. Leave ENABLE_RERANKER=true as default for direct-mode runs.
+**Obs:** `rerank_score` field populated for all retrieved nuggets at step 08. SampleCo top score = 0.88 (highest of all 4). **RC:** Oracle `/lifeos/rerank` live; env gate worked. **Disposition:** KEEP. Leave ENABLE_RERANKER=true as default for direct-mode runs.
 
 ### 2. 🔴 NEW FAILURE: verb_diversity collapsed from 100 → 12.5
 **Obs:** Every bullet starts with `"At <Company>, as a <Role>,"` prefix. Scorecard verb_diversity picks leading word → 1 unique verb ("At") across 10 bullets = 0.1 unique_ratio = 12.5 after weighting.  
@@ -171,7 +171,7 @@ A. ✅ no error text   B. ✅ no empty ULs   C. ✅ every role ≥2 bullets (3/3
 **Disposition:** **NEW-FIX-NEEDED** — high priority. Prompt tweak to remove "At [company]" preamble OR post-process strip.
 
 ### 3. 🟡 NEAR-DUPLICATE BULLETS in fallback tail roles
-**Obs:** ContentStack renders 2 bullets, both about "shipped 3 AI products, Compose AI, DesignerAI, Lens". First from step_12 LLM condense, second from L2 raw-nugget fallback. Sukha similar.  
+**Obs:** SampleCo renders 2 bullets, both about "shipped 3 AI products, Compose AI, DesignerAI, Lens". First from step_12 LLM condense, second from L2 raw-nugget fallback. Sample similar.  
 **RC:** My L2 dedup uses exact-lowercase match; paraphrased content slips through. Same underlying source nugget.  
 **Disposition:** **NEW-FIX-NEEDED** — medium priority. Either semantic dedup (cosine >0.85) or exclude pool nuggets whose content was already consumed by step_10.
 
@@ -181,7 +181,7 @@ A. ✅ no error text   B. ✅ no empty ULs   C. ✅ every role ≥2 bullets (3/3
 **Disposition:** Follow-up — conditional enable of step 13 when bullet mean-length exceeds 125 chars. Low priority since PDF still 1-page.
 
 ### 5. KEEP: 3-layer fallback validated end-to-end
-**Obs:** vision.md logged `filled 2 sparse companies from raw nuggets`. ContentStack + Sukha got 1 L1 + 1 L2 each, reaching ≥2 threshold. No empty roles, no error text.  
+**Obs:** vision.md logged `filled 2 sparse companies from raw nuggets`. SampleCo + Sample got 1 L1 + 1 L2 each, reaching ≥2 threshold. No empty roles, no error text.  
 **Disposition:** KEEP. v0.1.2 3-layer logic stays.
 
 ### 6. KEEP: Role cap 4-unconditional
@@ -255,11 +255,11 @@ changes_applied:
 **NEW-FIX-NEEDED (2 issues):**
 
 ### Issue #1 (high) — IIT Delhi education leaked into Work Experience
-**Obs:** HTML renders 5 roles; 5th is "Indian Institute of Technology, Delhi" with awards ("Leadership in Action Award", "Growth Hack Top 6%", "Sprinklr Gold Medal") as "bullets". Violates 4-role cap + mixes education/awards into work section.
+**Obs:** HTML renders 5 roles; 5th is "Indian Institute of Technology, Delhi" with awards ("Leadership in Action Award", "Growth Hack Top 6%", "TechCo SaaS Gold Medal") as "bullets". Violates 4-role cap + mixes education/awards into work section.
 **RC (hypothesis):** Either (a) step_07 LLM included IIT in companies field, OR (b) my fallback reconstruction at step_14 pulled IIT from parsed_resume.experiences (if step_01 misclassified it), OR (c) awards parsed as bullets for some role. Need to inspect 07_jd_parse_strategy.json + 01_resume_parsed.json.
 **Disposition:** NEW-FIX-NEEDED. Either filter out education-like names from role list at step_14 assembly, OR fix upstream classification.
 
-### Issue #2 (medium) — ContentStack + Sukha = 1 bullet each (upstream sparse)
+### Issue #2 (medium) — SampleCo + Sample = 1 bullet each (upstream sparse)
 **Obs:** Both short roles only have 1 achievement in the source resume. Step_02 extracted 1 nugget each. Step_10 produced 1 paragraph each. L2/L3 fallback has no more content to add.
 **RC:** Not a pipeline bug — resume input is genuinely sparse for these roles. Min-2 rule cannot be met without hallucinating.
 **Disposition:** Accept as-is OR prompt user to add 2nd achievement in resume. Not a code fix.
@@ -382,7 +382,7 @@ Lower than v5.3-rescored (75.1) because LLM variance produced more repetitive ve
 | page_fit | 100 | 100 | 30.0 | **50.0** (truthful — 73.7% util) |
 | brs_top_pct | 0 | 1.0 | 100 | **100** ✓ |
 | contrast_aa | 100 | 100 | 100 | **100** |
-| synonym/near_dup | 0 | 0 | 97.8 | **97.8** ✓ caught Sprinklr pair |
+| synonym/near_dup | 0 | 0 | 97.8 | **97.8** ✓ caught TechCo SaaS pair |
 | structure_integrity | 100 | 100 | 100 | **100** |
 | **Overall** | **60.6 D** | **69.7 D** | **75.1 C** | **71.6 C** |
 
@@ -390,7 +390,7 @@ Lower than v5.3-rescored (75.1) because LLM variance produced more repetitive ve
 - BRS scale auto-detect (verified: top_brs 1.0 → scored 100)
 - page_fit truthful bands (correctly flags 73.7% util as F)
 - metric_density tiered (more honest 71-76 vs old 100)
-- near_dup_rate composite detector (caught Sprinklr GenAI dup; v5.3 churn dup also catches)
+- near_dup_rate composite detector (caught TechCo SaaS GenAI dup; v5.3 churn dup also catches)
 
 **ROLLBACK candidates (none from these 4 changes — instrument-only)**
 
@@ -401,12 +401,12 @@ Lower than v5.3-rescored (75.1) because LLM variance produced more repetitive ve
 **RC:** Pipeline drops/skips Projects content, Skills section short, only 2-3 work entries. Bullet count low for available space.
 **Disposition:** **Phase 4 expand-mode** — biggest single lever. Without expand, page_fit dim caps at 50/F.
 
-### #2 (HIGH) — Sprinklr GenAI pair duplicate (DETECTED but NOT prevented)
-**Obs:** "Cut insight time from 7 days to same-day by building GenAI root-cause product at Sprinklr" + "Generated $1.2M TCV by building GenAI root-cause product at Sprinklr" — same achievement, two framings.
+### #2 (HIGH) — TechCo SaaS GenAI pair duplicate (DETECTED but NOT prevented)
+**Obs:** "Cut insight time from 7 days to same-day by building GenAI root-cause product at TechCo SaaS" + "Generated $1.2M TCV by building GenAI root-cause product at TechCo SaaS" — same achievement, two framings.
 **RC:** step_10/12 prompt allows multiple bullets per company without semantic-distinct check.
 **Disposition:** Phase 2.1 (semantic dedup at step_11 rank) — kill duplicate before HTML render.
 
-### #3 (HIGH) — AmEx bullet hallucination
+### #3 (HIGH) — CompA bullet hallucination
 **Obs:** v5.4 produced "Reduced AI-assisted sprint planning adoption time by 80%" — original was "Drove 80% AI-assisted sprint planning adoption" (an adoption rate, not a time reduction).
 **RC:** LLM (Cerebras qwen-235B in v5.4) reframed metric incorrectly — verb-bias regression.
 **Disposition:** Phase 2.2 (stricter prompt: never re-frame metric meaning) + post-validation (compare metric in output bullet vs source nugget).
@@ -684,14 +684,14 @@ hypothesis: de-hardcode keeps quality + makes pipeline domain-agnostic
 **Adversarial test (code-only, no full pipeline):**
 - SWE markdown ("Built Kubernetes (K8s) clusters; Continuous Integration (CI)..."): learned K8s, CI, CD ✓
 - Designer markdown ("Augmented Reality (AR), Web Content Accessibility Guidelines (WCAG)..."): learned AR, WCAG ✓
-- Satvik markdown ("Anti-Money Laundering (AML), Common Data Layer (CDL)..."): learned AML, CDL ✓
+- Jane markdown ("Anti-Money Laundering (AML), Common Data Layer (CDL)..."): learned AML, CDL ✓
 - Orphan ("Used K8s extensively, no expansion defined"): learned NOTHING ✓ (correct graceful)
 
 **Pipeline runs:**
 | Run | Code state | Corpus state | Score |
 |---|---|---|---|
-| v5.7 | hardcoded dict (Satvik bias) | n/a | **B 81.2** (BIASED — luckily Satvik's domain matched dict) |
-| v5.8 | de-hardcode + auto-learn ONLY | empty | **C 79.6** (HONEST — Satvik's resume has no inline expansions, so auto-learn found 0 pairs) |
+| v5.7 | hardcoded dict (Jane bias) | n/a | **B 81.2** (BIASED — luckily Jane's domain matched dict) |
+| v5.8 | de-hardcode + auto-learn ONLY | empty | **C 79.6** (HONEST — Jane's resume has no inline expansions, so auto-learn found 0 pairs) |
 | v5.9 | de-hardcode + corpus seeded with [AML, CDL, TCV] | 3 pairs | **C 76.5** (logbook: "learned 3 acronym pair(s); expanded 3 on first use"; LLM variance regressed verb_diversity 100→66.7 and other dims) |
 
 **Deep insight — LLM variance dominates iteration noise:**
@@ -709,7 +709,7 @@ hypothesis: de-hardcode keeps quality + makes pipeline domain-agnostic
 
 **ROLLBACK candidates: NONE** — the score regression v5.7→v5.8 is principled (removing biased dict means honest assessment for users without inline expansions).
 
-**Cosmetic note:** Satvik's PDF now shows raw "AML" instead of "Anti-Money Laundering (AML)" because his resume doesn't define it inline. To recover the polished look:
+**Cosmetic note:** Jane's PDF now shows raw "AML" instead of "Anti-Money Laundering (AML)" because his resume doesn't define it inline. To recover the polished look:
 - Manual: user adds "(AML)" after "Anti-Money Laundering" once in resume → auto-learn picks up
 - Automated: run `python -m linkright.resume.scripts.enrich_corpus_oracle` once → Oracle gemma3:1b populates corpus → next runs benefit
 - Ongoing: weekly cron entry — corpus self-enriches over time
@@ -720,13 +720,13 @@ hypothesis: de-hardcode keeps quality + makes pipeline domain-agnostic
 | **A** | Phase 6 reproducibility — add `temperature=0.0` + `seed=42` to LLM calls; lock random.seed | 3-run variance ≤2 (was ±5) → real signal | 30 min |
 | B | Multi-sample expansion — introduce 2nd JD (Crypto/SWE) for cross-validation | reveals overfit | 1.5 hrs |
 | C | Phase 3 JD tier-1 keyword injection in Skills + bullet hints | kw 30→55+ → +4-6 | 1.5 hrs |
-| D | Run Component B (Oracle enrichment) against current corpus on a vocabulary-rich sample | corpus grows, Satvik's next runs auto-expand | 15 min |
+| D | Run Component B (Oracle enrichment) against current corpus on a vocabulary-rich sample | corpus grows, Jane's next runs auto-expand | 15 min |
 
 **Baseline updated:** v5.9 = 76.5 / C is new baseline (honest, de-hardcoded).
 
 ### 2026-04-26 — resume — Sanika sample v6 (cross-domain SWE + entity-fidelity guards + metric hallucination found)
 ```yaml
-sample: sanika_microsoft_swe2_compliance (NEW — first non-Satvik run; SWE not PM)
+sample: sanika_microsoft_swe2_compliance (NEW — first non-Jane run; SWE not PM)
 resume: Sanika Jain — Software Engineer @ Oracle + Google intern
 jd: Microsoft Software Engineer 2 — Commerce Platform Compliance
 llm_mode: direct (auto-approve nuggets enabled)
@@ -761,7 +761,7 @@ Source nugget metrics: ['1', '1.5', '10', '100', '1410', '19', '20', '21', '22',
 metric_fidelity dim correctly returned 28.6 (5 of 7 bullets have non-traceable numbers).
 
 **Cross-domain insight:**
-- Non-Satvik resume scored similarly (C 76.4 vs Satvik's recent C 76.5) — pipeline IS domain-generalizable
+- Non-Jane resume scored similarly (C 76.4 vs Jane's recent C 76.5) — pipeline IS domain-generalizable
 - All universal dims (entity, near_dup, structure, contrast, tense, etc.) scored 100
 - Domain-quality dims (keyword, metric_density, page_fit) regressed similarly
 
@@ -788,7 +788,7 @@ metric_fidelity dim correctly returned 28.6 (5 of 7 bullets have non-traceable n
 | B | Stronger PHASE_4A prompt rules: "STRICT: every number in your bullet MUST appear in nugget pool. Hallucinated numbers = REJECTED" | maybe +2-3 (prompt-only) | 15 min |
 | C | Drop high-school entries from Education when total experience > 1 yr (Sanika has 2 schools rendered) | structure_integrity stays, cleaner output | 30 min |
 
-**Baseline note:** Sanika v6 = 76.4 C (first cross-domain validation). Satvik most recent = 76.5 C. Within ±5 of each other → pipeline IS domain-agnostic but fabrication issue persists.
+**Baseline note:** Sanika v6 = 76.4 C (first cross-domain validation). Jane most recent = 76.5 C. Within ±5 of each other → pipeline IS domain-agnostic but fabrication issue persists.
 
 ### 2026-04-26 — resume — Sanika v7 (bullet count cap fix)
 ```yaml
@@ -876,7 +876,7 @@ hypothesis: replace "skip entirely" with "qualitative fallback" — recover v8's
 **Predicted Δ:** +5-15pp coverage_pct.
 
 **Test setup:**
-- Resume: Satvik's PDF (cached profile, fastembed 384-dim, 17 nuggets locked)
+- Resume: Jane's PDF (cached profile, fastembed 384-dim, 17 nuggets locked)
 - JD: JPMorgan Chase PM (`linkedin_jobs.json[0]`)
 - Backend: claude CLI agent-mode
 - n=3 each (baseline at 0.5, H1 at 0.4)

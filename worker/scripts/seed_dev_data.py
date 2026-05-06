@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 DEV_USER_ID = "c2305b3f-f934-4955-8c71-1875d7e45c64"
-CAREER_PROFILE_PATH = Path(__file__).resolve().parent.parent.parent.parent / "linkright" / "satvik_jain_career_profile.md"
+CAREER_PROFILE_PATH = Path(__file__).resolve().parent.parent.parent.parent / "linkright" / "jane_doe_career_profile.md"
 
 
 def chunk_text(text: str, max_chunk: int = 1000, hard_limit: int = 1500) -> list[str]:

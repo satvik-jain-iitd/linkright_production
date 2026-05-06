@@ -454,7 +454,7 @@ Given an input paragraph:
 # WORKED EXAMPLES — study these
 
 INPUT (long, 200 chars):
-  "In my role as Senior Product Manager at American Express, I <b>architected an AML
+  "In my role as Senior Product Manager at Acme Bank, I <b>architected an AML
   risk engine</b> for 100M+ accounts across 40+ markets, cutting <b>speed-to-market
   by 70%</b> through modular design patterns."
 

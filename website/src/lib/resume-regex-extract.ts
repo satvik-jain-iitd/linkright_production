@@ -86,16 +86,16 @@ const SKILL_SEEDS = new Set(
 );
 
 // Common job-title / role suffix words that sometimes follow the name
-// on line 1. Stripping them keeps the extracted name clean ("Satvik Jain"
-// not "Satvik Jain PRODUCT MANAGER").
+// on line 1. Stripping them keeps the extracted name clean ("Jane Doe"
+// not "Jane Doe PRODUCT MANAGER").
 const ROLE_SUFFIX_RE =
   /\s+(?:product\s+manager|senior\s+product\s+manager|principal\s+pm|group\s+pm|pm|engineer|software\s+engineer|developer|designer|analyst|consultant|lead|director|head\s+of\s+\w+|founder|co-?founder|cto|ceo|cfo|coo|vp|svp|curriculum\s+\w+|resume|cv)\b.*$/i;
 
 function firstLineAsName(raw: string): string {
   const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   let candidate = lines[0] ?? "";
-  // Strip role/title suffix (case-insensitive) so "Satvik Jain PRODUCT MANAGER"
-  // becomes "Satvik Jain".
+  // Strip role/title suffix (case-insensitive) so "Jane Doe PRODUCT MANAGER"
+  // becomes "Jane Doe".
   candidate = candidate.replace(ROLE_SUFFIX_RE, "").trim();
   const words = candidate.split(/\s+/);
   if (

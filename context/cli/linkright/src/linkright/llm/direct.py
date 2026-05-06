@@ -1243,7 +1243,7 @@ def chat_with_fallback(
     # 2026-05-01: Gemini block MOVED to position 6 (just before OpenRouter) —
     # Gemini Flash Lite is PAID ($0.075/$0.30 per 1M tok), so we exhaust all
     # FREE providers first (Cerebras → SambaNova → Cloudflare → Z.ai) before
-    # incurring any cost. Per Satvik instruction: "gemini last me use krna wo paid hai abhi".
+    # incurring any cost. Per Jane instruction: "gemini last me use krna wo paid hai abhi".
 
     # Tertiary: Cerebras qwen-235B (skip if still in cascade cap or cooling)
     if providers_tried < _CASCADE_MAX_PROVIDERS and not _is_cooling("cerebras"):
@@ -1410,7 +1410,7 @@ def chat_with_fallback(
 
 TIER_POLICY: dict[str, list[str]] = {
     # 2026-05-01 small-first principle: smaller models first (better RPM/TPD
-    # availability), upgrade to 70B only when quality demands it. Per Satvik:
+    # availability), upgrade to 70B only when quality demands it. Per Jane:
     # "preference small models pr hi rakho unless usse quality na aa rhi ho".
     "A": ["groq_8b", "cerebras_8b", "cloudflare_3b", "cloudflare_8b"],
     "B": ["groq_8b", "cerebras_8b", "cloudflare_8b", "groq_70b", "cloudflare_70b"],

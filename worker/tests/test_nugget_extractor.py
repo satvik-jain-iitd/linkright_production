@@ -46,7 +46,7 @@ _SAMPLE_NUGGET_A = {
     "importance": "P0",
     "factuality": "fact",
     "temporality": "past",
-    "company": "American Express",
+    "company": "Acme Bank",
     "role": "Sr Associate PM",
     "tags": ["leadership", "ML", "risk"],
     "leadership_signal": "team_lead",
@@ -56,7 +56,7 @@ _SAMPLE_NUGGET_B = {
     "nugget_text": "Relocated to New Delhi for career growth",
     "question": "Why did you relocate?",
     "alt_questions": ["Where are you based?"],
-    "answer": "Relocated from Pune to New Delhi in 2022 to join American Express and grow in FinTech",
+    "answer": "Relocated from Pune to New Delhi in 2022 to join Acme Bank and grow in FinTech",
     "primary_layer": "B",
     "section_type": None,
     "life_domain": "Logistics",
@@ -127,7 +127,7 @@ def _groq_response(nuggets: list[dict]) -> dict:
 
 # Career text that fits in one batch (< 3000 chars)
 _LONG_TEXT = (
-    "American Express — New Delhi. Senior Associate Product Manager, Credit Risk. "
+    "Acme Bank — New Delhi. Senior Associate Product Manager, Credit Risk. "
     "Led 18-member cross-functional team to redesign risk scoring pipeline, reducing "
     "errors from 18% to 2%. Drove GenAI root-cause analyzer from 0 to 85% coverage "
     "across 100M+ accounts. Owned DCLA feature shipped in 3 sprints."
@@ -155,9 +155,9 @@ def test_extraction_returns_list(httpx_mock, fake_sb):
 
 @pytest.mark.httpx_mock(assert_all_responses_were_requested=False)
 def test_extraction_count_15_to_25(httpx_mock, fake_sb):
-    """Satvik fixture text → Groq returns 20 nuggets → list has 15-25 nuggets."""
+    """Jane fixture text → Groq returns 20 nuggets → list has 15-25 nuggets."""
     fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
-    with open(os.path.join(fixtures_dir, "career_satvik.txt"), encoding="utf-8") as fh:
+    with open(os.path.join(fixtures_dir, "career_sample.txt"), encoding="utf-8") as fh:
         career_text = fh.read()
 
     # Build 20 nuggets — satvik text splits into 2 batches, mock both

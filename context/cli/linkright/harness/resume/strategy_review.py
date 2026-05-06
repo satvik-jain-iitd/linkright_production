@@ -1,6 +1,6 @@
 """Strategy human-in-the-loop review — Truth Engine Layer 2 (PRE-generation).
 
-Per Satvik 2026-05-02 (memory feedback_strategy_human_in_the_loop):
+Per Jane 2026-05-02 (memory feedback_strategy_human_in_the_loop):
 "the strategy step where outline is decided is the MOST CRUCIAL PHASE,
 align with user on all the things before building out the resume,
 dimensions, no of bullets, what kind of experience will be showcased by
@@ -67,7 +67,7 @@ def run_strategy_review(run_id: Optional[str] = None) -> dict:
         f"[bold cyan]🎯 Strategy Review — Truth Engine Layer 2 (PRE-generation)[/]\n"
         f"[dim]Run: {run_dir.name}[/]\n"
         f"Review the bullet plan BEFORE generation. Per-role: count + content + order.\n"
-        f"Per Satvik 2026-05-02: 'the strategy step where outline is decided is the\n"
+        f"Per Jane 2026-05-02: 'the strategy step where outline is decided is the\n"
         f"MOST CRUCIAL PHASE.'",
         border_style="cyan",
     ))

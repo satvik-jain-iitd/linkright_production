@@ -1,6 +1,6 @@
 """Module 1: Embedding retrieval quality diagnostics.
 
-For each target JD × 2 company scopes (unscoped, American Express),
+For each target JD × 2 company scopes (unscoped, Acme Bank),
 call hybrid_retrieve() and inspect the results:
 - Method tier (hybrid / bm25_only / fts_fallback / raw_text_fallback)
 - Result count
@@ -22,9 +22,9 @@ import pytest
 from app.tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
 
 
-# Company scopes tested per JD. "American Express" chosen because it's Satvik's
+# Company scopes tested per JD. "Acme Bank" chosen because it's Jane's
 # most recent role (9 nuggets per pre-flight) — representative scope test.
-_COMPANY_SCOPES = [None, "American Express"]
+_COMPANY_SCOPES = [None, "Acme Bank"]
 
 
 def _tokenize(text: str) -> set[str]:
@@ -95,7 +95,7 @@ async def test_retrieval_quality_per_jd(
         f.write(f"**Company scopes per JD:** {[s or 'unscoped' for s in _COMPANY_SCOPES]}  \n\n")
 
         # --- Section 0: Nugget Catalog ---
-        f.write("## 0. Nugget Catalog (what's available in Satvik's career_nuggets)\n\n")
+        f.write("## 0. Nugget Catalog (what's available in Jane's career_nuggets)\n\n")
         by_co: dict[str, list[dict]] = {}
         for n in all_nuggets:
             by_co.setdefault(n.get("company") or "—unscoped—", []).append(n)

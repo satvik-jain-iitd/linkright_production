@@ -2,7 +2,7 @@
 
 Uses unpdf (same library as production at repo/website) via a Node subprocess.
 pypdf (previous extractor) was replaced because it corrupted bold-rendered
-acronyms on Satvik's PDF (7 patterns: AM L, M anager, M L, M CP, CM S, HTM L,
+acronyms on Jane's PDF (7 patterns: AM L, M anager, M L, M CP, CM S, HTM L,
 M usic). unpdf parity test confirmed 0 corruption on the same PDF.
 
 Fix reference: F03 (vision.md RCA line 3232). bd issue: linkright-dg5.

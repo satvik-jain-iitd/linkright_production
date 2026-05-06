@@ -8,7 +8,7 @@ Cover letter branding (`--cover-letter <md-path>`) renders an additional
 `cover_letter_branded.pdf` next to the source markdown. Same color spec —
 metric bolds get colored, all other text stays black.
 
-Per Satvik design spec 2026-05-03 (memory: feedback_brand_design_spec_2026_05_03):
+Per Jane design spec 2026-05-03 (memory: feedback_brand_design_spec_2026_05_03):
 - Default = pure black-and-white. No tinted backgrounds, no colored panels.
 - Font color = ALWAYS black. Body, headings, dates, locations, bullets — black.
 - Background = ALWAYS white.

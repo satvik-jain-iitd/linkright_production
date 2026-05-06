@@ -9,7 +9,7 @@ function Screen12_Dashboard() {
         <div style={{ padding: "32px 48px 56px", maxWidth: 1200, marginInline: "auto" }}>
           {/* Welcome */}
           <div style={{ marginBottom: 28 }}>
-            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.015em", margin: 0 }}>Good morning, Satvik.</h1>
+            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.015em", margin: 0 }}>Good morning, Jane.</h1>
             <p style={{ color: "var(--color-muted)", margin: "6px 0 0", fontSize: 14 }}>5 new matches since Tuesday.</p>
           </div>
 
@@ -94,7 +94,7 @@ function Screen12_Dashboard() {
                     <div className="iconTile iconTile-sage"><Icon d={I.bolt}/></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>Product-sense warmup · 8 questions</div>
-                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>Tailored to your Amex payments work. 12 minutes.</div>
+                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>Tailored to your Acme Bank payments work. 12 minutes.</div>
                     </div>
                     <button className="pill pill-ghost pill-sm">Start</button>
                   </div>
@@ -102,7 +102,7 @@ function Screen12_Dashboard() {
                     <div className="iconTile iconTile-sage"><Icon d={I.mic}/></div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>Record a "Tell me about yourself" take</div>
-                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>3 previous takes. Last feedback: trim the Sprinklr arc by 20s.</div>
+                      <div style={{ fontSize: 12, color: "var(--color-muted)" }}>3 previous takes. Last feedback: trim the TechCo SaaS arc by 20s.</div>
                     </div>
                     <button className="pill pill-ghost pill-sm">Record</button>
                   </div>
@@ -350,9 +350,9 @@ function Screen16_InsightsBrowser() {
   const filters = ["Wins", "Learnings", "Takes", "Failures", "Shipped"];
   const insights = [
     { c: "teal", src: "from your diary · 3 days ago", t: "The reason-code drop-off insight", d: "Users couldn't map their issue to our 14-option taxonomy. Compressed it to three, completion jumped 18%.", type: "Win" },
-    { c: "gold", src: "from your Amex role", t: "What Walmart taught me about escalations", d: "3 weeks embedded changed how I think about legal UX forever. A policy engine is a language translator, not a rulebook.", type: "Learning" },
+    { c: "gold", src: "from your Acme Bank role", t: "What Walmart taught me about escalations", d: "3 weeks embedded changed how I think about legal UX forever. A policy engine is a language translator, not a rulebook.", type: "Learning" },
     { c: "pink", src: "from your diary · yesterday", t: "My roadmap template is broken", d: "Realised today we're tracking outputs, not bets. Rewriting for Q2.", type: "Take" },
-    { c: "purple", src: "from your Sprinklr role", t: "Why 6 of 36 enterprise shipments slipped", d: "Every one missed discovery depth. The pattern is obvious in retrospect.", type: "Failure" },
+    { c: "purple", src: "from your TechCo SaaS role", t: "Why 6 of 36 enterprise shipments slipped", d: "Every one missed discovery depth. The pattern is obvious in retrospect.", type: "Failure" },
     { c: "teal", src: "shipped 2 weeks ago", t: "Refund SLA automation is live", d: "5 days → 8 hours across 14,200 merchants. Three weeks from spec to ship.", type: "Shipped" },
     { c: "gold", src: "from your diary · 5 days ago", t: "Interview answer I keep using", d: "The 'why product vs. eng' question. I have a good answer now, built over 20 interviews.", type: "Learning" },
   ];
@@ -417,7 +417,7 @@ function Screen17_Compose() {
                 <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 14, borderBottom: "1px solid var(--color-border)" }}>
                   <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--color-accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>SJ</div>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>Satvik Jain</div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>Jane Doe</div>
                     <div style={{ fontSize: 12, color: "var(--color-muted)" }}>Senior PM · posts to LinkedIn</div>
                   </div>
                 </div>
@@ -478,8 +478,8 @@ The hardest product decision is usually: what do we remove?`} />
                   <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                     <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--color-accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 }}>SJ</div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>Satvik Jain <span style={{ color: "#666", fontWeight: 400, fontSize: 11 }}>· You</span></div>
-                      <div style={{ fontSize: 11, color: "#666" }}>Senior PM · American Express</div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Jane Doe <span style={{ color: "#666", fontWeight: 400, fontSize: 11 }}>· You</span></div>
+                      <div style={{ fontSize: 11, color: "#666" }}>Senior PM · Acme Bank</div>
                       <div style={{ fontSize: 11, color: "#666" }}>Now · 🌐</div>
                     </div>
                   </div>
@@ -658,7 +658,7 @@ function Screen20_Profile() {
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#E2E8F0", color: "#334155", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 22 }}>SJ</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>Satvik Jain</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>Jane Doe</div>
                 <div style={{ fontSize: 13, color: "var(--color-muted)", marginTop: 2 }}>satvik.jain@gmail.com · Pro plan</div>
                 <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
                   <span className="chip">47 highlights in your memory</span>
@@ -691,7 +691,7 @@ function Screen20_Profile() {
             <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 16px" }}>Connected accounts</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {[
-                { icon: I.linkedin, name: "LinkedIn", st: "Connected · linkedin.com/in/satvikj", c: "purple", on: true },
+                { icon: I.linkedin, name: "LinkedIn", st: "Connected · linkedin.com/in/janedoe-example", c: "purple", on: true },
                 { icon: I.github, name: "GitHub", st: "Connected · for Pages hosting", c: "purple", on: true },
                 { icon: I.globe, name: "Personal website", st: "Not connected", c: "outline", on: false },
               ].map(r => (

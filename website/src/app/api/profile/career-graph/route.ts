@@ -265,7 +265,7 @@ export async function GET() {
     }
   }
 
-  // Build stats — F-12: dedupe by distinct company name so Sprinklr (3 roles)
+  // Build stats — F-12: dedupe by distinct company name so TechCo SaaS (3 roles)
   // counts once, not thrice. Keep per-(company,role) `experiences` for
   // downstream code that needs stint granularity; the UI uses
   // `distinct_companies` + `companies[]` (role-aggregated).

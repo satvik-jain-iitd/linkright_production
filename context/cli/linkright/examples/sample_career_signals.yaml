@@ -1,12 +1,12 @@
 metadata:
-  user: "Satvik Jain"
-  email: "satvik.jain@iitdalumni.com"
-  phone: "+91-7678296693"
-  linkedin_url: "https://linkedin.com/in/satvikjain"
+  user: "Jane Doe"
+  email: "jane.doe@example.com"
+  phone: "+1-555-0123"
+  linkedin_url: "https://linkedin.com/in/janedoe-example"
   tagline: "Product Manager"
-  summary: "Product Manager with 3.5+ years owning business outcomes at enterprise SaaS scale. Led segment-level delivery across 100M+ accounts & 40+ markets (Amex) & 1,500+ SaaS clients (Sprinklr). Builds & mentors product teams. B.Tech Civil Engineering, IIT Delhi."
+  summary: "Product Manager with 3.5+ years owning business outcomes at enterprise SaaS scale. Led segment-level delivery across 100M+ accounts & 40+ markets (Acme Bank) & 1,500+ SaaS clients (TechCo SaaS). Builds & mentors product teams. B.Tech Civil Engineering, leading engineering institute."
   profession: "product-manager"
-  region: "India"
+  region: "Global"
   yoe_override: 4
 
 static:
@@ -42,17 +42,17 @@ static:
   education:
     degree: "B.Tech"
     field: "Civil Engineering"
-    institution: "Indian Institute of Technology Delhi"
+    institution: "Leading Engineering Institute"
     year: "2017 – 2021"
   achievements:
-    - "Secured Top 0.002% with AIR-2446 in JEE Advanced 2017, outperforming 12 lakh+ candidates to join IIT Delhi"
-    - "Secured Top 1.5% with AIR-1463 in GATE 2022 Engineering Exam, competing with 100K+ candidates from across India"
-    - "Secured Rank 1 in Chhatarpur District with 94.2% marks in Class 12th MPBSE 2017"
+    - "Secured Top 0.002% with rank 2446 in national engineering entrance exam, outperforming 1.2M+ candidates"
+    - "Secured Top 1.5% with rank 1463 in graduate engineering aptitude exam, competing with 100K+ candidates"
+    - "Secured Rank 1 in district with 94.2% marks in high-school board exam"
   voluntary_work:
-    - org: "Sukha Education"
+    - org: "Sample Education NGO"
       role: "Strategy Consulting"
       tenure: "01/2025 – 04/2025"
-      description: "Designed digital transformation strategy for education NGO in Chennai, saving ₹60K annually across 50+ volunteers"
+      description: "Designed digital transformation strategy for an education NGO, saving $720 annually across 50+ volunteers"
   interests:
     - "AI-Music Creation & Singing"
     - "Co-creating with AI"
@@ -60,8 +60,8 @@ static:
     - "Product Strategy AI"
 
 signals:
-  - id: "amex"
-    company: "American Express"
+  - id: "acme_bank"
+    company: "Acme Bank"
     role: "Senior Associate Product Manager"
     tenure: "07/2024 – Present"
     signal_type: "job"
@@ -79,7 +79,7 @@ signals:
       - raw: "Mentored 2 POs on zero-to-one execution; hired and now manage UX designer through 12-round competitive selection"
         fit_tags: ["mentoring", "hiring", "team-building"]
         signal_strength: 8
-      - raw: "Captained 8-member team to rank #21 of 400+ teams in Amex Growth Hack, building Rally AI meeting intelligence bot"
+      - raw: "Captained 8-member team to rank 21 of 400+ teams in internal Growth Hack, building meeting-intelligence bot"
         fit_tags: ["AI", "hackathon", "leadership", "innovation"]
         signal_strength: 8
     context:
@@ -87,8 +87,8 @@ signals:
       scope: "global"
       tech_stack: ["SAFe", "JIRA", "SQL", "Figma", "Python"]
 
-  - id: "sprinklr"
-    company: "Sprinklr"
+  - id: "techco_saas"
+    company: "TechCo SaaS"
     role: "Senior Product Analyst"
     tenure: "04/2022 – 07/2024"
     signal_type: "job"
@@ -97,10 +97,10 @@ signals:
       - raw: "Grew Use Case Hub adoption from 35% to 85% across 1,500+ SaaS clients, enabling self-serve setup for 15 industries"
         fit_tags: ["adoption", "SaaS", "self-serve", "metrics"]
         signal_strength: 10
-      - raw: "Built GenAI root-cause product for Walmart, analyzing 100K+ contacts to cut time-to-insight from 7 days to same-day"
+      - raw: "Built GenAI root-cause product for major retailer, analyzing 100K+ contacts to cut time-to-insight from 7 days to same-day"
         fit_tags: ["GenAI", "ML", "analytics", "enterprise"]
         signal_strength: 9
-      - raw: "Deployed Insights for Qatar PM's office via NLP across 40 ministries; redesigned Sharek app, boosting retention to 55%"
+      - raw: "Deployed Insights for a national government office via NLP across 40 ministries; redesigned a citizen-services app, boosting retention to 55%"
         fit_tags: ["NLP", "government", "retention", "mobile"]
         signal_strength: 9
       - raw: "Scaled team from 6 to 14 in 3 months with structured reverse-KT onboarding, maintaining delivery across 15 industries"

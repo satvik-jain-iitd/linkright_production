@@ -43,7 +43,7 @@ SCHEMA_VERSION = 1
 # resume_hash, prompt_hash, deterministic) — same conditions only.
 #
 # Deterministic and non-deterministic runs are kept in SEPARATE buckets per
-# Satvik's 2026-05-01 reminder: temp=0 produces formulaic outputs that don't
+# Jane's 2026-05-01 reminder: temp=0 produces formulaic outputs that don't
 # replicate at temp=0.3, so cross-bucket compares would be apples-vs-oranges.
 
 _HISTORY_FILENAME = "telemetry_history.jsonl"

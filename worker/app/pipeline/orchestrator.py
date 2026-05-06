@@ -217,7 +217,7 @@ _PREFIX_RE = _re.compile(
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 # Keywords that signal a section contains professional experience or skills.
-# v4: removed hardcoded company names (sprinklr, amex, etc.) — now generic.
+# v4: removed hardcoded company names (techco_saas, amex, etc.) — now generic.
 _PROF_KEYWORDS = {
     "experience", "work", "role", "manager", "engineer", "analyst",
     "consultant", "associate", "intern", "developer", "lead", "director",
@@ -938,8 +938,8 @@ def _extract_company_keys(budget: dict) -> list[str]:
 
     Handles LLM format variations:
       - "company_1_total", "company_2_total" (canonical)
-      - "American Express_total", "Flipkart_total" (real names + _total)
-      - "American Express", "Flipkart" (just company names, no suffix)
+      - "Acme Bank_total", "Flipkart_total" (real names + _total)
+      - "Acme Bank", "Flipkart" (just company names, no suffix)
     """
     NON_COMPANY = {"awards", "voluntary", "awards_total", "voluntary_total"}
     # Try canonical format first
@@ -2362,7 +2362,7 @@ async def phase_4b_ranking(ctx: PipelineContext, sb: Client):
     # Step 3b (v0.1.4) — defensive semantic dedup. Within each company, walk
     # pairs in BRS-descending order; if a lower-BRS bullet near-duplicates an
     # already-kept higher-BRS sibling, drop the lower one. Catches the
-    # Sprinklr-style "13% to 9% churn" pair that was visibly duplicated in
+    # TechCo SaaS-style "13% to 9% churn" pair that was visibly duplicated in
     # earlier outputs. Uses the composite Jaccard + shared-metrics detector.
     try:
         from ._dedup import is_near_duplicate as _is_near_dup_4b

@@ -132,7 +132,7 @@ def test_linkedin_in_profile_path_blocked():
     """LinkedIn user profile /in/<user> blocked by /in/ pattern in BLOCKED_PATH_PATTERNS."""
     cap = _make_capture(
         source="linkedin",
-        job_url="https://www.linkedin.com/in/satvik-jain/",
+        job_url="https://www.linkedin.com/in/janedoe-example/",
     )
     blocked, reason = is_blocked(cap)
     assert blocked

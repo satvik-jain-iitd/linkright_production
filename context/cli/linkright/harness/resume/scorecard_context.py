@@ -331,7 +331,7 @@ def build_context(run_dir: Path) -> dict[str, Any]:
         total_mm += n_entries * (ELEM_HEIGHTS["entry_header"] + ELEM_HEIGHTS["entry_subhead"] + ELEM_HEIGHTS["entry_spacing"])
         # Bullets — count visual lines per bullet (chars / 120, min 1).
         # 2026-05-02 corrected calibration: CHARS_PER_LINE = 120 to match the
-        # actual width target band (108-120c). Per Satvik 2026-05-02 evening
+        # actual width target band (108-120c). Per Jane 2026-05-02 evening
         # direction (memory `feedback_width_band_one_line_per_bullet`):
         # space-saving comes from OPTIMIZING bullets to fit 1 line each, NOT
         # from dropping content. An in-band bullet (108-120c) IS 1 line.

@@ -10,21 +10,21 @@ export const TEST_PASSWORD = 'TestPass123!';
 export const TARGET_ROLE = 'Product Manager';
 
 // Real resume text — used when PDF upload fails (which is a known bug)
-export const RESUME_TEXT = `Satvik Jain PRODUCT MANAGER
-Phone: +91-7678296693 Email: satvik.jain@iitdalumni.com LinkedIn: Satvik Jain
+export const RESUME_TEXT = `Jane Doe PRODUCT MANAGER
+Phone: +1-555-0123 Email: jane.doe@example.com LinkedIn: Jane Doe
 Professional Summary
 Product Manager with 3.5+ years owning business outcomes at enterprise SaaS scale. Led segment-level delivery across 100M+
-accounts & 40+ markets (Amex) & 1,500+ SaaS clients (Sprinklr). Builds & mentors product teams. B.Tech Civil Engineering, IIT
+accounts & 40+ markets (Acme Bank) & 1,500+ SaaS clients (TechCo SaaS). Builds & mentors product teams. B.Tech Civil Engineering, IIT
 Delhi.
 Professional Experience
-American Express 07/2024 – Present
+Acme Bank 07/2024 – Present
 Senior Associate Product Manager
 • Led 18-member team to deliver AML risk engine MVP-1 across 100M+ accounts in 1 year, winning Leadership Award
 • Drove 20+ UX research sessions with compliance analysts across 6 regions, designing 3 AML capability UIs end-to-end
 • Shipped Asset Manager, rule builder, and sandbox versioning across 40+ markets, cutting score errors from 18% to 2%
 • Mentored 2 POs on zero-to-one execution; hired and now manage UX designer through 12-round competitive selection
-• Captained 8-member team to rank #21 of 400+ teams in Amex Growth Hack, building Rally AI meeting intelligence bot
-Sprinklr 04/2022 – 07/2024
+• Captained 8-member team to rank #21 of 400+ teams in Acme Bank Growth Hack, building Rally AI meeting intelligence bot
+TechCo SaaS 04/2022 – 07/2024
 Senior Product Analyst
 • Grew Use Case Hub adoption from 35% to 85% across 1,500+ SaaS clients, enabling self-serve setup for 15 industries
 • Built GenAI root-cause product for Walmart, analyzing 100K+ contacts to cut time-to-insight from 7 days to same-day
@@ -35,7 +35,7 @@ Product Strategy, Roadmapping, PRDs, OKR & KPI Definition, Feature Prioritizatio
 Testing, Figma, UI/UX, UX Research, SAFe, Agile, JIRA, Python, APIs, System Design, AI/ML, GTM Strategy, Market Research,
 Competitive Analysis, Business Case & Financial Modeling, Stakeholder Management, Cross-Functional Collaboration, PLM
 Voluntary Work
-Sukha Education, Strategy Consulting 01/2025 – 04/2025
+Sample NGO, Strategy Consulting 01/2025 – 04/2025
 • Designed digital transformation strategy for education NGO in Chennai, saving ₹60K annually across 50+ volunteers
 Education
 Indian Institute of Technology Delhi Bachelors in Technology, Civil Engineering

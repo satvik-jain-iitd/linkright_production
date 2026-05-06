@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Real-world "does it work?" test with Satvik's actual artifacts:
+// Real-world "does it work?" test with Jane's actual artifacts:
 //  - PDF resume         → /api/onboarding/parse-resume   (quality of parse)
 //  - Career profile .md → /api/resume/start career_text   (rich context)
 //  - Wing Assistant JD  → /api/jd/analyze + /api/resume/start (match + generation)
@@ -17,14 +17,14 @@ const JD_PATH = 'tests/fixtures/wing-assistant-jd.txt';
 
 test.describe.configure({ mode: 'serial' });
 
-test.describe('Real-world personalization — Satvik + Wing Assistant JD', () => {
+test.describe('Real-world personalization — Jane + Wing Assistant JD', () => {
   test.use({ storageState: 'playwright/.auth/user.json' });
 
   test.beforeAll(async () => {
     await fs.mkdir(OUT_DIR, { recursive: true });
   });
 
-  test('1. Parse Satvik PDF via /api/onboarding/parse-resume', async ({ request }) => {
+  test('1. Parse Jane PDF via /api/onboarding/parse-resume', async ({ request }) => {
     const buf = await fs.readFile(PDF_PATH);
     const res = await request.post('/api/onboarding/parse-resume', {
       multipart: {
@@ -38,7 +38,7 @@ test.describe('Real-world personalization — Satvik + Wing Assistant JD', () =>
 
     // Write readable MD FIRST so failures still capture output
     const md = [
-      '# Parse-resume quality — Satvik real PDF',
+      '# Parse-resume quality — Jane real PDF',
       '',
       `**HTTP:** ${status}`,
       `**Name:** ${parsed.full_name}`,
@@ -166,7 +166,7 @@ test.describe('Real-world personalization — Satvik + Wing Assistant JD', () =>
     const summary = (j.summary ?? j.result_summary ?? null) as unknown;
 
     const md = [
-      '# Resume generation — Satvik for Wing Assistant Lead PM',
+      '# Resume generation — Jane for Wing Assistant Lead PM',
       '',
       `**Job ID:** ${jobId}`,
       `**Final status:** ${j.status}`,

@@ -1,7 +1,7 @@
 import { abortSignalAny } from "./abort-signal-any";
 // Client for the Oracle FastAPI backend's /lifeos/generate + /lifeos/rewrite
 // endpoints. Both wrap a local Ollama gemma3:1b (as of 2026-04-22) running on
-// Satvik's Oracle Cloud VPS — free, no rate limits, no per-token cost.
+// Jane's Oracle Cloud VPS — free, no rate limits, no per-token cost.
 //
 // Use as the cheapest first-try for tasks where a 1B model is good enough
 // (resume parsing, bullet cleanup). Fall back to Groq / Gemini when the

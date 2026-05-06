@@ -105,7 +105,7 @@ def _s_metric_density(ctx: dict[str, Any]) -> float:
 
 
 def _s_page_fit(ctx: dict[str, Any]) -> float:
-    """Phase 1.2 — score ~90% utilization as ideal per Satvik 2026-05-02 update.
+    """Phase 1.2 — score ~90% utilization as ideal per Jane 2026-05-02 update.
 
     User's words 2026-05-02: "lets target 90% height instead of 95% that way
     we will have breathing space at the bottom of the resume". IDEAL band
@@ -185,8 +185,8 @@ def _bullet_metrics(s: str) -> set:
     """Extract numeric tokens (e.g., '13%', '9%', '100M', '$1.2M', '36') from a bullet.
 
     Used to catch paraphrased duplicates that share the same metrics
-    (Sprinklr v5.3 had two bullets both citing '13% to 9% churn' with
-    different wording — Jaccard alone missed them, but metric overlap caught them).
+    (e.g. two bullets both citing '13% to 9% churn' with different wording —
+    Jaccard alone missed them, but metric overlap caught them).
     """
     return {m.group(0).strip() for m in _NUMERIC_TOKEN_RE.finditer(s.lower())}
 

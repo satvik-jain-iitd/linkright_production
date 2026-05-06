@@ -1,6 +1,6 @@
 """Interactive metric-fill — truth-engine for missing/weak bullet metrics.
 
-Per Satvik 2026-05-02: bullets lacking strong quantifiable claims get
+Per Jane 2026-05-02: bullets lacking strong quantifiable claims get
 PLACEHOLDERS (X%, Y$M, Z hours) auto-inserted, then surfaced to the user
 for explicit review. Placeholders are NOT fabrication — they openly signal
 "value pending; user supplies offline" (a common pattern for NDA/privacy).

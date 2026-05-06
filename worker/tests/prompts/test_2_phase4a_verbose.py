@@ -1,6 +1,6 @@
 """Module 2: Phase 4a verbose paragraph prompt tests.
 
-Tests the current vs proposed Phase 4a prompt on real Satvik data:
+Tests the current vs proposed Phase 4a prompt on real Jane data:
 - Uses retrieval results from Module 1 (cached in session)
 - Generates 4 paragraphs per JD × company using both prompt variants
 - Evaluates: hallucination, JD keyword coverage, rigid-formula detection
@@ -18,7 +18,7 @@ import pytest
 from app.tools.hybrid_retrieval import hybrid_retrieve, format_nuggets_for_llm
 
 
-# Hallucinations specific to Satvik's real profile (he's 3 yrs exp, in India)
+# Hallucinations specific to Jane's real profile (he's 3 yrs exp, in India)
 HALLUCINATION_PATTERNS = [
     (r"\b\d+\+?\s*years?\b", "years claim"),
     (r"\bNew York\b", "fabricated location"),
@@ -110,8 +110,8 @@ async def test_phase4a_per_jd(
     """A/B test current vs proposed Phase 4a prompt."""
     report_path = report_writer("phase_4a_comparison")
 
-    # Pick one company to focus on — American Express has 9 nuggets, rich context
-    company = "American Express"
+    # Pick one company to focus on — Acme Bank has 9 nuggets, rich context
+    company = "Acme Bank"
     company_title = "Senior Associate Product Manager"
     company_dates = "Jul 2024 – Present"
     bullet_count = 4
