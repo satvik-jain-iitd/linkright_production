@@ -128,6 +128,7 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
             must_be_file=True,
             flag_hint="-r/--resume",
         )
+    _temp_jd_path: Path | None = None
     if jd_path is None:
         from linkright.prompts import prompt_for_jd_input
         kind, value = prompt_for_jd_input(flag_hint="-j/--jd")
@@ -139,6 +140,7 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
             tmp.write(value)
             tmp.close()
             jd_path = Path(tmp.name)
+            _temp_jd_path = jd_path  # track for cleanup after copy below
             click.echo(f"  Staged pasted JD → {jd_path}")
 
     _started_at = time.monotonic()
@@ -167,6 +169,13 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     else:
         shutil.copy(resume_path, run_dir / "inputs" / resume_path.name)
     shutil.copy(jd_path, run_dir / "inputs" / "jd.md")
+    if _temp_jd_path is not None:
+        # Clean up the prompt-staged temp file — the canonical copy lives
+        # under run_dir/inputs/ now.
+        try:
+            _temp_jd_path.unlink()
+        except OSError:
+            pass
 
     # Profile-cache pre-populate: if ~/.linkright/profile/ exists AND its
     # embedder tier matches the active tier, copy the per-step artifacts
@@ -322,6 +331,7 @@ def score(pdf_path: Path | None, jd_path: Path | None) -> None:
             must_be_file=True,
             flag_hint="--pdf",
         )
+    _temp_jd_path: Path | None = None
     if jd_path is None:
         from linkright.prompts import prompt_for_jd_input
         kind, value = prompt_for_jd_input(flag_hint="--jd")
@@ -333,9 +343,15 @@ def score(pdf_path: Path | None, jd_path: Path | None) -> None:
             tmp.write(value)
             tmp.close()
             jd_path = Path(tmp.name)
+            _temp_jd_path = jd_path
 
     click.echo(f"Scorecard stub — pdf={pdf_path.name}, jd={jd_path.name}")
     click.echo("Resume scorecard harness: harness/resume/ (to be wired).")
+    if _temp_jd_path is not None:
+        try:
+            _temp_jd_path.unlink()
+        except OSError:
+            pass
 
 
 @resume_group.command("batch")

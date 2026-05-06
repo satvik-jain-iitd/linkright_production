@@ -61,14 +61,16 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
     """
     profile_dir = _profile_dir()
 
-    # If no source flag given, prompt interactively (file / paste / folder).
+    # If no source flag given, prompt interactively (file / folder).
+    # The `--paste` flag still exists as a stub but is NOT surfaced in
+    # the prompt — the downstream parser is not wired yet, so offering
+    # paste interactively would dead-end the user. When the text-only
+    # parser ships, add the paste branch back to prompt_for_resume_source.
     if not resume_path and not paste and not from_folder:
         from linkright.prompts import prompt_for_resume_source
         kind, value = prompt_for_resume_source()
         if kind == "file":
             resume_path = value
-        elif kind == "paste":
-            paste = True  # falls through to existing 'Day 2' error below
         else:  # folder
             from_folder = value
 

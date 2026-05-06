@@ -101,14 +101,32 @@ def test_jobs_evaluate_no_arg_prompts_jd(monkeypatch, tmp_path):
         return ("file", jd)
 
     monkeypatch.setattr("linkright.prompts.prompt_for_jd_input", fake_jd)
+    # Mock matches the real evaluator's return shape — the CLI body
+    # accesses 6 keys: grade, overall_score, recommendation, dimensions,
+    # dimension_reasons, persisted_to. A partial mock would silently
+    # KeyError at runtime; CliRunner absorbs the exception and the test
+    # would falsely-pass. (Caught by adversarial review.)
     monkeypatch.setattr(
         "linkright.jobsearch.evaluator.evaluate_jd",
-        lambda *a, **kw: {"grade": "A", "score": 90, "dimensions": {}, "recommendation": "apply"},
+        lambda *a, **kw: {
+            "grade": "A",
+            "overall_score": 90.0,
+            "recommendation": "apply",
+            "dimensions": {"role_fit": 95.0},
+            "dimension_reasons": {"role_fit": "Strong PM signals"},
+            "persisted_to": "(skipped — --no-persist)",
+        },
     )
 
     from linkright.jobsearch.cli import evaluate
     res = CliRunner().invoke(evaluate, ["--no-persist"])
     assert called["jd_input"], "prompt_for_jd_input was never called for empty --jd"
+    # Strict exit-code assertion — protects against silent KeyError /
+    # other CLI-body crashes that CliRunner would otherwise absorb.
+    assert res.exit_code == 0, (
+        f"evaluate command crashed after the prompt fired (exit={res.exit_code}). "
+        f"Output:\n{res.output}\nException: {res.exception}"
+    )
 
 
 def test_jobs_find_slug_no_arg_prompts_company(monkeypatch):

@@ -84,6 +84,23 @@ def test_prompt_for_existing_path_strips_quotes(monkeypatch, tmp_path):
     assert p == real_file.resolve()
 
 
+def test_prompt_for_existing_path_quoted_path_with_spaces(monkeypatch, tmp_path):
+    """Regression: PR #93 round-1 review caught that the original
+    quote-strip-then-shlex.split sequence broke quoted paths containing
+    spaces ('"/path/to/My Resume.pdf"' → '/path/to/My' after wrong
+    truncation). Verify the fixed implementation handles this case.
+    """
+    real_file = tmp_path / "My Resume 2025.pdf"
+    real_file.write_text("PDF")
+    quoted = f'"{real_file}"'
+    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(quoted))
+
+    p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
+    assert p == real_file.resolve(), (
+        f"Quoted path with spaces was truncated. Expected {real_file.resolve()}, got {p}"
+    )
+
+
 def test_prompt_for_existing_path_expands_tilde(monkeypatch, tmp_path):
     # Set HOME so ~ expands to tmp_path
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -278,20 +295,6 @@ def test_prompt_for_resume_source_file_branch(monkeypatch, tmp_path):
     assert val == pdf.resolve()
 
 
-def test_prompt_for_resume_source_paste_branch(monkeypatch):
-    monkeypatch.setattr(
-        "questionary.select",
-        lambda *a, **kw: FakeQ("   Paste my resume text here (multi-line)"),
-    )
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ("Resume body text\nLine 2"),
-    )
-    kind, val = prompts.prompt_for_resume_source()
-    assert kind == "paste"
-    assert "Resume body text" in val
-
-
 def test_prompt_for_resume_source_folder_branch(monkeypatch, tmp_path):
     folder = tmp_path / "resumes"
     folder.mkdir()
@@ -303,6 +306,40 @@ def test_prompt_for_resume_source_folder_branch(monkeypatch, tmp_path):
     kind, val = prompts.prompt_for_resume_source()
     assert kind == "folder"
     assert val == folder.resolve()
+
+
+def test_prompt_for_resume_source_paste_option_hidden(monkeypatch, tmp_path):
+    """Per round-1 review: paste option must NOT be surfaced in the
+    interactive prompt until the downstream text-only parser is wired.
+    Surfacing it would dead-end users at the 'Day 2 — coming soon' stub.
+    """
+    real_file = tmp_path / "r.pdf"
+    real_file.write_text("PDF")
+
+    captured_options = {}
+
+    def fake_select(message, choices, **kw):
+        captured_options["count"] = len(choices)
+        captured_options["labels"] = list(choices)
+        # Pick the first option (file) so the call returns cleanly
+        return FakeQ(choices[0])
+
+    monkeypatch.setattr("questionary.select", fake_select)
+    # Provide a REAL file so prompt_for_existing_path doesn't infinite-loop
+    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(str(real_file)))
+
+    kind, val = prompts.prompt_for_resume_source()
+    assert kind == "file"  # we picked the first option (file)
+
+    # Verify only 2 choices (file + folder), no "paste"
+    assert captured_options.get("count") == 2, (
+        f"prompt_for_resume_source should offer only file + folder (paste hidden); "
+        f"got {captured_options.get('count')} options: {captured_options.get('labels')}"
+    )
+    for label in captured_options.get("labels", []):
+        assert "paste" not in label.lower(), (
+            f"Paste option must not be surfaced — found: {label}"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────

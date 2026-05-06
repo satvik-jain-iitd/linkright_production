@@ -76,20 +76,24 @@ def _sanitize_path_input(raw: str) -> str:
 
     Handles the 3 common-but-annoying inputs:
       - macOS Finder drag-drop: `/Users/x/My\\ Resume.pdf` → `/Users/x/My Resume.pdf`
-      - Quoted-paste: `"~/Downloads/file.pdf"` or `'/tmp/file'` → unquoted
+      - Quoted-paste: `"/path with spaces/file.pdf"` or `'/tmp/file'` → unquoted
       - Tilde expansion: `~/Downloads/file.pdf` → `/Users/x/Downloads/file.pdf`
+
+    Uses shlex.split as the single source of truth for shell-escape
+    decoding — it handles BOTH surrounding quotes (preserving internal
+    spaces) AND backslash escapes natively. Manual outer-quote stripping
+    is wrong: it strips the protective quoting context and then
+    shlex re-tokenizes by whitespace, breaking paths with spaces.
     """
     s = raw.strip()
-    # Strip matching surrounding quotes
-    if len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
-        s = s[1:-1]
-    # shlex.split handles backslash-escapes from Finder drag-drop
+    if not s:
+        return ""
     try:
         parts = shlex.split(s)
         if parts:
             s = parts[0]
     except ValueError:
-        # Mismatched quotes etc — fall through with the unquoted string
+        # Mismatched quotes — fall through with the raw stripped string
         pass
     s = os.path.expanduser(s)
     return s
@@ -370,22 +374,24 @@ def prompt_for_jd_input(
 
 def prompt_for_resume_source(
     *,
-    flag_hint: str = "-r/--resume / --paste / --from-folder",
+    flag_hint: str = "-r/--resume / --from-folder",
 ) -> tuple[str, Any]:
     """Ask how the user wants to provide their resume — for `profile create`.
 
-    Mirrors the three existing flags (-r, --paste, --from-folder) but as
-    interactive choices.
+    Surfaces only the wired branches (file + folder). The legacy
+    `--paste` flag still exists but stubs to a 'Day 2 — coming soon'
+    error; surfacing it as an interactive choice would dead-end
+    interactive users (worse UX than an undiscoverable flag). When the
+    text-only resume parser is wired downstream, add the paste branch
+    back to this prompt.
 
     Returns:
         ("file", Path)   — single PDF/MD path
-        ("paste", str)   — pasted resume text
         ("folder", Path) — directory; tool picks first PDF inside
     """
     _ensure_tty(flag_hint)
     options = [
         {"key": "file", "label": "Path to my resume PDF (or .md) — recommended", "recommended": True},
-        {"key": "paste", "label": "Paste my resume text here (multi-line)"},
         {"key": "folder", "label": "Folder containing my resume (auto-detect first PDF)"},
     ]
     pick = prompt_for_choice("How do you want to provide your resume?", options, flag_hint=flag_hint)
@@ -396,12 +402,6 @@ def prompt_for_resume_source(
             flag_hint=flag_hint,
         )
         return ("file", path)
-    if pick["key"] == "paste":
-        body = prompt_for_paste_block(
-            "Paste your resume text below (Esc + Enter when done):",
-            flag_hint=flag_hint,
-        )
-        return ("paste", body)
     # folder
     folder = prompt_for_existing_path(
         "Path to folder containing your resume:",
