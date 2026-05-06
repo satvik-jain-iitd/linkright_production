@@ -262,7 +262,7 @@ def _validate_key_format(spec: "ProviderSpec", key_val: str) -> tuple[bool, str]
     if spec.key_prefix and not key_val.startswith(spec.key_prefix):
         return False, (
             f"Expected format: `{spec.key_prefix}...` for {spec.name}. "
-            f"Got: `{key_val[:8]}...` — check you copied the right key."
+            f"Got: `{key_val[:4]}...` — check you copied the right key."
         )
     # Basic alphanumeric + common separators check
     allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.")
