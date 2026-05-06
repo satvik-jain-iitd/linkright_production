@@ -93,29 +93,10 @@ PDF_OPTIONS = [
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────
 
-def _format_choice(opt: dict) -> str:
-    """Add a (recommended) badge to the label if marked."""
-    if opt.get("recommended"):
-        return f"⭐ {opt['label']}"
-    return f"   {opt['label']}"
-
-
-def _pick(question: str, options: list[dict], *, default_recommended: bool = True) -> dict:
-    """Single-select prompt; returns the chosen option dict."""
-    default = next((o for o in options if o.get("recommended")), options[0]) if default_recommended else options[0]
-    choice_label = questionary.select(
-        question,
-        choices=[_format_choice(o) for o in options],
-        default=_format_choice(default),
-        instruction="(↑/↓ to navigate, enter to confirm)",
-    ).ask()
-    if choice_label is None:
-        # User pressed Ctrl-C
-        sys.exit(1)
-    for o in options:
-        if _format_choice(o) == choice_label:
-            return o
-    return default
+# `_pick` moved to linkright.prompts.prompt_for_choice — single source of
+# truth for the recommended-marker / Ctrl+C contract used across the CLI.
+# Re-exported here so the wizard's existing call sites keep working.
+from linkright.prompts import prompt_for_choice as _pick  # noqa: E402
 
 
 def _check_bin(name: str) -> bool:
