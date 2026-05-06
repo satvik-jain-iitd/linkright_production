@@ -265,7 +265,7 @@ def _validate_key_format(spec, key_val: str) -> tuple[bool, str]:
     if spec.key_prefix and not key_val.startswith(spec.key_prefix):
         return False, (
             f"Expected format: `{spec.key_prefix}...` for {spec.name}. "
-            f"Got: `{key_val[:8]}...` — check you copied the right key."
+            f"Got: `{key_val[:4]}...` — check you copied the right key."
         )
     allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.")
     bad_chars = set(key_val) - allowed
@@ -418,6 +418,20 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
     else:
         print()
         print("  No keys added. Run `linkright keys add groq` when ready.")
+
+    # ── Path A educational note — other free providers not yet in cascade ──
+    print()
+    print("  ─" * 26)
+    print("  ℹ  Other free LLM providers exist (not yet in cascade):")
+    print()
+    print("     • Mistral La Plateforme — console.mistral.ai/api-keys")
+    print("     • DeepSeek              — platform.deepseek.com/api_keys")
+    print("     • Together AI           — api.together.ai/settings/projects/~current/api-keys")
+    print("     • HuggingFace           — huggingface.co/settings/tokens")
+    print()
+    print("  To request adding any of these to the cascade, open an issue:")
+    print("  https://github.com/satvik-jain-iitd/linkright_production/issues/new")
+    print()
 
     return updates
 
