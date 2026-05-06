@@ -229,7 +229,6 @@ def _ask_groq_key() -> tuple[str, bool, str]:
 def _smoke_embedder(opt: dict) -> tuple[bool, str]:
     key = opt["key"]
     if key == "fastembed":
-        print("  Downloading fastembed model from HuggingFace (~67 MB, one-time)…")
         try:
             from fastembed import TextEmbedding
             m = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
@@ -627,6 +626,13 @@ def run_wizard() -> int:
     print()
     print("Smoke-testing your picks…")
     print(f"  Groq API key:        {'✓' if ok_groq else '✗'}  {msg_groq}")
+    # Lead-in only on fresh setup — the wizard path may trigger a model
+    # download. `linkright setup --check` (which also calls _smoke_embedder
+    # at line ~733) hits the cache, so we don't claim a download there.
+    if embedder["key"] == "fastembed":
+        _fastembed_cache = Path.home() / ".cache" / "fastembed"
+        if not _fastembed_cache.exists() or not any(_fastembed_cache.iterdir()):
+            print("  Downloading fastembed model from HuggingFace (~67 MB, one-time)…")
     ok_emb, msg_emb = _smoke_embedder(embedder)
     print(f"  Embedder ({embedder['key']}): {'✓' if ok_emb else '✗'}  {msg_emb}")
     if pdf["key"] == "playwright":
