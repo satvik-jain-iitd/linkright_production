@@ -196,3 +196,40 @@ def test_read_all_managed_returns_written_keys(tmp_env):
 def test_read_empty_file_returns_empty_dict(tmp_env):
     managed = read_all_managed(env_path=tmp_env)
     assert managed == {}
+
+
+# ── Atomic write crash-survival ───────────────────────────────────────────
+
+def test_atomic_write_survives_rename_failure(tmp_env):
+    """If os.rename raises mid-write, the original .env is untouched and no
+    temp file debris is left behind."""
+    import linkright.keys.env_writer as ew_mod
+
+    original_content = "MY_CUSTOM_VAR=preserved\n"
+    tmp_env.write_text(original_content)
+
+    # Patch os.rename to raise on the first call (simulates power-loss scenario)
+    original_rename = os.rename
+    call_count = [0]
+
+    def _fail_rename(src, dst):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            # Clean up the temp file ourselves before raising (env_writer's except
+            # block does this, but we want to verify it actually does)
+            raise OSError("Simulated rename failure")
+        return original_rename(src, dst)
+
+    with patch("os.rename", side_effect=_fail_rename):
+        with pytest.raises(OSError):
+            write_keys({"GROQ_API_KEY": "gsk_" + "a" * 40}, env_path=tmp_env)
+
+    # Original content must be intact
+    assert tmp_env.read_text() == original_content, (
+        "Original .env was corrupted by a failed atomic write"
+    )
+    # No temp debris (.env.tmp.*) must remain
+    tmp_files = list(tmp_env.parent.glob(".env.tmp.*"))
+    assert not tmp_files, (
+        f"Temp file debris left after failed write: {[f.name for f in tmp_files]}"
+    )
