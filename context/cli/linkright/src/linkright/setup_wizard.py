@@ -23,11 +23,25 @@ ten minutes of manual setup steps.
 
 from __future__ import annotations
 
+import logging as _logging_setup
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
+
+# Suppress HuggingFace telemetry + tqdm progress-bars during the embedder
+# smoke-test. These env vars are read at HF library import time; setting
+# them after `from fastembed import TextEmbedding` is too late.
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
+# Surgical filter — drop ONLY the HF_TOKEN warning record, leave real
+# errors (network failures, disk-full, auth issues) visible.
+_logging_setup.getLogger("huggingface_hub").addFilter(
+    lambda r: "HF_TOKEN" not in r.getMessage()
+)
 import questionary
 import yaml
 
@@ -553,6 +567,7 @@ def run_wizard() -> int:
     print()
     embedder_step = 2 if needs_groq else 1
     embedder = _pick(f"{embedder_step}/{total_steps} — Which embedder?", EMBEDDER_OPTIONS)
+    print()  # visual separator between decisions
 
     # ── Decision 3: PDF render ─────────────────────────────────────
     pdf_step = 3 if needs_groq else 2
@@ -612,6 +627,25 @@ def run_wizard() -> int:
     print()
     print("Smoke-testing your picks…")
     print(f"  Groq API key:        {'✓' if ok_groq else '✗'}  {msg_groq}")
+    # Lead-in only on fresh setup — the wizard path may trigger a model
+    # download. `linkright setup --check` (which also calls _smoke_embedder
+    # at line ~733) hits the cache, so we don't claim a download there.
+    # Cache path matches fastembed's `define_cache_dir()`:
+    # FASTEMBED_CACHE_PATH env var > tempfile.gettempdir()/fastembed_cache
+    # (NOT ~/.cache/fastembed — fastembed never writes there by default).
+    if embedder["key"] == "fastembed":
+        _fastembed_cache = Path(
+            os.getenv("FASTEMBED_CACHE_PATH")
+            or os.path.join(tempfile.gettempdir(), "fastembed_cache")
+        )
+        # OSError-safe: permission denied, race, etc. → assume not cached
+        # so we print the lead-in (better to over-explain than silent pause).
+        try:
+            _cached = _fastembed_cache.exists() and any(_fastembed_cache.iterdir())
+        except OSError:
+            _cached = False
+        if not _cached:
+            print("  Downloading fastembed model from HuggingFace (~67 MB, one-time)…")
     ok_emb, msg_emb = _smoke_embedder(embedder)
     print(f"  Embedder ({embedder['key']}): {'✓' if ok_emb else '✗'}  {msg_emb}")
     if pdf["key"] == "playwright":
