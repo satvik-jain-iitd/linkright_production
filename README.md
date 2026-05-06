@@ -44,10 +44,9 @@ linkright doctor       # 9-check health verify
 
 ## 🚀 First run
 
-Get a free Groq API key (https://console.groq.com — 30 sec signup), save it:
-
 ```bash
-mkdir -p ~/.linkright && echo "GROQ_API_KEY=<your-key>" >> ~/.linkright/.env
+pip install 'linkright[full]'
+linkright setup                # 5-step wizard — including guided API key setup, no .env editing needed
 ```
 
 Then:

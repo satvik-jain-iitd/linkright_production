@@ -760,53 +760,81 @@ def openrouter_chat(
 ) -> tuple[str, dict]:
     """OpenRouter chat completion — routes to meta-llama/llama-3.3-70b-instruct.
     Same model class as prod Groq, so quality matches.
+
+    2026-05-06: migrated to _collect_keys rotation (OPENROUTER_API_KEY + _1.._4),
+    matching the pattern used by Groq/Cerebras/SambaNova/Z.ai. On per-key 429 or
+    402-credits-exhausted, marks that key cooling and tries the next one.
     """
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
+    keys = _collect_keys("OPENROUTER_API_KEY")
+    if not keys:
         raise LLMError("OPENROUTER_API_KEY not set; cannot call OpenRouter")
     model = model or os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct")
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    det_applied = _apply_deterministic_overrides(payload)
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    t0 = time.time()
-    with httpx.Client(timeout=120.0) as client:
-        resp = client.post(OPENROUTER_URL, json=payload, headers=headers)
-    # Iter-08 (2026-04-23): adaptive 402 — OpenRouter error often says
-    # "can only afford N tokens". Parse N and retry with reduced max_tokens.
-    if resp.status_code == 402:
-        import re as _re402
-        body = resp.text or ""
-        m = _re402.search(r"can only afford\s+(\d+)", body)
-        if m:
-            new_max = max(500, int(m.group(1)) - 50)  # leave 50-token buffer
-            payload["max_tokens"] = new_max
+    last_err: Optional[Exception] = None
+    for label, api_key in keys:
+        tag = f"openrouter_{label}"
+        if _is_cooling(tag):
+            continue
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        det_applied = _apply_deterministic_overrides(payload)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        t0 = time.time()
+        try:
             with httpx.Client(timeout=120.0) as client:
                 resp = client.post(OPENROUTER_URL, json=payload, headers=headers)
-    dt = time.time() - t0
-    if resp.status_code != 200:
-        raise LLMError(f"OpenRouter {resp.status_code}: {resp.text[:500]}")
-    data = resp.json()
-    text = data["choices"][0]["message"]["content"]
-    usage = {
-        "provider": "openrouter",
-        "model": model,
-        "latency_s": round(dt, 2),
-        "prompt_tokens": data.get("usage", {}).get("prompt_tokens"),
-        "completion_tokens": data.get("usage", {}).get("completion_tokens"),
-        "total_tokens": data.get("usage", {}).get("total_tokens"),
-        "cached_tokens": _cached_tokens(data),
-        "deterministic_applied": det_applied,
-        "deterministic_seed_supported": True,
-    }
-    return text, usage
+            # Iter-08 (2026-04-23): adaptive 402 — OpenRouter error often says
+            # "can only afford N tokens". Parse N and retry with reduced max_tokens.
+            if resp.status_code == 402:
+                import re as _re402
+                body = resp.text or ""
+                m = _re402.search(r"can only afford\s+(\d+)", body)
+                if m:
+                    new_max = max(500, int(m.group(1)) - 50)  # leave 50-token buffer
+                    payload["max_tokens"] = new_max
+                    with httpx.Client(timeout=120.0) as client:
+                        resp = client.post(OPENROUTER_URL, json=payload, headers=headers)
+                if resp.status_code == 402:
+                    # Credits exhausted on this key — cool it and try next
+                    _mark_cooling(tag, "402-credits")
+                    last_err = LLMError(f"OpenRouter {tag} 402: credits exhausted")
+                    continue
+            dt = time.time() - t0
+            if resp.status_code == 429:
+                _mark_cooling(tag, "429")
+                last_err = LLMError(f"OpenRouter {tag} 429: rate limited")
+                continue
+            if resp.status_code != 200:
+                raise LLMError(f"OpenRouter {resp.status_code}: {resp.text[:500]}")
+            _clear_cooling(tag)
+            data = resp.json()
+            text = data["choices"][0]["message"]["content"]
+            usage = {
+                "provider": f"openrouter_{label}",
+                "model": model,
+                "latency_s": round(dt, 2),
+                "prompt_tokens": data.get("usage", {}).get("prompt_tokens"),
+                "completion_tokens": data.get("usage", {}).get("completion_tokens"),
+                "total_tokens": data.get("usage", {}).get("total_tokens"),
+                "cached_tokens": _cached_tokens(data),
+                "deterministic_applied": det_applied,
+                "deterministic_seed_supported": True,
+            }
+            return text, usage
+        except LLMError:
+            raise
+        except Exception as e:
+            last_err = LLMError(f"OpenRouter {tag}: {type(e).__name__}: {str(e)[:200]}")
+    raise last_err or LLMError("OpenRouter: all keys exhausted or cooling")
 
 
 def cerebras_chat(

@@ -80,9 +80,12 @@ linkright init
 #   "Use LinkRight to tailor my resume for this JD: <paste>"
 # The agent discovers .claude/skills/tailor-resume.md and spawns `linkright mcp serve`.
 
-# 2b. Direct mode — uses your API keys
-export GEMINI_API_KEY_1=...      # primary
-export GROQ_API_KEY=...           # cascade step 1
+# 2b. Direct mode — uses your own API keys (free tier)
+linkright setup        # step 5 of the wizard prompts for keys interactively
+# OR add keys directly:
+linkright keys add groq       # prompts securely, writes to ~/.linkright/.env
+linkright keys add cerebras   # add more providers for cascade redundancy
+linkright keys list           # see configured keys (masked)
 linkright resume tailor -r resume.pdf -j jds/noon.md --llm-mode direct
 ```
 
@@ -251,7 +254,7 @@ Legacy v0.0 commands (`optimize`, `validate`, `assisted`) are preserved.
 | `OPENROUTER_API_KEY` | OpenRouter | $0 free models, $ paid | 7 (last resort) |
 | `ORACLE_BACKEND_URL` | Oracle Ollama (self-hosted gemma3:1b) | unlimited (your VPS) | local fallback |
 
-**Forever-$0 path:** signing up for Groq alone covers ~14,400 calls/day = ~2,000 resumes/day. Adding 2-3 more providers gives multi-tier defense against any single rate-limit. Drop a single key into `~/.linkright/.env` and `Config._autoload_env()` picks it up automatically.
+**Forever-$0 path:** signing up for Groq alone covers ~14,400 calls/day = ~2,000 resumes/day. Adding 2-3 more providers gives multi-tier defense against any single rate-limit. Run `linkright setup` (step 5 of the wizard) or `linkright keys add groq` to add keys interactively — no manual `.env` editing needed.
 
 Agent mode (MCP server) needs **none** of these — the user's existing AI agent (Claude Code, Cursor, etc.) provides the LLM under their subscription quota.
 
