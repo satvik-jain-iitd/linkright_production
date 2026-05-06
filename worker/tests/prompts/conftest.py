@@ -97,7 +97,7 @@ def satvik_user_id() -> str:
 
 @pytest.fixture(scope="session")
 def target_jds() -> list[dict]:
-    with open(FIXTURES_DIR / "satvik_target_jds.json") as f:
+    with open(FIXTURES_DIR / "sample_target_jds.json") as f:
         return json.load(f)
 
 

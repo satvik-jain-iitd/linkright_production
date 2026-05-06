@@ -28,7 +28,7 @@ Modules 1→2→3 share data through session-scoped pytest fixtures
    ```
 2. **Career text fixture:** `fixtures/satvik_career_text.txt` (gitignored) —
    reconstructed from Supabase `user_work_history` + `career_nuggets` if missing
-3. **Target JDs:** `fixtures/satvik_target_jds.json` — curated 3 JDs, committed
+3. **Target JDs:** `fixtures/sample_target_jds.json` — curated 3 JDs, committed
 
 ## Run
 
