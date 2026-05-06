@@ -2,6 +2,45 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.4.2] - 2026-05-06
+
+`linkright profile show` polish — three UX fixes from manual walkthrough.
+First end-to-end PyPI publish via the auto-publish workflow shipped in 0.4.1
+(0.4.1 itself was bumped in pyproject but never published to PyPI).
+
+### Changed
+
+- **`linkright profile show`** now groups your profile into resume-conventional
+  sections (Professional Experience → Education → Skills → Projects → Awards)
+  matching FlowCV's content taxonomy, instead of alphabetical company order
+  that interleaved education between work entries. (#87)
+- **Timeline visible per role** — each work role and education entry now
+  shows its date range as a dim chip after the label, e.g.
+  `Senior Associate Product Manager  (Jul 2024 – Present)`. Dates loaded
+  lazily from `01_resume_parsed.json`; gracefully degrades to no-dates
+  if the artifact is missing. (#87)
+- **Current employer floats to top** — Professional Experience now puts
+  any role with `end_date == "Present"` at the top of the section
+  (universal resume convention "current job first"), regardless of
+  start-date order. (#87)
+- **`--full` flag** added to `linkright profile show` — disables the
+  120-char bullet truncation when you need to read the full sentence.
+  A tip-line surfaces this option whenever truncated bullets exist. (#87)
+- **Empty-section hint** — sections that aren't yet populated (Languages,
+  Certificates, Voluntary Work, etc.) appear as a single dim line at
+  the bottom of the tree with a `linkright profile rebuild` hint, so
+  users know what's missing without inline clutter. (#87)
+
+### Fixed
+
+- Multiple degrees from the same institution (e.g. IIT 5-year integrated
+  programs) no longer silently overwrite each other in the date lookup;
+  years now accumulate and render as `(2021 / 2019)`. (#87)
+- Date sort no longer uses ASCII string comparison ("Nov 2024" >
+  "Jan 2025" by ASCII), which produced wrong reverse-chronological
+  order. New `_date_sort_key()` parses freeform date strings into
+  `(year, month)` tuples for true chronological sort. (#87)
+
 ## [0.4.1] - 2026-05-06
 
 CLI polish pass — 5 PRs of UX improvements with no behavioral regressions.
