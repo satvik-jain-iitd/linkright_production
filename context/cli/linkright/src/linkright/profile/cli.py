@@ -124,14 +124,16 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
 # ── show ────────────────────────────────────────────────────────────────────
 
 @profile_group.command("show")
-def show_cmd() -> None:
-    """Render the profile outline (companies → roles → bullets) using rich."""
+@click.option("--full", "show_full", is_flag=True,
+              help="Show full bullet text (disable 120-char truncation).")
+def show_cmd(show_full: bool) -> None:
+    """Render the profile outline (resume sections → companies → roles → bullets) using rich."""
     from .render import show_profile
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
         click.echo("No profile found. Run `linkright profile create -r resume.pdf --yes` first.", err=True)
         sys.exit(1)
-    show_profile(profile_dir)
+    show_profile(profile_dir, full=show_full)
 
 
 # ── status (cheap non-render check) ─────────────────────────────────────────
@@ -147,7 +149,6 @@ def status_cmd() -> None:
     click.echo(f"Profile dir:  {profile_dir}")
     click.echo(f"Created:      {meta.get('created_at')}")
     click.echo(f"Embedder:     {meta.get('embedder_tier')} ({meta.get('embedder_model')}, dim={meta.get('dim')})")
-    click.echo(f"Source PDF:   sha256={meta.get('source_pdf_sha256', '')[:16]}…")
     click.echo(f"Nuggets:      {meta.get('n_nuggets')}")
     click.echo(f"  embedded:   {meta.get('n_embedded')}")
     click.echo(f"  highlights: {meta.get('n_highlights')}")
@@ -158,7 +159,12 @@ def status_cmd() -> None:
         click.echo(f"Contact:")
         for k in ("name", "phone", "email", "linkedin", "portfolio"):
             v = contact.get(k) or "(blank)"
-            click.echo(f"  {k:<10}: {v}")
+            line = f"  {k:<10}: {v}"
+            # AR walkthrough A.6 fix: surface the action when a field is blank
+            # so the user knows the next move (don't make them search docs).
+            if v == "(blank)" and k == "portfolio":
+                line += "  (set with: linkright contact)"
+            click.echo(line)
 
 
 # ── edit-contact ────────────────────────────────────────────────────────────
@@ -167,10 +173,9 @@ def status_cmd() -> None:
 def edit_contact_cmd() -> None:
     """Re-verify / edit personal contact details (phone, email, LinkedIn, etc.).
 
-    Truth Engine Layer 1 — per Satvik 2026-05-02 (memory
-    feedback_personal_details_verify_at_start): wrong contact info = silent
-    failure (recruiter can't reach candidate). Use this when phone changes,
-    LinkedIn URL updates, or you add a portfolio.
+    Use this when your phone changes, LinkedIn URL updates, or you add
+    a portfolio. Wrong contact info is the worst kind of resume bug —
+    the recruiter can't reach you, and you'll never know.
     """
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():

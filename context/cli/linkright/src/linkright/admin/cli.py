@@ -147,7 +147,26 @@ async def _import_companies_async(
         return counts
 
     # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=3)
+    # 10s outer timeout via wait_for so create_pool doesn't hang forever on unreachable host.
+    try:
+        pool = await asyncio.wait_for(
+            asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=3),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        raise click.ClickException(
+            "Oracle PG connection timeout (10s). Check ORACLE_PG_URL or run "
+            "`linkright doctor` to verify connectivity."
+        )
+    except OSError as exc:
+        raise click.ClickException(
+            f"Oracle PG connection failed: {exc}. Verify the host is reachable."
+        )
+    except asyncpg.PostgresError as exc:
+        raise click.ClickException(
+            f"Oracle PG connection failed: {type(exc).__name__}: {exc}. "
+            "Verify ORACLE_PG_URL credentials and SSL config."
+        )
 
     _UPSERT = """
         INSERT INTO companies (
@@ -228,7 +247,26 @@ async def _stats_async(oracle_pg_url: str) -> None:
         )
 
     # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
-    pool = await asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2)
+    # 10s outer timeout via wait_for so create_pool doesn't hang forever on unreachable host.
+    try:
+        pool = await asyncio.wait_for(
+            asyncpg.create_pool(oracle_pg_url, min_size=1, max_size=2),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        raise click.ClickException(
+            "Oracle PG connection timeout (10s). Check ORACLE_PG_URL or run "
+            "`linkright doctor` to verify connectivity."
+        )
+    except OSError as exc:
+        raise click.ClickException(
+            f"Oracle PG connection failed: {exc}. Verify the host is reachable."
+        )
+    except asyncpg.PostgresError as exc:
+        raise click.ClickException(
+            f"Oracle PG connection failed: {type(exc).__name__}: {exc}. "
+            "Verify ORACLE_PG_URL credentials and SSL config."
+        )
     try:
         async with pool.acquire() as conn:
             total = await conn.fetchval("SELECT COUNT(*) FROM companies")
@@ -488,7 +526,26 @@ def slug_discovery_stats() -> None:
                 "asyncpg not installed — run: pip install linkright[admin]"
             )
         # SSL governed by URL's sslmode param (libpq semantics) — see worker/app/oracle/pg.py
-        pool = await asyncpg.create_pool(oracle_url, min_size=1, max_size=2)
+        # 10s outer timeout via wait_for so create_pool doesn't hang forever on unreachable host.
+        try:
+            pool = await asyncio.wait_for(
+                asyncpg.create_pool(oracle_url, min_size=1, max_size=2),
+                timeout=10.0,
+            )
+        except asyncio.TimeoutError:
+            raise click.ClickException(
+                "Oracle PG connection timeout (10s). Check ORACLE_PG_URL or run "
+                "`linkright doctor` to verify connectivity."
+            )
+        except OSError as exc:
+            raise click.ClickException(
+                f"Oracle PG connection failed: {exc}. Verify the host is reachable."
+            )
+        except asyncpg.PostgresError as exc:
+            raise click.ClickException(
+                f"Oracle PG connection failed: {type(exc).__name__}: {exc}. "
+                "Verify ORACLE_PG_URL credentials and SSL config."
+            )
         try:
             async with pool.acquire() as conn:
                 total_attempts = await conn.fetchval(

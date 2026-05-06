@@ -2,6 +2,113 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.4.2] - 2026-05-06
+
+`linkright profile show` polish — three UX fixes from manual walkthrough.
+First end-to-end PyPI publish via the auto-publish workflow shipped in 0.4.1
+(0.4.1 itself was bumped in pyproject but never published to PyPI).
+
+### Changed
+
+- **`linkright profile show`** now groups your profile into resume-conventional
+  sections (Professional Experience → Education → Skills → Projects → Awards)
+  matching FlowCV's content taxonomy, instead of alphabetical company order
+  that interleaved education between work entries. (#87)
+- **Timeline visible per role** — each work role and education entry now
+  shows its date range as a dim chip after the label, e.g.
+  `Senior Associate Product Manager  (Jul 2024 – Present)`. Dates loaded
+  lazily from `01_resume_parsed.json`; gracefully degrades to no-dates
+  if the artifact is missing. (#87)
+- **Current employer floats to top** — Professional Experience now puts
+  any role with `end_date == "Present"` at the top of the section
+  (universal resume convention "current job first"), regardless of
+  start-date order. (#87)
+- **`--full` flag** added to `linkright profile show` — disables the
+  120-char bullet truncation when you need to read the full sentence.
+  A tip-line surfaces this option whenever truncated bullets exist. (#87)
+- **Empty-section hint** — sections that aren't yet populated (Languages,
+  Certificates, Voluntary Work, etc.) appear as a single dim line at
+  the bottom of the tree with a `linkright profile rebuild` hint, so
+  users know what's missing without inline clutter. (#87)
+
+### Fixed
+
+- Multiple degrees from the same institution (e.g. IIT 5-year integrated
+  programs) no longer silently overwrite each other in the date lookup;
+  years now accumulate and render as `(2021 / 2019)`. (#87)
+- Date sort no longer uses ASCII string comparison ("Nov 2024" >
+  "Jan 2025" by ASCII), which produced wrong reverse-chronological
+  order. New `_date_sort_key()` parses freeform date strings into
+  `(year, month)` tuples for true chronological sort. (#87)
+
+## [0.4.1] - 2026-05-06
+
+CLI polish pass — 5 PRs of UX improvements with no behavioral regressions.
+Plus the foundation for `pip install --upgrade linkright` to actually work
+for the first time (PyPI auto-publish CI on tag push).
+
+### Changed
+
+- **`linkright` (no-args)** now shows the cheat-sheet content directly
+  instead of the alphabetical command list. Industry convention (git,
+  kubectl, docker, npm) — no-args shows curated content; `linkright
+  --help` continues to show the alphabetical command list as escape
+  valve for power users. (#79)
+- **`linkright tailor`** ends with a structured success card showing
+  PDF path + score + duration + 3-step next-action nudge, instead of
+  `✓ Done — see <path>`. Cross-platform `open` suggestion (uses
+  `xdg-open` on Linux, `start` on Windows). Path is shell-quoted so
+  copy-paste works for `--run-id` values containing spaces. (#80)
+- **`linkright profile show`** adds a P0/P1/P2/P3 priority legend at
+  the top of the tree. Long bullet text truncates at word-boundary
+  with ellipsis (no more mid-character cuts). Literal "none"
+  company/role placeholders normalized to "Other / Independent" /
+  "(role unspecified)". Empty companies hidden. (#81)
+- **`linkright profile status`** drops the SHA256 hash from default
+  output (was internal cache-invalidation detail). When portfolio
+  field is blank, status output now shows `(set with: linkright
+  contact)` inline. (#81)
+- **`linkright doctor`** — pluralization fix (`1 issue above` instead
+  of `1 issue(s) above`). Embedder failure line states "using Oracle
+  fallback (slower, network-dependent). pip install fastembed for
+  offline + 5x speed." when fastembed is missing AND
+  `ORACLE_BACKEND_URL` is set — eliminates the
+  anxiety-without-agency pattern on the failure. (#82)
+- **Help-text cleanup** across `critique`, `fill`, `practice`,
+  `improve`, `strategy-review`, `edit-contact`: drops "Per Satvik
+  <date>" attributions, "Truth Engine Layer N" framing, internal
+  artifact paths (e.g. `<run>/artifacts/15b_interview_prep.json`),
+  and "magnitude tier 0.5" jargon. Reads as user-facing product copy
+  now. STAR auto-expands inline as `STAR (Situation / Task / Action
+  / Result)` so new users aren't lost on the acronym. (#83)
+- **`linkright tailor --help`** docstring rewritten as user copy
+  ("typically 2-4 minutes" + quickstart) instead of the "16-step
+  pipeline" implementation-detail framing. (#79)
+
+### Added
+
+- **`linkright doctor --auto-fix`** flag — opt-in, confirm-each-step.
+  Detects fixable failures (e.g., missing fastembed), prompts the user
+  per-failure, runs `pip install <pkg>` via subprocess on `y`. Caveat
+  documented in `--help`: runs in your CURRENT Python env; conda/pipx
+  users should install manually. (#82)
+- **PyPI auto-publish on tag push** — `.github/workflows/cli-publish.yml`
+  watches for tags matching `v*`. On push, validates the tag version
+  matches `pyproject.toml`, builds wheel + sdist, uploads to PyPI via
+  the `PYPI_API_TOKEN` secret. After this 0.4.1 release lands on PyPI,
+  every user can run `pip install --upgrade linkright`. Foundational
+  for the v1 ship.
+
+### Notes
+
+> **Action required for repository owner (one-time, ~3 min):**
+> 1. Create a PyPI API token at <https://pypi.org/manage/account/token/>
+>    (scope: project = "linkright").
+> 2. Add it to GitHub Actions secrets as `PYPI_API_TOKEN` at
+>    <https://github.com/satvik-jain-iitd/linkright_production/settings/secrets/actions>.
+> 3. After this PR merges, run `git tag v0.4.1 && git push --tags`
+>    locally — the CI workflow auto-publishes 0.4.1 to PyPI.
+
 ## [0.4.0] - 2026-05-03
 
 Pillar 2 + Pillar 3 push toward v1 ship. New `linkright watch` (Chrome-attached
@@ -17,7 +124,9 @@ narratives.
 > from `agent` (subprocess to claude/opencode/gemini-cli) to `direct` (HTTP
 > calls to Groq/Cerebras with BYOK keys). Run `linkright setup` after
 > upgrading — the wizard will detect your old config and prompt to migrate.
-> Direct mode is free up to 14,400 Groq req/day (most users won't hit it).
+> Direct mode is free on Groq's `llama-3.1-8b-instant` free tier
+> (14,400 req/day). If the pipeline ever escalates to `llama-3.3-70b`, the
+> daily cap drops to 1,000 req — but that's atypical for resume tailoring.
 
 > **NOTICE — visual change for existing users**: default brand colors flipped
 > from navy palette (`#1B2A4A` etc.) to pure `#000000`. If you previously ran
@@ -31,7 +140,8 @@ narratives.
   to job pages, extracts JD + posts to `/api/captures` on the LinkRight backend.
   7 portals supported: LinkedIn, Naukri, Indeed, Wellfound, Greenhouse, Lever,
   Ashby. Subcommands: `watch` (foreground), `watch setup` (Chrome remote-debug
-  setup), `watch service` (background daemon), `watch status` (one-shot health
+  setup), `watch install-service` / `watch uninstall-service` (background
+  daemon), `watch status` (one-shot health
   check), `watch list` (recent captures from Oracle PG). Per-source path
   blocklist prevents accidental private-page captures.
 - **Pillar 2 dual-read** — `linkright jobs find` now merges Supabase scored
@@ -112,11 +222,12 @@ narratives.
   to a Supabase `/api/discoveries` endpoint that is not yet deployed.
   Calling the live import currently returns 405 Method Not Allowed.
   Deferred to a follow-up release.
-- **Wizard config migration is one-shot**: existing 0.3.0 users will
-  see a one-time prompt on first `linkright setup` after upgrade to
-  switch from agent mode to direct mode. If you decline, your old
-  `default_llm_mode: agent` and `agent_backend` are preserved; switch
-  later by editing `~/.linkright/config.yaml` and re-running setup.
+- **Wizard prompts to migrate on each setup run while agent mode is configured**:
+  existing 0.3.0 users will see a migration prompt every time they run
+  `linkright setup` until they accept the switch (or manually edit
+  `~/.linkright/config.yaml`). Declining preserves `default_llm_mode: agent`
+  and `agent_backend`; you can keep declining indefinitely. `linkright setup
+  --check` also warns when agent mode is detected so you don't forget.
 
 ## [0.1.0] - 2026-04-24
 

@@ -21,6 +21,7 @@ Before running a NEW run:
 from __future__ import annotations
 
 import argparse
+import click
 import json
 import os
 import re
@@ -31,6 +32,24 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parent
+
+
+def _see_and_continue(label: str, summary: str = "") -> None:
+    """Read-only checkpoint: pause after a phase boundary so the user can inspect
+    what just completed before the pipeline continues. Skipped when LR_NO_PAUSE=1
+    (CI / non-interactive runs). Pairs with the website's gate overlays — same
+    gate semantics, different transport (terminal stdin vs Supabase realtime).
+
+    The 3 EDITABLE Truth Engine gates (contact_verify, strategy_review,
+    critique) remain as separate `linkright resume {strategy-review|critique}`
+    commands per existing CLI design.
+    """
+    if os.environ.get("LR_NO_PAUSE") == "1":
+        return
+    click.echo(f"\n— Gate: {label} —")
+    if summary:
+        click.echo(summary)
+    click.confirm("Continue to next phase?", default=True, abort=True)
 
 
 def _path_repr(p) -> str:
@@ -5113,6 +5132,12 @@ def main():
         ),
     )
 
+    _see_and_continue(
+        "JD analyzed",
+        f"Strategy: {parsed_p12.get('strategy', '?')}; bullet budget across "
+        f"{len(distribution.get('included_companies', []))} companies.",
+    )
+
     retrieved = step_08_retrieve_per_company(parsed_p12, nuggets_with_emb)
 
     # 2026-05-02 — NEW-3: if user has confirmed a strategy plan via
@@ -5136,7 +5161,18 @@ def main():
             log(f"[step_07b override] failed to load confirmed strategy ({_e}); "
                 f"using auto-retrieval")
 
+    _see_and_continue(
+        "Career profile retrieved",
+        f"Found {sum(len(v) for v in retrieved.values())} relevant nuggets across "
+        f"{len(retrieved)} companies.",
+    )
+
     summary = step_09_summary(parsed_p12, retrieved, raw_text)
+
+    _see_and_continue(
+        "Layout and summary ready",
+        f"Professional summary written ({len(summary)} chars). Drafting bullets next.",
+    )
 
     # Iter-06 (2026-04-23): try batched step_10 first (1 call for all companies),
     # fall back to per-company on any failure. Gated by ENABLE_BATCH_STEP_10=1.
@@ -5151,6 +5187,15 @@ def main():
         log(f"[v8-guards] failed ({_e}) — continuing with raw step_10 output")
 
     ranked = step_11_rank(verbose_all, parsed_p12.get("jd_keywords", []))
+
+    _see_and_continue(
+        "Bullets drafted and ranked",
+        f"Ranked {sum(len(v) for v in ranked.values())} bullets across "
+        f"{len(ranked)} companies. Iterative 1-page fit loop next.",
+    )
+    # NOTE: gate_bullets_condensed (worker's 5th read-only gate) is intentionally
+    # omitted here — step_12 lives inside the fit-iteration loop, so a per-iter
+    # pause would be poor UX. Final critique remains via `linkright resume critique`.
 
     # ─── Iter-05 (2026-04-23): 1-page fitness loop ──────────────────────────
     # Wraps steps 12 → 15 in an iterative feedback loop. If final PDF is not

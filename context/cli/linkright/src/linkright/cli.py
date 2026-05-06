@@ -59,14 +59,33 @@ Pillars (full names — short aliases also work):
 """
 
 
-@click.group(cls=AliasedGroup, epilog=_EPILOG)
+@click.group(cls=AliasedGroup, epilog=_EPILOG, invoke_without_command=True)
 @click.version_option(version=__version__, prog_name="linkright")
-def main() -> None:
+@click.pass_context
+def main(ctx: click.Context) -> None:
     """LinkRight — local-first, agent-native career OS.
 
     \b
     Try first: linkright tldr
     """
+    # When invoked with no subcommand (just `linkright`), render the cheat
+    # sheet directly instead of click's default --help wall. Industry
+    # convention (git, kubectl, docker, npm) — show curated content first;
+    # the alphabetical command list stays one keystroke away as
+    # `linkright --help` for users who want the full surface.
+    if ctx.invoked_subcommand is None:
+        click.echo(_TLDR)
+        # Silent version-check: hits PyPI (cached 24h) + appends a small
+        # update-available notice. Fully fail-silent on offline / PyPI down /
+        # cache corruption. See linkright.lib.version_check for design.
+        try:
+            from linkright.lib.version_check import update_notice
+            notice = update_notice()
+            if notice:
+                click.echo(notice)
+        except Exception:
+            pass  # never let version-check block CLI usage
+        ctx.exit(0)
 
 
 # ── Pillars ─────────────────────────────────────────────────────────────
@@ -232,6 +251,94 @@ always work too.
 """
 
 
+@main.command("update")
+@click.option("--check", "check_only", is_flag=True,
+              help="Just print whether an update is available; don't install.")
+@click.option("--yes", "yes", is_flag=True,
+              help="Skip the confirmation prompt before running pip.")
+def update_cmd(check_only: bool, yes: bool) -> None:
+    """Upgrade linkright to the latest version on PyPI.
+
+    \b
+    Equivalent to:  python -m pip install --upgrade linkright
+    But uses YOUR exact Python (sys.executable) — handles users with
+    multiple Pythons (system / anaconda / venv) correctly.
+
+    Use --check to see if an update is available without installing.
+    Use --yes to skip the confirmation prompt (for scripted runs).
+    """
+    import subprocess
+    import sys as _sys
+
+    # Defensive import: lib.version_check ships in PR-B (#85). If this PR (PR-C)
+    # somehow lands without PR-B (e.g. user pinned to a frankenstein version),
+    # show a human-readable message instead of a raw ModuleNotFoundError.
+    try:
+        from linkright.lib.version_check import (
+            get_installed_version, get_latest_version, is_newer,
+        )
+    except ImportError:
+        click.echo(
+            "✗ `linkright update` needs the version-check helper "
+            "(linkright.lib.version_check) which ships in linkright >= 0.4.1.\n"
+            "  Upgrade manually:\n"
+            f"  {_sys.executable} -m pip install --upgrade linkright"
+        )
+        _sys.exit(1)
+
+    installed = get_installed_version()
+    latest = get_latest_version(force_refresh=True)  # always-fresh for `update`
+
+    if latest is None:
+        click.echo("✗ Couldn't reach PyPI (offline?). Try again later or upgrade manually:")
+        click.echo(f"  {_sys.executable} -m pip install --upgrade linkright")
+        _sys.exit(1)
+
+    if not is_newer(latest, installed):
+        click.echo(f"✓ linkright {installed} is already the latest. Nothing to do.")
+        return
+
+    click.echo(f"Update available: linkright {installed} → {latest}")
+    click.echo("")
+    click.echo(f"Will run: {_sys.executable} -m pip install --upgrade linkright")
+    click.echo("(in your CURRENT Python env; if you use conda/pipx, install manually)")
+    click.echo("")
+
+    if check_only:
+        click.echo("--check: skipping install. Run `linkright update` (without --check) to upgrade.")
+        return
+
+    if not yes and not click.confirm("Proceed with upgrade?", default=False):
+        click.echo("Aborted.")
+        return
+
+    click.echo("")
+    click.echo("--- pip install --upgrade linkright ---")
+    proc = subprocess.run(
+        [_sys.executable, "-m", "pip", "install", "--upgrade", "linkright"],
+        capture_output=False,  # stream pip output to user
+    )
+    click.echo("--- end pip ---")
+    click.echo("")
+
+    if proc.returncode != 0:
+        click.echo(f"✗ pip exited with code {proc.returncode}. Upgrade failed.")
+        _sys.exit(proc.returncode)
+
+    # Importlib.metadata caches Distribution objects per Python session — the
+    # currently-running interpreter still reports the OLD version. Spawn a
+    # fresh subprocess to query the actual on-disk installed version.
+    fresh = subprocess.run(
+        [_sys.executable, "-c",
+         "from importlib.metadata import version; print(version('linkright'))"],
+        capture_output=True, text=True,
+    )
+    new_installed = fresh.stdout.strip() if fresh.returncode == 0 else latest
+
+    click.echo(f"✓ Upgraded: linkright {installed} → {new_installed}")
+    click.echo(f"  Changelog: https://github.com/satvik-jain-iitd/linkright_production/releases")
+
+
 @main.command("tldr")
 def tldr_cmd() -> None:
     """Print a one-page cheat sheet of the most-used commands."""
@@ -241,12 +348,20 @@ def tldr_cmd() -> None:
 # ── doctor — environment + config + deps health check ─────────────────────
 
 @main.command("doctor")
-def doctor_cmd() -> None:
+@click.option("--auto-fix", "auto_fix", is_flag=True,
+              help="After detecting failures, prompt to run the suggested fix command for each "
+                   "(confirm-each-step). Skips failures with no auto-fix available. "
+                   "Note: runs `pip install` in your CURRENT Python environment — "
+                   "if you use conda/pipx, install manually for cleanest results.")
+def doctor_cmd(auto_fix: bool) -> None:
     """Health check — config, API keys, deps, embedder, MongoDB, render path.
 
     Prints a table of green/red checks. Run this whenever something feels
     broken — it's the fastest way to localize the problem to a specific
     layer (network, missing key, bad install, etc.).
+
+    Pair with --auto-fix to opt into running the suggested fix commands
+    (each prompted individually).
     """
     import os
     import shutil as _shutil
@@ -308,8 +423,16 @@ def doctor_cmd() -> None:
         fastembed_ok = True
     except Exception:
         pass
-    rows.append(("Embedder (fastembed)", fastembed_ok,
-                 "installed" if fastembed_ok else "pip install fastembed (or set ORACLE_BACKEND_URL)"))
+    if fastembed_ok:
+        embedder_detail = "installed"
+    elif os.environ.get("ORACLE_BACKEND_URL"):
+        # AR walkthrough F-PRE-3 / X-2 fix: tell the user the fallback is
+        # active. Anxiety-without-agency pattern eliminated — they know what's
+        # actually running, and they know how to upgrade if they want speed.
+        embedder_detail = "using Oracle fallback (slower, network-dependent). pip install fastembed for offline + 5x speed."
+    else:
+        embedder_detail = "pip install fastembed (or set ORACLE_BACKEND_URL for hosted fallback)"
+    rows.append(("Embedder (fastembed)", fastembed_ok, embedder_detail))
 
     # 5. PDF render path — playwright OR weasyprint
     pw_ok = False
@@ -373,7 +496,29 @@ def doctor_cmd() -> None:
         rows.append((f"Agent backend `{backend}` on PATH", bin_present,
                      "installed" if bin_present else f"`{backend}` not on PATH"))
 
-    # 9. Render the table
+    # 10. Latest version on PyPI (silent fail if offline / cache miss).
+    #     Always ok=True because "update available" is informational, not a
+    #     blocking failure — we don't want doctor to exit 1 just because user
+    #     is one polish-PR behind. Detail line conveys the state clearly.
+    try:
+        from linkright.lib.version_check import (
+            get_installed_version, get_latest_version, is_newer,
+        )
+        _installed_v = get_installed_version()
+        _latest_v = get_latest_version()
+        if _latest_v is None:
+            rows.append(("Latest version (PyPI)", True,
+                         f"{_installed_v} installed (PyPI check unavailable — offline?)"))
+        elif is_newer(_latest_v, _installed_v):
+            rows.append(("Latest version (PyPI)", True,
+                         f"{_installed_v} → {_latest_v} available. Run: linkright update"))
+        else:
+            rows.append(("Latest version (PyPI)", True,
+                         f"{_installed_v} (latest)"))
+    except Exception:
+        pass  # version-check is fully optional; no crash if helper fails
+
+    # 11. Render the table
     GREEN = "\033[32m"; RED = "\033[31m"; DIM = "\033[2m"; RST = "\033[0m"
     width = max(len(label) for label, _, _ in rows)
     click.echo("LinkRight doctor — environment & deps check\n")
@@ -386,10 +531,84 @@ def doctor_cmd() -> None:
     click.echo("")
     if failures == 0:
         click.echo(f"{GREEN}All checks passed.{RST} You're good to run `linkright tailor`.")
+        return
+
+    # AR walkthrough F-PRE-2 fix: pluralization
+    issue_word = "issue" if failures == 1 else "issues"
+    click.echo(
+        f"{RED}{failures} {issue_word} above.{RST} "
+        f"Run `linkright doctor --auto-fix` to attempt the suggested fixes "
+        f"(prompted per step), or `linkright setup` for the wizard."
+    )
+
+    if auto_fix:
+        _run_doctor_auto_fix(rows)
+        return
+
+    sys.exit(1)
+
+
+# AR walkthrough X-2 fix: smoke-check failures now have an OPT-IN auto-fix path
+# (default off, prompted-per-step). Eliminates the "diagnostic without agency"
+# anti-pattern — user has a path forward without leaving the terminal.
+
+_PIP_FIX_RE = __import__("re").compile(
+    r"(pip install [\w\-\[\]\.]+(?:\s*&&\s*[\w\-\s]+)?)",
+    __import__("re").IGNORECASE,
+)
+
+
+def _extract_fix_command(detail: str) -> "str | None":
+    """Parse a doctor row's detail string for an auto-runnable shell command.
+
+    Heuristic: match the FIRST `pip install <pkg>` (optionally followed by
+    `&& <follow-up>` like `&& playwright install chromium`). Returns the
+    command string for shell execution, or None if no recognized fix.
+    """
+    if not detail:
+        return None
+    m = _PIP_FIX_RE.search(detail)
+    return m.group(1) if m else None
+
+
+def _run_doctor_auto_fix(rows: "list[tuple[str, bool, str]]") -> None:
+    """Prompt-and-run the suggested fix command for each failed row.
+
+    Per Decision 5 of the polish-plan alignment session: confirm-each-step
+    rather than --auto-fix --yes silent, to match Unix tradition (don't
+    mutate the user's env without explicit confirmation).
+    """
+    import subprocess
+    click.echo("")
+    click.echo("--auto-fix: prompting per failed check (Ctrl+C to abort the loop)...")
+    attempted = 0
+    for label, ok, detail in rows:
+        if ok:
+            continue
+        cmd = _extract_fix_command(detail)
+        if not cmd:
+            click.echo(f"  ⊝  {label}: no auto-fix available (manual: {detail})")
+            continue
+        click.echo("")
+        if click.confirm(f"  Run `{cmd}` for `{label}`?", default=False):
+            attempted += 1
+            try:
+                proc = subprocess.run(cmd, shell=True, capture_output=False)
+                if proc.returncode == 0:
+                    click.echo(f"  ✓  fix succeeded for `{label}`")
+                else:
+                    click.echo(f"  ✗  fix exited {proc.returncode} for `{label}`")
+            except Exception as exc:
+                click.echo(f"  ✗  fix subprocess failed: {exc}")
+        else:
+            click.echo(f"  ⊝  skipped `{label}`")
+
+    click.echo("")
+    if attempted:
+        click.echo(f"{attempted} fix(es) attempted. Re-run `linkright doctor` to verify.")
     else:
-        click.echo(f"{RED}{failures} issue(s) above.{RST} "
-                   f"Run `linkright setup` to auto-fix common ones, or `linkright tldr` for the cheat sheet.")
-        sys.exit(1)
+        click.echo("No fixes applied (all skipped or no auto-fix available).")
+    sys.exit(1 if attempted == 0 else 0)
 
 
 @main.command("setup")

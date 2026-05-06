@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,6 +38,60 @@ def resume_group() -> None:
     """
 
 
+def _render_success_card(run_dir: Path, started_at: float) -> None:
+    """Print the end-of-tailor success summary card.
+
+    Replaces the previous one-line `✓ Done — see <path>` with a structured
+    summary that surfaces (a) the PDF path, (b) the score if scorecard.json
+    exists, (c) wall-clock duration, and (d) suggested next-step commands.
+    Per the peak-end rule, the END of a long-running command is the user's
+    highest-emotion moment — celebrate the win + nudge the natural next move.
+
+    Best-effort: if scorecard.json is missing or unparseable, the score line
+    is silently dropped (no crash, no scary error).
+    """
+    duration = time.monotonic() - started_at
+    mins, secs = divmod(int(duration), 60)
+    duration_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+
+    pdf_path = run_dir / "artifacts" / "15_final_resume.pdf"
+    pdf_line = str(pdf_path) if pdf_path.exists() else "(PDF not produced — see logs/pipeline.log)"
+
+    score_line = None
+    scorecard_path = run_dir / "scorecard.json"
+    if scorecard_path.exists():
+        try:
+            data = json.loads(scorecard_path.read_text())
+            score = data.get("overall_score")
+            grade = data.get("overall_grade", "")
+            if score is not None:
+                score_line = f"{score:.1f}/100  ({grade})" if grade else f"{score:.1f}/100"
+        except Exception:
+            pass  # graceful degrade — no score line is OK
+
+    click.echo("")
+    click.echo(f"✓ Resume tailored — {run_dir.name}")
+    click.echo("")
+    click.echo(f"  📄 PDF:        {pdf_line}")
+    if score_line:
+        click.echo(f"  📊 Score:      {score_line}")
+    click.echo(f"  ⏱  Took:       {duration_str}")
+    click.echo("")
+    click.echo("  Next steps:")
+    click.echo("    linkright critique          → LLM review (5 actionable issues + fix UI)")
+    click.echo("    linkright fill              → Resolve missing-metric gaps")
+    click.echo("    linkright practice          → Interview prep cards from your bullets")
+    click.echo("")
+    if pdf_path.exists():
+        # AR R1 fixes: (1) cross-platform opener — `open` is macOS-only;
+        # Linux uses `xdg-open`, Windows uses `start`. (2) shell-quote the
+        # path so users with custom --run-id containing spaces can copy-paste
+        # the suggestion without it breaking on the unquoted whitespace.
+        opener = {"darwin": "open", "linux": "xdg-open", "win32": "start"}.get(sys.platform, "open")
+        click.echo(f'  Open the PDF: {opener} "{pdf_path}"')
+        click.echo("")
+
+
 @resume_group.command("tailor")
 @click.option("--resume", "-r", "resume_path", type=click.Path(exists=True, path_type=Path), required=True,
               help="Resume PDF or career_signals.yaml")
@@ -51,8 +106,28 @@ def resume_group() -> None:
 @click.option("--deterministic", is_flag=True,
               help="Pin temperature=0 + seed across all LLM calls. Pairs with hypothesis-test for variance reduction.")
 @click.option("--seed", default=42, type=int, help="Seed for deterministic mode (default 42). Honoured by Groq/Cerebras/OpenRouter; Gemini ignores.")
-def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int) -> None:
-    """Tailor resume for a JD via the 16-step pipeline."""
+@click.option("--no-pause", "no_pause", is_flag=True, help="Skip phase-boundary review checkpoints (CI / non-interactive mode).")
+def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int, no_pause: bool) -> None:
+    """Tailor your resume for a job description (typically 2-4 minutes).
+
+    \b
+    Quick start:
+      linkright tailor -r resume.pdf -j jd.md
+
+    The command parses your resume + JD, retrieves matching career nuggets,
+    drafts bullets via LLM, scores + ranks, and renders a final PDF.
+
+    \b
+    Most users only need:
+      -r / --resume <PATH>     Your resume PDF
+      -j / --jd <PATH>         Job description (markdown)
+
+    Other flags below are advanced — needed only for non-PM roles
+    (--mode), CI / non-interactive runs (--no-pause / --yes), repeatable
+    test runs (--deterministic / --seed), or fresh re-extraction
+    (--no-cache).
+    """
+    _started_at = time.monotonic()
     cfg = Config.load()
     llm_mode = llm_mode or cfg.default_llm_mode
     mode = mode or cfg.default_skill_mode
@@ -62,6 +137,10 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
         os.environ["LR_DETERMINISTIC"] = "1"
         os.environ["LR_SEED"] = str(seed)
         click.echo(f"Deterministic mode ON (seed={seed}) — temperature pinned to 0 across all LLM calls.")
+
+    if no_pause:
+        os.environ["LR_NO_PAUSE"] = "1"
+        click.echo("Pause checkpoints disabled (--no-pause).")
 
     run_dir = cfg.runs_dir() / run_id
     (run_dir / "inputs").mkdir(parents=True, exist_ok=True)
@@ -100,7 +179,7 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
                 if copied:
                     cache_used = True
                     click.echo(f"✓ Profile cache hit — reusing {len(copied)} artifacts from ~/.linkright/profile/ "
-                               f"(saves ~30-60s of step_00-03 work).")
+                               f"(saves ~30-60s of parse + extract + embed work).")
             else:
                 click.echo(f"⚠ Profile embedder tier ({meta.get('embedder_tier')}) ≠ active tier "
                            f"({active_tier}); skipping cache (rebuild profile to align).")
@@ -151,7 +230,7 @@ def tailor(resume_path: Path, jd_path: Path, mode: str | None, llm_mode: str | N
         except Exception as e:  # noqa: BLE001
             click.echo(f"Pipeline error: {e}", err=True)
             raise click.Abort()
-        click.echo(f"✓ Done — see {run_dir}")
+        _render_success_card(run_dir, _started_at)
     else:
         raise click.BadParameter(f"Unknown llm-mode: {llm_mode}")
 
@@ -225,13 +304,14 @@ def iterate(run_id: str | None, max_iterations: int) -> None:
 def improve_cmd(run_id: str | None, target_dim: str | None, dry_run: bool) -> None:
     """REFINE existing bullets — NOT regenerate from scratch.
 
-    Per Satvik 2026-05-01: scratch regen (tailor command) generates new content;
-    improve (this command) reads existing artifacts, identifies what's missing
-    vs target dim, runs targeted refinement LLM calls to fix ONLY that
-    deficiency while preserving everything else (metrics, bolds, verbs).
+    Use this when your tailored resume is mostly good but one specific
+    dimension needs polish (e.g., bullets too long, bullets too short).
+    Reads the latest tailor run, identifies what's off vs the target
+    dim, runs targeted LLM refinement on ONLY that dimension —
+    preserves everything else (metrics, bolds, verbs).
 
-    MVP supports `width_hit_rate` only — bullets outside [108,118] char band
-    get trimmed/expanded via klass=B refinement. Pattern extends to other dims.
+    Currently supports `width_hit_rate` (bullets outside [108, 118]
+    char band get trimmed/expanded). Other dims coming.
     """
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
@@ -250,23 +330,24 @@ def improve_cmd(run_id: str | None, target_dim: str | None, dry_run: bool) -> No
 @click.option("--dry-run", is_flag=True,
               help="Detect gaps and print, but skip user prompts + LLM rewrites.")
 def fill_metrics_cmd(run_id: str | None, dry_run: bool) -> None:
-    """Interactive truth-engine — fill missing/weak bullet metrics from user input.
+    """Interactive metric-filler — replace weak bullets with concrete numbers.
 
-    Truth Engine track extension. For every bullet whose magnitude tier is
-    <= 0.5 (raw count or no metric), the tool:
-      1. Shows 3 LLM-suggested metric TYPES (e.g., cost reduction, time saved,
-         user reach) with industry-average ranges + per-bullet rationale.
-      2. User picks ONE type (or marks "metric not relevant" to skip).
-      3. User picks ONE of three paths:
-           a. Provide actual value (e.g., '18%')
-           b. Use placeholder ('X%', 'Y$M', 'Z hours' — fill offline later)
+    For each bullet that counts things ('Built 5 features') instead of
+    measuring impact ('Built 5 features that drove 30% adoption'), the
+    tool:
+      1. Suggests 3 metric types (e.g., cost reduction, time saved,
+         user reach) with industry-typical ranges.
+      2. You pick a type (or mark "not relevant" to skip).
+      3. You pick a fill mode:
+           a. Provide your actual value (e.g., '18%')
+           b. Use a placeholder ('X%', 'Y$M', 'Z hours') — fill offline
            c. Cancel — leave bullet alone
-      4. Bullet rewritten with chosen value; re-render + re-score.
+      4. Bullet rewritten with your value; resume re-rendered + re-scored.
 
-    Placeholders are NOT fabrication — they openly signal "value pending".
-    A common industry pattern for NDA / privacy / mid-process candidates.
-    Per Satvik 2026-05-02: this is coaching about what metrics matter; user
-    supplies actuals offline, tool never invents numbers.
+    Placeholders are NOT fabrication — they openly signal "value pending"
+    (a common pattern for NDA / privacy / mid-process candidates). The
+    tool coaches WHAT metrics matter; YOU supply the actual numbers.
+    Tool never invents values.
     """
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
@@ -285,19 +366,18 @@ def fill_metrics_cmd(run_id: str | None, dry_run: bool) -> None:
 @click.option("--non-interactive", is_flag=True,
               help="Print the full prep packet without prompting (for piping/review).")
 def practice_cmd(run_id: str | None, non_interactive: bool) -> None:
-    """Walk through interview-practice cards generated from your tailored resume.
+    """Walk through interview-practice cards from your tailored resume.
 
-    Reads `<run>/artifacts/15b_interview_prep.json` (auto-generated by
-    step_14 via NEW-6 hybrid signal classifier) and shows per bullet:
+    For every bullet in your latest resume, shows:
       - the competency signal it conveys
       - 2 recruiter screening questions this bullet best answers
-      - STAR seed template (Action pre-filled from the bullet)
-      - prompt to type your answer (saved as audit log)
+      - STAR (Situation / Task / Action / Result) seed template,
+        with Action pre-filled from the bullet
+      - prompt to type your answer (saved as your audit log)
 
-    Per Satvik 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
-    "every bullet must serve as baseline narrative for Round 1 / HR screening
-    rounds for common questions that are always asked always". This command
-    operationalizes that — Pillar 1 (resume) ↔ Pillar 3 (interview prep) bridge.
+    Bridges Pillar 1 (resume) ↔ Pillar 3 (interview prep) — every
+    bullet becomes a baseline narrative for HR-screening / Round 1
+    questions that almost-always come up.
     """
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
@@ -314,19 +394,21 @@ def practice_cmd(run_id: str | None, non_interactive: bool) -> None:
 @click.option("--run-id", default=None,
               help="Run id under ~/.linkright/runs/ (defaults to latest non-hypothesis run)")
 def strategy_review_cmd(run_id: str | None) -> None:
-    """Review the bullet plan BEFORE generation — Truth Engine Layer 2 (PRE).
+    """Review the bullet plan BEFORE final generation.
 
-    Per Satvik 2026-05-02 (memory feedback_strategy_human_in_the_loop):
-    "the strategy step where outline is decided is the MOST CRUCIAL PHASE,
-    align with user on all the things before building out the resume,
-    dimensions, no of bullets, what kind of experience will be showcased
-    by each bullet in order of alignment with highest on top in every
-    job role/title inside a company".
+    The bullet-plan step is the most consequential decision in the
+    tailor pipeline — it determines which experiences from your career
+    get prioritized, in what order, and how many bullets each role
+    gets. This command surfaces that plan for you to inspect and edit
+    BEFORE the LLM writes the verbose bullets.
 
     Workflow:
-      1. Run `linkright resume tailor` once (produces artifacts incl. step_07/08)
-      2. Run THIS command — review per-role nugget plan, pick which become bullets
-      3. Future tailor runs read the confirmed plan and override auto-retrieval
+      1. Run `linkright resume tailor` once — pipeline retrieves
+         nuggets per role, builds a draft plan
+      2. Run THIS command — review per-role nugget plan; pick which
+         become bullets
+      3. Future tailor runs read your confirmed plan and override the
+         auto-retrieval
     """
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
@@ -343,23 +425,18 @@ def strategy_review_cmd(run_id: str | None) -> None:
 @click.option("--run-id", default=None,
               help="Run id under ~/.linkright/runs/ (defaults to latest non-hypothesis run)")
 def critique_cmd(run_id: str | None) -> None:
-    """End-of-pipeline LLM critique — Truth Engine Layer 3.
+    """LLM critique of your tailored resume + interactive fixes.
 
-    Reads the rendered resume + JD, asks an LLM critic to identify up to 5
-    actionable issues (weak phrasings, generic skills, missing JD coverage,
-    illogical bullets, etc.), then walks each issue interactively. Per
-    issue, user picks: apply suggested fix / open in $EDITOR for manual
-    edit / skip.
+    Reads your rendered resume + JD. An LLM critic identifies up to 5
+    actionable issues (weak phrasings, generic skills, missing JD
+    coverage, illogical bullets, etc.). For each issue you pick:
+      - Apply: take the LLM's suggested fix
+      - Manual edit: opens the bullet in $EDITOR
+      - Skip: leave it alone
 
-    Closes the Truth Engine loop:
-      Layer 1 (start):  `linkright profile create` → contact verify
-      Layer 2 (mid):    `linkright resume fill-metrics` → metric resolution
-      Layer 3 (end):    THIS command — critique + fix-or-skip per issue
-
-    Per Satvik 2026-05-02: "ask the model to criticise and say what does
-    not make sense and how to fix it and then figure out with the user how
-    to go about improving the resume with couple of options (including a
-    manual edit one)".
+    Run this right after `linkright tailor` to catch problems before
+    you ship. Pairs naturally with `linkright fill` (metric gaps) and
+    `linkright practice` (interview prep cards).
     """
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
