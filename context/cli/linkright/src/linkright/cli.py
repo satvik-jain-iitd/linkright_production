@@ -34,6 +34,7 @@ from linkright.content.cli import content_group
 from linkright.coverletter.cli import coverletter_group
 from linkright.watch.cli import watch_group
 from linkright.stories.cli import stories_group
+from linkright.keys.cli import keys_group
 
 
 _EPILOG = """\
@@ -80,6 +81,7 @@ main.add_command(coverletter_group)     # name="cover-letter"
 main.add_command(coverletter_group, name="cl")  # top-level alias
 main.add_command(watch_group, name="watch")     # Sprint D — passive job-page capture via Chrome CDP
 main.add_command(stories_group)         # Pillar 3 Story Bank — STAR-format career narratives
+main.add_command(keys_group)            # API key management (list/add/remove/test)
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
@@ -264,34 +266,40 @@ def doctor_cmd() -> None:
                  profile_meta if os.path.isfile(profile_meta)
                  else "run `linkright profile create -r resume.pdf`"))
 
-    # 3. At least one LLM provider key in env or ~/.linkright/.env
-    env_path = os.path.join(home_lr, ".env")
-    env_text = ""
-    if os.path.isfile(env_path):
-        try:
-            with open(env_path) as f:
-                env_text = f.read()
-        except Exception:
-            env_text = ""
-    provider_envs = [
-        "GROQ_API_KEY", "GROQ_API_KEY_2",
-        "CEREBRAS_API_KEY", "CEREBRAS_API_KEY_2",
-        "GEMINI_API_KEY", "GOOGLE_API_KEY",
-        "ZAI_API_KEY", "ZAI_API_KEY_2",
-        "SAMBANOVA_API_KEY",
-        "CLOUDFLARE_API_TOKEN",
-        "OPENROUTER_API_KEY",
-    ]
-    found_keys = [
-        k for k in provider_envs
-        if os.environ.get(k) or (k + "=" in env_text)
-    ]
-    rows.append((
-        "At least 1 free-tier LLM key",
-        bool(found_keys),
-        ", ".join(found_keys[:3]) + (f" (+{len(found_keys)-3} more)" if len(found_keys) > 3 else "")
-        if found_keys else "no GROQ/CEREBRAS/GEMINI/ZAI/SAMBANOVA/CLOUDFLARE/OPENROUTER key found",
-    ))
+    # 3. Multi-key LLM health check — uses keys module for accurate counting
+    try:
+        from linkright.keys.env_writer import read_all_managed
+        from linkright.keys.catalogue import PROVIDERS as _PROVIDERS, resilience_score
+        _managed = read_all_managed()
+        _total_keys = sum(1 for p in _PROVIDERS for v in p.all_env_vars if _managed.get(v))
+        _pcount = sum(1 for p in _PROVIDERS if any(_managed.get(v) for v in p.all_env_vars))
+        if _total_keys:
+            _score = resilience_score(_total_keys, _pcount)
+            _detail = f"{_total_keys} key(s) across {_pcount} provider(s) — resilience: {_score}"
+        else:
+            _detail = "no keys — run `linkright keys add groq`"
+        rows.append(("LLM keys configured", bool(_total_keys), _detail))
+    except ImportError:
+        # Fallback for environments where keys module is missing
+        env_path = os.path.join(home_lr, ".env")
+        env_text = ""
+        if os.path.isfile(env_path):
+            try:
+                with open(env_path) as f:
+                    env_text = f.read()
+            except Exception:
+                env_text = ""
+        provider_envs = [
+            "GROQ_API_KEY", "CEREBRAS_API_KEY", "GEMINI_API_KEY",
+            "SAMBANOVA_API_KEY", "CLOUDFLARE_API_TOKEN", "OPENROUTER_API_KEY",
+        ]
+        found_keys = [k for k in provider_envs if os.environ.get(k) or (k + "=" in env_text)]
+        rows.append((
+            "At least 1 free-tier LLM key",
+            bool(found_keys),
+            ", ".join(found_keys[:3]) + (f" (+{len(found_keys)-3} more)" if len(found_keys) > 3 else "")
+            if found_keys else "no GROQ/CEREBRAS/GEMINI key found — run `linkright keys add groq`",
+        ))
 
     # 4. Embedder availability — fastembed (default) or sentence-transformers
     fastembed_ok = False

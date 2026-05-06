@@ -1,16 +1,19 @@
 """Interactive setup wizard — `linkright setup`.
 
-Goal: zero-jargon onboarding for a new user. Three core decisions:
+Goal: zero-jargon onboarding for a new user. Four core decisions +
+an optional API-key step:
 
-  1. Groq API key  (powers the 16-step resume pipeline — free at console.groq.com)
+  1. Groq API key  (legacy primary — now part of the multi-key step)
   2. Embedder tier (fastembed / sentence-transformers / Oracle)
   3. PDF render    (Playwright / skip)
+  4. API keys step (multi-provider — primary + fallbacks)
 
 After choices, we:
   - Verify the Groq key with a live API call
   - Install any missing pip packages silently
   - Run a smoke check on each picked tier (catches misconfig early)
-  - Write picks to ~/.linkright/config.yaml and Groq key to ~/.linkright/.env
+  - Write picks to ~/.linkright/config.yaml
+  - Write API keys atomically to ~/.linkright/.env via keys.env_writer
   - Print a 3-line "you're ready" summary with the exact next command
 
 The user never sees pip output, Python tracebacks, or model download progress
@@ -137,7 +140,11 @@ def _playwright_install() -> bool:
 
 
 def _write_env_key(key_name: str, value: str) -> None:
-    """Write/update a single key in ~/.linkright/.env (chmod 600, in-place update)."""
+    """Write/update a single key in ~/.linkright/.env (chmod 600, in-place update).
+
+    DEPRECATED for multi-key use — kept for backward compat with _ask_groq_key.
+    New code uses keys.env_writer.write_keys() instead.
+    """
     env_path = Path.home() / ".linkright" / ".env"
     env_path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
@@ -245,6 +252,224 @@ def _smoke_pdf() -> tuple[bool, str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Step 4: Multi-key API setup
+# ─────────────────────────────────────────────────────────────────────────
+
+def _validate_key_format(spec, key_val: str) -> tuple[bool, str]:
+    """Validate key format against provider spec. Returns (ok, message)."""
+    if len(key_val) < spec.key_min_len:
+        return False, (
+            f"Key too short ({len(key_val)} chars, expected ≥{spec.key_min_len}). "
+            f"Did you paste the full key?"
+        )
+    if spec.key_prefix and not key_val.startswith(spec.key_prefix):
+        return False, (
+            f"Expected format: `{spec.key_prefix}...` for {spec.name}. "
+            f"Got: `{key_val[:8]}...` — check you copied the right key."
+        )
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.")
+    bad_chars = set(key_val) - allowed
+    if bad_chars:
+        return False, f"Unexpected characters in key: {bad_chars}"
+    return True, "OK"
+
+
+def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
+    """Run the interactive API keys wizard step.
+
+    Returns a dict of {env_var: value} to write via env_writer.write_keys().
+    If user skips, returns {}.
+
+    `existing_groq_key` — if user already entered a Groq key in the old step,
+    pre-populate it so we don't ask twice.
+    """
+    from linkright.keys.catalogue import PROVIDERS, resilience_score
+    from linkright.keys.env_writer import mask_key
+
+    print()
+    print("────────────────────────────────────────────────────")
+    print("5/5 — API Keys (Direct mode LLM cascade)")
+    print("────────────────────────────────────────────────────")
+    print()
+    print("  LinkRight cascades through 7 free-tier providers.")
+    print("  Add 1+ keys now for redundancy — no credit cards needed for most.")
+    print("  Skip if you'll use Agent mode (Claude Code / Cursor) only.")
+    print()
+
+    MODE_OPTIONS = [
+        {"key": "interactive", "label": "Add keys interactively  (guided, ~2 min)", "recommended": True},
+        {"key": "agent",       "label": "Skip — I'll use Agent mode only (Claude Code / Cursor)"},
+        {"key": "later",       "label": "Skip — I'll add keys later via `linkright keys`"},
+    ]
+    mode = _pick("How would you like to add API keys?", MODE_OPTIONS)
+    if mode["key"] != "interactive":
+        if mode["key"] == "agent":
+            print()
+            print("  OK — Agent mode uses your LLM CLI tool directly.")
+            print("  You can add direct-mode keys anytime: `linkright keys add groq`")
+        else:
+            print()
+            print("  OK — add keys anytime: `linkright keys add <provider>`")
+        return {}
+
+    # Interactive per-provider flow
+    updates: dict[str, str] = {}
+
+    # If user already entered Groq in the legacy step, pre-populate
+    if existing_groq_key and existing_groq_key.startswith("gsk_"):
+        updates["GROQ_API_KEY"] = existing_groq_key
+
+    total_providers = len(PROVIDERS)
+    for idx, spec in enumerate(PROVIDERS, start=1):
+        print()
+        print(f"  ────────────────────────────────────────────────")
+        badge = "⭐ recommended" if spec.recommended else ""
+        print(f"  {idx}/{total_providers} ▶ {spec.name}  {badge}")
+        print()
+        print(f"  What it is:  {spec.description}")
+        print(f"  Free tier:   {spec.free_tier}")
+        print(f"  Signup:      {spec.signup_url}")
+        if not spec.signup_url_verified:
+            print(f"  (URL unconfirmed — check provider's docs if link doesn't work)")
+        print()
+
+        # Check if primary already set (from legacy step)
+        if updates.get(spec.primary_env):
+            masked = mask_key(updates[spec.primary_env])
+            print(f"  Primary key already set: {masked}")
+            add_more = questionary.confirm(
+                f"  Add a fallback key for {spec.name}?", default=False
+            ).ask()
+            if not add_more:
+                continue
+            # Find next slot for fallback
+            slot_vars = spec.extra_envs
+            fallback_count = 0
+            for slot_var in slot_vars:
+                if updates.get(slot_var):
+                    fallback_count += 1
+                    continue
+                if fallback_count >= 3:
+                    break
+                ok, new_updates = _prompt_key_for_slot(spec, slot_var, fallback_count + 1, updates)
+                updates.update(new_updates)
+                if not ok:
+                    break
+                add_another = questionary.confirm(
+                    f"  Add another fallback key for {spec.name}?", default=False
+                ).ask()
+                if not add_another:
+                    break
+                fallback_count += 1
+            continue
+
+        # Normal flow — ask if they want to add this provider
+        PROVIDER_OPTIONS = [
+            {"key": "add",  "label": f"Add primary key for {spec.name}"},
+            {"key": "skip", "label": f"Skip {spec.name}"},
+        ]
+        action = _pick(f"Configure {spec.name}?", PROVIDER_OPTIONS, default_recommended=True)
+        if action["key"] == "skip":
+            continue
+
+        # Prompt primary key
+        _, new_updates = _prompt_key_for_slot(spec, spec.primary_env, 0, updates)
+        updates.update(new_updates)
+        if not updates.get(spec.primary_env):
+            continue  # User aborted this provider
+
+        # Offer fallbacks (up to 3)
+        for fb_num, slot_var in enumerate(spec.extra_envs, start=1):
+            if fb_num > 3:
+                break
+            add_fb = questionary.confirm(
+                f"  Add fallback key {fb_num} for {spec.name}? (helps avoid rate limits)",
+                default=False,
+            ).ask()
+            if not add_fb:
+                break
+            ok, new_updates = _prompt_key_for_slot(spec, slot_var, fb_num, updates)
+            updates.update(new_updates)
+            if not ok:
+                break
+
+    # Summary table
+    if updates:
+        print()
+        print("  ── Keys saved ───────────────────────────────────")
+        key_count = 0
+        provider_count = 0
+        for spec in PROVIDERS:
+            provider_keys = [(v, updates[v]) for v in spec.all_env_vars if updates.get(v)]
+            if provider_keys:
+                provider_count += 1
+                key_count += len(provider_keys)
+                print(f"  ✓  {spec.name:<20}  {len(provider_keys)} key(s)")
+            else:
+                print(f"  —  {spec.name:<20}  (skipped)")
+
+        score = resilience_score(key_count, provider_count)
+        score_color = "\033[32m" if score in ("EXCELLENT", "GOOD") else "\033[33m"
+        print()
+        print(f"  {key_count} key(s) across {provider_count} provider(s)  |  "
+              f"Cascade resilience: {score_color}{score}\033[0m")
+        print()
+        print("  Run `linkright keys test` to verify live status.")
+    else:
+        print()
+        print("  No keys added. Run `linkright keys add groq` when ready.")
+
+    return updates
+
+
+def _prompt_key_for_slot(
+    spec, slot_var: str, slot_num: int, existing_updates: dict[str, str]
+) -> tuple[bool, dict[str, str]]:
+    """Prompt for a single key + optional paired value (Cloudflare).
+
+    Returns (success, {var: value} updates).
+    slot_num=0 means primary, 1..3 means fallback.
+    """
+    from linkright.keys.env_writer import mask_key
+
+    slot_label = "primary key" if slot_num == 0 else f"fallback key {slot_num}"
+    key_val = questionary.password(
+        f"  Paste {spec.name} {slot_label}:"
+    ).ask()
+    if key_val is None:
+        return False, {}
+    key_val = key_val.strip()
+    if not key_val:
+        return False, {}
+
+    ok, msg = _validate_key_format(spec, key_val)
+    if not ok:
+        print(f"  \033[33m⚠ Format warning: {msg}\033[0m")
+        proceed = questionary.confirm("  Save anyway?", default=False).ask()
+        if not proceed:
+            print("  Skipped — key not saved.")
+            return False, {}
+
+    updates: dict[str, str] = {slot_var: key_val}
+    print(f"  ✓  {slot_var} saved")
+
+    # Cloudflare needs a paired account_id
+    if spec.paired_env:
+        if slot_num == 0:
+            pair_var = spec.paired_env
+        else:
+            pair_var = f"{spec.paired_env}_{slot_num}"
+        acct_id = questionary.text(
+            f"  Cloudflare Account ID (find at dash.cloudflare.com → Overview → Account ID):"
+        ).ask()
+        if acct_id and acct_id.strip():
+            updates[pair_var] = acct_id.strip()
+            print(f"  ✓  {pair_var} saved")
+
+    return True, updates
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Wizard entry
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -252,32 +477,39 @@ def run_wizard() -> int:
     """Returns shell exit code (0 OK, 1 user-cancel, 2 install/smoke fail)."""
     print()
     print("╔════════════════════════════════════════════════════╗")
-    print("║   LinkRight setup — 3 quick choices                ║")
+    print("║   LinkRight setup — 5 quick choices                ║")
     print("╚════════════════════════════════════════════════════╝")
     print()
-    print("First: a free Groq API key powers the resume pipeline.")
-    print("Then: embedder + PDF renderer choices (⭐ = recommended).")
+    print("Steps: LLM key • embedder • PDF render • API keys (~2 min total)")
+    print("⭐ = recommended choice")
     print()
 
     # ── Decision 1: Groq API key ───────────────────────────────────
-    print("1/3 — Groq API key (powers the 16-step resume pipeline)")
+    print("1/5 — Groq API key (primary LLM for the resume pipeline)")
     print()
     groq_key, ok_groq, msg_groq = _ask_groq_key()
 
     # ── Decision 2: Embedder ───────────────────────────────────────
     print()
-    embedder = _pick("2/3 — Which embedder?", EMBEDDER_OPTIONS)
+    embedder = _pick("2/5 — Which embedder?", EMBEDDER_OPTIONS)
 
     # ── Decision 3: PDF render ─────────────────────────────────────
-    pdf = _pick("3/3 — Render PDFs from generated resumes?", PDF_OPTIONS)
+    pdf = _pick("3/5 — Render PDFs from generated resumes?", PDF_OPTIONS)
+
+    # ── Decision 4: Skill mode (legacy — hidden from 5-step flow to avoid clutter)
+    # Keep variable for config write but don't ask — default "auto"
+    skill_mode_key = "auto"
 
     print()
     print("──────────────────────────────────────────────────────")
-    print(f"Picks  →  LLM: direct (Groq)  •  embedder: {embedder['key']}  •  PDF: {pdf['key']}")
+    print(f"Picks so far  →  embedder: {embedder['key']}  •  PDF: {pdf['key']}")
     print("──────────────────────────────────────────────────────")
-    print()
 
-    # ── Install missing pieces ─────────────────────────────────────
+    # ── Decision 5: Multi-provider API keys ───────────────────────
+    api_key_updates = run_api_keys_step(existing_groq_key=groq_key if ok_groq else "")
+
+    print()
+    print("──────────────────────────────────────────────────────")
     print("Installing missing pieces (pip, models, browsers)…")
     failures: list[str] = []
 
@@ -326,6 +558,16 @@ def run_wizard() -> int:
     else:
         ok_pdf = True
         print("  PDF:                 — skipped (HTML-only output)")
+
+    # ── Write API keys atomically ────────────────────────────────────
+    if api_key_updates:
+        try:
+            from linkright.keys.env_writer import write_keys
+            write_keys(api_key_updates)
+            print(f"  ✓  API keys → ~/.linkright/.env")
+        except Exception as e:
+            print(f"  ✗  Failed to write API keys: {e}")
+            failures.append("api-key write")
 
     # ── Write config ────────────────────────────────────────────────
     cfg_path = Path.home() / ".linkright" / "config.yaml"
@@ -403,6 +645,7 @@ def run_wizard() -> int:
     print()
     print("To re-run the wizard later:  linkright setup")
     print("To check current setup:      linkright setup --check")
+    print("To manage API keys:          linkright keys")
     return 0
 
 
@@ -440,4 +683,20 @@ def run_check() -> int:
     if cfg.get("render_pdf"):
         ok, msg = _smoke_pdf()
         print(f"  PDF:       {'✓' if ok else '✗'}  {msg}")
+
+    # Multi-key status
+    try:
+        from linkright.keys.env_writer import read_all_managed
+        from linkright.keys.catalogue import PROVIDERS, resilience_score
+        managed = read_all_managed()
+        total = sum(1 for p in PROVIDERS for v in p.all_env_vars if managed.get(v))
+        pcount = sum(1 for p in PROVIDERS if any(managed.get(v) for v in p.all_env_vars))
+        if total:
+            score = resilience_score(total, pcount)
+            print(f"  API keys:  ✓  {total} key(s) across {pcount} provider(s) — {score}")
+        else:
+            print("  API keys:  ✗  none configured — run `linkright keys add groq`")
+    except ImportError:
+        pass
+
     return 0
