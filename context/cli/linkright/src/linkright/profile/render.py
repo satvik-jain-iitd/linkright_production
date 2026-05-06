@@ -69,7 +69,14 @@ def _date_sort_key(date_str: str) -> tuple[int, int]:
       'Nov 2024'    → (2024, 11)
       'Jul 2024'    → (2024, 7)
       '2021'        → (2021, 0)        # year-only education entries
-      'Present'     → (9999, 12)       # active roles float to top in DESC
+      'Present'     → (9999, 12)       # defensive fallback: should not occur
+                                       # for `start_date` in valid data, but
+                                       # if it does, sort it to top in DESC.
+                                       # NOTE: 'current-role-first' boost for
+                                       # Professional Experience is implemented
+                                       # at the COMPANY-sort level via
+                                       # `_co_key`'s `is_active` flag, NOT
+                                       # via this function's `Present` branch.
       '' / unknown  → (0, 0)           # sorts last in DESC
 
     Without this helper, string-comparison on 'Nov 2024' vs 'Jan 2025' would
@@ -94,14 +101,20 @@ def _date_sort_key(date_str: str) -> tuple[int, int]:
     return (year, month)
 
 
-def _load_date_lookups(profile_dir: Path) -> tuple[dict[tuple[str, str], str], dict[str, str], dict[tuple[str, str], str]]:
+def _load_date_lookups(profile_dir: Path) -> tuple[dict[tuple[str, str], str], dict[str, str], dict[tuple[str, str], str], dict[tuple[str, str], str]]:
     """Lazy-load `01_resume_parsed.json` for date hints.
 
-    Returns three dicts (all empty if the artifact is missing or corrupt):
+    Returns four dicts (all empty if the artifact is missing or corrupt):
       * work_dates:  (company.lower(), role.lower()) → "start – end"
-      * edu_dates:   institution.lower()             → "year"
+      * edu_dates:   institution.lower()             → "year" (or "y1 / y2"
+                     if multiple degrees from the same institution — common
+                     for IIT-style 5-year integrated programs)
       * work_starts: (company.lower(), role.lower()) → start_date string
                      (used to sort Professional Experience by recency)
+      * work_ends:   (company.lower(), role.lower()) → end_date string
+                     (used to detect 'Present' = currently-active roles, so
+                     they sort to the top of Professional Experience —
+                     resume-convention "current job first")
 
     Failure to load is non-fatal — the tree still renders, just without
     date chips. We never crash `profile show` over a missing artifact.
@@ -109,10 +122,11 @@ def _load_date_lookups(profile_dir: Path) -> tuple[dict[tuple[str, str], str], d
     work_dates: dict[tuple[str, str], str] = {}
     edu_dates: dict[str, str] = {}
     work_starts: dict[tuple[str, str], str] = {}
+    work_ends: dict[tuple[str, str], str] = {}
 
     parsed_path = profile_dir / "artifacts" / "01_resume_parsed.json"
     if not parsed_path.exists():
-        return work_dates, edu_dates, work_starts
+        return work_dates, edu_dates, work_starts, work_ends
 
     try:
         parsed = json.loads(parsed_path.read_text()).get("parsed", {})
@@ -124,15 +138,27 @@ def _load_date_lookups(profile_dir: Path) -> tuple[dict[tuple[str, str], str], d
             if co and start:
                 work_dates[(co, role)] = f"{start} – {end}"
                 work_starts[(co, role)] = start
+                work_ends[(co, role)] = end
+        # Accumulate education years per institution into a list, then join
+        # with ' / ' for display. This preserves dual-degree history (e.g.
+        # IIT integrated 5-year programs) instead of silently overwriting.
+        edu_years_acc: dict[str, list[str]] = defaultdict(list)
         for edu in parsed.get("education", []) or []:
             inst = (edu.get("institution") or "").strip().lower()
             year = (edu.get("year") or "")
             if inst and year:
-                edu_dates[inst] = str(year)
+                edu_years_acc[inst].append(str(year))
+        for inst, years in edu_years_acc.items():
+            # Sort DESC so the most recent year leads ('2021 / 2019').
+            try:
+                years_sorted = sorted(set(years), key=lambda y: int(y) if y.isdigit() else 0, reverse=True)
+            except Exception:
+                years_sorted = list(dict.fromkeys(years))
+            edu_dates[inst] = " / ".join(years_sorted)
     except Exception:
         pass  # corrupt JSON / missing keys / etc. → no dates; tree still renders.
 
-    return work_dates, edu_dates, work_starts
+    return work_dates, edu_dates, work_starts, work_ends
 
 
 def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None:
@@ -161,7 +187,7 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         console.print("[yellow]No nuggets in this profile.[/]")
         return
 
-    work_dates, edu_dates, work_starts = _load_date_lookups(profile_dir)
+    work_dates, edu_dates, work_starts, work_ends = _load_date_lookups(profile_dir)
 
     # Group: type → company → role → [nuggets]. A second per-type bucket holds
     # nuggets without a company (common for skills, awards, projects).
@@ -184,7 +210,13 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         "[dim]Priority: [bold red]P0[/]=core  [bold yellow]P1[/]=strong  "
         "[dim italic]P2[/]=supporting  [dim italic]P3[/]=context-only[/]"
     )
-    if not full:
+    # Only surface the --full tip when there's an actual long bullet to be
+    # truncated — otherwise it's noise that trains users to ignore tips.
+    has_long_bullet = any(
+        len((n.get("nugget_text") or n.get("answer", "") or "").strip()) > 120
+        for n in nuggets
+    )
+    if not full and has_long_bullet:
         console.print("[dim]Tip:  bullets >120 chars are truncated. Run `linkright profile show --full` for full text.[/]")
 
     def _truncate_title(s: str, limit: int = 120) -> str:
@@ -213,19 +245,32 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
 
         section_node = tree.add(f"[bold cyan]{label}[/]")
 
-        # Sort companies: work_experience by start_date DESC (most recent first);
-        # education by year DESC; everything else alphabetical for stability.
+        # Sort companies: work_experience puts CURRENT employer (any role
+        # with end_date == "Present") at the top — universal resume convention,
+        # so users see their primary current role first. Among inactive
+        # companies, sort by latest start_date DESC. Within work, also
+        # break ties on start_date DESC so a current AND-recently-started
+        # role still beats a current-but-older-started role.
+        # Education by year DESC; everything else alphabetical for stability.
         if n_type == "work_experience":
             def _co_key(item):
                 co_lower = item[0].lower()
                 roles_dict = item[1]
-                # Pick the LATEST start_date among roles within this company —
-                # so a multi-role company (promotions) sorts by its newest role.
+                # is_active = 1 if ANY role at this company is still ongoing
+                # (its end_date string parses to (9999, 12) — i.e. literal
+                # "Present" or empty). Active beats inactive; ties broken
+                # by latest start_date.
+                ends = [
+                    work_ends.get((co_lower, r.lower()), "")
+                    for r in roles_dict.keys()
+                ]
+                is_active = 1 if any(_date_sort_key(e) == (9999, 12) for e in ends) else 0
                 starts = [
                     work_starts.get((co_lower, r.lower()), "")
                     for r in roles_dict.keys()
                 ]
-                return max((_date_sort_key(s) for s in starts), default=(0, 0))
+                latest_start = max((_date_sort_key(s) for s in starts), default=(0, 0))
+                return (is_active, latest_start)
             sorted_companies = sorted(companies.items(), key=_co_key, reverse=True)
         elif n_type == "education":
             def _edu_key(item):
