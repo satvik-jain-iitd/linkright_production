@@ -131,10 +131,18 @@ def test_full_add_path_writes_env(isolated_env):
          patch("linkright.keys.env_writer.write_keys") as mock_write:
         updates = run_api_keys_step()
 
-    # write_keys is called by wizard's caller, not by run_api_keys_step directly.
-    # run_api_keys_step returns dict; test that the dict is sensible.
-    # (The actual write happens in run_wizard — tested separately.)
-    # Just verify no exceptions raised.
+    # The returned dict must contain exactly the Groq key the user entered.
+    assert updates.get("GROQ_API_KEY") == groq_key, (
+        f"Expected GROQ_API_KEY={groq_key!r}, got {updates.get('GROQ_API_KEY')!r}"
+    )
+    # run_api_keys_step must NOT write keys itself — the caller (run_wizard) does.
+    mock_write.assert_not_called()
+    # No env vars outside Groq's known slots should appear.
+    from linkright.keys.catalogue import PROVIDER_MAP
+    groq_spec = PROVIDER_MAP["groq"]
+    allowed_keys = set(groq_spec.all_env_vars)
+    unexpected = set(updates.keys()) - allowed_keys
+    assert not unexpected, f"Unexpected env vars in updates: {unexpected}"
 
 
 # ── Resume path: existing .env + re-run ──────────────────────────────────
