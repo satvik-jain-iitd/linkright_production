@@ -189,34 +189,38 @@ def init_cmd() -> None:
 _TLDR = """\
 LinkRight — Quick Reference (cheat sheet)
 
+✨ Every command works WITHOUT flags. Just type the command — you'll be
+prompted for anything missing (resume / JD / IDs). Flags below are
+optional shortcuts for power users who don't want the prompts.
+
 🚀 Common workflow (most users only need these 5):
-  linkright tailor -j <jd.md>      Generate tailored resume for a JD
-  linkright cl -j <jd.md>          Generate cover letter for the same JD
+  linkright tailor                 Generate tailored resume (prompts for resume + JD)
+  linkright cl                     Generate cover letter (prompts for JD)
   linkright critique               LLM review → 5 actionable issues
   linkright fill                   Resolve missing-metric gaps (interactive)
   linkright practice               Interview prep cards from your resume
 
 📝 Pillar 1 — Cover letter:
-  linkright cl -j <jd.md>                      Generate 3-paragraph cover letter
-  linkright cl --from-discovery <id>           Cover letter from saved job discovery
-  linkright cl -j <jd.md> --tone formal        Formal tone
-  linkright cl -j <jd.md> --tone enthusiastic  Enthusiastic tone
-  linkright cl -j <jd.md> --pdf               Also render PDF
+  linkright cl                                 Prompts for JD (file path or paste)
+  linkright cl --tone formal                   (optional) Formal tone
+  linkright cl --tone enthusiastic             (optional) Enthusiastic tone
+  linkright cl --pdf                           (optional) Also render PDF
+  linkright cl -j jd.md                        (power-user: skip prompt)
   linkright cover-letter --help                Full option list
 
 🔍 Pillar 2 — Job feed (daily workflow):
   linkright auth login             Log in to sync.linkright.in (once)
   linkright auth status            Show current session
   linkright jobs find              Today's top-10 scored job matches
-  linkright jobs find --top 20     See more results
-  linkright jobs show <id>         Full JD + scoring breakdown
-  linkright jobs apply <id>        Tailor resume + mark applied
-  linkright jobs status <id> saved Save a job for later
-  linkright jobs import jobs.csv   Import jobs from CSV
+  linkright jobs find --top 20     (optional) See more results
+  linkright jobs show              Picker over today's top-20 jobs
+  linkright jobs apply             Pick a job → tailor resume + mark applied
+  linkright jobs status            Pick a job + new state interactively
+  linkright jobs import            Prompts for CSV path
 
 🎯 First-time setup (run once):
   linkright setup                  Pick LLM / embedder / PDF — guided wizard
-  linkright profile create -r <resume.pdf>
+  linkright profile create         Prompts for resume source (file/paste/folder)
   linkright contact                Verify phone / email / LinkedIn
 
 🔍 Resume inspect:
@@ -244,6 +248,9 @@ LinkRight — Quick Reference (cheat sheet)
   linkright jobs --help            All jobsearch subcommands
   linkright auth --help            Auth subcommands
   linkright profile --help         All profile subcommands
+
+Power-user tip: pass flags (-r, -j, --pdf, etc.) to skip prompts —
+useful for CI scripts or when you're cycling through many JDs.
 
 Tip: prefix matching works (git-style) — `linkright tail` resolves to `tailor`
 if no other tail* exists. Aliases never override exact names; long names

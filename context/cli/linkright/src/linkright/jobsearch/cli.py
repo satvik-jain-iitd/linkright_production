@@ -271,12 +271,22 @@ def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_
 # ── show ──────────────────────────────────────────────────────────────────────
 
 @jobsearch_group.command("show")
-@click.argument("discovery_id")
-def show(discovery_id: str) -> None:
-    """Show full JD detail for a discovery (by ID or rank from `find`)."""
+@click.argument("discovery_id", required=False, default=None)
+def show(discovery_id: str | None) -> None:
+    """Show full JD detail for a discovery.
+
+    Run with no arg to be prompted from a picker of today's top-20 jobs.
+    Pass a discovery ID or rank int to skip the prompt.
+    """
     from rich.console import Console
     from rich.panel import Panel
     from rich import box
+
+    if discovery_id is None:
+        discovery_id = _pick_discovery_id_interactive("Pick a job to view:")
+        if not discovery_id:
+            click.echo("Cancelled.", err=True)
+            sys.exit(1)
 
     # If given a rank integer, fetch today's feed and resolve to ID
     resolved_id = _resolve_id(discovery_id)
@@ -346,11 +356,14 @@ def show(discovery_id: str) -> None:
 # ── apply (new: website API) ───────────────────────────────────────────────────
 
 @jobsearch_group.command("apply")
-@click.argument("discovery_id")
+@click.argument("discovery_id", required=False, default=None)
 @click.option("--no-status-update", "no_status", is_flag=True,
               help="Run tailor pipeline only — do not mark discovery as applied on the website")
-def apply_cmd(discovery_id: str, no_status: bool) -> None:
+def apply_cmd(discovery_id: str | None, no_status: bool) -> None:
     """Fetch JD, run Pillar 1 tailor pipeline, and mark as applied.
+
+    Run with no arg to be prompted from a picker of today's top-20 jobs.
+    Pass a discovery ID or rank int to skip the prompt.
 
     \b
     Steps:
@@ -362,6 +375,12 @@ def apply_cmd(discovery_id: str, no_status: bool) -> None:
     import shutil
     import subprocess
     from datetime import datetime, timezone
+
+    if discovery_id is None:
+        discovery_id = _pick_discovery_id_interactive("Pick a job to apply to:")
+        if not discovery_id:
+            click.echo("Cancelled.", err=True)
+            sys.exit(1)
 
     resolved_id = _resolve_id(discovery_id)
     headers = _auth_headers()
@@ -478,10 +497,13 @@ def apply_cmd(discovery_id: str, no_status: bool) -> None:
 # ── status ────────────────────────────────────────────────────────────────────
 
 @jobsearch_group.command("status")
-@click.argument("discovery_id")
-@click.argument("state", type=click.Choice(["new", "saved", "dismissed"]))
-def status_cmd(discovery_id: str, state: str) -> None:
+@click.argument("discovery_id", required=False, default=None)
+@click.argument("state", required=False, default=None,
+                type=click.Choice(["new", "saved", "dismissed"]))
+def status_cmd(discovery_id: str | None, state: str | None) -> None:
     """Update the status of a discovery on sync.linkright.in.
+
+    Run with no args to be prompted for both ID + new state.
 
     \b
     Valid states:  new | saved | dismissed
@@ -491,9 +513,27 @@ def status_cmd(discovery_id: str, state: str) -> None:
 
     \b
     Examples:
+      linkright jobs status                  (prompted for both)
       linkright jobs status <id> saved
       linkright jobs s <id> dismissed
     """
+    if discovery_id is None:
+        discovery_id = _pick_discovery_id_interactive("Pick a job to update:")
+        if not discovery_id:
+            click.echo("Cancelled.", err=True)
+            sys.exit(1)
+    if state is None:
+        from linkright.prompts import prompt_for_select
+        state = prompt_for_select(
+            "New state:",
+            choices=["new", "saved", "dismissed"],
+            allow_cancel=True,
+            flag_hint="STATE",
+        )
+        if state is None:
+            click.echo("Cancelled.", err=True)
+            sys.exit(1)
+
     resolved_id = _resolve_id(discovery_id)
     headers = _auth_headers()
 
@@ -540,10 +580,13 @@ _OPTIONAL_DEFAULTS = {
 
 
 @jobsearch_group.command("import")
-@click.argument("csv_path", type=click.Path(exists=True, path_type=Path))
+@click.argument("csv_path", required=False, default=None,
+                type=click.Path(exists=True, path_type=Path))
 @click.option("--dry-run", is_flag=True, help="Validate only — do not POST to API")
-def import_cmd(csv_path: Path, dry_run: bool) -> None:
+def import_cmd(csv_path: Path | None, dry_run: bool) -> None:
     """Import jobs from a CSV file into sync.linkright.in.
+
+    Run with no arg to be prompted for the CSV path.
 
     \b
     Required columns: title, company
@@ -553,6 +596,15 @@ def import_cmd(csv_path: Path, dry_run: bool) -> None:
     Imported jobs are created with enrichment_status='pending' — scores
     appear in `linkright jobs find` after 2-3 minutes.
     """
+    if csv_path is None:
+        from linkright.prompts import prompt_for_existing_path
+        click.echo("CSV expects columns: title, company (required); optional: url, location, jd_text, …")
+        csv_path = prompt_for_existing_path(
+            "Path to CSV file with jobs to import:",
+            must_be_file=True,
+            flag_hint="CSV_PATH",
+        )
+
     from datetime import date
 
     # Validate CSV schema BEFORE requiring auth (better UX)
@@ -663,14 +715,27 @@ def import_cmd(csv_path: Path, dry_run: bool) -> None:
 # ── Legacy commands (preserved from scaffold) ─────────────────────────────────
 
 @jobsearch_group.command("evaluate")
-@click.option("--jd", "jd_path", required=True, type=click.Path(exists=True, path_type=Path),
-              help="Path to JD text/markdown file")
+@click.option("--jd", "jd_path", required=False, default=None,
+              type=click.Path(exists=True, path_type=Path),
+              help="(optional) Path to JD text/markdown file — prompted if omitted")
 @click.option("--jd-url", default=None, help="Optional source URL for the JD")
 @click.option("--no-persist", is_flag=True, help="Do not write to MongoDB / disk")
-def evaluate(jd_path: Path, jd_url: str | None, no_persist: bool) -> None:
-    """Run 10-dimension evaluation on a JD (local MongoDB mode)."""
+def evaluate(jd_path: Path | None, jd_url: str | None, no_persist: bool) -> None:
+    """Run 10-dimension evaluation on a JD (local MongoDB mode).
+
+    Run with no flags to be prompted for the JD (file path or paste).
+    """
     from .evaluator import evaluate_jd
-    jd_text = jd_path.read_text()
+
+    if jd_path is None:
+        from linkright.prompts import prompt_for_jd_input
+        kind, value = prompt_for_jd_input(flag_hint="--jd")
+        if kind == "file":
+            jd_text = Path(value).read_text()
+        else:  # paste
+            jd_text = value
+    else:
+        jd_text = jd_path.read_text()
     try:
         result = evaluate_jd(jd_text, persist=not no_persist, jd_url=jd_url)
     except RuntimeError as e:
@@ -710,6 +775,58 @@ def recommend(top_n: int) -> None:
 
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
+
+def _pick_discovery_id_interactive(message: str = "Pick a job:") -> str | None:
+    """Prompt the user to pick a discovery_id from today's top-20 feed.
+
+    Uses the SAME endpoint as `_resolve_id` (`/api/recommendations/today`)
+    so rank-int → UUID resolution stays consistent. If auth or network
+    fails, falls back to a free-text ID prompt so the picker degrades
+    gracefully.
+
+    Returns the picked UUID string, or None if cancelled.
+    """
+    try:
+        from linkright.auth import require_session, api_headers
+        sess = require_session()
+        import httpx
+        with httpx.Client(timeout=15, follow_redirects=True) as client:
+            resp = client.get(
+                f"{_LINKRIGHT_API}/api/recommendations/today",
+                headers=api_headers(sess),
+            )
+        if resp.status_code == 200:
+            rows = resp.json().get("top20") or []
+            items = []
+            for i, row in enumerate(rows, start=1):
+                disc = row.get("job_discoveries") or {}
+                if not disc:
+                    continue
+                items.append({
+                    "rank": i,
+                    "id": disc.get("id") or row.get("discovery_id"),
+                    "title": disc.get("title") or "(no title)",
+                    "company": disc.get("company_name") or "?",
+                    "grade": disc.get("auto_score_grade") or "?",
+                })
+            if items:
+                from linkright.prompts import prompt_for_id_from_list
+                return prompt_for_id_from_list(
+                    items,
+                    label_fn=lambda r: f"#{r['rank']:>2}  [{r['grade']}]  {r['title'][:40]:<40} @ {r['company'][:30]}",
+                    id_fn=lambda r: r["id"],
+                    message=message,
+                    flag_hint="DISCOVERY_ID",
+                )
+    except Exception:
+        pass
+    # Fallback: free-text ID prompt
+    from linkright.prompts import prompt_for_text
+    return prompt_for_text(
+        "Discovery ID (UUID or rank from `linkright jobs find`):",
+        flag_hint="DISCOVERY_ID",
+    )
+
 
 def _resolve_id(raw: str) -> str:
     """If raw looks like an integer (rank), fetch today's feed and resolve to UUID.
@@ -758,16 +875,20 @@ def _parse_number(val: str | None) -> float | None:
 # ── find-slug — user-facing ATS slug lookup (read-only) ──────────────────────
 
 @jobsearch_group.command("find-slug")
-@click.argument("company")
+@click.argument("company", required=False, default=None)
 @click.option("--website", default=None, help="Company website URL (improves accuracy).")
-def find_slug(company: str, website: str | None) -> None:
+def find_slug(company: str | None, website: str | None) -> None:
     """Find the ATS slug for a company (read-only, no database writes).
+
+    Run with no arg to be prompted for the company name. Optionally
+    follow up with the company URL for higher accuracy.
 
     Useful for setting up a job watchlist — tells you which ATS provider
     a company uses and what their slug is, so you can track their jobs.
 
     \b
     Examples:
+      linkright jobs find-slug                          (prompted)
       linkright jobs find-slug stripe
       linkright jobs find-slug razorpay --website https://razorpay.com
 
@@ -779,6 +900,22 @@ def find_slug(company: str, website: str | None) -> None:
       Jobs:    78 open positions
       Samples: Software Engineer, Product Manager, Data Engineer
     """
+    if company is None:
+        from linkright.prompts import prompt_for_text, prompt_for_yes_no
+        company = prompt_for_text(
+            "Company name (e.g. 'stripe'):",
+            allow_empty=False,
+            flag_hint="COMPANY",
+        )
+        if website is None and prompt_for_yes_no(
+            "Got the company URL? (improves accuracy)", default=False
+        ):
+            website = prompt_for_text(
+                "Company website URL:",
+                allow_empty=False,
+                flag_hint="--website",
+            )
+
     import asyncio
 
     async def _run():
