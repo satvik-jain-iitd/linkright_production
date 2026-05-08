@@ -293,4 +293,154 @@ profile_group.add_aliases({
     "rb":      "rebuild",
     # status / st (avoid clash with `s`→show prefix-match)
     "st":      "status",
+    # graph / g
+    "g":       "graph",
 })
+
+
+# ── graph ────────────────────────────────────────────────────────────────────
+
+@profile_group.command("graph")
+@click.option("--force", is_flag=True, help="Rebuild graph even if graph.json already exists.")
+def graph_cmd(force: bool) -> None:
+    """Build an interactive career knowledge graph from profile nuggets.
+
+    Saves graph.json + graph.html to ~/.linkright/profile/ and opens the
+    HTML visualization in the default browser.
+
+    Requires: pip install graphifyy networkx
+    """
+    import webbrowser
+    import networkx as nx
+
+    profile_dir = _profile_dir()
+    if not (profile_dir / "metadata.yaml").exists():
+        click.echo(
+            "No profile found. Run `linkright profile create -r resume.pdf` first.",
+            err=True,
+        )
+        sys.exit(1)
+
+    graph_path = profile_dir / "graph.json"
+    html_path = profile_dir / "graph.html"
+
+    if graph_path.exists() and not force:
+        click.echo(f"Graph already exists at {graph_path}")
+        click.echo("Opening existing graph. Pass --force to rebuild.")
+        webbrowser.open(html_path.as_uri())
+        click.echo(f"Graph HTML: {html_path}")
+        return
+
+    # ── Load nuggets ──────────────────────────────────────────────────────────
+    nuggets_path = profile_dir / "nuggets.jsonl"
+    if not nuggets_path.exists():
+        click.echo("No nuggets.jsonl found. Profile may be incomplete.", err=True)
+        sys.exit(1)
+
+    nuggets = []
+    with nuggets_path.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                try:
+                    nuggets.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+
+    if not nuggets:
+        click.echo("No nuggets found in profile. Profile may be empty.", err=True)
+        sys.exit(1)
+
+    click.echo(f"Building career graph from {len(nuggets)} nuggets…")
+
+    # ── Build extraction dict for graphify.build.build_from_json ─────────────
+    # Nodes: one per nugget. Each nugget has id, company, role, answer fields.
+    # Edges: connect nuggets that share the same company.
+    nodes = []
+    edges = []
+    seen_edges: set[tuple[str, str]] = set()
+
+    # Group nugget IDs by company for edge construction
+    company_to_ids: dict[str, list[str]] = {}
+
+    for nug in nuggets:
+        nid = str(nug.get("id", nug.get("nugget_index", "")))
+        if not nid:
+            continue
+        company = nug.get("company", "Unknown")
+        role = nug.get("role", nug.get("title", ""))
+        label = nug.get("question", nug.get("answer", ""))[:80]
+        nodes.append({
+            "id": nid,
+            "label": label,
+            "type": "nugget",
+            "company": company,
+            "role": role,
+        })
+        company_to_ids.setdefault(company, []).append(nid)
+
+    # Add company hub nodes + edges to their nuggets
+    for company, ids in company_to_ids.items():
+        hub_id = f"company:{company}"
+        nodes.append({
+            "id": hub_id,
+            "label": company,
+            "type": "company",
+            "company": company,
+        })
+        for nid in ids:
+            key = (hub_id, nid)
+            if key not in seen_edges:
+                edges.append({"source": hub_id, "target": nid, "type": "EXTRACTED"})
+                seen_edges.add(key)
+
+    extraction = {"nodes": nodes, "edges": edges}
+
+    # ── Import graphify pipeline pieces ──────────────────────────────────────
+    try:
+        from graphify.build import build_from_json
+        from graphify.cluster import cluster
+        from graphify.export import to_json, to_html
+    except ImportError:
+        click.echo(
+            "graphify not installed. Run: pip install graphifyy networkx",
+            err=True,
+        )
+        sys.exit(1)
+
+    # ── Build + cluster ───────────────────────────────────────────────────────
+    G = build_from_json(extraction)
+    click.echo(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+
+    communities = cluster(G)
+    click.echo(f"Communities detected: {len(communities)}")
+
+    # Build community_labels: {community_id: str} from hub node labels
+    community_labels: dict[int, str] = {}
+    for cid, member_ids in communities.items():
+        # Find a company-hub node in this community (cleaner label)
+        hub_labels = [
+            G.nodes[nid].get("label", nid)
+            for nid in member_ids
+            if G.nodes[nid].get("type") == "company"
+        ]
+        if hub_labels:
+            community_labels[cid] = " / ".join(sorted(set(hub_labels)))
+        elif member_ids:
+            community_labels[cid] = G.nodes[member_ids[0]].get("label", str(cid))
+        else:
+            community_labels[cid] = str(cid)
+
+    member_counts = {cid: len(members) for cid, members in communities.items()}
+
+    # ── Export ────────────────────────────────────────────────────────────────
+    to_json(G, communities, str(graph_path), force=True)
+    to_html(G, communities, str(html_path),
+            community_labels=community_labels,
+            member_counts=member_counts)
+
+    click.echo(f"✓ Graph saved: {graph_path}")
+    click.echo(f"✓ Visualization: {html_path}")
+
+    webbrowser.open(html_path.as_uri())
+    click.echo("Opened in browser.")

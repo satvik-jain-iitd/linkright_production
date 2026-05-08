@@ -77,6 +77,7 @@ from .lib import prompts as P
 from .lib import width_poc
 from .lib import fit_loop
 from .lib.pdf_parse import extract_text
+from .lib.graph_context import get_subliminal_context
 from .lib.md_parse import parse_resume_markdown
 from .lib.width_config import (
     STEP12_MIN_CHARS,
@@ -1887,6 +1888,9 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
         companies_to_process = parsed_p12.get("companies", [])
         skipped = []
 
+    # Resolve profile dir for subliminal context (graceful fallback if missing)
+    _sc_profile_dir = Path(os.environ.get("LINKRIGHT_HOME", str(Path.home() / ".linkright"))) / "profile"
+
     for co in companies_to_process:
         co_name = co.get("name", "")
         retrieved_nugs = retrieved.get(co_name, [])
@@ -1901,6 +1905,8 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
         valid_atom_ids = {n["id"] for n in retrieved_nugs}
 
         bullet_count = 5
+
+        subliminal_context = get_subliminal_context(co_name, _sc_profile_dir)
 
         sys = llm.subst(
             P.PHASE_4A_VERBOSE_SYSTEM,
@@ -1920,6 +1926,7 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
             company_team=co.get("team", ""),
             company_chunks=company_chunks,
             bullet_count=bullet_count,
+            subliminal_context=subliminal_context,
         )
         llm_failed_completely = False
         try:
@@ -2462,6 +2469,14 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
         return None
 
     companies_block = "\n---\n".join(blocks)
+
+    # Aggregate subliminal context across all companies (batched variant)
+    _sc_profile_dir_b = Path(os.environ.get("LINKRIGHT_HOME", str(Path.home() / ".linkright"))) / "profile"
+    _subliminal_parts = [
+        get_subliminal_context(co.get("name", ""), _sc_profile_dir_b)
+        for co in companies_to_process
+    ]
+    subliminal_context = "\n".join(p for p in _subliminal_parts if p)
     jd_keywords = parsed_p12.get("jd_keywords", [])
     jd_keywords_compact = ", ".join(str(k) for k in jd_keywords[:12])
     jd_requirements_list = "\n".join(f"{r['id']}: {r.get('text','')}" for r in reqs)
@@ -2478,6 +2493,7 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
         jd_keywords_compact=jd_keywords_compact,
         jd_requirements_list=jd_requirements_list,
         companies_block=companies_block,
+        subliminal_context=subliminal_context,
     )
 
     # Response schema: object with "companies" map → per-company paragraph arrays
