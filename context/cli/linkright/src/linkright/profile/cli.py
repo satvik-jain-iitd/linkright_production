@@ -311,7 +311,6 @@ def graph_cmd(force: bool) -> None:
     Requires: pip install graphifyy networkx
     """
     import webbrowser
-    import networkx as nx
 
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():

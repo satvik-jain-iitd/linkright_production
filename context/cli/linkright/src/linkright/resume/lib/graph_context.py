@@ -7,8 +7,6 @@ prompt so the LLM frames bullets with the right unconscious impression.
 from __future__ import annotations
 import json
 from pathlib import Path
-from typing import Optional
-
 
 def get_subliminal_context(company_name: str, profile_dir: Path) -> str:
     """BFS from company node in career graph -> community label + brand signals.
@@ -22,7 +20,6 @@ def get_subliminal_context(company_name: str, profile_dir: Path) -> str:
 
     try:
         from networkx.readwrite import json_graph
-        import networkx as nx
 
         data = json.loads(graph_path.read_text())
         G = json_graph.node_link_graph(data, edges="links")
@@ -43,7 +40,6 @@ def get_subliminal_context(company_name: str, profile_dir: Path) -> str:
             return ""
 
         company_node = scored[0][1]
-        company_label = G.nodes[company_node].get("label", company_name)
 
         # BFS 2 hops to get neighbors
         neighbors = set()
