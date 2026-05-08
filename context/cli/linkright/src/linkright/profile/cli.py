@@ -434,6 +434,14 @@ def graph_cmd(force: bool) -> None:
 
     # ── Export ────────────────────────────────────────────────────────────────
     to_json(G, communities, str(graph_path), force=True)
+
+    # Patch community_labels into graph.json — to_json doesn't write them,
+    # but graph_context.py reads data.get("community_labels", {}) to resolve
+    # community cluster names for subliminal context injection.
+    raw = json.loads(graph_path.read_text())
+    raw["community_labels"] = {str(k): v for k, v in community_labels.items()}
+    graph_path.write_text(json.dumps(raw))
+
     to_html(G, communities, str(html_path),
             community_labels=community_labels,
             member_counts=member_counts)

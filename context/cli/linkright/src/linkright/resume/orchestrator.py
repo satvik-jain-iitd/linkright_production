@@ -2438,6 +2438,7 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
 
     blocks = []
     all_valid_atoms: dict[str, set[str]] = {}  # company → valid atom IDs
+    _sc_profile_dir_b = Path(os.environ.get("LINKRIGHT_HOME", str(Path.home() / ".linkright"))) / "profile"
     for idx, co in enumerate(companies_to_process):
         co_name = co.get("name", "")
         retrieved_nugs = (retrieved.get(co_name) or [])
@@ -2448,12 +2449,15 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
         bcount = realistic.get(co_name, 0)
         if bcount <= 0:
             continue
+        # Inject subliminal context per-company so LLM can attribute signals correctly
+        _sc = get_subliminal_context(co_name, _sc_profile_dir_b)
+        _sc_block = f"\n{_sc}" if _sc else ""
         blocks.append(
             f"### Company: {co_name}\n"
             f"Title: {co.get('title', '')}\n"
             f"Dates: {co.get('dates', '')}\n"
             f"bullet_count_required: {bcount}  (HARD CAP — never exceed this; never invent bullets beyond your atom pool)\n"
-            f"Career Context (atom pool — cite ONLY these IDs):\n{company_atoms}\n"
+            f"Career Context (atom pool — cite ONLY these IDs):\n{company_atoms}{_sc_block}\n"
         )
 
     # Telemetry — log the realistic redistribution for vision.md
@@ -2470,13 +2474,6 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
 
     companies_block = "\n---\n".join(blocks)
 
-    # Aggregate subliminal context across all companies (batched variant)
-    _sc_profile_dir_b = Path(os.environ.get("LINKRIGHT_HOME", str(Path.home() / ".linkright"))) / "profile"
-    _subliminal_parts = [
-        get_subliminal_context(co.get("name", ""), _sc_profile_dir_b)
-        for co in companies_to_process
-    ]
-    subliminal_context = "\n".join(p for p in _subliminal_parts if p)
     jd_keywords = parsed_p12.get("jd_keywords", [])
     jd_keywords_compact = ", ".join(str(k) for k in jd_keywords[:12])
     jd_requirements_list = "\n".join(f"{r['id']}: {r.get('text','')}" for r in reqs)
@@ -2493,7 +2490,7 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
         jd_keywords_compact=jd_keywords_compact,
         jd_requirements_list=jd_requirements_list,
         companies_block=companies_block,
-        subliminal_context=subliminal_context,
+        subliminal_context="",
     )
 
     # Response schema: object with "companies" map → per-company paragraph arrays

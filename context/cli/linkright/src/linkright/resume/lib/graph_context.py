@@ -6,7 +6,17 @@ prompt so the LLM frames bullets with the right unconscious impression.
 """
 from __future__ import annotations
 import json
+import logging
 from pathlib import Path
+
+try:
+    from networkx.readwrite import json_graph
+    _NX_AVAILABLE = True
+except ImportError:
+    _NX_AVAILABLE = False
+
+_log = logging.getLogger(__name__)
+
 
 def get_subliminal_context(company_name: str, profile_dir: Path) -> str:
     """BFS from company node in career graph -> community label + brand signals.
@@ -14,13 +24,18 @@ def get_subliminal_context(company_name: str, profile_dir: Path) -> str:
     Returns a formatted text block for injection into step_10 prompt.
     Returns empty string if graph.json missing or company not found (graceful fallback).
     """
+    if not _NX_AVAILABLE:
+        _log.debug(
+            "networkx not installed — subliminal graph context disabled. "
+            "Run: pip install networkx"
+        )
+        return ""
+
     graph_path = profile_dir / "graph.json"
     if not graph_path.exists():
         return ""
 
     try:
-        from networkx.readwrite import json_graph
-
         data = json.loads(graph_path.read_text())
         G = json_graph.node_link_graph(data, edges="links")
 
