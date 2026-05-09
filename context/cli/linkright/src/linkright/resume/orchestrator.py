@@ -90,6 +90,11 @@ from .lib.width_config import (
     STEP12_PAD_MIN,
     STEP12_PAD_MAX,
 )
+from .profile_facts import (
+    load_expected_profile_facts,
+    missing_expected_values,
+    value_in_text,
+)
 
 
 # ── Module-level retry counter (populated by any step that re-prompts on
@@ -640,13 +645,12 @@ def step_00_ingest_pdf() -> str:
     raw_text = extract_text(pdf_path)
     out_path.write_text(raw_text, encoding="utf-8")
 
-    # Evaluate (basic structural checks; specific-name check removed as it
-    # was hardcoded to one user — generic email + phone presence is enough
-    # signal that the resume was parsed)
+    # Evaluate (basic structural checks plus optional profile-derived sentinels)
     length = len(raw_text)
     email_match = re.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", raw_text)
     phone_match = re.search(r"\+?\d[\d\s\-]{7,}\d", raw_text)
     bullet_char_count = raw_text.count("•") + raw_text.count("●")
+    expected_facts = load_expected_profile_facts(run_dir=RUN_DIR)
 
     # Detect pypdf spacing corruption — characters embedded with trailing space.
     # E.g. "AM L" should be "AML", "M anager" should be "Manager", "M L" should be "ML".
@@ -662,6 +666,8 @@ def step_00_ingest_pdf() -> str:
         gaps.append("no email pattern detected")
     if not phone_match:
         gaps.append("no phone pattern detected")
+    if expected_facts.name and not value_in_text(raw_text, expected_facts.name):
+        gaps.append(f"expected profile name not found in raw resume text: {expected_facts.name}")
     if len(likely_corrupted) > 3:
         gaps.append(
             f"pypdf spacing corruption: {len(likely_corrupted)} hits like {likely_corrupted[:5]} — "
@@ -680,6 +686,7 @@ def step_00_ingest_pdf() -> str:
 - Bullet chars (• or ●): {bullet_char_count}
 - pypdf corruption hits (acronym-splitting artifacts): {len(likely_corrupted)}
 - Sample corruption: `{likely_corrupted[:10]}`
+- Expected profile name loaded: `{expected_facts.name or 'NONE'}`
 
 **Evaluation:** {status.upper()}
 
@@ -744,12 +751,14 @@ def step_01_parse_resume(raw_text: str) -> dict:
     companies = [e["company"] for e in experiences if e.get("company")]
     total_bullets = sum(len(e.get("bullets", [])) for e in experiences)
     total_projects = sum(len(e.get("projects", [])) for e in experiences) + len(parsed.get("projects", []))
+    expected_facts = load_expected_profile_facts(run_dir=RUN_DIR)
+    missing_expected_companies = missing_expected_values(expected_facts.companies, companies)
 
     gaps: list[str] = []
-    # TODO: company-presence sentinels removed — were hardcoded to one user's
-    # employers. Restore as profile-derived check in follow-up PR.
     if not companies:
         gaps.append("no companies parsed from resume")
+    if missing_expected_companies:
+        gaps.append(f"expected profile companies missing from parsed resume: {missing_expected_companies}")
     if len(experiences) < 2:
         gaps.append(f"only {len(experiences)} experience blocks extracted; expected 2–4")
     if total_bullets < 8:
@@ -770,6 +779,7 @@ def step_01_parse_resume(raw_text: str) -> dict:
 
 **Metrics:**
 - Companies parsed: {companies}
+- Expected profile companies: {list(expected_facts.companies)}
 - Experience blocks: {len(experiences)}
 - Total bullets: {total_bullets}
 - Total projects (in-role + top-level): {total_projects}
@@ -905,8 +915,11 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
         gaps.append(f"importance distribution collapsed: {importance_counts}")
     if multi_signal:
         gaps.append(f"{len(multi_signal)} nuggets appear multi-signal (should be atomized): {multi_signal[:5]}")
-    # TODO: per-company nugget attribution check removed — was hardcoded to
-    # one user's employer. Restore as profile-derived check in follow-up PR.
+    expected_facts = load_expected_profile_facts(run_dir=RUN_DIR)
+    expected_companies = expected_facts.companies
+    missing_nugget_companies = missing_expected_values(expected_companies, per_company.keys())
+    if missing_nugget_companies:
+        gaps.append(f"expected companies missing from nugget attribution: {missing_nugget_companies}")
 
     status = "pass" if not gaps else "partial"
 
@@ -916,6 +929,7 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
 **Metrics:**
 - Total nuggets: {len(nuggets)}
 - Per-company distribution: {per_company}
+- Expected companies checked: {list(expected_companies)}
 - Importance distribution: {importance_counts}
 - LLM usage: {usage}
 
@@ -1259,8 +1273,9 @@ def step_06_role_scores(nuggets: list[dict], reqs: list[dict], experiences: list
     # Evaluate
     primary = role_scores[0]["company"] if role_scores else "(none)"
     gaps_detected: list[str] = []
-    # TODO: primary-role expectation check removed — was hardcoded to one
-    # user's employer. Restore as profile-derived check in follow-up PR.
+    expected_facts = load_expected_profile_facts(run_dir=RUN_DIR)
+    if primary != "(none)" and expected_facts.companies and missing_expected_values([primary], expected_facts.companies):
+        gaps_detected.append(f"primary role is not in expected profile companies: {primary}")
     if coverage_pct == 0:
         gaps_detected.append("coverage 0% — threshold too strict OR embeddings broken OR matcher bug")
     if coverage_pct == 100:
@@ -1283,6 +1298,7 @@ def step_06_role_scores(nuggets: list[dict], reqs: list[dict], experiences: list
 - User cumulative years: {user_years}
 - JD required years: {required_years}
 - Primary role: **{primary}** ({role_scores[0].get('avg_best_cosine', 0) if role_scores else 0})
+- Expected profile companies: {list(expected_facts.companies)}
 - Coverage %: **{coverage_pct}%** ({len(covered_reqs)}/{len(reqs)} reqs covered)
 - Years-check revoked: {years_revoked}
 - Open gaps (uncovered reqs): {len(gaps_list)}
