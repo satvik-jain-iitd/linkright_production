@@ -474,6 +474,7 @@ Team: {company_team}
 ## Relevant Career Context
 {company_chunks}
 
+{subliminal_context}
 Write {bullet_count} XYZ achievement paragraphs for this company. Lead with IMPACT, not action. Include verbose_context for each. ZERO verb repetition."""
 
 
@@ -624,6 +625,7 @@ PHASE_4A_VERBOSE_BATCHED_USER = """## JD Keywords
 
 {companies_block}
 
+{subliminal_context}
 Write XYZ paragraphs for ALL companies in one JSON response. Each company gets exactly its own `bullet_count`. Vary verbs across companies — do not reuse."""
 
 
