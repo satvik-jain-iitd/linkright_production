@@ -89,8 +89,10 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
         click.echo("Need --resume PATH or --paste or --from-folder DIR.", err=True)
         sys.exit(2)
 
-    # Existing profile guard
-    if profile_dir.exists() and any(profile_dir.iterdir()):
+    # Existing profile guard — check metadata.yaml specifically (same signal
+    # as `profile show`/`status`). Avoids false-positive on empty scaffold dirs
+    # (artifacts/ inputs/ logs/ from a prior failed run with no actual data).
+    if (profile_dir / "metadata.yaml").exists():
         if not force:
             click.echo(f"Profile already exists at {profile_dir}.")
             click.echo("Run `linkright profile show` to inspect, `linkright profile rebuild` to start over,")
