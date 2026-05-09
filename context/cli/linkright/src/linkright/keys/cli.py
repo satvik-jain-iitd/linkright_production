@@ -81,15 +81,58 @@ def keys_list() -> None:
     click.echo("")
 
 
+def _detect_env_keys(spec: "ProviderSpec") -> list[str]:  # noqa: F821
+    """Scan os.environ for keys matching this provider.
+
+    Checks:
+    1. Each standard slot var (GROQ_API_KEY, GROQ_API_KEY_1..4)
+    2. Plural aggregate var (e.g. CEREBRAS_API_KEYS=k1,k2,k3,k4)
+    Returns list of raw key strings not already in managed store.
+    """
+    import os
+    found: list[str] = []
+    seen: set[str] = set()
+
+    # 1. Standard slot vars
+    for var in spec.all_env_vars:
+        val = os.environ.get(var, "").strip()
+        if val and val not in seen:
+            found.append(val)
+            seen.add(val)
+
+    # 2. Plural aggregate (CEREBRAS_API_KEYS, GROQ_API_KEYS, CLOUDFLARE_API_TOKENS, etc.)
+    if spec.primary_env.endswith(("_KEY", "_TOKEN")):
+        plural_var: Optional[str] = spec.primary_env + "S"
+    else:
+        plural_var = None
+    aggregate = os.environ.get(plural_var, "").strip() if plural_var else ""
+    if aggregate:
+        for k in aggregate.split(","):
+            k = k.strip()
+            if k and k not in seen:
+                found.append(k)
+                seen.add(k)
+
+    return found
+
+
 @keys_group.command("add")
 @click.argument("provider", default="")
-def keys_add(provider: str) -> None:
-    """Add a new key for PROVIDER (groq, cerebras, sambanova, cloudflare, zai, gemini, openrouter).
+@click.option("--key", "-k", "key_value", default="", help="Key value (non-interactive / scripting).")
+@click.option("--bulk", is_flag=True, help="Paste multiple keys at once (newline or comma separated).")
+def keys_add(provider: str, key_value: str, bulk: bool) -> None:
+    """Add one or more keys for PROVIDER (groq, cerebras, gemini, sambanova, cloudflare, zai, openrouter).
 
-    Picks the next available slot automatically.
+    Picks the next available slot automatically. After each key, offers to add
+    another — useful for loading 4 Cerebras / 3 Gemini rotation keys at once.
+
+    \b
+    Examples:
+      linkright keys add cerebras            # interactive, prompts for each key
+      linkright keys add cerebras --bulk     # paste all keys at once
+      linkright keys add groq --key gsk_...  # non-interactive (scripts / CI)
     """
     if not provider:
-        # Interactive provider selection
         choices = [f"{p.key:<12}  {p.name}" for p in PROVIDERS]
         selected = questionary.select(
             "Which provider?",
@@ -106,53 +149,238 @@ def keys_add(provider: str) -> None:
         click.echo(f"{RED}Unknown provider: {provider!r}{RST}. Valid: {valid}")
         sys.exit(1)
 
-    managed = read_all_managed()
-    slot = spec.next_available_slot(managed)
-    if slot is None:
-        click.echo(f"{YELLOW}All {len(spec.all_env_vars)} key slots for {spec.name} are already used.{RST}")
-        click.echo("  Use `linkright keys remove` to free a slot first.")
-        sys.exit(1)
-
-    click.echo(f"\n  Adding key for {BOLD}{spec.name}{RST}")
-    click.echo(f"  Get a key at: {DIM}{spec.signup_url}{RST}")
+    click.echo(f"\n  Adding key(s) for {BOLD}{spec.name}{RST}")
+    click.echo(f"  Get keys at: {DIM}{spec.signup_url}{RST}")
     click.echo(f"  Free tier: {spec.free_tier}")
-    click.echo(f"  Slot: {slot}")
+    if len(spec.all_env_vars) > 1:
+        click.echo(f"  Supports up to {len(spec.all_env_vars)} rotation keys for rate-limit resilience.")
     click.echo("")
 
-    key_val = questionary.password(f"Paste {spec.name} API key:").ask()
-    if key_val is None:
-        sys.exit(1)
-    key_val = key_val.strip()
-
-    ok, msg = _validate_key_format(spec, key_val)
-    if not ok:
-        click.echo(f"\n  {RED}Format warning: {msg}{RST}")
-        proceed = questionary.confirm("Save anyway?", default=False).ask()
-        if not proceed:
-            click.echo("  Aborted — key not saved.")
+    # ── Non-interactive: --key flag ─────────────────────────────────────────
+    if key_value:
+        key_value = key_value.strip()
+        managed = read_all_managed()
+        slot = spec.next_available_slot(managed)
+        if slot is None:
+            click.echo(f"{YELLOW}All slots filled for {spec.name}.{RST} Use `linkright keys remove` first.")
             sys.exit(1)
+        ok, msg = _validate_key_format(spec, key_value)
+        if not ok:
+            click.echo(f"  {YELLOW}Format warning: {msg}{RST}")
+        write_keys({slot: key_value})
+        click.echo(f"  {GREEN}✓ Saved {slot} → ~/.linkright/.env{RST}")
+        new_managed = read_all_managed()
+        total, pcount = _count_keys(new_managed)
+        score = resilience_score(total, pcount)
+        click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}\n")
+        return
 
-    updates: dict[str, str] = {slot: key_val}
+    # ── Bulk mode: --bulk flag ──────────────────────────────────────────────
+    if bulk:
+        click.echo("  Paste keys (one per line or comma-separated), then press Enter on an empty line:")
+        click.echo("")
+        lines: list[str] = []
+        while True:
+            try:
+                line = input("  > ").strip()
+            except EOFError:
+                break
+            if not line:
+                break
+            lines.append(line)
+        raw_keys: list[str] = []
+        for line in lines:
+            for part in line.replace(",", "\n").splitlines():
+                part = part.strip()
+                if part:
+                    raw_keys.append(part)
+        if not raw_keys:
+            click.echo("  No keys entered. Aborted.")
+            sys.exit(1)
+        added = 0
+        for raw_key in raw_keys:
+            managed = read_all_managed()
+            slot = spec.next_available_slot(managed)
+            if slot is None:
+                click.echo(f"  {YELLOW}All slots filled — stopping at {added} key(s).{RST}")
+                break
+            ok, msg = _validate_key_format(spec, raw_key)
+            if not ok:
+                click.echo(f"  {YELLOW}⚠ {raw_key[:12]}…  format warning: {msg} — saved anyway{RST}")
+            write_keys({slot: raw_key})
+            click.echo(f"  {GREEN}✓{RST} {slot}")
+            added += 1
+        if added == 0:
+            click.echo("  No keys saved.")
+            sys.exit(1)
+        click.echo(f"\n  {GREEN}✓ {added} key(s) saved to ~/.linkright/.env{RST}")
+        new_managed = read_all_managed()
+        total, pcount = _count_keys(new_managed)
+        score = resilience_score(total, pcount)
+        click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}\n")
+        return
 
-    # Cloudflare needs a paired account ID
-    if spec.paired_env and slot == spec.primary_env:
-        account_id = questionary.text(
-            f"Cloudflare Account ID (find at dash.cloudflare.com → profile):").ask()
-        if account_id:
-            updates[spec.paired_env] = account_id.strip()
-    elif spec.paired_env:
-        # fallback slot — paired slot is CLOUDFLARE_ACCOUNT_ID_N
-        slot_idx = spec.extra_envs.index(slot) + 1
-        pair_var = f"{spec.paired_env}_{slot_idx}"
-        account_id = questionary.text(
-            f"Cloudflare Account ID for this key ({pair_var}):").ask()
-        if account_id:
-            updates[pair_var] = account_id.strip()
+    # ── Env auto-detect ─────────────────────────────────────────────────────
+    managed = read_all_managed()
+    env_keys = _detect_env_keys(spec)
+    # Filter out keys already stored
+    stored_vals = set(v for v in managed.values() if v)
+    fresh_env_keys = [k for k in env_keys if k not in stored_vals]
+    if fresh_env_keys:
+        click.echo(f"  {GREEN}Found {len(fresh_env_keys)} key(s) for {spec.name} in your shell environment.{RST}")
+        for k in fresh_env_keys:
+            click.echo(f"    {DIM}{k[:8]}…{k[-4:]}{RST}")
+        click.echo("")
+        do_import = questionary.confirm(
+            f"  Import all {len(fresh_env_keys)} key(s) now?", default=True
+        ).ask()
+        if do_import:
+            imported = 0
+            for raw_key in fresh_env_keys:
+                managed = read_all_managed()
+                slot = spec.next_available_slot(managed)
+                if slot is None:
+                    click.echo(f"  {YELLOW}All slots filled — stopping at {imported} key(s).{RST}")
+                    break
+                write_keys({slot: raw_key})
+                click.echo(f"  {GREEN}✓{RST} {slot}")
+                imported += 1
+            new_managed = read_all_managed()
+            total, pcount = _count_keys(new_managed)
+            score = resilience_score(total, pcount)
+            click.echo(f"\n  {GREEN}✓ {imported} key(s) imported → ~/.linkright/.env{RST}")
+            click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}\n")
+            return
+        click.echo("")  # user declined import → fall through to manual entry
 
+    # ── Interactive loop ────────────────────────────────────────────────────
+    added = 0
+    while True:
+        managed = read_all_managed()
+        slot = spec.next_available_slot(managed)
+        if slot is None:
+            click.echo(f"{YELLOW}All {len(spec.all_env_vars)} slot(s) for {spec.name} are filled.{RST}")
+            break
+
+        key_num = added + 1
+        label = "primary key" if slot == spec.primary_env else f"key #{key_num} (rotation slot)"
+        key_val = questionary.password(f"Paste {spec.name} {label}:").ask()
+        if key_val is None:
+            click.echo("  Aborted.")
+            break
+        key_val = key_val.strip()
+        if not key_val:
+            click.echo("  Empty — skipped.")
+            break
+
+        ok, msg = _validate_key_format(spec, key_val)
+        if not ok:
+            click.echo(f"\n  {RED}Format warning: {msg}{RST}")
+            proceed = questionary.confirm("Save anyway?", default=False).ask()
+            if not proceed:
+                click.echo("  Key not saved.")
+                break
+
+        updates: dict[str, str] = {slot: key_val}
+
+        # Cloudflare needs a paired account ID per key
+        if spec.paired_env and slot == spec.primary_env:
+            account_id = questionary.text(
+                "Cloudflare Account ID (find at dash.cloudflare.com → profile):").ask()
+            if account_id:
+                updates[spec.paired_env] = account_id.strip()
+        elif spec.paired_env and slot in spec.extra_envs:
+            slot_idx = spec.extra_envs.index(slot) + 1
+            pair_var = f"{spec.paired_env}_{slot_idx}"
+            account_id = questionary.text(f"Cloudflare Account ID for this key ({pair_var}):").ask()
+            if account_id:
+                updates[pair_var] = account_id.strip()
+
+        write_keys(updates)
+        click.echo(f"  {GREEN}✓ Saved → {slot}{RST}")
+        added += 1
+
+        # Check if more slots exist; if so offer to add another
+        managed = read_all_managed()
+        next_slot = spec.next_available_slot(managed)
+        if next_slot is None:
+            click.echo(f"  All {len(spec.all_env_vars)} slot(s) for {spec.name} filled.")
+            break
+        add_another = questionary.confirm(
+            f"  Add another key for {spec.name}? ({next_slot} is next open slot)",
+            default=False,
+        ).ask()
+        if not add_another:
+            break
+
+    if added == 0:
+        click.echo("  No keys saved.")
+        sys.exit(1)
+
+    click.echo(f"\n  {GREEN}✓ {added} key(s) saved to ~/.linkright/.env{RST}")
+    new_managed = read_all_managed()
+    total, pcount = _count_keys(new_managed)
+    score = resilience_score(total, pcount)
+    click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}")
+    click.echo("")
+
+
+@keys_group.command("import")
+@click.option("--dry-run", is_flag=True, help="Show what would be imported without saving.")
+def keys_import(dry_run: bool) -> None:
+    """Scan your shell environment for API keys and import them into ~/.linkright/.env.
+
+    Detects standard slot vars (GROQ_API_KEY, CEREBRAS_API_KEY_1…) and
+    aggregate vars (CEREBRAS_API_KEYS=k1,k2,k3). Shows a table of what was
+    found, then imports on confirmation (or use --dry-run to preview only).
+    """
+    managed = read_all_managed()
+    stored_vals = set(v for v in managed.values() if v)
+
+    found_rows: list[tuple[str, str, str]] = []  # (provider_name, slot_var, key_val)
+
+    for spec in PROVIDERS:
+        env_keys = _detect_env_keys(spec)
+        fresh = [k for k in env_keys if k not in stored_vals]
+        if not fresh:
+            continue
+        avail_slots = [s for s in spec.all_env_vars if not managed.get(s)]
+        for key_val, slot in zip(fresh, avail_slots):
+            found_rows.append((spec.name, slot, key_val))
+
+    click.echo("")
+    if not found_rows:
+        click.echo("  No new keys found in shell environment.")
+        click.echo("  (Checked GROQ_API_KEY, CEREBRAS_API_KEYS, GEMINI_API_KEY, etc.)")
+        click.echo("  Use `linkright keys add <provider>` to add keys manually.")
+        click.echo("")
+        return
+
+    label = "Would import" if dry_run else "Found"
+    click.echo(f"  {label} {len(found_rows)} key(s) from shell environment:\n")
+    click.echo(f"  {'Provider':<22} {'Slot':<32} {'Key (masked)'}")
+    click.echo("  " + "─" * 70)
+    for provider_name, slot, key_val in found_rows:
+        masked = f"{key_val[:6]}…{key_val[-4:]}" if len(key_val) > 10 else key_val
+        click.echo(f"  {provider_name:<22} {slot:<32} {DIM}{masked}{RST}")
+    click.echo("")
+
+    if dry_run:
+        click.echo(f"  {YELLOW}--dry-run: nothing saved.{RST} Remove --dry-run to import.")
+        click.echo("")
+        return
+
+    proceed = questionary.confirm(
+        f"  Import {len(found_rows)} key(s) into ~/.linkright/.env?", default=True
+    ).ask()
+    if not proceed:
+        click.echo("  Aborted — no keys saved.")
+        return
+
+    updates: dict[str, str] = {slot: key_val for _, slot, key_val in found_rows}
     write_keys(updates)
-    click.echo(f"\n  {GREEN}✓ Saved {slot} → ~/.linkright/.env{RST}")
 
-    # Re-count
+    click.echo(f"\n  {GREEN}✓ {len(updates)} key(s) imported → ~/.linkright/.env{RST}")
     new_managed = read_all_managed()
     total, pcount = _count_keys(new_managed)
     score = resilience_score(total, pcount)

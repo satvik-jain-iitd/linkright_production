@@ -97,6 +97,34 @@ class LLMError(Exception):
     pass
 
 
+def _log_token_usage(intent: str, usage: dict) -> None:
+    """Print token counts to stderr after each tier_chat call.
+
+    Shows actual prompt/completion/total tokens from the provider's usage
+    dict (already normalised to prompt_tokens / completion_tokens /
+    total_tokens across all providers). Silently skips if values are None
+    (agent-mode or provider didn't return usage).
+    """
+    import sys as _sys
+    prompt = usage.get("prompt_tokens")
+    completion = usage.get("completion_tokens")
+    total = usage.get("total_tokens")
+    provider = usage.get("provider", "?")
+    if prompt is None and completion is None and total is None:
+        return
+    parts = []
+    if prompt is not None:
+        parts.append(f"in={prompt:,}")
+    if completion is not None:
+        parts.append(f"out={completion:,}")
+    if total is not None:
+        parts.append(f"total={total:,}")
+    print(
+        f"  [tokens] {intent}  {' | '.join(parts)}  ({provider})",
+        file=_sys.stderr, flush=True,
+    )
+
+
 # ── Deterministic mode (Phase 2 — 2026-05-01) ──────────────────────────────
 #
 # When LR_DETERMINISTIC=1, every provider helper pins temperature=0.0 and
@@ -1546,6 +1574,19 @@ def tier_chat(
     if temperature is None:
         temperature = TIER_TEMPERATURE[klass]
 
+    _agent_mode = os.environ.get("LR_LLM_MODE", "").lower() == "agent"
+
+    # Token counter — estimate before send (4 chars ≈ 1 token, rough but instant).
+    # Skipped in agent mode: the subprocess handles its own output; we'd only emit
+    # the estimate with no matching actuals (agent_chat returns no usage dict).
+    if not _agent_mode:
+        import sys as _sys
+        _input_est = (len(system) + len(user)) // 4
+        print(
+            f"  [tokens] {intent}  sending ~{_input_est:,} input tokens …",
+            file=_sys.stderr, flush=True,
+        )
+
     # Phase 3 — per-intent override (hypothesis-test enabler).
     override = _resolve_tier_override(intent)
     if override:
@@ -1556,6 +1597,7 @@ def tier_chat(
             usage["klass"] = klass
             usage["intent"] = intent
             usage["tier_override"] = override
+            _log_token_usage(intent, usage)
             return text, usage
         except LLMError:
             # Fall through to standard tier policy on override failure.
@@ -1569,6 +1611,7 @@ def tier_chat(
             )
             usage["klass"] = klass
             usage["intent"] = intent
+            _log_token_usage(intent, usage)
             return text, usage
         except LLMError as e:
             last_err = e
@@ -1584,4 +1627,5 @@ def tier_chat(
     usage["klass"] = klass
     usage["intent"] = intent
     usage["tier_fallback"] = True
+    _log_token_usage(intent, usage)
     return text, usage
