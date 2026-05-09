@@ -100,9 +100,12 @@ def _detect_env_keys(spec: "ProviderSpec") -> list[str]:  # noqa: F821
             found.append(val)
             seen.add(val)
 
-    # 2. Plural aggregate (CEREBRAS_API_KEYS, GROQ_API_KEYS, etc.)
-    plural_var = spec.primary_env.rstrip("Y") + "YS"  # GROQ_API_KEY → GROQ_API_KEYS
-    aggregate = os.environ.get(plural_var, "").strip()
+    # 2. Plural aggregate (CEREBRAS_API_KEYS, GROQ_API_KEYS, CLOUDFLARE_API_TOKENS, etc.)
+    if spec.primary_env.endswith(("_KEY", "_TOKEN")):
+        plural_var: Optional[str] = spec.primary_env + "S"
+    else:
+        plural_var = None
+    aggregate = os.environ.get(plural_var, "").strip() if plural_var else ""
     if aggregate:
         for k in aggregate.split(","):
             k = k.strip()
@@ -331,8 +334,6 @@ def keys_import(dry_run: bool) -> None:
     aggregate vars (CEREBRAS_API_KEYS=k1,k2,k3). Shows a table of what was
     found, then imports on confirmation (or use --dry-run to preview only).
     """
-    import os
-
     managed = read_all_managed()
     stored_vals = set(v for v in managed.values() if v)
 

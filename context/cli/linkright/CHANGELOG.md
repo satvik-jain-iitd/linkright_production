@@ -21,7 +21,16 @@ Token counts (input/output/total) now printed to stderr on every LLM call.
   what was found, confirms before writing. `--dry-run` to preview only. (#99)
 - **Token counter** — `tier_chat` prints `[tokens] intent  in=N | out=N |
   total=N  (provider)` to stderr on every call. Estimate before send, actuals
-  after. Silently skips if provider doesn't return usage (agent mode). (#99)
+  after. Silently skips in agent mode (no dangling estimate). Token telemetry
+  now fires on `LR_TIER_OVERRIDE` path too (was silent before). (#99)
+
+### Fixed
+
+- `_detect_env_keys` plural-var derivation now correctly handles `_TOKEN`
+  suffix (Cloudflare) — was generating `CLOUDFLARE_API_TOKENYS`, now
+  produces `CLOUDFLARE_API_TOKENS`. (#99)
+- `_log_token_usage` guard changed to `all None` — previously silently
+  dropped lines when only `total_tokens` was populated. (#99)
 
 ## [0.5.2] - 2026-05-09
 

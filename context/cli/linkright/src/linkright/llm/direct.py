@@ -110,7 +110,7 @@ def _log_token_usage(intent: str, usage: dict) -> None:
     completion = usage.get("completion_tokens")
     total = usage.get("total_tokens")
     provider = usage.get("provider", "?")
-    if prompt is None and completion is None:
+    if prompt is None and completion is None and total is None:
         return
     parts = []
     if prompt is not None:
@@ -1574,6 +1574,19 @@ def tier_chat(
     if temperature is None:
         temperature = TIER_TEMPERATURE[klass]
 
+    _agent_mode = os.environ.get("LR_LLM_MODE", "").lower() == "agent"
+
+    # Token counter — estimate before send (4 chars ≈ 1 token, rough but instant).
+    # Skipped in agent mode: the subprocess handles its own output; we'd only emit
+    # the estimate with no matching actuals (agent_chat returns no usage dict).
+    if not _agent_mode:
+        import sys as _sys
+        _input_est = (len(system) + len(user)) // 4
+        print(
+            f"  [tokens] {intent}  sending ~{_input_est:,} input tokens …",
+            file=_sys.stderr, flush=True,
+        )
+
     # Phase 3 — per-intent override (hypothesis-test enabler).
     override = _resolve_tier_override(intent)
     if override:
@@ -1584,18 +1597,11 @@ def tier_chat(
             usage["klass"] = klass
             usage["intent"] = intent
             usage["tier_override"] = override
+            _log_token_usage(intent, usage)
             return text, usage
         except LLMError:
             # Fall through to standard tier policy on override failure.
             pass
-
-    # Token counter — estimate before send (4 chars ≈ 1 token, rough but instant)
-    _input_est = (len(system) + len(user)) // 4
-    import sys as _sys
-    print(
-        f"  [tokens] {intent}  sending ~{_input_est:,} input tokens …",
-        file=_sys.stderr, flush=True,
-    )
 
     last_err: Optional[Exception] = None
     for provider in TIER_POLICY[klass]:
