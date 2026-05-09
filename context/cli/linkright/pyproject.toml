@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "linkright"
-version = "0.5.1"
+version = "0.5.2"
 description = "Local-first, agent-native career OS — resume tailoring, interview prep, job search, content planning. Runs $0 with free-tier LLM keys."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -97,6 +97,9 @@ dev = [
     "build>=1.0",
     "twine>=4.0",
 ]
+
+[tool.setuptools.package-data]
+linkright = ["resume/lib/*.mjs"]
 
 [tool.setuptools.packages.find]
 # Industry pattern: src-layout for the main package + companion top-level
