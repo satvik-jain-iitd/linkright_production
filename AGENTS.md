@@ -148,18 +148,3 @@ For more details, see README.md and docs/QUICKSTART.md.
 - If push fails, resolve and retry until it succeeds
 
 <!-- END BEADS INTEGRATION -->
-
-## CLI Release Rule (MANDATORY)
-
-Every PR that changes code under `context/cli/linkright/` **must** include a version bump in `context/cli/linkright/pyproject.toml` and a CHANGELOG entry.
-
-**Why:** The `cli-publish` CI workflow triggers ONLY on `pyproject.toml` changes. A merged code PR without a version bump means the fix never reaches users on PyPI — `linkright update` returns nothing new. This was the PR #96 incident (2026-05-09).
-
-**How:**
-```bash
-# In every CLI code PR, also bump:
-# 1. context/cli/linkright/pyproject.toml  →  version = "X.Y.Z+1"
-# 2. context/cli/linkright/CHANGELOG.md   →  prepend ## [X.Y.Z+1] - YYYY-MM-DD section
-```
-
-Patch bump (`0.5.0 → 0.5.1`) for bugfixes. Minor bump (`0.5.0 → 0.6.0`) for new features. Major bump for breaking changes.
