@@ -202,16 +202,161 @@ def test_all_slots_used_message_shows_correct_count(runner, isolated_env):
             fake_keys[var] = ("gsk_" if "GROQ" in var else "cfut_" if "CLOUDFLARE_API_TOKEN" in var else "snova_" if "SAMBANOVA" in var else "csk_aa" if "CEREBRAS" in var else "x") + "a" * 40
         ew.write_keys(fake_keys, env_path=isolated_env)
 
-        result = runner.invoke(keys_group, ["add", spec.key], input="\n")
+        # Patch _detect_env_keys to return [] so the env-auto-detect path doesn't
+        # fire from real shell env vars leaking in — we're testing the "all slots
+        # exhausted" interactive path, not the env-detect path.
+        with patch("linkright.keys.cli._detect_env_keys", return_value=[]):
+            result = runner.invoke(keys_group, ["add", spec.key], input="\n")
         expected_count = len(all_slots)
         assert str(expected_count) in result.output, (
             f"Provider {spec.name!r}: expected '{expected_count}' in message, "
             f"got: {result.output!r}"
         )
-        assert f"All {expected_count} key slots for {spec.name}" in result.output, (
+        assert f"All {expected_count} slot(s) for {spec.name}" in result.output, (
             f"Provider {spec.name!r}: full message not found in output:\n{result.output}"
         )
 
         # Clean up for next provider
         for var in all_slots:
             ew.remove_key(var, env_path=isolated_env)
+
+
+# ── keys add --key (non-interactive) ─────────────────────────────────────
+
+def test_keys_add_key_flag_writes_env(runner, isolated_env):
+    """--key flag bypasses questionary and writes key directly."""
+    fake_key = "gsk_" + "z" * 40
+    result = runner.invoke(keys_group, ["add", "groq", "--key", fake_key])
+    assert result.exit_code == 0, f"Output: {result.output}"
+    managed = ew.read_all_managed(env_path=isolated_env)
+    assert managed.get("GROQ_API_KEY") == fake_key
+
+
+def test_keys_add_key_flag_shows_resilience(runner, isolated_env):
+    """--key flag prints resilience score after saving."""
+    fake_key = "gsk_" + "z" * 40
+    result = runner.invoke(keys_group, ["add", "groq", "--key", fake_key])
+    assert result.exit_code == 0
+    assert "Cascade resilience" in result.output
+
+
+def test_keys_add_key_flag_all_slots_full(runner, isolated_env):
+    """--key flag exits non-zero when all slots are already filled."""
+    slots = {
+        "GROQ_API_KEY": "gsk_" + "a" * 40,
+        "GROQ_API_KEY_1": "gsk_" + "b" * 40,
+        "GROQ_API_KEY_2": "gsk_" + "c" * 40,
+        "GROQ_API_KEY_3": "gsk_" + "d" * 40,
+        "GROQ_API_KEY_4": "gsk_" + "e" * 40,
+    }
+    ew.write_keys(slots, env_path=isolated_env)
+    result = runner.invoke(keys_group, ["add", "groq", "--key", "gsk_" + "f" * 40])
+    assert result.exit_code != 0
+    assert "All slots filled" in result.output
+
+
+# ── keys add --bulk ───────────────────────────────────────────────────────
+
+def test_keys_add_bulk_saves_multiple(runner, isolated_env):
+    """--bulk mode saves all pasted keys to consecutive rotation slots."""
+    key1 = "gsk_" + "a" * 40
+    key2 = "gsk_" + "b" * 40
+    # Two keys then blank line to finish
+    result = runner.invoke(keys_group, ["add", "groq", "--bulk"], input=f"{key1}\n{key2}\n\n")
+    assert result.exit_code == 0, f"Output: {result.output}"
+    managed = ew.read_all_managed(env_path=isolated_env)
+    assert managed.get("GROQ_API_KEY") == key1
+    assert managed.get("GROQ_API_KEY_1") == key2
+
+
+def test_keys_add_bulk_empty_input_exits_nonzero(runner, isolated_env):
+    """--bulk with no keys entered exits non-zero."""
+    result = runner.invoke(keys_group, ["add", "groq", "--bulk"], input="\n")
+    assert result.exit_code != 0
+
+
+# ── keys import ───────────────────────────────────────────────────────────
+
+def test_keys_import_dry_run_no_env_keys(runner, isolated_env):
+    """--dry-run with no matching env vars prints nothing-found message."""
+    # Patch _detect_env_keys to return [] for every provider so real shell vars
+    # (e.g. CEREBRAS_API_KEY in the dev environment) don't leak into the test.
+    with patch("linkright.keys.cli._detect_env_keys", return_value=[]):
+        result = runner.invoke(keys_group, ["import", "--dry-run"])
+    assert result.exit_code == 0
+    assert "No new keys found" in result.output
+
+
+def test_keys_import_dry_run_finds_env_keys(runner, isolated_env, monkeypatch):
+    """--dry-run detects keys from os.environ and shows table without saving."""
+    fake_key = "gsk_" + "z" * 40
+    monkeypatch.setenv("GROQ_API_KEY", fake_key)
+    result = runner.invoke(keys_group, ["import", "--dry-run"])
+    assert result.exit_code == 0
+    assert "dry-run" in result.output.lower() or "nothing saved" in result.output.lower() or "--dry-run" in result.output
+    assert "GROQ_API_KEY" in result.output
+    # Raw key must NOT appear
+    assert fake_key not in result.output
+    # Managed .env should still be empty
+    managed = ew.read_all_managed(env_path=isolated_env)
+    assert not managed.get("GROQ_API_KEY")
+
+
+def test_keys_import_saves_on_confirm(runner, isolated_env, monkeypatch):
+    """keys import saves env keys when user confirms."""
+    fake_key = "gsk_" + "z" * 40
+    monkeypatch.setenv("GROQ_API_KEY", fake_key)
+    mock_confirm = MagicMock()
+    mock_confirm.ask.return_value = True
+    with patch("questionary.confirm", return_value=mock_confirm):
+        result = runner.invoke(keys_group, ["import"])
+    assert result.exit_code == 0, f"Output: {result.output}"
+    managed = ew.read_all_managed(env_path=isolated_env)
+    assert managed.get("GROQ_API_KEY") == fake_key
+
+
+# ── _detect_env_keys unit tests ───────────────────────────────────────────
+
+def test_detect_env_keys_key_suffix(monkeypatch):
+    """_KEY suffix → GROQ_API_KEYS aggregate var is checked."""
+    from linkright.keys.cli import _detect_env_keys
+    from linkright.keys.catalogue import PROVIDER_MAP
+    spec = PROVIDER_MAP["groq"]
+    fake_key = "gsk_" + "x" * 40
+    monkeypatch.setenv("GROQ_API_KEYS", fake_key)
+    # Clear slot vars so only aggregate path triggers
+    for var in spec.all_env_vars:
+        monkeypatch.delenv(var, raising=False)
+    found = _detect_env_keys(spec)
+    assert fake_key in found
+
+
+def test_detect_env_keys_token_suffix(monkeypatch):
+    """_TOKEN suffix → CLOUDFLARE_API_TOKENS aggregate var is checked (not CLOUDFLARE_API_TOKENYS)."""
+    from linkright.keys.cli import _detect_env_keys
+    from linkright.keys.catalogue import PROVIDER_MAP
+    spec = PROVIDER_MAP["cloudflare"]
+    fake_token = "t" * 40
+    monkeypatch.setenv("CLOUDFLARE_API_TOKENS", fake_token)
+    for var in spec.all_env_vars:
+        monkeypatch.delenv(var, raising=False)
+    found = _detect_env_keys(spec)
+    assert fake_token in found
+
+
+def test_detect_env_keys_no_aggregate_for_unknown_suffix(monkeypatch):
+    """Provider with unexpected suffix skips aggregate var (returns only slot-var hits)."""
+    from linkright.keys.cli import _detect_env_keys
+    from linkright.keys.catalogue import ProviderSpec
+    # Synthetic provider with non-standard suffix
+    spec = ProviderSpec(
+        key="fake", name="Fake", description="", free_tier="",
+        signup_url="", signup_url_verified=False, recommended=False,
+        primary_env="FAKE_API_CRED",
+        key_min_len=1,
+    )
+    # Set a slot var directly
+    monkeypatch.setenv("FAKE_API_CRED", "real_cred_value")
+    found = _detect_env_keys(spec)
+    # Slot-var value found; no crash from phantom aggregate var
+    assert "real_cred_value" in found
