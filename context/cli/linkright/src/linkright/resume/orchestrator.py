@@ -674,7 +674,6 @@ def step_00_ingest_pdf() -> str:
 
 **Metrics:**
 - Character count: {length}
-- Contains name (case-insensitive): {has_name}
 - Email extracted: `{email_match.group(0) if email_match else 'NONE'}`
 - Phone extracted: `{phone_match.group(0) if phone_match else 'NONE'}`
 - Bullet chars (• or ●): {bullet_char_count}
