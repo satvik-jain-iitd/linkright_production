@@ -97,6 +97,34 @@ class LLMError(Exception):
     pass
 
 
+def _log_token_usage(intent: str, usage: dict) -> None:
+    """Print token counts to stderr after each tier_chat call.
+
+    Shows actual prompt/completion/total tokens from the provider's usage
+    dict (already normalised to prompt_tokens / completion_tokens /
+    total_tokens across all providers). Silently skips if values are None
+    (agent-mode or provider didn't return usage).
+    """
+    import sys as _sys
+    prompt = usage.get("prompt_tokens")
+    completion = usage.get("completion_tokens")
+    total = usage.get("total_tokens")
+    provider = usage.get("provider", "?")
+    if prompt is None and completion is None:
+        return
+    parts = []
+    if prompt is not None:
+        parts.append(f"in={prompt:,}")
+    if completion is not None:
+        parts.append(f"out={completion:,}")
+    if total is not None:
+        parts.append(f"total={total:,}")
+    print(
+        f"  [tokens] {intent}  {' | '.join(parts)}  ({provider})",
+        file=_sys.stderr, flush=True,
+    )
+
+
 # ── Deterministic mode (Phase 2 — 2026-05-01) ──────────────────────────────
 #
 # When LR_DETERMINISTIC=1, every provider helper pins temperature=0.0 and
@@ -1561,6 +1589,14 @@ def tier_chat(
             # Fall through to standard tier policy on override failure.
             pass
 
+    # Token counter — estimate before send (4 chars ≈ 1 token, rough but instant)
+    _input_est = (len(system) + len(user)) // 4
+    import sys as _sys
+    print(
+        f"  [tokens] {intent}  sending ~{_input_est:,} input tokens …",
+        file=_sys.stderr, flush=True,
+    )
+
     last_err: Optional[Exception] = None
     for provider in TIER_POLICY[klass]:
         try:
@@ -1569,6 +1605,7 @@ def tier_chat(
             )
             usage["klass"] = klass
             usage["intent"] = intent
+            _log_token_usage(intent, usage)
             return text, usage
         except LLMError as e:
             last_err = e
@@ -1584,4 +1621,5 @@ def tier_chat(
     usage["klass"] = klass
     usage["intent"] = intent
     usage["tier_fallback"] = True
+    _log_token_usage(intent, usage)
     return text, usage

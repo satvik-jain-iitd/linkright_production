@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.3] - 2026-05-09
+
+**Key management UX + token counter.** `linkright keys add` now auto-detects
+provider keys already in your shell env and offers to import them. Supports
+`--bulk` (paste all keys at once), `--key` (non-interactive for scripts). New
+`linkright keys import` scans your entire env for all known providers at once.
+Token counts (input/output/total) now printed to stderr on every LLM call.
+
+### Added
+
+- **`linkright keys add --bulk`** — paste multiple keys (newline or
+  comma-separated) in one shot; auto-assigns rotation slots. (#99)
+- **`linkright keys add --key "<val>"`** — non-interactive / CI-friendly
+  single-key injection. (#99)
+- **`linkright keys add <provider>`** — now auto-detects matching keys in
+  shell env (e.g. `CEREBRAS_API_KEYS=k1,k2,k3,k4`) and offers to import
+  all at once before falling back to manual entry. (#99)
+- **`linkright keys import`** — scan ALL providers at once; shows table of
+  what was found, confirms before writing. `--dry-run` to preview only. (#99)
+- **Token counter** — `tier_chat` prints `[tokens] intent  in=N | out=N |
+  total=N  (provider)` to stderr on every call. Estimate before send, actuals
+  after. Silently skips if provider doesn't return usage (agent mode). (#99)
+
 ## [0.5.2] - 2026-05-09
 
 **Bugfix** — `linkright profile create` no longer crashes with `NameError: name 'has_name' is not defined`. PR #90 (PII sweep) removed the name-check variable but left a stale f-string reference in `step_00_ingest_pdf`. Also fixes `unpdf` falling back to `pypdf` on every run by including the missing `unpdf_parity_test.mjs` in the wheel via `package-data`.
