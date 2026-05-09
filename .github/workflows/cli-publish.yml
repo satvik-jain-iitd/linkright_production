@@ -5,10 +5,12 @@ name: cli-publish
 # in your PR, merge, done.
 #
 # Flow:
-#   1. Read version from pyproject.toml
-#   2. Check if git tag v{version} already exists — skip if it does
-#   3. Create + push the tag automatically
+#   1. Read + validate version from pyproject.toml (hard-fail on empty)
+#   2. Check if git tag v{version} already exists — skip entirely if it does
+#   3. Verify PYPI_API_TOKEN secret is set (fail fast before any mutation)
 #   4. Build wheel + sdist, upload to PyPI
+#   5. Create + push the git tag ONLY after successful upload
+#      (tag-after-upload prevents orphaned tags on build/upload failure)
 #
 # Pre-flight (one-time setup, owner only):
 #   1. Create PyPI API token at https://pypi.org/manage/account/token/
@@ -24,7 +26,7 @@ on:
       - "context/cli/linkright/pyproject.toml"
 
 permissions:
-  contents: write   # needed to create + push the git tag
+  contents: write   # needed to push the git tag after successful upload
 
 jobs:
   build-and-publish:
@@ -41,10 +43,14 @@ jobs:
         with:
           fetch-depth: 0   # full history needed to check existing tags
 
-      - name: Read version from pyproject.toml
+      - name: Read + validate version from pyproject.toml
         id: version
         run: |
           ver=$(grep -E '^version = ' pyproject.toml | head -1 | cut -d'"' -f2)
+          if [ -z "$ver" ]; then
+            echo "::error::Could not extract version from pyproject.toml. Check that the file contains a line matching: version = \"X.Y.Z\""
+            exit 1
+          fi
           echo "version=$ver" >> "$GITHUB_OUTPUT"
           echo "Detected version: $ver"
 
@@ -59,13 +65,18 @@ jobs:
             echo "Tag v${{ steps.version.outputs.version }} is new — will publish."
           fi
 
-      - name: Create and push tag
+      - name: Verify PYPI_API_TOKEN secret is set
         if: steps.tag_check.outputs.exists == 'false'
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          if [ -z "$PYPI_API_TOKEN" ]; then
+            echo "::error::PYPI_API_TOKEN secret is not set. Add it at:"
+            echo "::error::https://github.com/satvik-jain-iitd/linkright_production/settings/secrets/actions"
+            echo "::error::Failing before any build or tag mutation to avoid orphaned state."
+            exit 1
+          fi
+          echo "PYPI_API_TOKEN is set."
 
       - name: Set up Python
         if: steps.tag_check.outputs.exists == 'false'
@@ -87,6 +98,14 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: python -m twine upload --non-interactive --verbose dist/*
+
+      - name: Create and push tag (after successful upload)
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Summary — published
         if: steps.tag_check.outputs.exists == 'false'
