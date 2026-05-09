@@ -1,6 +1,15 @@
 # Changelog
 
-All notable changes to LinkRight will be documented in this file.
+## [0.5.1] - 2026-05-09
+
+**Bugfix** — `linkright profile create` no longer shows "already exists" when only empty scaffold directories exist from a prior failed run. The guard now checks `metadata.yaml` (same signal as `profile show`/`status`), so users can always `create` after a failed run without needing `--force`.
+
+### Fixed
+
+- `profile create` guard: `any(iterdir())` → `(profile_dir / "metadata.yaml").exists()` — eliminates contradictory "Profile already exists" vs "No profile found" messages on partial state. (#96)
+
+
+
 
 ## [0.5.0] - 2026-05-07
 
