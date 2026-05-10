@@ -22,8 +22,9 @@ MODE_ACCENT: dict[str, str] = {
     "jobs":      PURPLE, "jobsearch": PURPLE,
 }
 
-# Two-tone ASCII art: █ solid blocks → teal bold, box-drawing corners/lines → gold
-# This separates the "fill" from the "structure" visually, giving depth like BMAD METHOD.
+# Career-journey gradient: Teal → Purple → Sage → Pink left-to-right.
+# Each color zone corresponds to a LinkRight pillar in the order users live them:
+#   Resume (Teal) → Job Search (Purple) → Interview (Sage) → Social/Content (Pink)
 _ASCII_LINES = [
     "██╗     ██╗███╗   ██╗██╗  ██╗██████╗ ██╗ ██████╗ ██╗  ██╗████████╗",
     "██║     ██║████╗  ██║██║ ██╔╝██╔══██╗██║██╔════╝ ██║  ██║╚══██╔══╝",
@@ -32,28 +33,44 @@ _ASCII_LINES = [
     "███████╗██║██║ ╚████║██║  ██╗██║  ██║██║╚██████╔╝██║  ██║   ██║   ",
     "╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝  ",
 ]
-_BOX_CHARS = set("╔╗╚╝═║╠╣╦╩╬╟╢╤╧╫╞╡╓╖╙╜╒╕╘╛┼├┤┬┴─│")  # ╗ already in set
+
+# (t, (R, G, B)) — t is normalized position across banner width 0.0 → 1.0
+_GRADIENT_STOPS: list[tuple[float, tuple[int, int, int]]] = [
+    (0.00, (15,  190, 175)),   # #0FBEAF  Teal   — Resume / Profile
+    (0.38, (139,  92, 246)),   # #8B5CF6  Purple — Job Search
+    (0.72, (143, 165, 114)),   # #8FA572  Sage   — Interview Prep
+    (1.00, (240,  90, 121)),   # #F05A79  Pink   — Social / Content
+]
 
 
-def _render_ascii_line(line: str) -> str:
-    """Two-tone: █ → bold teal, box-drawing → gold, spaces → pass-through."""
+def _lerp_color(t: float) -> str:
+    """Linear interpolation across career-journey gradient stops."""
+    t = max(0.0, min(1.0, t))
+    for i in range(len(_GRADIENT_STOPS) - 1):
+        t0, c0 = _GRADIENT_STOPS[i]
+        t1, c1 = _GRADIENT_STOPS[i + 1]
+        if t <= t1:
+            ratio = (t - t0) / (t1 - t0)
+            r = round(c0[0] + ratio * (c1[0] - c0[0]))
+            g = round(c0[1] + ratio * (c1[1] - c0[1]))
+            b = round(c0[2] + ratio * (c1[2] - c0[2]))
+            return f"#{r:02X}{g:02X}{b:02X}"
+    r, g, b = _GRADIENT_STOPS[-1][1]
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
+def _render_gradient_line(line: str) -> str:
+    """Color each non-space character with its interpolated gradient color."""
+    positions = [i for i, ch in enumerate(line) if ch != " "]
+    if not positions:
+        return line
+    max_col = positions[-1] or 1
     out: list[str] = []
-    i = 0
-    while i < len(line):
-        ch = line[i]
-        if ch == "█":
-            # Collect run of █
-            run_start = i
-            while i < len(line) and line[i] == "█":
-                i += 1
-            block = line[run_start:i]
-            out.append(f"[bold {TEAL}]{block}[/]")
-        elif ch in _BOX_CHARS:
-            out.append(f"[{GOLD}]{ch}[/]")
-            i += 1
-        else:
+    for i, ch in enumerate(line):
+        if ch == " ":
             out.append(ch)
-            i += 1
+        else:
+            out.append(f"[bold {_lerp_color(i / max_col)}]{ch}[/]")
     return "".join(out)
 
 
@@ -62,7 +79,7 @@ def lr_banner(version: str = "", subtitle: str = "Your local-first career OS  ·
     rule_w = min(width - 4, 72)
     console.print()
     for line in _ASCII_LINES:
-        console.print("  " + _render_ascii_line(line))
+        console.print("  " + _render_gradient_line(line))
     console.print()
     console.print(f"  [{GOLD}]◆[/]  [bold white]{subtitle}[/]")
     if version:
