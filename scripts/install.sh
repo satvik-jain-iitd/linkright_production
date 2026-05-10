@@ -264,11 +264,19 @@ heading "4/4  Installing $LINKRIGHT_PACKAGE"
 # If linkright already exists, upgrade rather than reinstall.
 if pipx list 2>/dev/null | grep -q "package linkright "; then
   info "linkright already installed — upgrading"
-  run pipx upgrade linkright || run pipx install --force "$LINKRIGHT_PACKAGE"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    say "  [dry-run] pipx upgrade linkright"
+  else
+    pipx upgrade linkright >/dev/null 2>&1 || pipx install --force "$LINKRIGHT_PACKAGE" >/dev/null 2>&1
+  fi
 else
   info "pipx install '$LINKRIGHT_PACKAGE'"
   say "  This pulls ~250MB total (LinkRight + fastembed model + playwright)."
-  run pipx install "$LINKRIGHT_PACKAGE"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    say "  [dry-run] pipx install '$LINKRIGHT_PACKAGE'"
+  else
+    pipx install "$LINKRIGHT_PACKAGE" >/dev/null 2>&1
+  fi
 fi
 
 # Sanity check
@@ -285,6 +293,13 @@ fi
 
 # ── Done — next steps ───────────────────────────────────────────────────────
 
+# Detect shell rc file for PATH reload hint (I-4)
+case "${SHELL:-}" in
+  */zsh)  SHELL_RC="~/.zshrc" ;;
+  */fish) SHELL_RC="~/.config/fish/config.fish" ;;
+  *)      SHELL_RC="~/.bashrc" ;;
+esac
+
 if [[ "$NO_SETUP_HINT" == "0" ]]; then
   cat <<EOF >&2
 
@@ -295,7 +310,7 @@ ${C_BOLD}Next steps:${C_RESET}
   ${C_CYAN}1. Get a free LLM key${C_RESET} (any one — Groq is fastest)
      https://console.groq.com → Sign up → API Keys → Create
      Then save it:
-       ${C_DIM}mkdir -p ~/.linkright && echo "GROQ_API_KEY=<paste-key>" >> ~/.linkright/.env${C_RESET}
+       ${C_DIM}linkright keys add groq${C_RESET}
 
   ${C_CYAN}2. Run the setup wizard${C_RESET} (interactive — picks LLM/embedder/PDF)
        ${C_DIM}linkright setup${C_RESET}
@@ -318,7 +333,7 @@ ${C_BOLD}Docs / issues:${C_RESET} ${REPO_URL}
 
 ${C_DIM}If \`linkright\` is "command not found", open a new terminal — pipx added
 ~/.local/bin (or equivalent) to your PATH but the current shell may not have
-picked it up yet. Or run:  source ~/.bashrc  (or ~/.zshrc).${C_RESET}
+picked it up yet. Or run:  source ${SHELL_RC}  to reload your shell config.${C_RESET}
 
 EOF
 fi

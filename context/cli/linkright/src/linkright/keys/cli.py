@@ -19,6 +19,13 @@ BOLD   = "\033[1m"
 RST    = "\033[0m"
 
 
+def _plural(count: int, singular: str, plural: str | None = None) -> str:
+    """Return singular or plural form based on count."""
+    if plural is None:
+        plural = singular + "s"
+    return f"{count} {singular if count == 1 else plural}"
+
+
 def _count_keys(managed: dict[str, str]) -> tuple[int, int]:
     """Return (total_key_count, provider_count_with_at_least_one_key)."""
     total = 0
@@ -170,6 +177,7 @@ def keys_list() -> None:
     click.echo("")
     click.echo(f"{BOLD}LinkRight API Keys{RST}")
     click.echo("─" * 48)
+    click.echo(f"  {DIM}\u2b50 = recommended (fastest free tier){RST}")
 
     for p in PROVIDERS:
         has_any = any(managed.get(v) for v in p.all_env_vars)
@@ -196,13 +204,22 @@ def keys_list() -> None:
     click.echo("─" * 48)
     score = resilience_score(total_keys, provider_count)
     color = GREEN if score in ("EXCELLENT", "GOOD") else (YELLOW if score == "FAIR" else RED)
-    click.echo(f"  {total_keys} key(s) across {provider_count} provider(s)  |  "
+    click.echo(f"  {_plural(total_keys, "key")} across {_plural(provider_count, "provider")}  |  "
                f"Resilience: {color}{score}{RST}")
     click.echo("")
     if total_keys == 0:
         click.echo(f"  {YELLOW}No keys configured.{RST} Run `linkright keys add groq` to add your first key.")
     elif score == "FAIR":
         click.echo(f"  {YELLOW}Tip:{RST} Add keys from a 2nd provider for rate-limit resilience.")
+
+    # K-10: warn about duplicate keys (same last-4 chars for same provider)
+    for p in PROVIDERS:
+        p_vals = [managed[v] for v in p.all_env_vars if managed.get(v)]
+        if len(p_vals) > 1:
+            suffixes = [v[-4:] if len(v) >= 4 else v for v in p_vals]
+            if len(suffixes) != len(set(suffixes)):
+                click.echo(f"  {YELLOW}\u26a0 Duplicate keys detected in {p.name} \u2014 "
+                           f"run `linkright keys remove {p.key}` to clean up.{RST}")
     click.echo("")
 
 
@@ -297,7 +314,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         new_managed = read_all_managed()
         total, pcount = _count_keys(new_managed)
         score = resilience_score(total, pcount)
-        click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}\n")
+        click.echo(f"  Cascade resilience: {_plural(total, "key")} across {_plural(pcount, "provider")} — {score}\n")
         return
 
     # ── Bulk mode: --bulk flag ──────────────────────────────────────────────
@@ -338,11 +355,11 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         if added == 0:
             click.echo("  No keys saved.")
             sys.exit(1)
-        click.echo(f"\n  {GREEN}✓ {added} key(s) saved to ~/.linkright/.env{RST}")
+        click.echo(f"\n  {GREEN}✓ {_plural(added, "key")} saved to ~/.linkright/.env{RST}")
         new_managed = read_all_managed()
         total, pcount = _count_keys(new_managed)
         score = resilience_score(total, pcount)
-        click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}\n")
+        click.echo(f"  Cascade resilience: {_plural(total, "key")} across {_plural(pcount, "provider")} — {score}\n")
         return
 
     # ── Env auto-detect ─────────────────────────────────────────────────────
@@ -373,8 +390,8 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
             new_managed = read_all_managed()
             total, pcount = _count_keys(new_managed)
             score = resilience_score(total, pcount)
-            click.echo(f"\n  {GREEN}✓ {imported} key(s) imported → ~/.linkright/.env{RST}")
-            click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}\n")
+            click.echo(f"\n  {GREEN}✓ {_plural(imported, "key")} imported → ~/.linkright/.env{RST}")
+            click.echo(f"  Cascade resilience: {_plural(total, "key")} across {_plural(pcount, "provider")} — {score}\n")
             return
         click.echo("")  # user declined import → fall through to manual entry
 
@@ -444,11 +461,11 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         click.echo("  No keys saved.")
         sys.exit(1)
 
-    click.echo(f"\n  {GREEN}✓ {added} key(s) saved to ~/.linkright/.env{RST}")
+    click.echo(f"\n  {GREEN}✓ {_plural(added, "key")} saved to ~/.linkright/.env{RST}")
     new_managed = read_all_managed()
     total, pcount = _count_keys(new_managed)
     score = resilience_score(total, pcount)
-    click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}")
+    click.echo(f"  Cascade resilience: {_plural(total, "key")} across {_plural(pcount, "provider")} — {score}")
     click.echo("")
 
     # K-12: offer to add keys for another provider after finishing the current one
@@ -484,11 +501,12 @@ def keys_import(dry_run: bool) -> None:
         click.echo("  No new keys found in shell environment.")
         click.echo("  (Checked GROQ_API_KEY, CEREBRAS_API_KEYS, GEMINI_API_KEY, etc.)")
         click.echo("  Use `linkright keys add <provider>` to add keys manually.")
+        click.echo("  Or manually edit ~/.linkright/.env (one per line: GROQ_API_KEY=gsk_...)")
         click.echo("")
         return
 
     label = "Would import" if dry_run else "Found"
-    click.echo(f"  {label} {len(found_rows)} key(s) from shell environment:\n")
+    click.echo(f"  {label} {_plural(len(found_rows), 'key')} from shell environment:\n")
     click.echo(f"  {'Provider':<22} {'Slot':<32} {'Key (masked)'}")
     click.echo("  " + "─" * 70)
     for provider_name, slot, key_val in found_rows:
@@ -511,18 +529,23 @@ def keys_import(dry_run: bool) -> None:
     updates: dict[str, str] = {slot: key_val for _, slot, key_val in found_rows}
     write_keys(updates)
 
-    click.echo(f"\n  {GREEN}✓ {len(updates)} key(s) imported → ~/.linkright/.env{RST}")
+    click.echo(f"\n  {GREEN}✓ {_plural(len(updates), 'key')} imported → ~/.linkright/.env{RST}")
     new_managed = read_all_managed()
     total, pcount = _count_keys(new_managed)
     score = resilience_score(total, pcount)
-    click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}")
+    click.echo(f"  Cascade resilience: {_plural(total, "key")} across {_plural(pcount, "provider")} — {score}")
     click.echo("")
 
 
 @keys_group.command("remove")
-@click.argument("provider")
+@click.argument("provider", default="")
 def keys_remove(provider: str) -> None:
     """Remove a key for PROVIDER. Interactive: picks which slot to remove."""
+    if not provider:
+        valid = ", ".join(p.key for p in PROVIDERS)
+        click.echo(f"Usage: linkright keys remove <provider>")
+        click.echo(f"Providers: {valid}")
+        sys.exit(1)
     spec = PROVIDER_MAP.get(provider.lower())
     if not spec:
         valid = ", ".join(p.key for p in PROVIDERS)
