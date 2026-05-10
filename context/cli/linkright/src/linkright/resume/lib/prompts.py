@@ -73,7 +73,7 @@ Rules:
 # ── Nugget extraction (worker) ──────────────────────────────────────────────
 
 NUGGET_EXTRACT_MD = """You are a career data extractor. Extract atomic nuggets from career text.
-Each nugget = one coherent achievement, skill, or fact. A dense resume should yield 25–45 nuggets.
+Each nugget = one coherent achievement, skill, or fact. Extract every distinct data point — no minimum, no maximum. Count is purely resume-content-driven.
 
 For each nugget write a ## nugget block with these fields:
 
