@@ -71,7 +71,11 @@ def _offer_enrich(profile_dir: Path) -> None:
         expand=False,
     ))
 
-    do_enrich = questionary.confirm("Add depth to a nugget now?", default=False).ask()
+    try:
+        do_enrich = questionary.confirm("Add depth to a nugget now?", default=False).ask()
+    except KeyboardInterrupt:
+        console.print("[dim]Enrichment skipped (Ctrl+C).[/]")
+        return
     if not do_enrich:
         return
 

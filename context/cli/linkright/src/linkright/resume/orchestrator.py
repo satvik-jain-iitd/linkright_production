@@ -817,14 +817,20 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
     )
 
     # Use the raw career text as input.
-    # max_tokens bumped from 4000 → 8000 after PROMPT-2 upgrade (NUGGET_EXTRACT_MD target:
-    # 25-45 nuggets × 150-350 char answers). At 4000 tokens, tail nuggets were silently
-    # truncated with no warning. Groq llama-3.3-70b-versatile supports 32k output tokens.
+    # klass upgraded A → B after PROMPT-2 (NUGGET_EXTRACT_MD now targets 25-45 nuggets
+    # × 150-350 char answers). Two reasons for the upgrade:
+    #   1. Token budget: worst-case ~4500 output tokens. Tier A = only 8B models; their
+    #      providers cap output at ~2000-4000 tokens in practice. Tier B's 70B fallback
+    #      (groq_70b) supports 32k output — large enough to never truncate.
+    #   2. Quality: 8B models struggle to maintain the SINGLE-SIGNAL RULE and 150-350
+    #      char targets consistently across 25-45 nuggets. 70B compliance is substantially
+    #      higher for structured extraction tasks of this complexity.
+    # max_tokens=8000: matches 70B capability; 8B providers will cascade to 70B on error.
     try:
         md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
             user=raw_text,
-            klass="A",
+            klass="B",
             intent="step_02_extract_nuggets",
             temperature=0.3,
             max_tokens=8000,
