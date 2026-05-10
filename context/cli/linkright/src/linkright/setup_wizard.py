@@ -65,6 +65,13 @@ import yaml
 # new options to the wizard; no other code change needed.
 # ─────────────────────────────────────────────────────────────────────────
 
+def _plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    """Return count + singular or plural form."""
+    if plural_form is None:
+        plural_form = singular + "s"
+    return f"{count} {singular if count == 1 else plural_form}"
+
+
 EMBEDDER_OPTIONS = [
     {
         "key": "fastembed",
@@ -125,13 +132,19 @@ def _try_import(module: str) -> bool:
         return False
 
 
-def _pip_install(package: str) -> bool:
-    """Install a pip package quietly. Returns True on success."""
+def _pip_install(package: str, stream: bool = False) -> bool:
+    """Install a pip package. Returns True on success.
+
+    If ``stream`` is True the subprocess stdout/stderr is not captured so the
+    user sees live pip output (used for large packages like sentence-transformers
+    where silent progress would leave the terminal frozen for minutes).
+    """
     try:
-        proc = subprocess.run(
-            [sys.executable, "-m", "pip", "install", package, "--quiet"],
-            capture_output=True, text=True, timeout=600,
-        )
+        cmd = [sys.executable, "-m", "pip", "install", package, "--progress-bar", "on"]
+        if stream:
+            proc = subprocess.run(cmd, timeout=600)
+        else:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         return proc.returncode == 0
     except Exception:
         return False
@@ -186,7 +199,7 @@ def _smoke_groq_key(key: str) -> tuple[bool, str]:
             timeout=10.0,
         )
         if resp.status_code == 200:
-            return True, "Groq API key valid ✓"
+            return True, "key valid"
         if resp.status_code == 401:
             return False, "Invalid key (401 Unauthorized)"
         if resp.status_code == 404:
@@ -219,6 +232,10 @@ def _ask_groq_key() -> tuple[str, bool, str]:
     print("  ✓  Saved GROQ_API_KEY → ~/.linkright/.env")
     print("  Verifying key with a live Groq call…")
     ok, msg = _smoke_groq_key(key)
+    if ok:
+        print("  ✓  Key valid")
+    else:
+        print(f"  ✗  Invalid key — {msg}")
     return key, ok, msg
 
 
@@ -297,7 +314,8 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
 
     print()
     print("────────────────────────────────────────────────────")
-    print("4/4 — API Keys (Direct mode LLM cascade)")
+    print("3 quick choices: embedder \u2022 PDF render \u2022 API keys")
+    print("3/3 — API Keys (Direct mode LLM cascade)")
     print("────────────────────────────────────────────────────")
     print()
     print("  LinkRight cascades through 7 free-tier providers.")
@@ -316,6 +334,11 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
             print()
             print("  OK — Agent mode uses your LLM CLI tool directly.")
             print("  You can add direct-mode keys anytime: `linkright keys add groq`")
+            if not shutil.which("claude"):
+                print()
+                print("  \u26a0 claude not found on PATH \u2014 install Claude Code first:")
+                print("    https://claude.ai/code")
+                print("  Or add a direct-mode key: linkright keys add groq")
         else:
             print()
             print("  OK — add keys anytime: `linkright keys add <provider>`")
@@ -413,14 +436,14 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
             if provider_keys:
                 provider_count += 1
                 key_count += len(provider_keys)
-                print(f"  ✓  {spec.name:<20}  {len(provider_keys)} key(s)")
+                print(f"  ✓  {spec.name:<20}  {_plural(len(provider_keys), 'key')}")
             else:
                 print(f"  —  {spec.name:<20}  (skipped)")
 
         score = resilience_score(key_count, provider_count)
         score_color = "\033[32m" if score in ("EXCELLENT", "GOOD") else "\033[33m"
         print()
-        print(f"  {key_count} key(s) across {provider_count} provider(s)  |  "
+        print(f"  {_plural(key_count, 'key')} across {_plural(provider_count, 'provider')}  |  "
               f"Cascade resilience: {score_color}{score}\033[0m")
         print()
         print("  Run `linkright keys test` to verify live status.")
@@ -541,32 +564,21 @@ def run_wizard() -> int:
             print()
 
     needs_groq = not (old_mode == "agent" and not migrate)
-    # Total visible steps: groq (optional) + embedder + pdf + multi-key
-    total_steps = 4 if needs_groq else 3
-    if needs_groq:
-        print(f"You'll see {total_steps} quick choices: Groq key • embedder • PDF render • API keys")
-    else:
-        print(f"You'll see {total_steps} quick choices: embedder • PDF render • API keys")
-    print("⭐ = recommended choice")
+    # Total visible steps: embedder + pdf + api-keys (Groq is now inside api-keys)
+    total_steps = 3
+    print(f"You'll see {total_steps} quick choices: embedder \u2022 PDF render \u2022 API keys")
+    print("\u2b50 = recommended choice")
     print()
 
-    # ── Decision 1: Groq API key (skip if user kept agent mode) ────
-    if needs_groq:
-        print(f"1/{total_steps} — Groq API key (powers the 16-step resume pipeline)")
-        print()
-        groq_key, ok_groq, msg_groq = _ask_groq_key()
-    else:
-        groq_key, ok_groq, msg_groq = "", True, "skipped (agent mode kept)"
+    # ── No dedicated Groq step — Groq appears as first provider in API keys step ──
+    groq_key, ok_groq, msg_groq = "", True, "skipped (enter in API keys step)"
 
-    # ── Decision 2: Embedder ───────────────────────────────────────
-    print()
-    embedder_step = 2 if needs_groq else 1
-    embedder = _pick(f"{embedder_step}/{total_steps} — Which embedder?", EMBEDDER_OPTIONS)
+    # ── Decision 1: Embedder ───────────────────────────────────────
+    embedder = _pick(f"1/{total_steps} \u2014 Which embedder?", EMBEDDER_OPTIONS)
     print()  # visual separator between decisions
 
-    # ── Decision 3: PDF render ─────────────────────────────────────
-    pdf_step = 3 if needs_groq else 2
-    pdf = _pick(f"{pdf_step}/{total_steps} — Render PDFs from generated resumes?", PDF_OPTIONS)
+    # ── Decision 2: PDF render ─────────────────────────────────────
+    pdf = _pick(f"2/{total_steps} \u2014 Render PDFs from generated resumes?", PDF_OPTIONS)
 
     # ── Decision 4 (hidden): Skill mode (legacy — defaults to "auto") ─
     skill_mode_key = "auto"
@@ -574,7 +586,8 @@ def run_wizard() -> int:
     print()
     print("──────────────────────────────────────────────────────")
     mode_label = "direct (Groq)" if needs_groq else "agent (kept from 0.3.0)"
-    print(f"Picks so far  →  LLM: {mode_label}  •  embedder: {embedder['key']}  •  PDF: {pdf['key']}")
+    emb_display = embedder['key'].replace("_", "-")
+    print(f"Picks so far  \u2192  LLM: {mode_label}  \u2022  embedder: {emb_display}  \u2022  PDF: {pdf['key']}")
     print("──────────────────────────────────────────────────────")
 
     # ── Decision 5: Multi-provider API keys ───────────────────────
@@ -590,8 +603,12 @@ def run_wizard() -> int:
     # Embedder pip
     if embedder.get("pip"):
         if embedder.get("import_check") and not _try_import(embedder["import_check"]):
-            print(f"  ⬇  pip install {embedder['pip']}  …")
-            if not _pip_install(embedder["pip"]):
+            large_pkg = embedder.get("key") == "sentence_transformers"
+            if large_pkg:
+                print(f"  ⬇  Installing {embedder['pip']} (~700 MB, ~2-3 min)…")
+            else:
+                print(f"  ⬇  pip install {embedder['pip']}  …")
+            if not _pip_install(embedder["pip"], stream=large_pkg):
                 failures.append(f"pip install {embedder['pip']}")
                 print("     ✗ failed — see install hint at end")
             else:
@@ -623,7 +640,7 @@ def run_wizard() -> int:
 
     print()
     print("Smoke-testing your picks…")
-    print(f"  Groq API key:        {'✓' if ok_groq else '✗'}  {msg_groq}")
+    print(f"  Groq API key:        {'✓ valid' if ok_groq else '✗'}  {msg_groq if not ok_groq else ''}")
     # Lead-in only on fresh setup — the wizard path may trigger a model
     # download. `linkright setup --check` (which also calls _smoke_embedder
     # at line ~733) hits the cache, so we don't claim a download there.
@@ -698,11 +715,12 @@ def run_wizard() -> int:
     print("✅  Setup complete.")
     print()
     print("Recommended next step (one-time, ~30s):")
-    print("   linkright profile create -r path/to/resume.pdf")
+    print("   linkright profile create")
     print("   → caches your resume so every tailor run is 30-60s faster")
     print()
     print("Then tailor for any job:")
-    print("   linkright resume tailor -r path/to/resume.pdf -j path/to/jd.md")
+    print("   linkright tailor -j path/to/jd.md")
+    print("   (profile cache means -r is optional after first setup)")
     print()
     print("To re-run the wizard later:  linkright setup")
     print("To check current setup:      linkright setup --check")
@@ -763,7 +781,7 @@ def run_check() -> int:
         pcount = sum(1 for p in PROVIDERS if any(managed.get(v) for v in p.all_env_vars))
         if total:
             score = resilience_score(total, pcount)
-            print(f"  API keys:  ✓  {total} key(s) across {pcount} provider(s) — {score}")
+            print(f"  API keys:  ✓  {_plural(total, 'key')} across {_plural(pcount, 'provider')} — {score}")
         else:
             print("  API keys:  ✗  none configured — run `linkright keys add groq`")
     except ImportError:

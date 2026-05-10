@@ -352,6 +352,13 @@ def tldr_cmd() -> None:
     click.echo(_TLDR)
 
 
+def _plural(count: int, singular: str, plural_form: str | None = None) -> str:
+    """Return count + singular or plural form."""
+    if plural_form is None:
+        plural_form = singular + "s"
+    return f"{count} {singular if count == 1 else plural_form}"
+
+
 # ── doctor — environment + config + deps health check ─────────────────────
 
 @main.command("doctor")
@@ -390,7 +397,7 @@ def doctor_cmd(auto_fix: bool) -> None:
     profile_meta = os.path.join(profile_dir, "metadata.yaml")
     rows.append(("Profile created",      os.path.isfile(profile_meta),
                  profile_meta if os.path.isfile(profile_meta)
-                 else "run `linkright profile create -r resume.pdf`"))
+                 else "run `linkright profile create`"))
 
     # 3. Multi-key LLM health check — uses keys module for accurate counting
     try:
@@ -401,7 +408,7 @@ def doctor_cmd(auto_fix: bool) -> None:
         _pcount = sum(1 for p in _PROVIDERS if any(_managed.get(v) for v in p.all_env_vars))
         if _total_keys:
             _score = resilience_score(_total_keys, _pcount)
-            _detail = f"{_total_keys} key(s) across {_pcount} provider(s) — resilience: {_score}"
+            _detail = f"{_plural(_total_keys, 'key')} across {_plural(_pcount, 'provider')} — resilience: {_score}"
         else:
             _detail = "no keys — run `linkright keys add groq`"
         rows.append(("LLM keys configured", bool(_total_keys), _detail))

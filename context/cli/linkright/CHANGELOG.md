@@ -1,28 +1,64 @@
 # Changelog
 
-## [0.5.4] - 2026-05-10
+## [0.5.5] - 2026-05-10
 
-**P0 onboarding fixes.** Six critical bugs in the setup and keys flows are resolved.
+**Onboarding P1/P2 polish.** Consolidated setup wizard from 4 steps to 3 (Groq
+is now the first provider inside the API keys step instead of a separate step).
+Pip installs for large packages now stream progress live. Every `key(s)` and
+`provider(s)` now uses correct singular/plural. Doctor fix suggestions no longer
+contain placeholder paths.
 
 ### Fixed
 
-- **S-3** — `linkright setup` API Keys step now shows `4/4` instead of `4/4 → 5/5`
-  (header was hardcoded to `5/5`, now correctly `4/4`). (#p0)
-- **S-6** — Wizard no longer re-prompts for the Groq API key in the API keys step when
-  the user already entered it in step 1. `existing_groq_key` is now always forwarded
-  from step 1, regardless of smoke-test outcome. (#p0)
-- **S-11** — HuggingFace "unauthenticated requests" warning no longer bleeds into
-  setup output. Added `warnings.filterwarnings` suppression (Python warnings module)
-  alongside the existing logging filter, covering all versions of `huggingface_hub`. (#p0)
-- **K-12** — `linkright keys add` now offers "Add keys for another provider?" after
-  completing each provider instead of exiting immediately. Shows only providers with
-  remaining open slots. Tail-recursive — chains as many providers as user wants. (#p0)
-- **K-7** — `linkright keys add` now fires a 1-token live API ping after saving each key
-  and prints `✓ Key valid` / `✗ Key rejected — check and re-enter` / `⚠ Rate-limited`.
-  Uses the same `probe_key()` infrastructure as `linkright keys test`. (#p0)
-- **D-1** — `linkright doctor` now reads `~/.linkright/config.yaml` to detect the
-  configured embedder tier (`fastembed` / `sentence_transformers` / `oracle`) and checks
-  for THAT embedder, instead of always checking fastembed regardless of config. (#p0)
+- **S-1** — Setup wizard step label no longer says "16-step resume pipeline";
+  replaced with "Typically 2–4 minutes per resume". (#onboarding-p1)
+- **S-4** — Groq key verify result (`✓ Key valid` / `✗ Invalid key`) now shown
+  immediately inline after the live call, not buried in the smoke-test section.
+- **S-7** — Removed dedicated Groq step 1/4. Groq is now the first provider
+  inside the API keys step. Wizard header updated to "3 quick choices:
+  embedder • PDF render • API keys". Step numbering updated (1/3, 2/3, 3/3).
+- **S-9** — `pip install sentence-transformers` now streams live progress via
+  `--progress-bar on` and prefixes the line with estimated time (~700 MB,
+  ~2-3 min) so the terminal does not appear frozen.
+- **S-12** — Success next-steps now shows `linkright tailor` (canonical alias),
+  not `linkright resume tailor`.
+- **S-13** — Tailor example no longer includes `-r` flag after `profile create`
+  recommendation; added note "(profile cache means -r is optional after first
+  setup)". `profile create` example simplified to no `-r` flag.
+- **S-14** — When user selects "Agent mode only" in setup, wizard now checks
+  for `claude` binary on PATH and shows a warning with install URL if missing.
+- **S-5** — "Picks so far" summary now displays `sentence-transformers`
+  (hyphen) consistently, not `sentence_transformers` (underscore).
+- **S-10** — Smoke test line no longer shows double `✓`: was
+  `Groq API key: ✓  Groq API key valid ✓`; now `Groq API key: ✓ valid`.
+- **K-3** — `linkright keys import` no-keys-found message now appends:
+  "Or manually edit ~/.linkright/.env (one per line: GROQ_API_KEY=gsk_...)".
+- **K-5** — Groq slot naming is now consistent: first `keys add groq` saves
+  to `GROQ_API_KEY` (primary, no suffix), as with all other providers.
+  Previously the old wizard pre-filled `GROQ_API_KEY`, causing `keys add` to
+  jump to `GROQ_API_KEY_1` — resolved by S-7 consolidation.
+- **K-9** — `linkright keys list` now shows legend: "⭐ = recommended (fastest
+  free tier)" at top of the table so the badge is self-explanatory.
+- **K-10** — `linkright keys list` now warns when two slots for the same
+  provider share the same last-4 chars (likely duplicate paste).
+- **K-11** — `linkright keys remove` with no argument now shows:
+  `Usage: linkright keys remove <provider>` with full provider list, instead
+  of a cryptic Click error.
+- **D-2** — Doctor "LLM keys configured" detail now uses proper
+  singular/plural: "1 key across 1 provider", "3 keys across 2 providers".
+- **D-3** — Doctor profile-missing fix suggestion changed from
+  `linkright profile create -r resume.pdf` (placeholder) to
+  `linkright profile create` (interactive, no placeholder path).
+- **I-2** — Installer now captures pipx's `done! ✨ 🌟 ✨` output and only
+  shows the clean `✓ linkright X.Y.Z installed` line.
+- **I-3** — Installer next-steps block no longer shows the raw shell one-liner
+  `mkdir -p ~/.linkright && echo "GROQ_API_KEY=..." >> ~/.linkright/.env`;
+  replaced with `linkright keys add groq`.
+- **I-4** — Installer "command not found" hint now detects `$SHELL` and shows
+  `source ~/.zshrc` on zsh (macOS default), `~/.bashrc` on bash, or
+  `~/.config/fish/config.fish` on fish, instead of always showing `~/.bashrc`.
+- **K-4** — All `key(s)` / `provider(s)` strings in `linkright keys`
+  subcommands now use proper singular/plural (e.g. "1 key", "2 keys").
 
 ## [0.5.3] - 2026-05-09
 
