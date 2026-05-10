@@ -43,6 +43,51 @@ def profile_group() -> None:
     """
 
 
+def _offer_enrich(profile_dir: Path) -> None:
+    """Offer one round of deep enrichment after truth-engine completes.
+
+    Non-blocking: Ctrl+C or "Skip" exits cleanly. Any nuggets added are
+    persisted immediately inside enrich_session. Caller does not need to
+    re-run persist().
+    """
+    import questionary
+    from rich.console import Console
+    from rich.panel import Panel
+
+    _TEAL = "#0FBEAF"
+    console = Console()
+
+    nuggets = load_nuggets(profile_dir)
+    if not nuggets:
+        return
+
+    console.print()
+    console.print(Panel(
+        f"[{_TEAL}]Deep Enrichment[/] — pick one achievement and answer 3 follow-up questions.\n"
+        "Each answer becomes a new nugget with richer detail → better resume tailoring.\n"
+        "[dim]Takes ~30–60 sec per nugget. You can run more later: `linkright profile enrich`[/]",
+        title="[bold]Optional: Deepen an Achievement[/]",
+        border_style=_TEAL,
+        expand=False,
+    ))
+
+    try:
+        do_enrich = questionary.confirm("Add depth to a nugget now?", default=False).ask()
+    except KeyboardInterrupt:
+        console.print("[dim]Enrichment skipped (Ctrl+C).[/]")
+        return
+    if not do_enrich:
+        return
+
+    try:
+        from .enrich import enrich_session
+        enrich_session(profile_dir)
+    except KeyboardInterrupt:
+        console.print("[dim]Enrichment cancelled — profile saved as-is.[/]")
+    except Exception as e:
+        console.print(f"[dim]Enrichment failed: {e} — profile saved as-is.[/]")
+
+
 # ── create ──────────────────────────────────────────────────────────────────
 
 @profile_group.command("create")
@@ -152,6 +197,13 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
             f"\nFinal counts: {meta.get('n_nuggets', 0)} nuggets, "
             f"{meta.get('n_highlights', 0)} highlights locked."
         )
+
+    # Truth-engine Layer 3: optional deep enrichment.
+    # After truth engine, user has verified all highlights. Offer to deepen
+    # specific achievements via 3 follow-up Q&A → new nuggets persisted.
+    # --yes skips (batch/scripted). Ctrl+C cancels gracefully without loss.
+    if not yes:
+        _offer_enrich(profile_dir)
 
     click.echo("")
     click.echo("Next: `linkright profile show` to review, "

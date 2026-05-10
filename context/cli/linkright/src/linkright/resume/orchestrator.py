@@ -810,22 +810,33 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
         step, "starting",
         "calling Groq 70B with vendored NUGGET_EXTRACT_MD prompt (same as "
         "worker/app/tools/nugget_extractor.py Langfuse key 'nugget_extractor_md'); "
-        "input is the raw resume text; expecting 20-40 atomic ## nugget blocks "
-        "each tagged with company, role, importance, answer, tags",
+        "input is the raw resume text; expecting 25-45 atomic ## nugget blocks "
+        "each tagged with company, role, importance, answer, tags; "
+        "max_tokens=8000 — worst-case: 45 nuggets × ~400 chars / 4 chars-per-token ≈ 4500 tokens; "
+        "buffer to 8000 so truncation never silently drops tail nuggets",
     )
 
-    # Use the raw career text as input (production batches at 3000 chars; Jane's is 3009 — single batch)
+    # Use the raw career text as input.
+    # klass="B" + provider override to groq_70b for this intent.
+    # PROMPT-2 targets 25-45 nuggets × 150-350 char answers ≈ up to ~4500 output tokens.
+    # 8B models (tier A/B head) cap at 2-4k output in practice and would fail with HTTP 400,
+    # wasting ~6-10s of round-trip latency before the cascade reaches 70B.
+    # `LR_TIER_OVERRIDE_step_02_extract_nuggets=groq_70b` (setdefault → user can override)
+    # pins this site to groq_70b directly; tier B policy still applies if 70B is unavailable.
+    # groq llama-3.3-70b-versatile supports 32k output tokens — max_tokens=8000 is safe.
+    import os as _os
+    _os.environ.setdefault("LR_TIER_OVERRIDE_step_02_extract_nuggets", "groq_70b")
     try:
         md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
             user=raw_text,
-            klass="A",
+            klass="B",
             intent="step_02_extract_nuggets",
             temperature=0.3,
-            max_tokens=4000,
+            max_tokens=8000,
         )
     except llm.LLMError as e:
-        logbook.append(step, "error", "LLM nugget extraction failed across all tier-A providers", body=f"```\n{e}\n```")
+        logbook.append(step, "error", "LLM nugget extraction failed across all tier-B providers (primary: groq_70b override)", body=f"```\n{e}\n```")
         raise
 
     log(f"=== step_02 {usage.get('provider')} raw output ===\n{md_text}\n=== end ===\n")
@@ -887,8 +898,8 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
             multi_signal.append(n.get("id", "?"))
 
     gaps: list[str] = []
-    if len(nuggets) < 10:
-        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 20-40 for a dense resume")
+    if len(nuggets) < 15:
+        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 25-45 for a dense resume")
     if len(importance_counts) < 2:
         gaps.append(f"importance distribution collapsed: {importance_counts}")
     if multi_signal:

@@ -321,109 +321,124 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
                         raw_text_fallback: str = "") -> dict:
     """Interactive contact verification — Truth Engine Layer 1.
 
-    Per Jane 2026-05-02 (memory feedback_personal_details_verify_at_start):
-    Surface phone/email/LinkedIn/portfolio/name to user. User confirms each
-    or types correction. Tool MUST NOT invent any value. Empty fields stay
-    empty unless user types a value.
+    Per feedback_personal_details_verify_at_start: surface phone/email/LinkedIn/
+    portfolio/name to user. User confirms each or types correction. Tool MUST NOT
+    invent any value. Empty fields stay empty unless user types a value.
+
+    UI pattern (mirrors Claude Code AskUserQuestion style):
+    - Phase 1: collect all fields with pre-filled defaults
+    - Phase 2: review panel → select-to-edit any single field → back to review
+    This gives true per-field forward/backward navigation without questionary
+    back-nav (which questionary does not natively support).
 
     Reads existing `contact.yaml` (if previously saved) — pre-fills defaults.
     Otherwise extracts via regex from raw resume text.
     """
     import questionary
     from rich.console import Console
+    from rich.panel import Panel
     profile_dir = profile_dir or _profile_dir()
     console = Console()
+
+    # LinkRight brand colours (from repo/website/src/app/globals.css)
+    _TEAL   = "#0FBEAF"   # primary
+    _GOLD   = "#E5B80B"   # gold — field labels / row numbers
+    _CORAL  = "#FF5733"   # secondary — errors/abort
+    _DIM    = "dim"
 
     existing = load_contact(profile_dir)
     if not existing and raw_text_fallback:
         existing = _extract_contact_from_text(raw_text_fallback)
     elif not existing:
-        # Try to read from cached step_01 raw text in profile/artifacts
         raw_path = profile_dir / "artifacts" / "00_resume_raw_text.txt"
         if raw_path.exists():
             existing = _extract_contact_from_text(raw_path.read_text(encoding="utf-8", errors="ignore"))
         else:
             existing = {"phone": "", "email": "", "linkedin": "", "portfolio": "", "name": ""}
 
+    fields = [
+        ("name",      "Full name"),
+        ("phone",     "Phone (with country code)"),
+        ("email",     "Email"),
+        ("linkedin",  "LinkedIn URL"),
+        ("portfolio", "Portfolio URL (blank if none)"),
+    ]
+    _label = dict(fields)
+
     console.print()
-    console.print("[bold cyan]📇 Contact details — confirm before we store them[/]")
-    console.print("[dim]Confirm or correct each field. Wrong contact = recruiter can't reach you.[/]")
-    console.print("[dim]Press Enter to accept current value; type a new value to override; type a single space + Enter to clear.[/]")
+    console.print(Panel(
+        f"[{_TEAL}]Wrong contact → recruiter can't reach you.[/]\n"
+        f"[{_DIM}]Press Enter to accept • type to override • space+Enter to clear[/]",
+        title="[bold]📇 Contact Details[/]",
+        border_style=_TEAL,
+        expand=False,
+    ))
     console.print()
 
+    # ── Phase 1: initial collection with pre-filled defaults ─────────────────
     confirmed: dict = {}
-    fields = [
-        ("name", "Full name"),
-        ("phone", "Phone (with country code)"),
-        ("email", "Email"),
-        ("linkedin", "LinkedIn URL (e.g., linkedin.com/in/...)"),
-        ("portfolio", "Portfolio URL (leave blank if none)"),
-    ]
     for key, label in fields:
         default = (existing.get(key) or "").strip()
         try:
-            ans = questionary.text(
-                f"{label}:",
-                default=default,
-            ).ask()
+            ans = questionary.text(f"{label}:", default=default).ask()
         except KeyboardInterrupt:
-            console.print("[red]Aborted by user (Ctrl+C). No changes saved.[/]")
+            console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes saved.[/]")
             sys.exit(130)
         if ans is None:
-            console.print("[red]Aborted. No changes saved.[/]")
+            console.print(f"[{_CORAL}]Aborted. No changes saved.[/]")
             sys.exit(130)
-        ans = ans.strip()
-        # Single space = explicit clear
-        if ans == "":
-            confirmed[key] = ""
-        else:
-            confirmed[key] = ans
+        confirmed[key] = ans.strip()
 
-    # PC-5: Confirmation step — show all fields at once before saving.
-    # Lets user catch "pressed Enter by accident" without per-field back-nav.
+    # ── Phase 2: review + per-field select-to-edit loop ─────────────────────
+    # Mirrors Claude Code AskUserQuestion: numbered panel → pick field to edit
+    # → single text prompt → back to review. "✓ All correct" = confirm.
     while True:
         console.print()
-        console.print("[bold]Review your contact details:[/]")
-        for k, label in fields:
-            v = confirmed.get(k) or "(blank)"
-            console.print(f"  {label}: [cyan]{v}[/]")
-        console.print()
+        rows = []
+        for i, (key, label) in enumerate(fields, 1):
+            val = confirmed.get(key) or ""
+            display = val if val else f"[{_DIM}](blank)[/]"
+            rows.append(f"  [{_GOLD}]{i}.[/]  {label:<30} [{_TEAL}]{display}[/]")
+        console.print(Panel(
+            "\n".join(rows),
+            title="[bold]Review — select a field to edit or confirm[/]",
+            border_style=_TEAL,
+            expand=False,
+        ))
+
+        _CONFIRM = "__confirm__"
+        choices = [questionary.Choice("✓  All correct — save and continue", value=_CONFIRM)]
+        for key, label in fields:
+            val = confirmed.get(key) or "(blank)"
+            choices.append(questionary.Choice(f"   Edit: {label}  [{val}]", value=key))
+
         try:
-            ok = questionary.select(
-                "Looks good?",
-                choices=["Yes — save and continue", "No — re-enter all fields"],
-                default="Yes — save and continue",
+            action = questionary.select(
+                "Action:",
+                choices=choices,
+                default=_CONFIRM,
             ).ask()
         except KeyboardInterrupt:
-            console.print("[red]Aborted by user (Ctrl+C). No changes saved.[/]")
+            console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes saved.[/]")
             sys.exit(130)
-        if ok is None:
-            console.print("[red]Aborted. No changes saved.[/]")
-            sys.exit(130)
-        if ok == "Yes — save and continue":
+        if action is None or action == _CONFIRM:
             break
-        # Re-enter all fields
-        console.print()
-        console.print("[dim]Re-entering fields — press Enter to keep, type to change, space+Enter to clear.[/]")
-        confirmed = {}
-        for key, label in fields:
-            default = (confirmed.get(key) or existing.get(key) or "").strip()
-            try:
-                ans = questionary.text(
-                    f"{label}:",
-                    default=default,
-                ).ask()
-            except KeyboardInterrupt:
-                console.print("[red]Aborted by user (Ctrl+C). No changes saved.[/]")
-                sys.exit(130)
-            if ans is None:
-                console.print("[red]Aborted. No changes saved.[/]")
-                sys.exit(130)
-            confirmed[key] = ans.strip()
+
+        # Edit exactly one field → back to review panel
+        label = _label[action]
+        current = confirmed.get(action) or ""
+        try:
+            new_val = questionary.text(f"{label}:", default=current).ask()
+        except KeyboardInterrupt:
+            # Ctrl+C on edit → cancel the edit, return to review (don't exit)
+            console.print(f"[{_DIM}]Edit cancelled — back to review.[/]")
+            continue
+        if new_val is not None:
+            confirmed[action] = new_val.strip()
 
     save_contact(profile_dir, confirmed)
     console.print()
-    console.print(f"[green]✓ Contact confirmed and saved to {profile_dir}/contact.yaml[/]")
+    console.print(f"[{_TEAL}]✓ Contact saved.[/]")
     return confirmed
 
 
