@@ -129,7 +129,9 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     _temp_jd_path: Path | None = None
     if jd_path is None:
         from linkright.prompts import prompt_for_jd_input
-        kind, value = prompt_for_jd_input(flag_hint="-j/--jd", allow_discovery=True)
+        from linkright.jobsearch.cli import _try_auth_headers as _try_auth
+        _allow_discovery = _try_auth() is not None
+        kind, value = prompt_for_jd_input(flag_hint="-j/--jd", allow_discovery=_allow_discovery)
         if kind == "file":
             jd_path = value
         elif kind == "discovery":
