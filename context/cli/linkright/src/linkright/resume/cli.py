@@ -107,20 +107,77 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     The command parses your resume + JD, retrieves matching career nuggets,
     drafts bullets via LLM, scores + ranks, and renders a final PDF.
     """
-    # Bare-command UX: prompt for any missing required input.
+    # Bare-command UX: auto-use profile resume when available; prompt only as fallback.
     if resume_path is None:
-        from linkright.prompts import prompt_for_existing_path
-        resume_path = prompt_for_existing_path(
-            "Path to your resume (PDF or .md):",
-            must_be_file=True,
-            flag_hint="-r/--resume",
-        )
+        from linkright.profile.pipeline import _profile_dir as _pdir_fn
+        _pdir = _pdir_fn()
+        _profile_pdf = _pdir / "inputs" / "resume.pdf"
+        _profile_md  = _pdir / "inputs" / "resume.md"
+        if _profile_pdf.exists():
+            resume_path = _profile_pdf
+            click.echo(f"✓ Using profile resume: {resume_path}")
+        elif _profile_md.exists():
+            resume_path = _profile_md
+            click.echo(f"✓ Using profile resume: {resume_path}")
+        else:
+            from linkright.prompts import prompt_for_existing_path
+            resume_path = prompt_for_existing_path(
+                "Path to your resume (PDF or .md):",
+                must_be_file=True,
+                flag_hint="-r/--resume",
+            )
     _temp_jd_path: Path | None = None
     if jd_path is None:
         from linkright.prompts import prompt_for_jd_input
-        kind, value = prompt_for_jd_input(flag_hint="-j/--jd")
+        from linkright.jobsearch.cli import _try_auth_headers as _try_auth
+        _allow_discovery = _try_auth() is not None
+        kind, value = prompt_for_jd_input(flag_hint="-j/--jd", allow_discovery=_allow_discovery)
         if kind == "file":
             jd_path = value
+        elif kind == "discovery":
+            from linkright.jobsearch.cli import (
+                _pick_discovery_id_interactive,
+                _resolve_id,
+                _http,
+                _auth_headers,
+                _LINKRIGHT_API,
+            )
+            discovery_id = _pick_discovery_id_interactive("Pick a saved job to tailor for:")
+            if not discovery_id:
+                click.echo("Cancelled.", err=True)
+                sys.exit(1)
+            resolved_id = _resolve_id(discovery_id)
+            click.echo(f"Fetching JD for discovery {resolved_id[:8]}...", nl=False)
+            try:
+                with _http() as client:
+                    resp = client.get(
+                        f"{_LINKRIGHT_API}/api/discoveries/{resolved_id}",
+                        headers=_auth_headers(),
+                    )
+            except Exception as exc:
+                raise click.ClickException(f"Network error fetching JD: {exc}")
+            if resp.status_code != 200:
+                raise click.ClickException(f"API error {resp.status_code}: {resp.text[:200]}")
+            disc = resp.json().get("discovery") or {}
+            jd_text = disc.get("jd_text") or ""
+            if not jd_text:
+                raise click.ClickException(
+                    "JD text not available for this discovery. "
+                    "Try a different job or paste the JD instead."
+                )
+            click.echo(" done.")
+            import tempfile
+            tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")
+            tmp.write(
+                f"# {disc.get('title', 'Job Description')} — {disc.get('company_name', '')}\n\n"
+                f"**Location**: {disc.get('location', 'Unknown')}\n"
+                f"**URL**: {disc.get('job_url', '')}\n\n"
+                + jd_text
+            )
+            tmp.close()
+            jd_path = Path(tmp.name)
+            _temp_jd_path = jd_path
+            click.echo(f"  Staged discovery JD → {jd_path}")
         else:  # paste — stage pasted text to a temp .md so existing copy works
             import tempfile
             tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8")

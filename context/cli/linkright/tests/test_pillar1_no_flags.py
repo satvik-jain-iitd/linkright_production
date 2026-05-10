@@ -69,6 +69,7 @@ def test_resume_score_with_flags_skips_prompts(monkeypatch, tmp_path):
 # ─────────────────────────────────────────────────────────────────────────
 
 def test_resume_tailor_no_flags_prompts(monkeypatch, tmp_path):
+    """When no profile resume exists, tailor must fall back to prompt_for_existing_path."""
     pdf = tmp_path / "r.pdf"; pdf.write_text("PDF")
     jd = tmp_path / "j.md"; jd.write_text("Senior PM")
 
@@ -82,20 +83,21 @@ def test_resume_tailor_no_flags_prompts(monkeypatch, tmp_path):
         called["jd_input"] = True
         return ("file", jd)
 
-    # Mock orchestrator.run-equivalent — tailor invokes module-level
-    # functions on `orchestrator`. Patch the whole `from . import
-    # orchestrator` module-attribute by no-op'ing key funcs.
+    # Point _profile_dir at a tmp dir with NO resume — forces fallback prompt path.
+    empty_profile = tmp_path / "empty_profile"
+    (empty_profile / "inputs").mkdir(parents=True)
+    monkeypatch.setattr(
+        "linkright.resume.cli._pdir_fn",  # module-level alias set inside `if resume_path is None`
+        lambda: empty_profile,
+        raising=False,
+    )
+    # Simpler: patch at the source so the import inside tailor() gets the stub.
+    import linkright.profile.pipeline as _pp
+    monkeypatch.setattr(_pp, "_profile_dir", lambda: empty_profile)
+
+    # Mock orchestrator — exit early before real pipeline work.
     import linkright.resume.orchestrator as orc
 
-    def _noop(*a, **kw):
-        return None
-
-    monkeypatch.setattr(orc, "step_00_ingest_pdf", _noop)
-    monkeypatch.setattr(orc, "step_01_parse_resume", lambda *a, **kw: {})
-    # Stop the pipeline early — let the test exit before downstream steps.
-    # tailor() calls many orchestrator.step_* funcs in sequence; mocking
-    # step_00 to raise SystemExit gets us out of the function before any
-    # real work happens, while still exercising the prompt-wiring code.
     def _early_exit(*a, **kw):
         import sys
         sys.exit(0)
@@ -103,14 +105,54 @@ def test_resume_tailor_no_flags_prompts(monkeypatch, tmp_path):
     monkeypatch.setattr(orc, "step_00_ingest_pdf", _early_exit)
     monkeypatch.setattr("linkright.prompts.prompt_for_existing_path", fake_path)
     monkeypatch.setattr("linkright.prompts.prompt_for_jd_input", fake_jd)
+    # No auth session → discovery option hidden (prevent sys.exit from require_session)
+    monkeypatch.setattr("linkright.jobsearch.cli._try_auth_headers", lambda: None)
 
     from linkright.resume.cli import tailor
     runner = CliRunner()
     res = runner.invoke(tailor, [])
-    # Test passes as long as the helpers were CALLED — exit code may be 0
-    # (clean SystemExit from _early_exit) or non-zero (downstream surface).
-    assert called["path"], "prompt_for_existing_path was never called for resume"
+    assert called["path"], "prompt_for_existing_path was never called — profile auto-detect should have missed"
     assert called["jd_input"], "prompt_for_jd_input was never called for jd"
+
+
+def test_resume_tailor_profile_auto_detect(monkeypatch, tmp_path):
+    """When profile resume exists, tailor must use it silently — no resume prompt."""
+    jd = tmp_path / "j.md"; jd.write_text("Senior PM")
+
+    # Build a fake profile dir with resume.pdf present.
+    fake_profile = tmp_path / "profile"
+    (fake_profile / "inputs").mkdir(parents=True)
+    fake_resume = fake_profile / "inputs" / "resume.pdf"
+    fake_resume.write_bytes(b"%PDF-1.4 stub")
+
+    import linkright.profile.pipeline as _pp
+    monkeypatch.setattr(_pp, "_profile_dir", lambda: fake_profile)
+
+    def boom_resume(*a, **kw):
+        raise AssertionError("prompt_for_existing_path must NOT fire when profile resume exists")
+
+    def fake_jd(*a, **kw):
+        return ("file", jd)
+
+    monkeypatch.setattr("linkright.prompts.prompt_for_existing_path", boom_resume)
+    monkeypatch.setattr("linkright.prompts.prompt_for_jd_input", fake_jd)
+    monkeypatch.setattr("linkright.jobsearch.cli._try_auth_headers", lambda: None)
+
+    import linkright.resume.orchestrator as orc
+
+    def _early_exit(*a, **kw):
+        import sys
+        sys.exit(0)
+
+    monkeypatch.setattr(orc, "step_00_ingest_pdf", _early_exit)
+
+    from linkright.resume.cli import tailor
+    runner = CliRunner()
+    res = runner.invoke(tailor, [])
+    # boom_resume would have raised AssertionError if called — reaching here means auto-detect worked.
+    assert "Using profile resume" in res.output, (
+        f"Expected '✓ Using profile resume' in output; got:\n{res.output}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────
