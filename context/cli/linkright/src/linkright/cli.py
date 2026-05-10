@@ -434,7 +434,8 @@ def doctor_cmd(auto_fix: bool) -> None:
         import yaml as _yaml_doctor
         _cfg_path_doctor = os.path.expanduser("~/.linkright/config.yaml")
         if os.path.isfile(_cfg_path_doctor):
-            _cfg_data = _yaml_doctor.safe_load(open(_cfg_path_doctor).read()) or {}
+            with open(_cfg_path_doctor) as _f:
+                _cfg_data = _yaml_doctor.safe_load(_f.read()) or {}
             _cfg_embedder = _cfg_data.get("embedder_tier", "fastembed")
     except Exception:
         pass
