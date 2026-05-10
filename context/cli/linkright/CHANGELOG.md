@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.7] - 2026-05-10
+
+**Profile create: per-field contact UI, deep enrichment integration, stronger nugget prompts.**
+
+Contact verification now uses a numbered review panel with per-field select-to-edit navigation
+(mirrors Claude Code AskUserQuestion pattern — pick any field, edit it, back to review).
+Deep enrichment (3 follow-up Q&A per achievement) is now optionally offered at the end of
+`profile create` — no longer requires a separate `linkright profile enrich` command.
+Resume parse prompt now enforces the SEPARATOR RULE (pipes only in headers, no em-dashes).
+Nugget extraction prompt upgraded with SINGLE-SIGNAL RULE + 150–350 char target + stronger
+anti-fabrication company grounding — expected nugget count increases from ~10 to 25–45.
+
+### Added
+
+- **UX-1** — Deep enrichment offered at end of `profile create` (after truth engine).
+  Pick one achievement → answer 3 LLM-generated follow-up questions → new nuggets persisted.
+  Skippable (Enter on "No") and runs non-blocking (Ctrl+C cancels without losing profile).
+  Full enrichment still available standalone via `linkright profile enrich`. (#ux-1)
+
+### Fixed / Improved
+
+- **PC-5b** — Contact verification upgraded from "re-enter all" to per-field selection.
+  Numbered review panel lists all 5 fields with current values. User selects which specific
+  field to edit → single text prompt → back to review panel. LinkRight brand colours applied
+  (primary teal `#0FBEAF`, gold field labels `#E5B80B`). (#pc-5b)
+- **PROMPT-1** — `RESUME_PARSE_FALLBACK` now includes SEPARATOR RULE (Critical): all ### and
+  education headers use pipe `|` separators; em-dashes and other separators are re-formatted.
+  Matches the website `parse-resume` route which added this rule to prevent parsing failures
+  on resumes that use em-dashes in company/role headers. (#prompt-1)
+- **PROMPT-2** — `NUGGET_EXTRACT_MD` upgraded with three quality gates from the website's
+  `career-narration` approach: (a) SINGLE-SIGNAL RULE — each nugget describes exactly one
+  achievement or capability; (b) 150–350 char target — optimal embedding model window;
+  (c) company grounding rule — company field must appear verbatim in input text, no
+  placeholder names. Expected nugget count increases from ~10 to 25–45 for a dense resume.
+  (#prompt-2)
+
 ## [0.5.6] - 2026-05-10
 
 **`linkright profile create` UX polish — 7 bugs fixed.** Embedder choice from

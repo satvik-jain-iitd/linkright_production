@@ -63,6 +63,7 @@ Rules:
 - ## SKILLS: comma-separated list of skills. Omit section if none.
 - ## CERTIFICATIONS: one per line. Omit section if none.
 - ### header format: Company | Role | Start | End (use "Present" if current)
+- SEPARATOR RULE (CRITICAL): every field in every ### or education header MUST be separated by a single pipe '|' with spaces (" | "). NEVER use em-dash (—), en-dash (–), comma, slash, or any other separator. Re-format source em-dashes into pipes.
 - bullets: exact text from resume, max 8 per role
 - **Project:** blocks inside ## EXPERIENCE: only when resume explicitly names a project under a role. Skip if none.
 - ## PROJECTS: for standalone portfolio/personal/side projects NOT under any company. Each gets a ### header with name and year.
@@ -72,7 +73,7 @@ Rules:
 # ── Nugget extraction (worker) ──────────────────────────────────────────────
 
 NUGGET_EXTRACT_MD = """You are a career data extractor. Extract atomic nuggets from career text.
-Each nugget = one coherent achievement, skill, or fact.
+Each nugget = one coherent achievement, skill, or fact. A dense resume should yield 25–45 nuggets.
 
 For each nugget write a ## nugget block with these fields:
 
@@ -90,37 +91,63 @@ importance: P0=career-defining (top 3 ever), P1=strong, P2=supporting, P3=backgr
 leadership: none=solo, individual=drove decisions, team_lead=managed people
 tags: 2-5 lowercase labels for skills/themes
 
-RULES:
-- Every work_experience nugget MUST have company AND role set. If the immediate source line does not name a company, scan the nearest preceding ### header or ## section heading to identify the employer. NEVER emit "none" or empty for the company field on a work_experience nugget. If truly ambiguous, classify as independent_project or skill instead.
-- answer MUST be self-contained: one crisp sentence that includes the key metric and names the company briefly (e.g. "… at Acme Bank …" mid-sentence). Keep it XYZ-style: lead with the impact/verb, not with context.
-- Each nugget is atomic — one achievement per block
-- Write ONLY ## nugget blocks, no other text
+# STRUCTURAL RULES
+
+- Every work_experience nugget MUST have company AND role set. Scan the nearest preceding
+  ### header or ## section heading to identify the employer. NEVER emit "none" or empty for
+  company on a work_experience nugget. If truly ambiguous, use independent_project or skill.
+- answer MUST be self-contained: include the company name briefly mid-sentence so the nugget
+  makes sense without the metadata fields (e.g. "…at Acme Bank…"). XYZ-style, verb first.
+- Each nugget is atomic — ONE achievement per block. See SINGLE-SIGNAL RULE below.
+- Write ONLY ## nugget blocks, no other text.
+- COMPANY GROUNDING (anti-fabrication): the company field MUST appear verbatim in the input
+  resume text. If a company name is unclear, write unknown and set type: independent_project.
+  NEVER output placeholder names (SampleCo, Acme, [Company], My Company, etc.).
+
+# SINGLE-SIGNAL RULE — MANDATORY (mirrors website career-narration quality gate)
+
+Each nugget answer must describe EXACTLY ONE achievement or capability.
+Test: "If a recruiter read ONLY this answer, does it describe one thing?"
+If MAYBE or NO → split into two ## nugget blocks.
+
+❌ WRONG (two signals crammed into one):
+  answer: Led AML engine overhaul AND redesigned compliance dashboard at Acme Bank.
+
+✅ CORRECT (each signal is its own nugget):
+  answer: Overhauled AML risk engine at Acme Bank, processing 100M+ daily transactions.
+  ---
+  answer: Redesigned compliance dashboard at Acme Bank, reducing analyst query time by 40%.
+
+# TARGET LENGTH — 150–350 chars per answer
+
+Embedding models perform best in the 150–350 character window.
+< 100 chars → too thin, vector is undifferentiated, retrieval degrades.
+> 400 chars → too dense, blended signal, cosine match imprecise.
+Count before outputting. Expand or split to hit the window.
 
 # XYZ format — MANDATORY for every `answer` field
 
-  X = Impact/Outcome — lead with this
-  Y = Measurement (a concrete number, %, $, K, M)
+  X = Impact/Outcome — lead with this (the metric or result)
+  Y = Measurement (a concrete number, %, $, K, M, team size)
   Z = Action (what was done + briefly where/how)
 
-Good answer examples (XYZ, no preamble):
-  "Architected AML risk engine for 100M+ accounts at Acme Bank across 40+ markets, cutting speed-to-market by 70%."
-  "Shipped DesignerAI self-serve onboarding at [Company], eliminating 12 manual setup steps."
-
-IMPORTANT: Only extract achievements that appear verbatim or near-verbatim in the source resume text.
-Do NOT invent, infer, or paraphrase company names or achievements not present in the source.
-The company field MUST match a company name explicitly named in the resume. If a detail is unclear,
-omit it rather than guess. Do NOT use placeholder names (e.g. SampleCo, Acme, [Company]) in output.
+Good answer examples (XYZ, no preamble, 150-350 chars):
+  "Modernised AML risk scoring engine at Acme Bank powering real-time alerts for 30M+ daily
+   transactions across 40+ markets, winning Leadership award and cutting speed-to-market by 70%."
+  "Shipped self-serve onboarding at DesignCo, eliminating 12 manual setup steps and reducing
+   time-to-value from 3 days to 20 minutes for enterprise customers."
 
 # NEGATIVE PROMPTS — these patterns REJECT the nugget
 
-- DO NOT prefix with "At <Company>, as a/an/the <Role>, I …" — company + role are
-  stored in dedicated fields above. Repeating them in `answer` wastes ~40 chars and
-  guarantees downstream verb-diversity collapse. Lead with the verb.
+- DO NOT prefix with "At <Company>, as a/an/the <Role>, I …" — company + role are in
+  dedicated fields above. Repeating them in `answer` wastes chars and degrades verb diversity.
+  Lead with the verb. Company name may appear once, briefly, mid-sentence only.
 - DO NOT start `answer` with "I ", "My ", "We ", "During my time", "In my role".
 - DO NOT use weak verbs: "worked on", "responsible for", "involved in", "helped with".
 - DO NOT use adverbs ("significantly", "successfully", "effectively").
 - DO NOT hedge numbers ("approximately", "around", "nearly").
-- DO NOT fabricate metrics — omit `answer` entirely if no real number exists."""
+- DO NOT fabricate metrics — if no real number exists, omit the metric rather than invent one.
+- DO NOT use placeholder company names (SampleCo, Acme, [Company], MyCompany, etc.)."""
 
 
 # ── JD requirement extraction ── REMOVED (S5-6 / F-NEW-1 codification, 2026-04-21)
