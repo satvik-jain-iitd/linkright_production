@@ -810,11 +810,16 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
         step, "starting",
         "calling Groq 70B with vendored NUGGET_EXTRACT_MD prompt (same as "
         "worker/app/tools/nugget_extractor.py Langfuse key 'nugget_extractor_md'); "
-        "input is the raw resume text; expecting 20-40 atomic ## nugget blocks "
-        "each tagged with company, role, importance, answer, tags",
+        "input is the raw resume text; expecting 25-45 atomic ## nugget blocks "
+        "each tagged with company, role, importance, answer, tags; "
+        "max_tokens=8000 — worst-case: 45 nuggets × ~400 chars / 4 chars-per-token ≈ 4500 tokens; "
+        "buffer to 8000 so truncation never silently drops tail nuggets",
     )
 
-    # Use the raw career text as input (production batches at 3000 chars; Jane's is 3009 — single batch)
+    # Use the raw career text as input.
+    # max_tokens bumped from 4000 → 8000 after PROMPT-2 upgrade (NUGGET_EXTRACT_MD target:
+    # 25-45 nuggets × 150-350 char answers). At 4000 tokens, tail nuggets were silently
+    # truncated with no warning. Groq llama-3.3-70b-versatile supports 32k output tokens.
     try:
         md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
@@ -822,7 +827,7 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
             klass="A",
             intent="step_02_extract_nuggets",
             temperature=0.3,
-            max_tokens=4000,
+            max_tokens=8000,
         )
     except llm.LLMError as e:
         logbook.append(step, "error", "LLM nugget extraction failed across all tier-A providers", body=f"```\n{e}\n```")
@@ -887,8 +892,8 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
             multi_signal.append(n.get("id", "?"))
 
     gaps: list[str] = []
-    if len(nuggets) < 10:
-        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 20-40 for a dense resume")
+    if len(nuggets) < 15:
+        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 25-45 for a dense resume")
     if len(importance_counts) < 2:
         gaps.append(f"importance distribution collapsed: {importance_counts}")
     if multi_signal:
