@@ -2,6 +2,11 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.1.4] - 2026-05-10
+
+### Fixed
+- **Critical:** HTML resume templates (`cv-a4-*.html`) were not bundled in the installed package — `linkright resume tailor` always crashed at step 14 (assemble HTML) with `FileNotFoundError`. Added `[tool.setuptools.package-data]` to `pyproject.toml` so templates ship with the wheel.
+
 ## [0.1.3] - 2026-05-09
 
 ### Fixed
