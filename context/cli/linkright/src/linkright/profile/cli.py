@@ -104,6 +104,9 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
     Run with no flags to be prompted for the resume source. Pass -r / --paste /
     --from-folder to skip the prompt.
     """
+    from linkright.ui import lr_banner
+    from linkright import __version__ as _ver
+    lr_banner(version=_ver)
     profile_dir = _profile_dir()
 
     # If no source flag given, prompt interactively (file / folder).

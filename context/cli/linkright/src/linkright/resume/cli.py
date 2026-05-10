@@ -39,17 +39,8 @@ def resume_group() -> None:
 
 
 def _render_success_card(run_dir: Path, started_at: float) -> None:
-    """Print the end-of-tailor success summary card.
-
-    Replaces the previous one-line `✓ Done — see <path>` with a structured
-    summary that surfaces (a) the PDF path, (b) the score if scorecard.json
-    exists, (c) wall-clock duration, and (d) suggested next-step commands.
-    Per the peak-end rule, the END of a long-running command is the user's
-    highest-emotion moment — celebrate the win + nudge the natural next move.
-
-    Best-effort: if scorecard.json is missing or unparseable, the score line
-    is silently dropped (no crash, no scary error).
-    """
+    """Print the end-of-tailor success summary card."""
+    from linkright.ui import success_card, TEAL
     duration = time.monotonic() - started_at
     mins, secs = divmod(int(duration), 60)
     duration_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
@@ -57,7 +48,8 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
     pdf_path = run_dir / "artifacts" / "15_final_resume.pdf"
     pdf_line = str(pdf_path) if pdf_path.exists() else "(PDF not produced — see logs/pipeline.log)"
 
-    score_line = None
+    fields = [("PDF", pdf_line), ("Took", duration_str)]
+
     scorecard_path = run_dir / "scorecard.json"
     if scorecard_path.exists():
         try:
@@ -65,31 +57,26 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
             score = data.get("overall_score")
             grade = data.get("overall_grade", "")
             if score is not None:
-                score_line = f"{score:.1f}/100  ({grade})" if grade else f"{score:.1f}/100"
+                score_str = f"{score:.1f}/100  ({grade})" if grade else f"{score:.1f}/100"
+                fields.insert(1, ("Score", score_str))
         except Exception:
-            pass  # graceful degrade — no score line is OK
+            pass
 
-    click.echo("")
-    click.echo(f"✓ Resume tailored — {run_dir.name}")
-    click.echo("")
-    click.echo(f"  📄 PDF:        {pdf_line}")
-    if score_line:
-        click.echo(f"  📊 Score:      {score_line}")
-    click.echo(f"  ⏱  Took:       {duration_str}")
-    click.echo("")
-    click.echo("  Next steps:")
-    click.echo("    linkright critique          → LLM review (5 actionable issues + fix UI)")
-    click.echo("    linkright fill              → Resolve missing-metric gaps")
-    click.echo("    linkright practice          → Interview prep cards from your bullets")
-    click.echo("")
+    opener = {"darwin": "open", "linux": "xdg-open", "win32": "start"}.get(sys.platform, "open")
+    next_steps = [
+        ("linkright critique", "LLM review — 5 actionable issues + fix UI"),
+        ("linkright fill",     "Resolve missing-metric gaps (interactive)"),
+        ("linkright practice", "Interview prep cards from your resume"),
+    ]
     if pdf_path.exists():
-        # AR R1 fixes: (1) cross-platform opener — `open` is macOS-only;
-        # Linux uses `xdg-open`, Windows uses `start`. (2) shell-quote the
-        # path so users with custom --run-id containing spaces can copy-paste
-        # the suggestion without it breaking on the unquoted whitespace.
-        opener = {"darwin": "open", "linux": "xdg-open", "win32": "start"}.get(sys.platform, "open")
-        click.echo(f'  Open the PDF: {opener} "{pdf_path}"')
-        click.echo("")
+        next_steps.append((f'{opener} "{pdf_path}"', "Open PDF"))
+
+    success_card(
+        title=f"Resume Tailored  —  {run_dir.name}",
+        fields=fields,
+        next_steps=next_steps,
+        accent=TEAL,
+    )
 
 
 @resume_group.command("tailor")

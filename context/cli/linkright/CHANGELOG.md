@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.8] — 2026-05-10
+
+### Changed
+- **UX-2**: Centralized `ui.py` — BMAD + Claude Code hybrid terminal UI primitives
+- **UX-3**: ASCII art banner — LINKRIGHT block letters shown on bare `linkright` + `profile create` + setup
+- **UX-4**: BMAD diamond bullets (`◆ ◇ ● ○`) + Claude Code numbered options throughout all prompts
+- **UX-5**: Mode-specific accents — Teal (resume), Sage (interview), Pink (social), Purple (jobs)
+- **UX-6**: Spacious step logs — `✨ start` → `● done` pattern, blank lines between steps
+- **UX-7**: Success card redesign — aligned fields, gold labels, teal values, next-steps section
+- **UX-8**: Removed all ★ stars; gold `✨` sparkle for step starts
+- **UX-9**: questionary Style unified — LinkRight brand colors in all select/confirm/text prompts
+
 ## [0.5.7] - 2026-05-10
 
 **Profile create: per-field contact UI, deep enrichment integration, stronger nugget prompts.**

@@ -74,6 +74,8 @@ def main(ctx: click.Context) -> None:
     # the alphabetical command list stays one keystroke away as
     # `linkright --help` for users who want the full surface.
     if ctx.invoked_subcommand is None:
+        from linkright.ui import lr_banner
+        lr_banner(version=__version__)
         click.echo(_TLDR)
         # Silent version-check: hits PyPI (cached 24h) + appends a small
         # update-available notice. Fully fail-silent on offline / PyPI down /
