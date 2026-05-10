@@ -117,6 +117,24 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
     click.echo(f"  Embedder:    {meta.get('embedder_tier')} ({meta.get('embedder_model')})")
     click.echo(f"  Dim:         {meta.get('dim')}")
 
+    # PC-4: Eagerly warm up the embedding model before interactive prompts.
+    # step_03 may have used a cached artifact (cache-hit path skips embed() calls),
+    # leaving the model uninitialised. Any model download triggered mid-questionary
+    # (e.g. when user edits a highlight in truth_engine_loop) interleaves tqdm
+    # progress with interactive text — visible race condition. Warming here
+    # guarantees download + init happens in this "Indexing" phase, not mid-prompt.
+    try:
+        from ..resume.lib.embedder import _detect_tier, _fastembed_init, _st_init
+        _tier = _detect_tier()
+        click.echo("Indexing achievements semantically…")
+        if _tier == "fastembed":
+            _fastembed_init()
+        elif _tier == "sentence_transformers":
+            _st_init()
+        # oracle + stub tiers require no local model init
+    except Exception:
+        pass  # never block the flow on warm-up failure
+
     # Truth-engine Layer 1: contact-info verification — runs FIRST (before
     # highlights loop). Per Jane 2026-05-02
     # (memory feedback_personal_details_verify_at_start): wrong contact info =
@@ -137,7 +155,7 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
 
     click.echo("")
     click.echo("Next: `linkright profile show` to review, "
-               "or `linkright resume tailor -j jd.md` to use it.")
+               "or `linkright tailor -j jd.md` to use it.")
 
 
 # ── show ────────────────────────────────────────────────────────────────────
