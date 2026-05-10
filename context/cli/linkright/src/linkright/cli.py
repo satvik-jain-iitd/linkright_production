@@ -427,23 +427,53 @@ def doctor_cmd(auto_fix: bool) -> None:
             if found_keys else "no GROQ/CEREBRAS/GEMINI key found — run `linkright keys add groq`",
         ))
 
-    # 4. Embedder availability — fastembed (default) or sentence-transformers
-    fastembed_ok = False
+    # 4. Embedder availability — D-1 fix: read configured embedder from config.yaml
+    #    instead of hardcoding fastembed. Checks the actual selected tier.
+    _cfg_embedder = "fastembed"  # default if config absent
     try:
-        import fastembed  # noqa: F401
-        fastembed_ok = True
+        import yaml as _yaml_doctor
+        _cfg_path_doctor = os.path.expanduser("~/.linkright/config.yaml")
+        if os.path.isfile(_cfg_path_doctor):
+            _cfg_data = _yaml_doctor.safe_load(open(_cfg_path_doctor).read()) or {}
+            _cfg_embedder = _cfg_data.get("embedder_tier", "fastembed")
     except Exception:
         pass
-    if fastembed_ok:
-        embedder_detail = "installed"
-    elif os.environ.get("ORACLE_BACKEND_URL"):
-        # AR walkthrough F-PRE-3 / X-2 fix: tell the user the fallback is
-        # active. Anxiety-without-agency pattern eliminated — they know what's
-        # actually running, and they know how to upgrade if they want speed.
-        embedder_detail = "using Oracle fallback (slower, network-dependent). pip install fastembed for offline + 5x speed."
+
+    embedder_ok = False
+    if _cfg_embedder == "fastembed":
+        try:
+            import fastembed  # noqa: F401
+            embedder_ok = True
+            embedder_detail = "installed"
+        except Exception:
+            pass
+        if not embedder_ok:
+            if os.environ.get("ORACLE_BACKEND_URL"):
+                embedder_detail = "using Oracle fallback (slower, network-dependent). pip install fastembed for offline + 5x speed."
+            else:
+                embedder_detail = "pip install fastembed (or set ORACLE_BACKEND_URL for hosted fallback)"
+    elif _cfg_embedder == "sentence_transformers":
+        try:
+            import sentence_transformers  # noqa: F401
+            embedder_ok = True
+            embedder_detail = "installed"
+        except Exception:
+            embedder_detail = "pip install sentence-transformers"
+    elif _cfg_embedder == "oracle":
+        if os.environ.get("ORACLE_BACKEND_URL") and os.environ.get("ORACLE_BACKEND_SECRET"):
+            embedder_ok = True
+            embedder_detail = "env vars present"
+        else:
+            embedder_detail = "ORACLE_BACKEND_URL / ORACLE_BACKEND_SECRET not set"
     else:
-        embedder_detail = "pip install fastembed (or set ORACLE_BACKEND_URL for hosted fallback)"
-    rows.append(("Embedder (fastembed)", fastembed_ok, embedder_detail))
+        # Unknown tier — treat as fastembed for backward compat
+        try:
+            import fastembed  # noqa: F401
+            embedder_ok = True
+            embedder_detail = "installed"
+        except Exception:
+            embedder_detail = "pip install fastembed"
+    rows.append((f"Embedder ({_cfg_embedder})", embedder_ok, embedder_detail))
 
     # 5. PDF render path — playwright OR weasyprint
     pw_ok = False

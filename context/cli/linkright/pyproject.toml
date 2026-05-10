@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "linkright"
-version = "0.5.3"
+version = "0.5.4"
 description = "Local-first, agent-native career OS — resume tailoring, interview prep, job search, content planning. Runs $0 with free-tier LLM keys."
 readme = "README.md"
 requires-python = ">=3.9"
