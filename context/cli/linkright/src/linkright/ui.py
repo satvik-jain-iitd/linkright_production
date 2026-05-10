@@ -32,7 +32,7 @@ _ASCII_LINES = [
     "███████╗██║██║ ╚████║██║  ██╗██║  ██║██║╚██████╔╝██║  ██║   ██║   ",
     "╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝  ",
 ]
-_BOX_CHARS = set("╔╗╚╝═║╠╣╦╩╬╟╢╤╧╫╞╡╓╖╙╜╒╕╘╛┼├┤┬┴─│")
+_BOX_CHARS = set("╔╗╚╝═║╠╣╦╩╬╟╢╤╧╫╞╡╓╖╙╜╒╕╘╛┼├┤┬┴─│")  # ╗ already in set
 
 
 def _render_ascii_line(line: str) -> str:
@@ -48,7 +48,7 @@ def _render_ascii_line(line: str) -> str:
                 i += 1
             block = line[run_start:i]
             out.append(f"[bold {TEAL}]{block}[/]")
-        elif ch in _BOX_CHARS or ch == "╗":
+        elif ch in _BOX_CHARS:
             out.append(f"[{GOLD}]{ch}[/]")
             i += 1
         else:
@@ -91,6 +91,7 @@ def lr_select(
     tabs: list[str] | None = None,
     active_tab: int = 0,
     hint: str = "Enter to select  ·  ↑↓ to navigate  ·  Esc to cancel",
+    default: object = None,
 ):
     """AskUserQuestion-style single select with optional tab chips."""
     if tabs:
@@ -102,7 +103,10 @@ def lr_select(
     console.print(f"\n  [{accent}]◇[/]  [bold]{question}[/]")
     console.print(f"  [dim]{hint}[/]\n")
     # Pass " " as questionary question to suppress duplicate print
-    return questionary.select(" ", choices=choices, style=qs_style(accent)).ask()
+    kwargs: dict = {"choices": choices, "style": qs_style(accent)}
+    if default is not None:
+        kwargs["default"] = default
+    return questionary.select(" ", **kwargs).ask()
 
 
 def lr_multi_select(

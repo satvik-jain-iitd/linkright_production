@@ -640,10 +640,12 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
         choices.append(questionary.Choice(title=label, value=i))
     choices.append(questionary.Choice(title="(cancel)", value=-1))
 
-    pick = questionary.select(
-        f"Select nugget to delete (out of {len(nuggets)}):",
+    from linkright.ui import lr_select, lr_confirm, TEAL
+    pick = lr_select(
+        f"Select nugget to delete ({len(nuggets)} total):",
         choices=choices,
-    ).ask()
+        accent=TEAL,
+    )
 
     if pick is None or pick == -1:
         console.print("Cancelled.")
@@ -655,10 +657,11 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
         target.get("nugget_text") or target.get("answer") or "(empty)"
     ).strip()[:120]
 
-    if not questionary.confirm(
+    if not lr_confirm(
         f"Delete this nugget?\n   {target_preview}",
         default=False,
-    ).ask():
+        accent=TEAL,
+    ):
         console.print("Cancelled.")
         return False
 
