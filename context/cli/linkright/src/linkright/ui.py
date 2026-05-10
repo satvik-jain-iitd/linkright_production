@@ -22,23 +22,52 @@ MODE_ACCENT: dict[str, str] = {
     "jobs":      PURPLE, "jobsearch": PURPLE,
 }
 
-LINKRIGHT_ASCII = r"""
-██╗     ██╗███╗   ██╗██╗  ██╗██████╗ ██╗ ██████╗ ██╗  ██╗████████╗
-██║     ██║████╗  ██║██║ ██╔╝██╔══██╗██║██╔════╝ ██║  ██║╚══██╔══╝
-██║     ██║██╔██╗ ██║█████╔╝ ██████╔╝██║██║  ███╗███████║   ██║
-██║     ██║██║╚██╗██║██╔═██╗ ██╔══██╗██║██║   ██║██╔══██║   ██║
-███████╗██║██║ ╚████║██║  ██╗██║  ██║██║╚██████╔╝██║  ██║   ██║
-╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝
-"""
+# Two-tone ASCII art: █ solid blocks → teal bold, box-drawing corners/lines → gold
+# This separates the "fill" from the "structure" visually, giving depth like BMAD METHOD.
+_ASCII_LINES = [
+    "██╗     ██╗███╗   ██╗██╗  ██╗██████╗ ██╗ ██████╗ ██╗  ██╗████████╗",
+    "██║     ██║████╗  ██║██║ ██╔╝██╔══██╗██║██╔════╝ ██║  ██║╚══██╔══╝",
+    "██║     ██║██╔██╗ ██║█████╔╝ ██████╔╝██║██║  ███╗███████║   ██║   ",
+    "██║     ██║██║╚██╗██║██╔═██╗ ██╔══██╗██║██║   ██║██╔══██║   ██║   ",
+    "███████╗██║██║ ╚████║██║  ██╗██║  ██║██║╚██████╔╝██║  ██║   ██║   ",
+    "╚══════╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝  ",
+]
+_BOX_CHARS = set("╔╗╚╝═║╠╣╦╩╬╟╢╤╧╫╞╡╓╖╙╜╒╕╘╛┼├┤┬┴─│")
+
+
+def _render_ascii_line(line: str) -> str:
+    """Two-tone: █ → bold teal, box-drawing → gold, spaces → pass-through."""
+    out: list[str] = []
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if ch == "█":
+            # Collect run of █
+            run_start = i
+            while i < len(line) and line[i] == "█":
+                i += 1
+            block = line[run_start:i]
+            out.append(f"[bold {TEAL}]{block}[/]")
+        elif ch in _BOX_CHARS or ch == "╗":
+            out.append(f"[{GOLD}]{ch}[/]")
+            i += 1
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
 
 
 def lr_banner(version: str = "", subtitle: str = "Your local-first career OS  ·  $0 to run") -> None:
     width = shutil.get_terminal_size((80, 24)).columns
-    console.print(f"[{TEAL}]{LINKRIGHT_ASCII}[/]")
-    console.print(f"  [dim]{subtitle}[/]")
+    rule_w = min(width - 4, 72)
+    console.print()
+    for line in _ASCII_LINES:
+        console.print("  " + _render_ascii_line(line))
+    console.print()
+    console.print(f"  [{GOLD}]◆[/]  [bold white]{subtitle}[/]")
     if version:
-        console.print(f"  [{GOLD}]v{version}[/]")
-    console.print(f"\n  [{TEAL}][dim]{'─' * min(width - 4, 76)}[/][/]\n")
+        console.print(f"     [{GOLD}]v{version}[/]")
+    console.print(f"\n  [{TEAL}]{'─' * rule_w}[/]\n")
 
 
 def qs_style(accent: str = TEAL) -> QStyle:
