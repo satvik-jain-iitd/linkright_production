@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.13] — 2026-05-11
+
+### Fixed
+- **PKG-1**: HTML resume templates (`resume/templates/*.html`, `templates/*.html`) were not bundled in the PyPI wheel. `package-data` only included `resume/lib/*.mjs` — every `pip`/`pipx` install crashed at step 14 (assemble HTML) with `FileNotFoundError: cv-a4-mid-career.html`. Added both template directories to `[tool.setuptools.package-data]`.
+
+
 ## [0.5.12] — 2026-05-11
 
 ### Fixed
@@ -16,7 +22,6 @@
 ### Fixed
 - **UX-11**: `linkright tailor` — no longer asks for resume when profile exists. Auto-detects `~/.linkright/profile/inputs/resume.pdf` (or `.md`) and uses it silently. Prompt only shown if no profile has been built.
 - **UX-12**: `linkright tailor` JD prompt now offers 3 options: (1) path to a JD file, (2) paste JD inline, (3) pick from saved jobs in Oracle DB (`linkright jobs find` feed). Discovery option fetches `jd_text` from `sync.linkright.in/api/discoveries/<id>` and stages to a temp file.
-
 
 ## [0.5.10] — 2026-05-10
 
