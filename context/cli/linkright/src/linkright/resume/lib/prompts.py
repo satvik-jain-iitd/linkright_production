@@ -104,7 +104,12 @@ RULES:
 
 Good answer examples (XYZ, no preamble):
   "Architected AML risk engine for 100M+ accounts at Acme Bank across 40+ markets, cutting speed-to-market by 70%."
-  "Shipped DesignerAI self-serve onboarding at SampleCo, eliminating 12 manual setup steps."
+  "Shipped DesignerAI self-serve onboarding at [Company], eliminating 12 manual setup steps."
+
+IMPORTANT: Only extract achievements that appear verbatim or near-verbatim in the source resume text.
+Do NOT invent, infer, or paraphrase company names or achievements not present in the source.
+The company field MUST match a company name explicitly named in the resume. If a detail is unclear,
+omit it rather than guess. Do NOT use placeholder names (e.g. SampleCo, Acme, [Company]) in output.
 
 # NEGATIVE PROMPTS — these patterns REJECT the nugget
 

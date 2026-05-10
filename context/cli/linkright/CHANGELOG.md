@@ -1,64 +1,39 @@
 # Changelog
 
-## [0.5.5] - 2026-05-10
+## [0.5.6] - 2026-05-10
 
-**Onboarding P1/P2 polish.** Consolidated setup wizard from 4 steps to 3 (Groq
-is now the first provider inside the API keys step instead of a separate step).
-Pip installs for large packages now stream progress live. Every `key(s)` and
-`provider(s)` now uses correct singular/plural. Doctor fix suggestions no longer
-contain placeholder paths.
+**`linkright profile create` UX polish — 7 bugs fixed.** Embedder choice from
+`linkright setup` is now honoured at runtime. HuggingFace unauthenticated-request
+warning no longer interleaves with interactive prompts. Model download is
+eagerly completed before any questionary appears. Contact details now show a
+review/re-enter confirmation step. Success message uses the correct `linkright
+tailor` alias. Contact header no longer shows internal jargon. Nugget extraction
+includes an anti-fabrication prompt guard and a runtime company-name validation.
 
 ### Fixed
 
-- **S-1** — Setup wizard step label no longer says "16-step resume pipeline";
-  replaced with "Typically 2–4 minutes per resume". (#onboarding-p1)
-- **S-4** — Groq key verify result (`✓ Key valid` / `✗ Invalid key`) now shown
-  immediately inline after the live call, not buried in the smoke-test section.
-- **S-7** — Removed dedicated Groq step 1/4. Groq is now the first provider
-  inside the API keys step. Wizard header updated to "3 quick choices:
-  embedder • PDF render • API keys". Step numbering updated (1/3, 2/3, 3/3).
-- **S-9** — `pip install sentence-transformers` now streams live progress via
-  `--progress-bar on` and prefixes the line with estimated time (~700 MB,
-  ~2-3 min) so the terminal does not appear frozen.
-- **S-12** — Success next-steps now shows `linkright tailor` (canonical alias),
-  not `linkright resume tailor`.
-- **S-13** — Tailor example no longer includes `-r` flag after `profile create`
-  recommendation; added note "(profile cache means -r is optional after first
-  setup)". `profile create` example simplified to no `-r` flag.
-- **S-14** — When user selects "Agent mode only" in setup, wizard now checks
-  for `claude` binary on PATH and shows a warning with install URL if missing.
-- **S-5** — "Picks so far" summary now displays `sentence-transformers`
-  (hyphen) consistently, not `sentence_transformers` (underscore).
-- **S-10** — Smoke test line no longer shows double `✓`: was
-  `Groq API key: ✓  Groq API key valid ✓`; now `Groq API key: ✓ valid`.
-- **K-3** — `linkright keys import` no-keys-found message now appends:
-  "Or manually edit ~/.linkright/.env (one per line: GROQ_API_KEY=gsk_...)".
-- **K-5** — Groq slot naming is now consistent: first `keys add groq` saves
-  to `GROQ_API_KEY` (primary, no suffix), as with all other providers.
-  Previously the old wizard pre-filled `GROQ_API_KEY`, causing `keys add` to
-  jump to `GROQ_API_KEY_1` — resolved by S-7 consolidation.
-- **K-9** — `linkright keys list` now shows legend: "⭐ = recommended (fastest
-  free tier)" at top of the table so the badge is self-explanatory.
-- **K-10** — `linkright keys list` now warns when two slots for the same
-  provider share the same last-4 chars (likely duplicate paste).
-- **K-11** — `linkright keys remove` with no argument now shows:
-  `Usage: linkright keys remove <provider>` with full provider list, instead
-  of a cryptic Click error.
-- **D-2** — Doctor "LLM keys configured" detail now uses proper
-  singular/plural: "1 key across 1 provider", "3 keys across 2 providers".
-- **D-3** — Doctor profile-missing fix suggestion changed from
-  `linkright profile create -r resume.pdf` (placeholder) to
-  `linkright profile create` (interactive, no placeholder path).
-- **I-2** — Installer now captures pipx's `done! ✨ 🌟 ✨` output and only
-  shows the clean `✓ linkright X.Y.Z installed` line.
-- **I-3** — Installer next-steps block no longer shows the raw shell one-liner
-  `mkdir -p ~/.linkright && echo "GROQ_API_KEY=..." >> ~/.linkright/.env`;
-  replaced with `linkright keys add groq`.
-- **I-4** — Installer "command not found" hint now detects `$SHELL` and shows
-  `source ~/.zshrc` on zsh (macOS default), `~/.bashrc` on bash, or
-  `~/.config/fish/config.fish` on fish, instead of always showing `~/.bashrc`.
-- **K-4** — All `key(s)` / `provider(s)` strings in `linkright keys`
-  subcommands now use proper singular/plural (e.g. "1 key", "2 keys").
+- **PC-1** — `embedder_tier` from `~/.linkright/config.yaml` is now honoured by
+  `_detect_tier()` in `embedder.py`. Previously the setup wizard saved the choice
+  correctly but the embedder ignored config and always auto-detected. (#pc-1)
+- **PC-2** — HuggingFace unauthenticated-request warning suppressed at embedder
+  module load (`HF_HUB_VERBOSITY=error` + `warnings.filterwarnings`), preventing
+  interleaving with interactive output during `profile create`. (#pc-2)
+- **PC-4** — Embedding model is now eagerly loaded/downloaded in the
+  `"Indexing achievements semantically..."` step (before contact verification
+  and highlight review begin), eliminating the tqdm/questionary race condition
+  on cache-hit runs where step_03 skips the embed call. (#pc-4)
+- **PC-5** — Contact verification adds a confirmation step after all five fields
+  are collected ("Looks good? / re-enter all fields"), letting users catch
+  accidental Enter presses without per-field back-navigation. (#pc-5)
+- **PC-6** — Success message at end of `profile create` now shows
+  `linkright tailor` (was incorrectly `linkright resume tailor`). (#pc-6)
+- **PC-7** — Contact verification header changed from
+  `"📇 Contact Verification — Truth Engine Layer 1"` (internal jargon) to
+  `"📇 Contact details — confirm before we store them"`. (#pc-7)
+- **PC-9** — Nugget extraction prompt now includes explicit anti-fabrication
+  instruction and removes the "SampleCo" few-shot example that the model was
+  copying. Runtime validation after step_02 warns (`⚠ Possible fabrication
+  detected`) when a nugget's company name is absent from the raw resume text. (#pc-9)
 
 ## [0.5.3] - 2026-05-09
 

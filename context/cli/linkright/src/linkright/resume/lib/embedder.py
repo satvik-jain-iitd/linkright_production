@@ -31,10 +31,15 @@ import hashlib
 import math
 import os
 import time
+import warnings
 from typing import Optional
 
 import httpx
 
+# PC-2: Suppress HuggingFace unauthenticated-request warning that interleaves
+# with interactive prompts during profile create. Set before any HF lib import.
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")
+warnings.filterwarnings("ignore", category=UserWarning, module="huggingface_hub")
 
 # Module-level cache: lazy init of whichever model the first call resolves to.
 _TIER: Optional[str] = None
@@ -52,6 +57,28 @@ def _detect_tier() -> str:
     if os.environ.get("ORACLE_BACKEND_URL") and os.environ.get("ORACLE_BACKEND_SECRET"):
         _TIER = "oracle"
         return _TIER
+
+    # PC-1: Honor embedder_tier from ~/.linkright/config.yaml.
+    # The setup wizard saves the user's explicit choice there; without this
+    # lookup the embedder always auto-detects and silently ignores the choice.
+    # Only sentence_transformers needs the config check — fastembed is already
+    # the auto-detect default, and oracle is gated by creds above.
+    try:
+        import yaml as _yaml
+        from pathlib import Path as _Path
+        _cfg_path = _Path(os.environ.get("LINKRIGHT_HOME", str(_Path.home() / ".linkright"))) / "config.yaml"
+        if _cfg_path.exists():
+            _cfg = _yaml.safe_load(_cfg_path.read_text()) or {}
+            _configured_tier = _cfg.get("embedder_tier", "")
+            if _configured_tier == "sentence_transformers":
+                try:
+                    import sentence_transformers  # noqa: F401
+                    _TIER = "sentence_transformers"
+                    return _TIER
+                except ImportError:
+                    pass  # fall through to auto-detect
+    except Exception:
+        pass  # never let config-read failure break the embedder
 
     # User opt-in for sentence-transformers (heavier)
     if os.environ.get("LR_USE_SENTENCE_TRANSFORMERS", "").lower() in ("1", "true", "yes"):

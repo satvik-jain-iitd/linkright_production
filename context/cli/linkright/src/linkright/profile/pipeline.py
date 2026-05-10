@@ -114,6 +114,22 @@ def parse_and_extract(resume_pdf: Path, profile_dir: Optional[Path] = None) -> d
     raw_text = orchestrator.step_00_ingest_pdf()
     parsed = orchestrator.step_01_parse_resume(raw_text)
     nuggets = orchestrator.step_02_extract_nuggets(raw_text, parsed)
+
+    # PC-9: Post-extraction fabrication guard — flag nuggets whose company name
+    # does NOT appear anywhere in the raw resume text (simple string containment).
+    # LLMs occasionally hallucinate company names from few-shot examples; this
+    # catches the symptom without blocking the pipeline.
+    _raw_lower = (raw_text or "").lower()
+    for _i, _n in enumerate(nuggets):
+        _co = (_n.get("company") or "").strip()
+        if _co and _co.lower() not in ("none", "null", ""):
+            if _co.lower() not in _raw_lower:
+                print(
+                    f"⚠ Possible fabrication detected in nugget {_i} — "
+                    f"company '{_co}' not found in resume text. Review carefully.",
+                    file=sys.stderr,
+                )
+
     nuggets_with_emb = orchestrator.step_03_embed_nuggets(nuggets)
 
     return {
@@ -330,7 +346,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
             existing = {"phone": "", "email": "", "linkedin": "", "portfolio": "", "name": ""}
 
     console.print()
-    console.print("[bold cyan]📇 Contact Verification — Truth Engine Layer 1[/]")
+    console.print("[bold cyan]📇 Contact details — confirm before we store them[/]")
     console.print("[dim]Confirm or correct each field. Wrong contact = recruiter can't reach you.[/]")
     console.print("[dim]Press Enter to accept current value; type a new value to override; type a single space + Enter to clear.[/]")
     console.print()
@@ -362,6 +378,48 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
             confirmed[key] = ""
         else:
             confirmed[key] = ans
+
+    # PC-5: Confirmation step — show all fields at once before saving.
+    # Lets user catch "pressed Enter by accident" without per-field back-nav.
+    while True:
+        console.print()
+        console.print("[bold]Review your contact details:[/]")
+        for k, label in fields:
+            v = confirmed.get(k) or "(blank)"
+            console.print(f"  {label}: [cyan]{v}[/]")
+        console.print()
+        try:
+            ok = questionary.select(
+                "Looks good?",
+                choices=["Yes — save and continue", "No — re-enter all fields"],
+                default="Yes — save and continue",
+            ).ask()
+        except KeyboardInterrupt:
+            console.print("[red]Aborted by user (Ctrl+C). No changes saved.[/]")
+            sys.exit(130)
+        if ok is None:
+            console.print("[red]Aborted. No changes saved.[/]")
+            sys.exit(130)
+        if ok == "Yes — save and continue":
+            break
+        # Re-enter all fields
+        console.print()
+        console.print("[dim]Re-entering fields — press Enter to keep, type to change, space+Enter to clear.[/]")
+        confirmed = {}
+        for key, label in fields:
+            default = (confirmed.get(key) or existing.get(key) or "").strip()
+            try:
+                ans = questionary.text(
+                    f"{label}:",
+                    default=default,
+                ).ask()
+            except KeyboardInterrupt:
+                console.print("[red]Aborted by user (Ctrl+C). No changes saved.[/]")
+                sys.exit(130)
+            if ans is None:
+                console.print("[red]Aborted. No changes saved.[/]")
+                sys.exit(130)
+            confirmed[key] = ans.strip()
 
     save_contact(profile_dir, confirmed)
     console.print()
