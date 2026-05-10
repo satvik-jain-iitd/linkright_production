@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.9] — 2026-05-10
+
+### Changed
+- **UX-10**: Career-journey gradient banner — LINKRIGHT ASCII art flows Teal→Purple→Sage→Pink left-to-right, each color zone mapping to a product pillar (Resume→JobSearch→Interview→Social). Per-column linear RGB interpolation, identical technique to Gemini CLI.
+
 ## [0.5.8] — 2026-05-10
 
 ### Changed
