@@ -810,15 +810,15 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
         step, "starting",
         "calling Groq 70B with vendored NUGGET_EXTRACT_MD prompt (same as "
         "worker/app/tools/nugget_extractor.py Langfuse key 'nugget_extractor_md'); "
-        "input is the raw resume text; expecting 25-45 atomic ## nugget blocks "
-        "each tagged with company, role, importance, answer, tags; "
-        "max_tokens=8000 — worst-case: 45 nuggets × ~400 chars / 4 chars-per-token ≈ 4500 tokens; "
-        "buffer to 8000 so truncation never silently drops tail nuggets",
+        "input is the raw resume text; extracting all distinct atomic ## nugget blocks "
+        "each tagged with company, role, importance, answer, tags; count is resume-content-driven "
+        "(no minimum, no maximum — fabrication risk if target imposed); "
+        "max_tokens=8000 — generous buffer so truncation never silently drops tail nuggets",
     )
 
     # Use the raw career text as input.
     # klass="B" + provider override to groq_70b for this intent.
-    # PROMPT-2 targets 25-45 nuggets × 150-350 char answers ≈ up to ~4500 output tokens.
+    # PROMPT-2 extracts all distinct data points × 150-350 char answers — no hard count target.
     # 8B models (tier A/B head) cap at 2-4k output in practice and would fail with HTTP 400,
     # wasting ~6-10s of round-trip latency before the cascade reaches 70B.
     # `LR_TIER_OVERRIDE_step_02_extract_nuggets=groq_70b` (setdefault → user can override)
@@ -898,8 +898,8 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
             multi_signal.append(n.get("id", "?"))
 
     gaps: list[str] = []
-    if len(nuggets) < 15:
-        gaps.append(f"only {len(nuggets)} nuggets extracted; expected 25-45 for a dense resume")
+    if len(nuggets) < 3:
+        gaps.append(f"only {len(nuggets)} nuggets extracted; PDF may be image-based or resume too sparse")
     if len(importance_counts) < 2:
         gaps.append(f"importance distribution collapsed: {importance_counts}")
     if multi_signal:

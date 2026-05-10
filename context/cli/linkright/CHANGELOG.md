@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.10] — 2026-05-10
+
+### Fixed
+- **PROMPT-3**: Removed hard nugget count target (25–45) from `NUGGET_EXTRACT_MD` and orchestrator. Count is now purely resume-content-driven. Hard target caused LLM fabrication risk (SampleCo incident root cause). Gaps threshold lowered to `< 3` (genuine failure signal only).
+
 ## [0.5.9] — 2026-05-10
 
 ### Changed
