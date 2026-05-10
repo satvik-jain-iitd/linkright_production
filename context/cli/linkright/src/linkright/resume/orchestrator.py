@@ -817,15 +817,15 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
     )
 
     # Use the raw career text as input.
-    # klass upgraded A → B after PROMPT-2 (NUGGET_EXTRACT_MD now targets 25-45 nuggets
-    # × 150-350 char answers). Two reasons for the upgrade:
-    #   1. Token budget: worst-case ~4500 output tokens. Tier A = only 8B models; their
-    #      providers cap output at ~2000-4000 tokens in practice. Tier B's 70B fallback
-    #      (groq_70b) supports 32k output — large enough to never truncate.
-    #   2. Quality: 8B models struggle to maintain the SINGLE-SIGNAL RULE and 150-350
-    #      char targets consistently across 25-45 nuggets. 70B compliance is substantially
-    #      higher for structured extraction tasks of this complexity.
-    # max_tokens=8000: matches 70B capability; 8B providers will cascade to 70B on error.
+    # klass="B" + provider override to groq_70b for this intent.
+    # PROMPT-2 targets 25-45 nuggets × 150-350 char answers ≈ up to ~4500 output tokens.
+    # 8B models (tier A/B head) cap at 2-4k output in practice and would fail with HTTP 400,
+    # wasting ~6-10s of round-trip latency before the cascade reaches 70B.
+    # `LR_TIER_OVERRIDE_step_02_extract_nuggets=groq_70b` (setdefault → user can override)
+    # pins this site to groq_70b directly; tier B policy still applies if 70B is unavailable.
+    # groq llama-3.3-70b-versatile supports 32k output tokens — max_tokens=8000 is safe.
+    import os as _os
+    _os.environ.setdefault("LR_TIER_OVERRIDE_step_02_extract_nuggets", "groq_70b")
     try:
         md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
@@ -836,7 +836,7 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
             max_tokens=8000,
         )
     except llm.LLMError as e:
-        logbook.append(step, "error", "LLM nugget extraction failed across all tier-A providers", body=f"```\n{e}\n```")
+        logbook.append(step, "error", "LLM nugget extraction failed across all tier-B providers (primary: groq_70b override)", body=f"```\n{e}\n```")
         raise
 
     log(f"=== step_02 {usage.get('provider')} raw output ===\n{md_text}\n=== end ===\n")
