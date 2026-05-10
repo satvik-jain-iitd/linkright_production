@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.4] - 2026-05-10
+
+**P0 onboarding fixes.** Six critical bugs in the setup and keys flows are resolved.
+
+### Fixed
+
+- **S-3** — `linkright setup` API Keys step now shows `4/4` instead of `4/4 → 5/5`
+  (header was hardcoded to `5/5`, now correctly `4/4`). (#p0)
+- **S-6** — Wizard no longer re-prompts for the Groq API key in the API keys step when
+  the user already entered it in step 1. `existing_groq_key` is now always forwarded
+  from step 1, regardless of smoke-test outcome. (#p0)
+- **S-11** — HuggingFace "unauthenticated requests" warning no longer bleeds into
+  setup output. Added `warnings.filterwarnings` suppression (Python warnings module)
+  alongside the existing logging filter, covering all versions of `huggingface_hub`. (#p0)
+- **K-12** — `linkright keys add` now offers "Add keys for another provider?" after
+  completing each provider instead of exiting immediately. Shows only providers with
+  remaining open slots. Tail-recursive — chains as many providers as user wants. (#p0)
+- **K-7** — `linkright keys add` now fires a 1-token live API ping after saving each key
+  and prints `✓ Key valid` / `✗ Key rejected — check and re-enter` / `⚠ Rate-limited`.
+  Uses the same `probe_key()` infrastructure as `linkright keys test`. (#p0)
+- **D-1** — `linkright doctor` now reads `~/.linkright/config.yaml` to detect the
+  configured embedder tier (`fastembed` / `sentence_transformers` / `oracle`) and checks
+  for THAT embedder, instead of always checking fastembed regardless of config. (#p0)
+
 ## [0.5.3] - 2026-05-09
 
 **Key management UX + token counter.** `linkright keys add` now auto-detects

@@ -42,6 +42,20 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 _logging_setup.getLogger("huggingface_hub").addFilter(
     lambda r: "HF_TOKEN" not in r.getMessage()
 )
+# S-11: Also suppress via Python warnings module — huggingface_hub emits
+# UserWarning (not just logging) for the HF_TOKEN prompt on some versions.
+import warnings as _warnings_setup
+_warnings_setup.filterwarnings(
+    "ignore",
+    message=r".*unauthenticated.*HF.*Hub.*",
+    category=UserWarning,
+    module=r"huggingface_hub.*",
+)
+_warnings_setup.filterwarnings(
+    "ignore",
+    message=r".*HF_TOKEN.*",
+    category=UserWarning,
+)
 import questionary
 import yaml
 
@@ -283,7 +297,7 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
 
     print()
     print("────────────────────────────────────────────────────")
-    print("5/5 — API Keys (Direct mode LLM cascade)")
+    print("4/4 — API Keys (Direct mode LLM cascade)")
     print("────────────────────────────────────────────────────")
     print()
     print("  LinkRight cascades through 7 free-tier providers.")
@@ -564,7 +578,9 @@ def run_wizard() -> int:
     print("──────────────────────────────────────────────────────")
 
     # ── Decision 5: Multi-provider API keys ───────────────────────
-    api_key_updates = run_api_keys_step(existing_groq_key=groq_key if ok_groq else "")
+    # S-6 fix: always pass groq_key so step 4 does not re-prompt for it.
+    # ok_groq failing (smoke/network) must not erase what the user already typed.
+    api_key_updates = run_api_keys_step(existing_groq_key=groq_key if groq_key else "")
 
     print()
     print("──────────────────────────────────────────────────────")
