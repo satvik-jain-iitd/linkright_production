@@ -255,6 +255,7 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
     import questionary
     from rich.console import Console
     from rich.panel import Panel
+    from linkright.ui import step_start, step_done, step_error, step_warn, step_detail, section_header, lr_text, TEAL
 
     profile_dir = profile_dir or _profile_dir()
     nuggets = load_nuggets(profile_dir)
@@ -280,21 +281,20 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
         expand=False,
     ))
 
-    console.print("\n[dim]Generating 3 sharp follow-up questions...[/]")
+    step_start("Generating follow-up questions", accent=TEAL)
     questions = generate_followups(target)
     if not questions:
-        console.print("[red]✗ LLM failed to generate follow-up questions.[/]")
+        step_error("LLM failed to generate follow-up questions.")
         return {"questions": 0, "answers": 0, "new_nuggets": 0}
 
-    console.print(f"[green]✓[/] {len(questions)} follow-up(s) generated.\n")
+    step_done(f"{len(questions)} follow-up(s) generated")
 
     new_nuggets_to_add: list[dict] = []
     answered = 0
     for q_idx, q in enumerate(questions, 1):
-        console.print(f"[bold cyan]Q{q_idx}:[/] {q}")
-        answer = questionary.text(
-            "  Your answer (blank = skip this Q):",
-        ).ask()
+        section_header(f"Q{q_idx}", accent=TEAL)
+        console.print(f"  {q}\n")
+        answer = lr_text("Your answer (blank = skip):", accent=TEAL)
         if answer is None:
             console.print("[yellow]Aborted.[/]")
             break
@@ -305,9 +305,9 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
         if new:
             new["parent_nugget_text"] = target_text
             new_nuggets_to_add.append(new)
-            console.print(f"  [green]→ extracted:[/] {new.get('nugget_text', '')[:120]}")
+            step_detail(f"extracted: {new.get('nugget_text', '')[:120]}")
         else:
-            console.print("  [yellow]→ extraction failed; answer not added.[/]")
+            step_warn("extraction failed — answer not added")
 
     if not new_nuggets_to_add:
         console.print("\n[yellow]No new nuggets added.[/]")
@@ -345,6 +345,7 @@ def _resolve_target_nugget(nuggets: list[dict], nugget_id: Optional[str], consol
         return None
 
     # Interactive picker
+    from linkright.ui import lr_select, TEAL
     choices = []
     for i, n in enumerate(nuggets):
         company = (n.get("company") or "").strip()[:22] or "(no co)"
@@ -354,10 +355,7 @@ def _resolve_target_nugget(nuggets: list[dict], nugget_id: Optional[str], consol
         choices.append(questionary.Choice(title=label, value=i))
     choices.append(questionary.Choice(title="(cancel)", value=-1))
 
-    pick = questionary.select(
-        f"Pick a nugget to enrich (out of {len(nuggets)}):",
-        choices=choices,
-    ).ask()
+    pick = lr_select(f"Pick a nugget to enrich ({len(nuggets)} total):", choices=choices, accent=TEAL)
     if pick is None or pick == -1:
         console.print("Cancelled.")
         return None

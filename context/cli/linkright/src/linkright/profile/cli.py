@@ -72,7 +72,8 @@ def _offer_enrich(profile_dir: Path) -> None:
     ))
 
     try:
-        do_enrich = questionary.confirm("Add depth to a nugget now?", default=False).ask()
+        from linkright.ui import lr_confirm, TEAL
+        do_enrich = lr_confirm("Add depth to a nugget now?", default=False, accent=TEAL)
     except KeyboardInterrupt:
         console.print("[dim]Enrichment skipped (Ctrl+C).[/]")
         return
@@ -104,6 +105,10 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
     Run with no flags to be prompted for the resume source. Pass -r / --paste /
     --from-folder to skip the prompt.
     """
+    if not yes and sys.stdout.isatty():
+        from linkright.ui import lr_banner
+        from linkright import __version__ as _ver
+        lr_banner(version=_ver)
     profile_dir = _profile_dir()
 
     # If no source flag given, prompt interactively (file / folder).

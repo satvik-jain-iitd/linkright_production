@@ -5004,13 +5004,23 @@ def main():
     logbook.append("run_start", "result", "environment + health probe summary", body="\n".join(f"- {p}" for p in probes))
 
     # ── Steps ──────────────────────────────────────────────────────────
+    from linkright.ui import step_start, step_done, step_warn, step_error
+
+    step_start("Reading resume PDF", index=1, total=9)
     raw_text = step_00_ingest_pdf()
+    step_done(detail=f"{len(raw_text)} chars extracted")
 
+    step_start("Parsing resume structure", index=2, total=9)
     parsed = step_01_parse_resume(raw_text)
+    step_done(detail=f"{len(parsed.get('experiences', []))} experiences parsed")
 
+    step_start("Extracting career nuggets", index=3, total=9)
     nuggets = step_02_extract_nuggets(raw_text, parsed)
+    step_done(detail=f"{len(nuggets)} nuggets extracted")
 
+    step_start("Embedding nuggets", index=4, total=9)
     nuggets_with_emb = step_03_embed_nuggets(nuggets)
+    step_done(detail=f"{sum(1 for n in nuggets_with_emb if n.get('emb'))} embedded")
 
     jd_text = (INPUTS / "jd.md").read_text(encoding="utf-8")
 
@@ -5018,7 +5028,9 @@ def main():
     # requirement set used by Step 6 is the JD-aware Credo-specific one — this
     # mirrors prod worker, which uses Phase 1+2's `requirements` field for
     # covers_requirements mapping in Phase 4a verbose bullets.
+    step_start("Analyzing job description", index=5, total=9)
     parsed_p12 = step_07_phase_1_2(jd_text, raw_text)
+    step_done(detail=f"{len(parsed_p12.get('requirements', []))} requirements identified")
 
     # v0.1.6 Entity-fidelity guard (Layer 1, post-step_07).
     # The JD-parser LLM occasionally hallucinates a company that doesn't exist in
@@ -5079,14 +5091,18 @@ def main():
             "importance": r.get("importance", "required"),
         })
 
+    step_start("Embedding JD requirements", index=6, total=9)
     reqs_with_emb = step_05_embed_reqs(canonical_reqs)
+    step_done(detail=f"{len(reqs_with_emb)} requirements embedded")
 
+    step_start("Scoring role alignment", index=7, total=9)
     role_result = step_06_role_scores(
         nuggets_with_emb,
         reqs_with_emb,
         parsed.get("experiences", []),
         jd_text,
     )
+    step_done(detail=f"{len(role_result.get('role_scores', []))} roles scored")
 
     # S5-2: weighted bullet distribution (replaces hardcoded bullet_budget).
     # Compute per-company bullets proportional to JD-alignment × recency, apply
@@ -5160,7 +5176,9 @@ def main():
         f"{len(distribution.get('included_companies', []))} companies.",
     )
 
+    step_start("Retrieving relevant nuggets per company", index=8, total=9)
     retrieved = step_08_retrieve_per_company(parsed_p12, nuggets_with_emb)
+    step_done(detail=f"{sum(len(v) for v in retrieved.values())} nuggets retrieved")
 
     # 2026-05-02 — NEW-3: if user has confirmed a strategy plan via
     # `linkright resume strategy-review`, override auto-retrieval with the
@@ -5189,7 +5207,9 @@ def main():
         f"{len(retrieved)} companies.",
     )
 
+    step_start("Writing professional summary", index=9, total=9)
     summary = step_09_summary(parsed_p12, retrieved, raw_text)
+    step_done(detail=f"{len(summary)} chars")
 
     _see_and_continue(
         "Layout and summary ready",

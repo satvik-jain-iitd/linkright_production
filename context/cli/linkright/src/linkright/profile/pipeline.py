@@ -337,14 +337,13 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
     import questionary
     from rich.console import Console
     from rich.panel import Panel
+    from linkright.ui import (
+        lr_text, lr_select, step_done, section_header,
+        TEAL as _TEAL, GOLD as _GOLD, CORAL as _CORAL,
+    )
+    _DIM = "dim"
     profile_dir = profile_dir or _profile_dir()
     console = Console()
-
-    # LinkRight brand colours (from repo/website/src/app/globals.css)
-    _TEAL   = "#0FBEAF"   # primary
-    _GOLD   = "#E5B80B"   # gold — field labels / row numbers
-    _CORAL  = "#FF5733"   # secondary — errors/abort
-    _DIM    = "dim"
 
     existing = load_contact(profile_dir)
     if not existing and raw_text_fallback:
@@ -380,7 +379,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
     for key, label in fields:
         default = (existing.get(key) or "").strip()
         try:
-            ans = questionary.text(f"{label}:", default=default).ask()
+            ans = lr_text(f"{label}:", default=default, accent=_TEAL)
         except KeyboardInterrupt:
             console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes saved.[/]")
             sys.exit(130)
@@ -413,11 +412,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
             choices.append(questionary.Choice(f"   Edit: {label}  [{val}]", value=key))
 
         try:
-            action = questionary.select(
-                "Action:",
-                choices=choices,
-                default=_CONFIRM,
-            ).ask()
+            action = lr_select("Action:", choices=choices, accent=_TEAL)
         except KeyboardInterrupt:
             console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes saved.[/]")
             sys.exit(130)
@@ -428,7 +423,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
         label = _label[action]
         current = confirmed.get(action) or ""
         try:
-            new_val = questionary.text(f"{label}:", default=current).ask()
+            new_val = lr_text(f"{label}:", default=current, accent=_TEAL)
         except KeyboardInterrupt:
             # Ctrl+C on edit → cancel the edit, return to review (don't exit)
             console.print(f"[{_DIM}]Edit cancelled — back to review.[/]")
@@ -438,7 +433,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
 
     save_contact(profile_dir, confirmed)
     console.print()
-    console.print(f"[{_TEAL}]✓ Contact saved.[/]")
+    step_done("Contact saved")
     return confirmed
 
 
@@ -501,6 +496,7 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
     import questionary  # imported here so non-interactive paths don't pay the cost
     from rich.console import Console
     from rich.panel import Panel
+    from linkright.ui import lr_select, lr_text, step_done, step_warn, TEAL as _TEAL, CORAL as _CORAL
 
     profile_dir = profile_dir or _profile_dir()
     highlights_path = profile_dir / "highlights.jsonl"
@@ -542,11 +538,7 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
             expand=False,
         ))
 
-        action = questionary.select(
-            "Action?",
-            choices=["Lock", "Skip", "Edit"],
-            default="Lock",
-        ).ask()
+        action = lr_select("Action?", choices=["Lock", "Skip", "Edit"], accent=_TEAL)
 
         if action is None:
             console.print("[yellow]Aborted — partial state NOT saved.[/]")
@@ -561,10 +553,7 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
             n_skipped += 1
             continue
 
-        new_text = questionary.text(
-            "Corrected version:",
-            default=text,
-        ).ask()
+        new_text = lr_text("Corrected version:", default=text, accent=_TEAL)
         if not new_text or not new_text.strip():
             console.print("[yellow]Empty — treating as skip.[/]")
             n_skipped += 1
@@ -651,10 +640,12 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
         choices.append(questionary.Choice(title=label, value=i))
     choices.append(questionary.Choice(title="(cancel)", value=-1))
 
-    pick = questionary.select(
-        f"Select nugget to delete (out of {len(nuggets)}):",
+    from linkright.ui import lr_select, lr_confirm, TEAL
+    pick = lr_select(
+        f"Select nugget to delete ({len(nuggets)} total):",
         choices=choices,
-    ).ask()
+        accent=TEAL,
+    )
 
     if pick is None or pick == -1:
         console.print("Cancelled.")
@@ -666,10 +657,11 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
         target.get("nugget_text") or target.get("answer") or "(empty)"
     ).strip()[:120]
 
-    if not questionary.confirm(
+    if not lr_confirm(
         f"Delete this nugget?\n   {target_preview}",
         default=False,
-    ).ask():
+        accent=TEAL,
+    ):
         console.print("Cancelled.")
         return False
 
