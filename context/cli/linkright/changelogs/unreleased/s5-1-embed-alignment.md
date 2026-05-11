@@ -1,3 +1,0 @@
-## [type: Added]
-<!-- pr: TBD -->
-- **S5.1 (Embedding-based JD-bullet alignment):** step_11_rank now blends BRS score (70%) with Oracle nomic-embed-text cosine alignment (30%) when jd_req_texts are available. Req texts are auto-derived from jd_requirement_clusters canonical_labels when not provided explicitly. Each bullet receives a `_alignment_score` field for telemetry. Semantically richer ranking that adds approximately N Oracle embed calls per run (one per bullet, typically 15-25 calls for a standard resume) when Oracle is live; graceful fallback to BRS-only when Oracle is unreachable or returns empty. Oracle is self-hosted (free), so there is no additional monetary cost, but call count does increase. 7 new tests in tests/test_jd_alignment_embedding.py (all pass).
