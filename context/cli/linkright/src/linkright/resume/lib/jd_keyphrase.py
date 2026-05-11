@@ -43,7 +43,7 @@ _STOPWORDS = {
     "collaborate", "collaborated", "collaborates", "collaborating",
     "partner", "partnered", "partners", "partnering",
     "coordinate", "coordinated", "coordinates", "coordinating",
-    "grow", "grew", "grows", "growing",
+    "grow", "grew", "grows", "growing", "grown",
     "scale", "scaled", "scales", "scaling",
     "expand", "expanded", "expands", "expanding",
     "increase", "increased", "increases", "increasing",
@@ -59,7 +59,7 @@ _STOPWORDS = {
     "mentor", "mentored", "mentors", "mentoring",
     "hire", "hired", "hires", "hiring",
     "direct", "directed", "directs", "directing",
-    "oversee", "oversaw", "oversees", "overseeing",
+    "oversee", "oversaw", "oversees", "overseeing", "overseen",
     "automate", "automated", "automates", "automating",
     "integrate", "integrated", "integrates", "integrating",
     "migrate", "migrated", "migrates", "migrating",
@@ -88,7 +88,6 @@ _STOPWORDS = {
     "align", "aligned", "aligns", "aligning",
     "prioritize", "prioritized", "prioritizes", "prioritizing",
     "define", "defined", "defines", "defining",
-    "drive", "drove", "driven",
 }
 
 # Tokenize: words of 3+ chars OR all-caps acronyms of 2+ chars.

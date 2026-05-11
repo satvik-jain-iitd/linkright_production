@@ -358,7 +358,10 @@ def step_3_generate_draft(
 
 # ── Step 4 — Truth-engine validation (deterministic, no LLM) ─────────────────
 
-# Terms that are too generic to trigger fishing guard even if in JD
+# Terms too generic to trigger fishing guard even if in JD.
+# Verb entries (lead/grow/drive/manage/build/create/deliver/hire/own) overlap with
+# _STOPWORDS in jd_keyphrase.py (added S1.2) and are now redundant for those paths,
+# but kept here as defence-in-depth for any future caller that bypasses _STOPWORDS.
 _FISHING_ALLOWLIST = {
     "role", "team", "work", "join", "help", "make", "build",
     "lead", "grow", "drive", "own", "hire", "seek", "look",
