@@ -809,6 +809,172 @@ def step_01_parse_resume(raw_text: str) -> dict:
     return parsed
 
 
+
+# ────────────────────────────────────────────────────────────────────────────
+# Step 01b — Contact-details verification (Truth Engine Layer 1)
+# ────────────────────────────────────────────────────────────────────────────
+
+def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dict:
+    """Surface parsed contact details for user confirmation before JD analysis.
+
+    Truth Engine Layer 1 — per feedback_personal_details_verify_at_start:
+    wrong contact data = silent failure (recruiter can't reach the candidate).
+    Runs between step_01 (parse) and step_07 (JD analysis).
+
+    - Shows email/phone/LinkedIn/portfolio extracted by step_01.
+    - Warns on unprofessional email or auto-generated LinkedIn slug.
+    - User can edit any field inline; edits are persisted to
+      ~/.linkright/profile_overrides.json for future runs.
+    - Skipped entirely when no_pause=True OR LR_NO_PAUSE=1 (CI mode).
+
+    Returns updated contact dict (may be the original if user skipped edits).
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    _no_pause = no_pause or os.environ.get("LR_NO_PAUSE") == "1"
+    if _no_pause:
+        return parsed.get("contact_info", {}) or {}
+
+    from linkright.resume.lib.contact_quality import check_email_quality, check_linkedin_quality
+
+    contact = dict(parsed.get("contact_info", {}) or {})
+
+    # Load any previously saved overrides (persisted from prior runs)
+    _overrides_path = _Path.home() / ".linkright" / "profile_overrides.json"
+    if _overrides_path.exists():
+        try:
+            _overrides = _json.loads(_overrides_path.read_text(encoding="utf-8"))
+            for _k in ("name", "phone", "email", "linkedin", "portfolio"):
+                if _overrides.get(_k):
+                    contact[_k] = _overrides[_k]
+        except Exception:
+            pass  # corrupt overrides file — ignore, don't block pipeline
+
+    email     = (contact.get("email") or "").strip()
+    phone     = (contact.get("phone") or "").strip()
+    linkedin  = (contact.get("linkedin") or "").strip()
+    portfolio = (contact.get("portfolio") or "").strip()
+
+    email_ok,    email_warn    = check_email_quality(email)
+    linkedin_ok, linkedin_warn = check_linkedin_quality(linkedin)
+
+    # ── Display panel ──────────────────────────────────────────────────────
+    def _status(ok: bool) -> str:
+        return "✓" if ok else "⚠"
+
+    click.echo()
+    click.echo("  ★  Verify your details before we continue")
+    click.echo()
+    click.echo(f"    Email:     {email or '(blank)':40s}  {_status(email_ok)}")
+    if not email_ok:
+        click.echo(f"               {email_warn}")
+    click.echo(f"    Phone:     {phone or '(blank)':40s}  ✓")
+    click.echo(f"    LinkedIn:  {linkedin or '(blank)':40s}  {_status(linkedin_ok)}")
+    if not linkedin_ok:
+        click.echo(f"               {linkedin_warn}")
+    click.echo(f"    Portfolio: {portfolio or '(blank)':40s}  ✓")
+    click.echo()
+
+    # ── Inline editing loop ────────────────────────────────────────────────
+    _field_map = {
+        "e": ("email",     "New email"),
+        "l": ("linkedin",  "New LinkedIn URL"),
+        "p": ("phone",     "New phone"),
+        "w": ("portfolio", "New portfolio URL"),
+    }
+
+    _changed: dict = {}
+
+    try:
+        import questionary as _q
+
+        _choices = [
+            _q.Choice("s — skip all (keep as-is)", value="s"),
+            _q.Choice("e — edit email",             value="e"),
+            _q.Choice("l — edit LinkedIn",          value="l"),
+            _q.Choice("p — edit phone",             value="p"),
+            _q.Choice("w — edit portfolio/website", value="w"),
+        ]
+
+        while True:
+            try:
+                action = _q.select(
+                    "Edit? (e=email, l=linkedin, p=phone, w=portfolio, s=skip all):",
+                    choices=_choices,
+                ).ask()
+            except KeyboardInterrupt:
+                click.echo("  Skipping contact verification (Ctrl+C).")
+                break
+
+            if action is None or action == "s":
+                break
+
+            key, label = _field_map[action]
+            current = contact.get(key) or ""
+            try:
+                new_val = _q.text(f"  {label}:", default=current).ask()
+            except KeyboardInterrupt:
+                click.echo("  Edit cancelled.")
+                continue
+            if new_val is not None:
+                contact[key] = new_val.strip()
+                _changed[key] = new_val.strip()
+
+    except ImportError:
+        # Fallback: plain input() prompts
+        _CHOICES_HELP = "e=email / l=linkedin / p=phone / w=portfolio / s=skip all"
+        while True:
+            try:
+                action = input(f"  Edit? ({_CHOICES_HELP}): ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                click.echo()
+                click.echo("  Skipping contact verification.")
+                break
+
+            if action in ("s", ""):
+                break
+            if action not in _field_map:
+                click.echo(f"  Unknown option '{action}'. {_CHOICES_HELP}")
+                continue
+
+            key, label = _field_map[action]
+            current = contact.get(key) or ""
+            try:
+                new_val = input(f"  {label} [{current}]: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                click.echo()
+                click.echo("  Edit cancelled.")
+                continue
+            if new_val:
+                contact[key] = new_val
+                _changed[key] = new_val
+
+    # ── Persist overrides ──────────────────────────────────────────────────
+    if _changed:
+        _overrides_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_overrides: dict = {}
+        if _overrides_path.exists():
+            try:
+                existing_overrides = _json.loads(_overrides_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        existing_overrides.update(_changed)
+        _overrides_path.write_text(
+            _json.dumps(existing_overrides, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        click.echo(f"  Contact overrides saved to {_overrides_path}")
+
+    logbook.append(
+        "step_01b_verify_contact_details",
+        "result",
+        f"contact verified; email_ok={email_ok}; linkedin_ok={linkedin_ok}; "
+        f"fields_edited={list(_changed.keys())}",
+    )
+    return contact
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Step 2 — Nugget extraction (Phase 0 equivalent)
 # ────────────────────────────────────────────────────────────────────────────
@@ -5215,6 +5381,10 @@ def main():
     step_start("Parsing resume structure", index=2, total=9)
     parsed = step_01_parse_resume(raw_text)
     step_done(detail=f"{len(parsed.get('experiences', []))} experiences parsed")
+
+    # Truth Engine Layer 1: surface contact details to user before JD analysis.
+    # Skipped when LR_NO_PAUSE=1 (CI mode) — step_01b reads env var internally.
+    step_01b_verify_contact_details(parsed)
 
     step_start("Extracting career nuggets", index=3, total=9)
     nuggets = step_02_extract_nuggets(raw_text, parsed)
