@@ -268,7 +268,7 @@ class TestStep11RankClusterDedup:
                 "centroid_embedding": [1.0, 0.0, 0.0, 0.0],
             }
         ]
-        # Both bullets reference 'communication' (>=5 chars → matches cluster c1)
+        # Both bullets reference 'communication' (>=4 chars → matches cluster c1)
         verbose_all = {
             "AcmeCorp": {
                 "paragraphs": [

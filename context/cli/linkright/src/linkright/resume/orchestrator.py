@@ -2690,6 +2690,24 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
 # Step 11 — BRS ranking (local)
 # ────────────────────────────────────────────────────────────────────────────
 
+_KW_STOPWORDS: frozenset[str] = frozenset({
+    # 3-char (already filtered by >=4, but explicit for clarity)
+    "and", "for", "the", "has", "can", "are", "its", "not", "but", "was",
+    # 4-char common English stopwords not domain-specific
+    "with", "from", "that", "work", "will", "have", "must", "make",
+    "need", "used", "been", "this", "they", "also", "over", "such",
+    "then", "when", "than", "what", "your", "very", "only", "just",
+    "more", "some", "most", "each", "both", "into", "does", "able",
+    "help", "role", "give", "take", "show", "find", "keep", "come",
+    "high", "good", "best", "last", "next", "long", "well", "full",
+    # 5-char stopwords
+    "which", "their", "there", "would", "could", "about", "other",
+    "those", "these", "using", "being", "doing", "often", "while",
+    "under", "above", "where", "every", "first", "since", "until",
+    "given", "large", "small", "based", "known", "clear", "quite",
+    "cross",
+})
+
 def step_11_rank(
     verbose_all: dict,
     jd_keywords: list[str],
@@ -2720,10 +2738,9 @@ def step_11_rank(
     if jd_req_clusters:
         for cl in jd_req_clusters:
             cid = cl["cluster_id"]
-            # Index canonical label words as cluster keys (>=4 chars only).
-            # >= 4 excludes 1-3 char connectives (and, for, the, has, can) while
-            # keeping domain terms (Java, REST, JSON, data, SQL, SaaS, team, Node).
-            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) >= 4]
+            # >= 4 + stopword filter: keeps domain terms (Java, REST, JSON, data, team)
+            # while excluding short connectives AND common 4-5 char stopwords (with, from, that, will)
+            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) >= 4 and w.lower() not in _KW_STOPWORDS]
             for w in label_words:
                 kw_to_cluster[w] = cid
             # Also index meaningful words from every member req_id in this cluster.
