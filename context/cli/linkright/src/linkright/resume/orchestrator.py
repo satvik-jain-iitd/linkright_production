@@ -2633,13 +2633,18 @@ def _apply_fabrication_guards(
                 bullets_touched += 1
                 if len(examples) < 3:
                     examples.append(f"{co_name}: '{original[:80]}' → '{text[:80]}'")
-                # S5.7 Phase 0: log stripped decision (metric takes precedence label)
-                _guard_decision = "stripped_metric" if _bullet_metric_strips else "stripped_jd_term"
+                # S5.7 Phase 0: compound label when both guards fired on this bullet
+                if _bullet_metric_strips and _bullet_jd_strips:
+                    _guard_decision = "stripped_metric+jd_term"
+                elif _bullet_metric_strips:
+                    _guard_decision = "stripped_metric"
+                else:
+                    _guard_decision = "stripped_jd_term"
                 _log_guard_decision(
                     bullet_text=original,
                     source_excerpt="; ".join(co_sources.get(co_name, [])[:3]),
                     decision=_guard_decision,
-                    run_id=str(ARTIFACTS.parent.name) if ARTIFACTS else "unknown",
+                    run_id=str(ARTIFACTS.parent.name) if ARTIFACTS != ROOT / "artifacts" else "unknown",
                 )
             else:
                 # S5.7 Phase 0: log accepted decision
@@ -2647,7 +2652,7 @@ def _apply_fabrication_guards(
                     bullet_text=original,
                     source_excerpt="; ".join(co_sources.get(co_name, [])[:3]),
                     decision="accepted",
-                    run_id=str(ARTIFACTS.parent.name) if ARTIFACTS else "unknown",
+                    run_id=str(ARTIFACTS.parent.name) if ARTIFACTS != ROOT / "artifacts" else "unknown",
                 )
 
     try:
