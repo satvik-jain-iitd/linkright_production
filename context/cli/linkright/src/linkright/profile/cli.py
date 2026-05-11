@@ -27,6 +27,8 @@ from .pipeline import (
     delete_nugget_interactive,
     contact_verify_loop,
     load_contact,
+    ingest_from_markdown,
+    print_privacy_audit,
 )
 
 
@@ -98,9 +100,13 @@ def _offer_enrich(profile_dir: Path) -> None:
 @click.option("--paste", is_flag=True, help="Interactive paste mode — type/paste resume text. (Day 2+)")
 @click.option("--from-folder", "from_folder", type=click.Path(exists=True, file_okay=False, path_type=Path),
               required=False, help="(optional) Folder to auto-detect first PDF.")
+@click.option("--from-markdown", "from_markdown", type=click.Path(exists=True, path_type=Path),
+              required=False, help="Path to a Markdown career narrative to ingest into the profile.")
+@click.option("--include-personal", "include_personal", is_flag=True,
+              help="Include personal-life sections (skipped by default for privacy).")
 @click.option("--yes", is_flag=True, help="Skip truth-engine confirmation; auto-lock all extracted nuggets.")
 @click.option("--force", is_flag=True, help="Overwrite existing profile without confirmation.")
-def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
+def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal, yes, force) -> None:
     """One-time: parse resume, extract nuggets, embed, persist to ~/.linkright/profile/.
 
     Run with no flags to be prompted for the resume source. Pass -r / --paste /
@@ -112,12 +118,16 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
         lr_banner(version=_ver)
     profile_dir = _profile_dir()
 
-    # If no source flag given, prompt interactively (file / folder).
+    # Determine whether a PDF resume pipeline is needed.
+    # --from-markdown alone is valid (markdown-only ingest, no PDF required).
+    _markdown_only = from_markdown and not resume_path and not paste and not from_folder
+
+    # If no source flag given (and not markdown-only), prompt interactively (file / folder).
     # The `--paste` flag still exists as a stub but is NOT surfaced in
     # the prompt — the downstream parser is not wired yet, so offering
     # paste interactively would dead-end the user. When the text-only
     # parser ships, add the paste branch back to prompt_for_resume_source.
-    if not resume_path and not paste and not from_folder:
+    if not resume_path and not paste and not from_folder and not _markdown_only:
         from linkright.prompts import prompt_for_resume_source
         kind, value = prompt_for_resume_source()
         if kind == "file":
@@ -136,14 +146,19 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
             sys.exit(1)
         resume_path = pdfs[0]
         click.echo(f"Detected resume: {resume_path}")
-    if not resume_path:
+    if not resume_path and not _markdown_only:
         click.echo("Need --resume PATH or --paste or --from-folder DIR.", err=True)
         sys.exit(2)
 
     # Existing profile guard — check metadata.yaml specifically (same signal
     # as `profile show`/`status`). Avoids false-positive on empty scaffold dirs
     # (artifacts/ inputs/ logs/ from a prior failed run with no actual data).
-    if (profile_dir / "metadata.yaml").exists():
+    #
+    # Exception: --from-markdown augment mode. If only --from-markdown is passed
+    # (no PDF source), the user is ADDING to an existing profile, not replacing it.
+    # The guard must not block in this case — markdown ingest appends to nuggets.jsonl.
+    _augment_only = bool(from_markdown and _markdown_only)
+    if (profile_dir / "metadata.yaml").exists() and not _augment_only:
         if not force:
             click.echo(f"Profile already exists at {profile_dir}.")
             click.echo("Run `linkright profile show` to inspect, `linkright profile rebuild` to start over,")
@@ -152,64 +167,92 @@ def create_cmd(resume_path, paste, from_folder, yes, force) -> None:
         _wipe(profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
 
-    click.echo(f"Creating profile from {resume_path} → {profile_dir}")
-    click.echo("This runs steps 0-3 of the resume pipeline (parse → extract nuggets → embed).")
-    click.echo("Expected wall-time: 30-90 sec depending on LLM backend.\n")
+    if _markdown_only:
+        # Markdown-only mode: skip PDF pipeline, just ensure profile dir exists.
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        click.echo(f"Creating profile from Markdown → {profile_dir}")
+        click.echo("Markdown-only mode: PDF pipeline skipped.\n")
+    else:
+        click.echo(f"Creating profile from {resume_path} → {profile_dir}")
+        click.echo("This runs steps 0-3 of the resume pipeline (parse → extract nuggets → embed).")
+        click.echo("Expected wall-time: 30-90 sec depending on LLM backend.\n")
 
-    result = parse_and_extract(resume_path, profile_dir)
-    persist(profile_dir, resume_path, result)
+        result = parse_and_extract(resume_path, profile_dir)
+        persist(profile_dir, resume_path, result)
 
-    meta = load_metadata(profile_dir) or {}
-    click.echo("")
-    click.echo(f"✓ Profile created at {profile_dir}")
-    click.echo(f"  Nuggets:     {meta.get('n_nuggets', 0)} extracted")
-    click.echo(f"  Embedded:    {meta.get('n_embedded', 0)} vectors stored")
-    click.echo(f"  Highlights:  {meta.get('n_highlights', 0)} (P0/P1 importance)")
-    click.echo(f"  Embedder:    {meta.get('embedder_tier')} ({meta.get('embedder_model')})")
-    click.echo(f"  Dim:         {meta.get('dim')}")
-
-    # PC-4: Eagerly warm up the embedding model before interactive prompts.
-    # step_03 may have used a cached artifact (cache-hit path skips embed() calls),
-    # leaving the model uninitialised. Any model download triggered mid-questionary
-    # (e.g. when user edits a highlight in truth_engine_loop) interleaves tqdm
-    # progress with interactive text — visible race condition. Warming here
-    # guarantees download + init happens in this "Indexing" phase, not mid-prompt.
-    try:
-        from ..resume.lib.embedder import _detect_tier, _fastembed_init, _st_init
-        _tier = _detect_tier()
-        click.echo("Indexing achievements semantically…")
-        if _tier == "fastembed":
-            _fastembed_init()
-        elif _tier == "sentence_transformers":
-            _st_init()
-        # oracle + stub tiers require no local model init
-    except Exception:
-        pass  # never block the flow on warm-up failure
-
-    # Truth-engine Layer 1: contact-info verification — runs FIRST (before
-    # highlights loop). Per Jane 2026-05-02
-    # (memory feedback_personal_details_verify_at_start): wrong contact info =
-    # silent failure (recruiter can't reach candidate). Verify always; only
-    # `--yes` skips (batch flows / scripted profile creation).
-    if not yes:
-        contact_verify_loop(profile_dir)
-
-    # Truth-engine Layer 2: highlights confirmation loop — Lock/Skip/Edit per
-    # nugget. --yes auto-locks all.
-    if not yes:
-        truth_engine_loop(profile_dir)
+    if not _markdown_only:
         meta = load_metadata(profile_dir) or {}
-        click.echo(
-            f"\nFinal counts: {meta.get('n_nuggets', 0)} nuggets, "
-            f"{meta.get('n_highlights', 0)} highlights locked."
-        )
+        click.echo("")
+        click.echo(f"✓ Profile created at {profile_dir}")
+        click.echo(f"  Nuggets:     {meta.get('n_nuggets', 0)} extracted")
+        click.echo(f"  Embedded:    {meta.get('n_embedded', 0)} vectors stored")
+        click.echo(f"  Highlights:  {meta.get('n_highlights', 0)} (P0/P1 importance)")
+        click.echo(f"  Embedder:    {meta.get('embedder_tier')} ({meta.get('embedder_model')})")
+        click.echo(f"  Dim:         {meta.get('dim')}")
 
-    # Truth-engine Layer 3: optional deep enrichment.
-    # After truth engine, user has verified all highlights. Offer to deepen
-    # specific achievements via 3 follow-up Q&A → new nuggets persisted.
-    # --yes skips (batch/scripted). Ctrl+C cancels gracefully without loss.
-    if not yes:
-        _offer_enrich(profile_dir)
+    if not _markdown_only:
+        # PC-4: Eagerly warm up the embedding model before interactive prompts.
+        # step_03 may have used a cached artifact (cache-hit path skips embed() calls),
+        # leaving the model uninitialised. Any model download triggered mid-questionary
+        # (e.g. when user edits a highlight in truth_engine_loop) interleaves tqdm
+        # progress with interactive text — visible race condition. Warming here
+        # guarantees download + init happens in this "Indexing" phase, not mid-prompt.
+        try:
+            from ..resume.lib.embedder import _detect_tier, _fastembed_init, _st_init
+            _tier = _detect_tier()
+            click.echo("Indexing achievements semantically…")
+            if _tier == "fastembed":
+                _fastembed_init()
+            elif _tier == "sentence_transformers":
+                _st_init()
+            # oracle + stub tiers require no local model init
+        except Exception:
+            pass  # never block the flow on warm-up failure
+
+        # Truth-engine Layer 1: contact-info verification — runs FIRST (before
+        # highlights loop). Per Jane 2026-05-02
+        # (memory feedback_personal_details_verify_at_start): wrong contact info =
+        # silent failure (recruiter can't reach candidate). Verify always; only
+        # `--yes` skips (batch flows / scripted profile creation).
+        if not yes:
+            contact_verify_loop(profile_dir)
+
+        # Truth-engine Layer 2: highlights confirmation loop — Lock/Skip/Edit per
+        # nugget. --yes auto-locks all.
+        if not yes:
+            truth_engine_loop(profile_dir)
+            meta = load_metadata(profile_dir) or {}
+            click.echo(
+                f"\nFinal counts: {meta.get('n_nuggets', 0)} nuggets, "
+                f"{meta.get('n_highlights', 0)} highlights locked."
+            )
+
+        # Truth-engine Layer 3: optional deep enrichment.
+        # After truth engine, user has verified all highlights. Offer to deepen
+        # specific achievements via 3 follow-up Q&A → new nuggets persisted.
+        # --yes skips (batch/scripted). Ctrl+C cancels gracefully without loss.
+        if not yes:
+            _offer_enrich(profile_dir)
+
+    # ── S3.4: Markdown profile ingestion ────────────────────────────────────
+    # Append nuggets from a long-form career narrative (Obsidian export, etc.)
+    # Can be combined with resume-based create (both sources merged) or used
+    # standalone on a new profile (profile_dir may have no metadata.yaml yet).
+    if from_markdown:
+        md_path = Path(from_markdown)
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        click.echo(f"\nIngesting Markdown profile: {md_path}")
+        if include_personal:
+            click.echo("  (--include-personal: processing all sections including personal-life)")
+        else:
+            click.echo("  (personal-life sections will be skipped — use --include-personal to opt in)")
+
+        ingest_result = ingest_from_markdown(
+            md_path=md_path,
+            profile_dir=profile_dir,
+            include_personal=include_personal,
+        )
+        print_privacy_audit(ingest_result)
 
     click.echo("")
     click.echo("Next: `linkright profile show` to review, "
