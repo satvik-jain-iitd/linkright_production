@@ -1,0 +1,149 @@
+# domain_verbs.yaml — Strong past-tense verb prefix maps by industry domain
+# Ordered by impact strength (strongest first).
+# Used by domain_verbs.py to replace weak opening verbs (worked/helped/assisted/supported/etc.)
+# without an LLM retry loop.
+# S2.2 — 2026-05-11
+
+tech:
+  - Architected
+  - Engineered
+  - Deployed
+  - Shipped
+  - Optimized
+  - Migrated
+  - Refactored
+  - Automated
+  - Instrumented
+  - Debugged
+  - Integrated
+  - Scaled
+  - Designed
+  - Built
+  - Implemented
+  - Modernized
+
+pm:
+  - Launched
+  - Drove
+  - Defined
+  - Prioritized
+  - Aligned
+  - Spearheaded
+  - Orchestrated
+  - Championed
+  - Delivered
+  - Roadmapped
+  - Synthesized
+  - Facilitated
+  - Accelerated
+  - Secured
+  - Influenced
+  - Directed
+
+sales:
+  - Closed
+  - Secured
+  - Won
+  - Negotiated
+  - Expanded
+  - Acquired
+  - Retained
+  - Upsold
+  - Converted
+  - Prospected
+  - Exceeded
+  - Generated
+  - Grew
+  - Activated
+  - Penetrated
+  - Cultivated
+
+finance:
+  - Reconciled
+  - Modeled
+  - Forecasted
+  - Analyzed
+  - Audited
+  - Structured
+  - Evaluated
+  - Optimized
+  - Hedged
+  - Reported
+  - Budgeted
+  - Controlled
+  - Advised
+  - Consolidated
+  - Valued
+  - Stress-tested
+
+marketing:
+  - Launched
+  - Grew
+  - Activated
+  - Positioned
+  - Campaigned
+  - Targeted
+  - Converted
+  - Evangelized
+  - Amplified
+  - Differentiated
+  - Researched
+  - Executed
+  - Rebranded
+  - Produced
+  - Optimized
+  - Segmented
+
+legal:
+  - Drafted
+  - Negotiated
+  - Enforced
+  - Reviewed
+  - Advised
+  - Structured
+  - Litigated
+  - Complied
+  - Mitigated
+  - Interpreted
+  - Defended
+  - Executed
+  - Authored
+  - Resolved
+  - Arbitrated
+  - Counseled
+
+operations:
+  - Streamlined
+  - Standardized
+  - Implemented
+  - Coordinated
+  - Managed
+  - Scaled
+  - Reduced
+  - Improved
+  - Oversaw
+  - Restructured
+  - Consolidated
+  - Executed
+  - Established
+  - Operationalized
+  - Transformed
+  - Commissioned
+
+data:
+  - Modeled
+  - Analyzed
+  - Extracted
+  - Transformed
+  - Visualized
+  - Predicted
+  - Classified
+  - Clustered
+  - Optimized
+  - Validated
+  - Pipelined
+  - Benchmarked
+  - Engineered
+  - Instrumented
+  - Curated
+  - Diagnosed

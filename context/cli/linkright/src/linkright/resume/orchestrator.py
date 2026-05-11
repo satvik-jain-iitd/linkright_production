@@ -78,6 +78,7 @@ from .lib.location_guard import build_header_windows, loc_in_header as _loc_in_h
 from .lib import prompts as P
 from .lib import width_poc
 from .lib import fit_loop
+from .lib.domain_verbs import replace_weak_verb, infer_industry
 from .lib.pdf_parse import extract_text
 from .lib.graph_context import get_subliminal_context
 from .lib.md_parse import parse_resume_markdown, _sanitize_year, _YEAR_PLACEHOLDER_RE, _YEAR_DIGIT_RE
@@ -1936,7 +1937,7 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
     jd_requirements_list = "\n".join(f"{r['id']}: {r.get('text','')}" for r in reqs)
 
     verbose_all: dict[str, dict] = {}
-    used_verbs: list[str] = []
+    used_verbs: set[str] = set()
     dropped_stats = {}
 
     # S5-7: token-conservative — iterate only companies that resume_strategy
@@ -2235,10 +2236,23 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
                     "_synthesized": True,
                 })
 
+        # S2.2 — Weak-verb deterministic replacement.
+        # After all bullets are finalised for this company, scan each accepted
+        # bullet for a weak opening verb and replace it with an industry-
+        # appropriate strong verb from domain_verbs.yaml. No LLM retry needed.
+        _industry = parsed_p12.get("industry") or infer_industry(career_level)
+        for p in accepted:
+            txt = p.get("text_html", "")
+            new_txt, new_verb = replace_weak_verb(txt, _industry, used_verbs)
+            if new_verb:
+                p["text_html"] = new_txt
+                p["verb"] = new_verb
+                log(f"[step_10 S2.2 verb-swap] {co_name}: weak→'{new_verb}' in bullet")
+
         for p in accepted:
             v = p.get("verb")
             if v:
-                used_verbs.append(v)
+                used_verbs.add(v)
 
         verbose_all[co_name] = {
             "paragraphs": accepted,
