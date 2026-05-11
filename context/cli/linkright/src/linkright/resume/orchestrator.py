@@ -5927,6 +5927,16 @@ def main():
     if _ranked_artifact.exists():
         _ranked_artifact.write_text(json.dumps(ranked, indent=2), encoding="utf-8")
 
+    # S5.6: cross-bullet verb coherence (after ranking, before step_12)
+    try:
+        from linkright.resume.lib.coherence import enforce_verb_coherence
+        from linkright.llm.oracle import oracle_health as _s56_oracle_health
+        if _s56_oracle_health():
+            for _co, _co_bullets in ranked.items():
+                ranked[_co] = enforce_verb_coherence(_co_bullets, section_id=_co, _oracle_ok=True)
+    except Exception:
+        pass  # never crash pipeline
+
     _see_and_continue(
         "Bullets drafted and ranked",
         f"Ranked {sum(len(v) for v in ranked.values())} bullets across "
