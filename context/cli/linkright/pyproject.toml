@@ -99,7 +99,7 @@ dev = [
 ]
 
 [tool.setuptools.package-data]
-linkright = ["resume/lib/*.mjs", "resume/templates/**", "templates/**"]
+linkright = ["resume/lib/*.mjs", "resume/templates/**", "resume/data/**", "templates/**"]
 
 [tool.setuptools.packages.find]
 # Industry pattern: src-layout for the main package + companion top-level

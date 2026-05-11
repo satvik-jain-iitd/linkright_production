@@ -4657,6 +4657,28 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         except Exception:
             pass
 
+    # S2.1 — load pre-built acronym expansion bank (350+ domain acronyms).
+    # Priority: per-run learned > persistent corpus > bank (bank fills remaining gaps).
+    # This means common acronyms (API, ML, KYC, GDPR, etc.) never need LLM lookup.
+    try:
+        from .lib.acronyms import load_acronym_bank as _load_bank, _merge_bank_into_expansions as _merge_bank
+        _ACRONYM_BANK = _load_bank()
+        _learned_before = len(_LEARNED_EXPANSIONS)
+        _merge_bank(_ACRONYM_BANK, _LEARNED_EXPANSIONS, _UNIVERSAL_NO_EXPAND_UPPER)
+        _bank_added = len(_LEARNED_EXPANSIONS) - _learned_before
+        try:
+            logbook.append(
+                "step_14_assemble_html", "acronym_bank",
+                f"bank loaded {len(_ACRONYM_BANK)} entries; added {_bank_added} new to lookup",
+            )
+        except Exception:
+            pass
+    except Exception as _e_bank:
+        try:
+            logbook.append("step_14_assemble_html", "acronym_bank", f"bank skipped: {_e_bank}")
+        except Exception:
+            pass
+
     def _expand_acronyms_in_text(text: str, already_seen: set, learned: dict) -> str:
         """For each LEARNED acronym, expand first occurrence in text.
 
