@@ -1671,15 +1671,18 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
     # the same context window.  This deterministic post-pass removes any
     # keyword that cannot be found verbatim (case-insensitive) in jd_text,
     # which is the ground truth for "what the job actually requires."
+    _s53_removed = 0  # hoisted — used in gap annotation below
+    _s53_raw_count = 0
     if jd_text:
         _jd_lower = jd_text.lower()
         raw_kws: list = parsed.get("jd_keywords") or []
+        _s53_raw_count = len(raw_kws)
         filtered_kws = [kw for kw in raw_kws if isinstance(kw, str) and kw.lower() in _jd_lower]
-        removed = len(raw_kws) - len(filtered_kws)
-        if removed:
+        _s53_removed = len(raw_kws) - len(filtered_kws)
+        if _s53_removed:
             logbook.append(
                 step, "eval",
-                f"S5.3 contamination guard: removed {removed}/{len(raw_kws)} keyword(s) absent from JD text",
+                f"S5.3 contamination guard: removed {_s53_removed}/{len(raw_kws)} keyword(s) absent from JD text",
                 body=f"Removed: {[k for k in raw_kws if isinstance(k, str) and k.lower() not in _jd_lower]}",
             )
         parsed["jd_keywords"] = filtered_kws
@@ -1728,7 +1731,12 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
             f"{total_years}y total — hallucinated years claim"
         )
     if not (18 <= len(kw) <= 25):
-        gaps.append(f"jd_keywords count={len(kw)} — expected 18-25 (prompt updated post-G3)")
+        if _s53_removed and 18 <= _s53_raw_count <= 25:
+            gaps.append(
+                f"jd_keywords count={len(kw)} (post-S5.3 filter; {_s53_removed} contaminated removed from {_s53_raw_count}) — raw was within 18-25 target"
+            )
+        else:
+            gaps.append(f"jd_keywords count={len(kw)} — expected 18-25 (prompt updated post-G3)")
     if len(platform_hits) < 3:
         gaps.append(f"jd_keywords missing platform signals (hit {len(platform_hits)}/{len(platform_signals)})")
     total_bullets = sum(v for k, v in bb.items() if isinstance(v, int))
