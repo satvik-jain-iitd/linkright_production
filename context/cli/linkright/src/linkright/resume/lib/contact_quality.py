@@ -12,6 +12,8 @@ import re
 
 _CASUAL_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com"}
 
+# \b word boundaries prevent false positives (hotel, catherine) but compound words
+# without separators (hotgirl, sexybeast) are not caught — known acceptable gap.
 # Local-part patterns that suggest an unprofessional address
 _UNPROFESSIONAL_WORDS = re.compile(
     r"\b(?:cool|hot|sexy|gamer|princess|ninja|wizard|beast|swag|lol|wtf|omg|"

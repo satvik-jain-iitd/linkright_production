@@ -149,7 +149,15 @@ def test_email_no_warn_radical():
     assert ok, f"'radical' should NOT trigger 'rad' warn; got: {msg}"
 
 
-def test_email_warn_hot_standalone():
-    """'hot' as standalone word (hotgirl99) DOES warn."""
+def test_email_warn_hotgirl99_via_digit():
+    # hotgirl99 warns via digit detection (_HAS_DIGITS), not word-boundary.
+    # \\bhot\\b cannot match inside 'hotgirl' (t and g are both \\w chars).
     ok, msg = check_email_quality("hotgirl99@gmail.com")
-    assert not ok, "Standalone 'hot' in local-part with digits should warn"
+    assert not ok, "hotgirl99 should warn (digit detection fires on '9')"
+
+
+def test_email_nowarn_hotguy_known_gap():
+    # Known gap: compound unprofessional words without separator + no digits
+    # are not caught (e.g. hotguy, sexybeast). \\b only fires at alpha/non-alpha.
+    ok, msg = check_email_quality("hotguy@gmail.com")
+    assert ok and msg == "", "hotguy has no digits and no word boundary — known gap, no warn"
