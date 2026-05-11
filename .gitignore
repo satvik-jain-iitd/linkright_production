@@ -1,0 +1,19 @@
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Large binaries / archives — local only, not in git
+archive/
+assets/
+
+# Editor swap files
+*.swp
+*.swo
+
+# Beads / Dolt files (added by bd init)
+.beads-credential-key
