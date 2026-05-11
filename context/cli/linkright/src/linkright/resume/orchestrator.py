@@ -4448,8 +4448,9 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             "key_achievements": _sg_achievements,
         })
 
+    _proj_cap = int(parsed_p12.get("bullet_budget", {}).get("projects_total") or 6)
     projects_items: list[str] = []
-    for p in _projects_raw[:6]:  # cap 6 (was 4; raised to fit 2 side gigs + 2 real projects)
+    for p in _projects_raw[:_proj_cap]:  # cap from budget (default 6)
         if not isinstance(p, dict):
             continue
         line = _project_line(p)
@@ -5323,6 +5324,15 @@ def main():
         if not k.startswith("company_"):
             weighted_budget[k] = v
     parsed_p12["bullet_budget"] = weighted_budget
+    # S1.12 fix: if Projects section is included by section_visibility but
+    # projects_total was not set by the LLM hint, default it to min(3, n_projects)
+    # so the expand path (E2_surface_projects) and normal render both have a
+    # non-zero budget for projects bullets.
+    _projects_included = "projects" in section_vis.get("included_sections", [])
+    if _projects_included and "projects_total" not in weighted_budget:
+        _n_projects = len(parsed_p12.get("projects") or [])
+        if _n_projects > 0:
+            weighted_budget["projects_total"] = min(3, _n_projects)
     logbook.append(
         "step_07_s5_2", "result",
         f"weighted distribution applied; profile={profile}; "
@@ -5562,6 +5572,10 @@ def main():
             fit_result, parsed_p12, condensed, fit_iter
         )
         iter_log["strategy_chosen"] = strategy
+        if strategy == "E_accept":
+            # Underflow accepted — no mutation needed, don't burn another render.
+            log(f"[fit_iter {fit_iter}] E_accept: underflow accepted, exiting loop")
+            break
         fit_loop.apply_strategy(strategy, parsed_p12, condensed)
         log(f"[fit_iter {fit_iter}] applying {strategy} for next iter")
 

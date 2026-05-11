@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.24] - 2026-05-11
+
+### Added
+- **S1.12 (EXPAND mode in page-fit loop):** `fit_loop.py` now detects page
+  under-utilization (< 85% of an A4 page) and runs expand strategies before
+  declaring success.  Two new strategies:
+  - `E1_expand_bullets` (iter 0): increments each company's bullet count by 2,
+    capped at 8 per company — surfaces more achievements when the page has room.
+  - `E2_surface_projects` (iter 1): removes `Projects` from `dropped_sections`
+    and allocates up to 3 project bullets — re-surfaces the Projects section
+    when there is measurable space remaining.
+  Expand strategies fire ONLY when `util_underflow=True` (util > 0% AND < 85%)
+  AND the page is 1-page, unwrapped, and not overflowing — never into a wrapping
+  or overflow state. `util_pct=0.0` (no HTML signal) is treated as "no signal"
+  so missing-HTML passes still succeed.
+- **S1.12 fix in `orchestrator.py`:** `projects_total` is now defaulted to
+  `min(3, n_projects)` at the S5-2 bullet-distribution step when the Projects
+  section is included in section visibility but the LLM hint omitted the key —
+  prevents the Projects section rendering with zero bullets.
+
 ## [0.5.23] - 2026-05-11
 
 ### Added
