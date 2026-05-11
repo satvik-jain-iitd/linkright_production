@@ -181,6 +181,33 @@ class TestClassifyImpactCategory:
         result = classify_impact_category("<b>Debugged</b> a memory corruption bug")
         assert result == "ProblemSolving"
 
+    def test_word_boundary_led_inside_delivered_no_false_positive(self):
+        """'led' as embedded substring of word 'delivered' must not match Leadership rule."""
+        from linkright.resume.lib.verb_taxonomy import classify_impact_category
+        # "Delivered" → starts with Achievement keyword "delivered"; first-match is Achievement.
+        # More importantly, the word "delivered" should not match the "led" rule because
+        # "led" is NOT a word boundary match inside "delivered".
+        result = classify_impact_category("Delivered the new onboarding experience on schedule")
+        assert result == "Achievement", (
+            f"Bullet starting with 'Delivered' should classify as Achievement, got '{result}'"
+        )
+
+    def test_word_boundary_ran_not_in_rebranded(self):
+        """'ran' as substring of 'rebranded' must not classify as Managing."""
+        from linkright.resume.lib.verb_taxonomy import classify_impact_category
+        result = classify_impact_category("Rebranded the enterprise product line")
+        # "rebranded" contains "ran" — should not fire Managing
+        assert result != "Managing" or result == "Achievement", (
+            f"'ran' inside 'rebranded' should not classify as Managing, got '{result}'"
+        )
+
+    def test_word_boundary_led_at_start_is_leadership(self):
+        """'led' as a standalone word at start should still classify as Leadership."""
+        from linkright.resume.lib.verb_taxonomy import classify_impact_category
+        result = classify_impact_category("Led a 12-person cross-functional team")
+        assert result == "Leadership", f"Expected Leadership, got '{result}'"
+
+
 
 # ── (b) get_taxonomy_verb ──────────────────────────────────────────────────────
 class TestGetTaxonomyVerb:

@@ -97,7 +97,7 @@ def load_verb_taxonomy() -> dict[str, dict[str, list[str]]]:
 def classify_impact_category(bullet_text: str) -> str:
     """Classify a bullet's impact category from its text.
 
-    Uses a priority-ordered keyword match — first match wins.
+    Uses a priority-ordered keyword match with word boundaries — first match wins.
     Returns one of the 9 category strings or ``"Achievement"`` as default.
 
     Parameters
@@ -107,13 +107,20 @@ def classify_impact_category(bullet_text: str) -> str:
     if not bullet_text:
         return _DEFAULT_CATEGORY
 
-    # Strip leading HTML tags for keyword matching
+    # Strip HTML tags for keyword matching
     clean = re.sub(r"<[^>]+>", " ", bullet_text).lower()
 
     for keywords, category in _CATEGORY_RULES:
         for kw in keywords:
-            if kw in clean:
-                return category
+            # Multi-word phrases use substring match (they are already specific).
+            # Single words use word-boundary match to avoid false positives like
+            # "led" matching "delivered" or "ran" matching "transparent".
+            if " " in kw:
+                if kw in clean:
+                    return category
+            else:
+                if re.search(r"\b" + re.escape(kw) + r"\b", clean):
+                    return category
 
     return _DEFAULT_CATEGORY
 
