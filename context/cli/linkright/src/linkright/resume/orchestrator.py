@@ -2720,8 +2720,11 @@ def step_11_rank(
     if jd_req_clusters:
         for cl in jd_req_clusters:
             cid = cl["cluster_id"]
-            # Index canonical label words as cluster keys (3+ char words only)
-            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) > 2]
+            # Index canonical label words as cluster keys (>=5 chars only).
+            # Filter is >=5, not >2, to exclude common connectives like "and",
+            # "for", "the", "has", "can" (all len=3) that would spuriously match
+            # every bullet and collapse kw_to_cluster to the last cluster.
+            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) >= 5]
             for w in label_words:
                 kw_to_cluster[w] = cid
             # Also index meaningful words from every member req_id in this cluster.
@@ -2731,6 +2734,14 @@ def step_11_rank(
                 for part in req_id.replace("-", "_").split("_"):
                     if len(part) > 3 and not part.isdigit():
                         kw_to_cluster[part.lower()] = cid
+        # In cluster mode, canonical-label keyword matching replaces jd_keywords
+        # LLM set — clusters cover the same signal more precisely (deduped,
+        # anti-stuffing) so kw_set is intentionally unused in the brs() inner fn.
+        logbook.append(
+            step, "cluster_mode",
+            f"jd_keyword signal replaced by {len(jd_req_clusters)} req clusters; "
+            f"kw_to_cluster has {len(kw_to_cluster)} entries",
+        )
 
     def brs(para: dict, covered_clusters: set[str] | None = None) -> tuple[float, set[str]]:
         """Return (score, new_cluster_ids_hit) for this paragraph.

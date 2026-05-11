@@ -225,3 +225,109 @@ class TestEdgeCases:
         clusters = cluster_requirements(reqs)
         ids = [cl["cluster_id"] for cl in clusters]
         assert all(cid.startswith("c") for cid in ids)
+
+
+# ---------------------------------------------------------------------------
+# Test (e) — step_11_rank: same-cluster dedup + cross-company independence
+# ---------------------------------------------------------------------------
+
+class TestStep11RankClusterDedup:
+    """Integration tests for the cluster-aware BRS in step_11_rank.
+
+    Uses minimal verbose_all dicts with 2 companies / 2 bullets each.
+    Mock embeddings are not needed here — we test BRS logic only.
+    Logbook and ARTIFACTS are monkeypatched so the test has no I/O side effects.
+    """
+
+    @staticmethod
+    def _setup(monkeypatch, tmp_path):
+        """Wire up orchestrator paths + silence logbook writes."""
+        from linkright.resume import orchestrator
+        arts = tmp_path / "artifacts"
+        arts.mkdir()
+        monkeypatch.setattr(orchestrator, "ARTIFACTS", arts)
+        monkeypatch.setattr(orchestrator.logbook, "append", lambda *a, **kw: None)
+        monkeypatch.setattr(orchestrator.logbook, "set_path", lambda *a, **kw: None)
+        return orchestrator
+
+    @staticmethod
+    def _bullet(text: str) -> dict:
+        return {"text_html": text, "nugget_ids": []}
+
+    def test_same_cluster_counted_once(self, monkeypatch, tmp_path):
+        """Two bullets both mentioning 'communication' (same cluster) should
+        yield a score gap: the first bullet gets the cluster BRS credit,
+        the second does NOT (covered_clusters anti-stuffing)."""
+        orch = self._setup(monkeypatch, tmp_path)
+
+        clusters = [
+            {
+                "cluster_id": "c1",
+                "canonical_label": "communication skills",
+                "member_req_ids": [],
+                "centroid_embedding": [1.0, 0.0, 0.0, 0.0],
+            }
+        ]
+        # Both bullets reference 'communication' (>=5 chars → matches cluster c1)
+        verbose_all = {
+            "AcmeCorp": {
+                "paragraphs": [
+                    self._bullet("Led communication across 12 stakeholders"),
+                    self._bullet("Improved communication for 3 teams"),
+                ]
+            }
+        }
+
+        ranked = orch.step_11_rank(
+            verbose_all, jd_keywords=[], jd_req_clusters=clusters
+        )
+
+        paras = ranked["AcmeCorp"]
+        # First bullet (higher score) should have scored the cluster
+        # Second bullet cannot claim c1 again — its cluster contribution is 0
+        # Verify: the two BRS scores are NOT identical (dedup changed the second)
+        scores = [p["_brs"] for p in paras]
+        assert scores[0] >= scores[1], "Higher-ranked bullet must have BRS >= lower"
+        # Specifically: only 1 bullet benefits from the cluster kw_hit bonus.
+        # At least one bullet must have a lower score than if both got credit.
+        # (If dedup is broken both would have identical cluster contribution.)
+        assert not (scores[0] == scores[1] and scores[0] > 0), (
+            "Both bullets got identical positive cluster BRS — dedup is not working"
+        )
+
+    def test_cross_company_cluster_resets(self, monkeypatch, tmp_path):
+        """covered_clusters must reset between companies so Company B's bullet
+        can still score cluster c1 even if Company A already covered it."""
+        orch = self._setup(monkeypatch, tmp_path)
+
+        clusters = [
+            {
+                "cluster_id": "c1",
+                "canonical_label": "stakeholder alignment skills",
+                "member_req_ids": [],
+                "centroid_embedding": [1.0, 0.0, 0.0, 0.0],
+            }
+        ]
+        verbose_all = {
+            "CompanyA": {
+                "paragraphs": [
+                    self._bullet("Led stakeholder alignment across 5 regions"),
+                ]
+            },
+            "CompanyB": {
+                "paragraphs": [
+                    self._bullet("Drove stakeholder alignment for product roadmap"),
+                ]
+            },
+        }
+
+        ranked = orch.step_11_rank(
+            verbose_all, jd_keywords=[], jd_req_clusters=clusters
+        )
+
+        score_a = ranked["CompanyA"][0]["_brs"]
+        score_b = ranked["CompanyB"][0]["_brs"]
+        # Both bullets reference 'stakeholder' + 'alignment' (both >=5 chars → c1)
+        # covered_clusters resets per company, so both must receive cluster credit
+        assert score_a > 0, "CompanyA bullet did not score cluster c1"
+        assert score_b > 0, "CompanyB bullet did not score cluster c1 — cross-company reset broken"
