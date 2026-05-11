@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.20] - 2026-05-11
+
+### Fixed
+- **S1.5 (GenAI acronym expansion error):** Added ~25 modern AI/ML terms to
+  `_UNIVERSAL_NO_EXPAND` in `orchestrator.py` and `_COMMON_KNOWN_ACRONYMS` in
+  `scorecard.py` — including `GenAI`, `LLM`, `NLP`, `MCP`, `RAG`, `GPT`,
+  `BERT`, `GAN`, `MLOps`, `AIOps`, `NLU`, `NLG`, `XAI`, `OCR`, `NER`,
+  `OAuth`, `JWT`. Terms like "GenAI" will no longer be expanded to garbage
+  strings like "Gen-Artificial Intelligence". Added case-insensitive guard
+  at corpus merge to block lowercase variants (`genai`, `llm`, etc.) that
+  may exist in persistent `learned_corpus.json`. Both enforcement layers —
+  orchestrator (expansion) and scorecard (penalty) — are now kept in sync.
+
 ## [0.5.19] — 2026-05-11
 
 ### Fixed

@@ -4528,12 +4528,22 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     # Tiny whitelist: universally-known tokens that NEVER need expansion.
     # Anything domain-specific is auto-learned, never hardcoded.
     _UNIVERSAL_NO_EXPAND = {
+        # General tech / infra — never expand
         "PM", "AI", "ML", "AR", "VR", "API", "SQL", "AWS", "GCP", "iOS", "OS",
         "UX", "UI", "REST", "JSON", "XML", "CSS", "JS", "PDF", "URL", "SDK",
         "HTML", "HTTP", "HTTPS", "DNS", "VPN", "SSL", "TLS", "DB", "RPC",
         "CPU", "GPU", "RAM", "SSD", "CLI", "GUI", "B2B", "B2C", "SaaS",
         "CRM", "ERP", "JD", "HR", "QA",
+        # AI / ML compound terms — product names / paradigm labels, expansion always wrong
+        # (e.g. "GenAI" must NOT expand to "Gen-Artificial Intelligence")
+        "LLM", "LLMs", "NLP", "MCP", "RAG", "GenAI", "GPT", "BERT", "GAN",
+        "MLOps", "AIOps", "NLU", "NLG", "XAI", "RL", "RLHF", "DL", "CV",
+        "OCR", "NER", "ASR", "TTS", "STT",
+        # Auth / protocol tokens
+        "OAuth", "JWT",
     }
+    # Case-insensitive lookup — corpus may store lowercase variants of the above.
+    _UNIVERSAL_NO_EXPAND_UPPER = {t.upper() for t in _UNIVERSAL_NO_EXPAND}
 
     # Pattern: "Capitalized Words (XYZ)" where XYZ is a 2-6 char uppercase token
     # (lowercase 's' suffix allowed for plurals like "PIs"). Matches "Anti-Money
@@ -4649,7 +4659,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         # Persistent corpus pairs WIN over this-run only if not already learned this run.
         # i.e., resume's own definition takes priority; corpus fills gaps.
         for _ac, _exp in _persistent_acronyms.items():
-            if _ac not in _LEARNED_EXPANSIONS and _ac not in _UNIVERSAL_NO_EXPAND:
+            if _ac not in _LEARNED_EXPANSIONS and _ac.upper() not in _UNIVERSAL_NO_EXPAND_UPPER:
                 _LEARNED_EXPANSIONS[_ac] = _exp
         # Contribute back: this-run learned pairs added to corpus for future runs.
         _new_to_corpus = merge_acronyms(_CORPUS, _LEARNED_EXPANSIONS)

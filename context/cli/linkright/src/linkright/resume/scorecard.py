@@ -330,11 +330,15 @@ _COMMON_KNOWN_ACRONYMS = {
     # Universally-known tech/programming/internet acronyms ONLY.
     # Domain-specific acronyms (AML, KYC, K8s, WCAG, etc.) MUST come from
     # auto-learn (orchestrator's _learn_acronym_expansions) — no domain bias here.
+    # S1.5: keep in sync with orchestrator._UNIVERSAL_NO_EXPAND.
     "PM", "AI", "ML", "AR", "VR", "API", "SQL", "AWS", "GCP", "iOS", "OS",
     "UX", "UI", "REST", "JSON", "XML", "CSS", "JS", "PDF", "URL", "SDK",
     "HTML", "HTTP", "HTTPS", "DNS", "VPN", "SSL", "TLS", "DB", "RPC",
     "CPU", "GPU", "RAM", "SSD", "CLI", "GUI", "B2B", "B2C", "SaaS",
     "CRM", "ERP", "JD", "HR", "QA", "MCP", "RAG", "LLM", "NLP", "OAuth", "JWT",
+    # Modern AI / compound terms — product names, should never be expanded
+    "GenAI", "GPT", "BERT", "GAN", "LLMs", "MLOps", "AIOps", "NLU", "NLG",
+    "XAI", "RL", "RLHF", "DL", "CV", "OCR", "NER", "ASR", "TTS", "STT",
 }
 
 
