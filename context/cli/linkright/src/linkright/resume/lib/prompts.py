@@ -181,7 +181,7 @@ Return ONLY valid JSON — no markdown, no commentary:
   },
   "career_summary": "2-sentence career trajectory summary — MUST NOT claim more total years of experience than the candidate actually has (see career_level bucket above)",
   "companies": [
-    {"name": "", "location": "city, country", "date_range": "Mon YYYY – Mon YYYY", "title": "", "team": "ONLY populate if resume EXPLICITLY names an org/team/division (e.g., 'Infrastructure Platform Team'). Do NOT use for specialization, product line, or role descriptor (e.g., 'AML & Financial Crime', 'B2B SaaS', 'Enterprise Platform'). Empty string if uncertain."}
+    {"name": "", "location": "VERBATIM from a role-header line ONLY (format: Company | Location | Dates) — empty string if no such header line exists", "date_range": "Mon YYYY – Mon YYYY", "title": "", "team": "ONLY populate if resume EXPLICITLY names an org/team/division (e.g., 'Infrastructure Platform Team'). Do NOT use for specialization, product line, or role descriptor (e.g., 'AML & Financial Crime', 'B2B SaaS', 'Enterprise Platform'). Empty string if uncertain."}
   ],
   "education": [
     {"institution": "", "degree": "", "year": "", "gpa": "", "highlights": ""}
@@ -217,6 +217,7 @@ Parsing rules:
 - highlights: Copy verbatim academic achievements, exam ranks, test scores, and honours EXACTLY as written in the career profile. Do NOT paraphrase, infer, or generate any content not present word-for-word. If no specific achievement appears in the text, use ""
 - skills: 2-4 categories relevant to JD
 - If a section has no data, use empty array/string — do NOT invent data
+- CRITICAL location rule (S1.9 — header-context only): companies[].location MUST appear verbatim in a role-header line (format: Company | Location | Dates) of the source resume markdown. If you cannot find such a header line for a role, output empty string "". NEVER invent a location, NEVER pull from bullet body context (e.g., "collaborated with NY risk team" does NOT validate "New York" as a role location), NEVER use company HQ. Only header-row presence validates a location. Recruiters flag wrong locations — inventing "New York, USA" for a Gurugram-based candidate is a critical truth-engine violation.
 
 Strategy definitions:
 {strategies_json}
