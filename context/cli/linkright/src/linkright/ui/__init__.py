@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 import questionary
 from questionary import Style as QStyle
 
@@ -186,18 +187,46 @@ def success_card(
     next_steps: list[tuple[str, str]] | None = None,
     accent: str = TEAL,
 ) -> None:
+    """Render a bordered success summary card.
+
+    Field values may contain a single newline to produce a two-line rendering:
+      first line  — rendered in accent colour on the key row
+      second line — indented to value column, rendered dimmed
+
+    This lets callers (e.g. _render_success_card) pass a bold filename on the
+    first line and the full path on the second without risking mid-word wraps
+    at the terminal edge (the second line is kept as a separate markup span so
+    Rich never has to break it across lines in unexpected places).
+    """
     key_w = max((len(k) for k, _ in fields), default=8) + 2
-    lines: list[str] = []
-    for k, v in fields:
-        lines.append(f"  [step.gold]{k:<{key_w}}[/]  [{accent}]{v}[/]")
+    # Indent for continuation lines aligns under the value column:
+    #   2 spaces (left pad) + key_w chars + 2 spaces (separator)
+    cont_indent = " " * (2 + key_w + 2)
+
+    body = Text(overflow="fold", no_wrap=False)
+    for i, (k, v) in enumerate(fields):
+        if i > 0:
+            body.append("\n")
+        first_line, *rest_lines = v.split("\n")
+        body.append(f"  ", style="")
+        body.append(f"{k:<{key_w}}", style="step.gold")
+        body.append("  ", style="")
+        body.append(first_line, style=accent)
+        for line in rest_lines:
+            body.append("\n")
+            body.append(cont_indent, style="")
+            body.append(line, style="dim")
     if next_steps:
-        lines.append("")
-        lines.append("  [dim]Next steps:[/]")
+        body.append("\n\n")
+        body.append("  Next steps:", style="dim")
         for cmd, desc in next_steps:
-            lines.append(f"    [dim]→[/]  [{accent}]{cmd}[/]   [dim]{desc}[/]")
+            body.append("\n    → ", style="dim")
+            body.append(cmd, style=accent)
+            body.append("   ", style="")
+            body.append(desc, style="dim")
     console.print()
     console.print(Panel(
-        "\n".join(lines),
+        body,
         title=f"[{accent} bold]{title}[/]",
         border_style=accent,
         expand=False,
