@@ -83,3 +83,36 @@ To test after provisioning:
 ```bash
 ORACLE_PG_URL=... python worker/scripts/smoke_oracle_pg.py
 ```
+
+---
+
+## CLI Release Rule (MANDATORY — fragment-based, Sprint 2+)
+
+### In every code PR (NEVER touch pyproject.toml or CHANGELOG.md directly)
+
+Every PR that touches code under `context/cli/linkright/` **must** write exactly one fragment file:
+
+```
+context/cli/linkright/changelogs/unreleased/<sprint-item-slug>.md
+```
+
+Format (copy from `changelogs/TEMPLATE.md`):
+```markdown
+## [type: Fixed]
+<!-- pr: 123 -->
+- **S?.? (short title):** Description of what changed and why.
+```
+
+**Do NOT touch `pyproject.toml` or `CHANGELOG.md` in code PRs.** These are now owned exclusively by the release script.
+
+### At sprint end (after ALL PRs merged to main)
+
+```bash
+# On main branch, from linkright_production/ root:
+bash scripts/release-cli.sh patch    # bugfix sprint
+bash scripts/release-cli.sh minor    # feature sprint
+```
+
+This script: compiles fragments → bumps version → updates CHANGELOG → commits → pushes → `cli-publish.yml` auto-triggers → PyPI publish.
+
+**Why this replaces the old rule:** The old rule (bump in PR) caused O(N²) forced rebases — every merge to main forced every open PR to rebase `pyproject.toml` and `CHANGELOG.md`. A sprint with 7 parallel PRs needed 21+ manual rebases. Fragment files are unique per PR → zero conflicts. Established 2026-05-11 after Sprint 1 (7-PR serial rebase pain).
