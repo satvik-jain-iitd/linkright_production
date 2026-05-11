@@ -22,6 +22,17 @@ instead of hardcoded user or employer literals.
   local profile or career-signal metadata when available. Runs with no profile
   metadata continue to degrade cleanly with the existing generic checks. (#91)
 
+## [0.5.17] — 2026-05-11
+
+### Fixed
+- **S1.6 — trailing punctuation residue cleanup:** `step_12_condense` now strips
+  trailing `,.` / `.,` / `..` / `;;` / `,,` / stray trailing commas / `_space_ .`
+  patterns from every condensed bullet's `text_html` before writing
+  `12_condensed_bullets.json`. Applied via a new `_clean_trailing_punct` helper
+  using end-anchored regex — mid-sentence punctuation is never disturbed. Clean
+  single `.` endings are preserved. Covered by 18 new unit tests in
+  `tests/test_punctuation_cleanup.py`.
+
 ## [0.5.16] — 2026-05-11
 
 ### Fixed

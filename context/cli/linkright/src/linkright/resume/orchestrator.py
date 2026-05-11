@@ -2736,6 +2736,19 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
             step12_llm_failed = True
             text, usage = "", {}
 
+    # S1.6: define here so both the synthesis-fallback path and the main path can use it.
+    # End-anchored patterns — mid-sentence punctuation is never touched.
+    def _clean_trailing_punct(html: str) -> str:
+        h = html or ""
+        h = re.sub(r",\s*\.+\s*$", ".", h)    # ,. or , . → .  (optional space handled)
+        h = re.sub(r"\.+,\s*$", ".", h)        # ., or .., → .
+        h = re.sub(r"\.{2,}\s*$", ".", h)      # .. or ... → .
+        h = re.sub(r";{2,}\s*$", ";", h)       # ;; → ;
+        h = re.sub(r",\s*$", "", h)             # trailing stray comma → remove (runs BEFORE ,, rule)
+        h = re.sub(r",{2,}\s*$", ",", h)       # ,, → , (after stray-comma rule so single , preserved)
+        h = re.sub(r"\s+([.,;])$", r"\1", h)   # trailing ' .' / ' ,' → strip space
+        return h.rstrip()
+
     if step12_llm_failed:
         # Iter-09: synthesis fallback — pass verbose paragraphs through as condensed bullets
         # (uses text_html directly, preserving bold + metrics; lower quality but crash-safe)
@@ -2752,6 +2765,9 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
                 "signal_rationale": p.get("signal_rationale", ""),
             })
         _note_retry("step_12_synthesis_fallback")
+        for _co, _bullets in condensed_by_co.items():
+            for _b in _bullets:
+                _b["text_html"] = _clean_trailing_punct(_b.get("text_html", "") or "")
         out_path = ARTIFACTS / "12_condensed_bullets.json"
         out_path.write_text(json.dumps(condensed_by_co, indent=2), encoding="utf-8")
         logbook.append(step, "eval", f"synthesis fallback: {sum(len(v) for v in condensed_by_co.values())} bullets passed through")
@@ -3085,6 +3101,10 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
             )
         except Exception:
             pass
+
+    for _co, _bullets in output.items():
+        for _b in _bullets:
+            _b["text_html"] = _clean_trailing_punct(_b.get("text_html", "") or "")
 
     out_path = ARTIFACTS / "12_condensed_bullets.json"
     out_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
