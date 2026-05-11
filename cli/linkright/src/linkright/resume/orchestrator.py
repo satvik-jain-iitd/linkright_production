@@ -54,6 +54,7 @@ except ImportError:
     pass
 
 from .lib import logbook, llm, embedder, cosine, telemetry
+from .lib.location_guard import build_header_windows, loc_in_header as _loc_in_header
 from .lib import prompts as P
 from .lib import width_poc
 from .lib import fit_loop
@@ -1896,9 +1897,9 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
             jd_keywords_compact=jd_keywords_compact,
             jd_requirements_list=jd_requirements_list,
             company_name=co_name,
-            company_title=co.get("title", ""),
-            company_dates=co.get("date_range", ""),
-            company_team=co.get("team", ""),
+            company_title=(co.get("title") or ""),
+            company_dates=(co.get("date_range") or ""),
+            company_team=(co.get("team") or ""),
             company_chunks=company_chunks,
             bullet_count=bullet_count,
         )
@@ -3791,13 +3792,38 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
 
     # v0.1.2 L2 precondition: rebuild companies list from step_01 experiences if empty
     # (covers the "all LLM providers exhausted mid-run" scenario).
+    # S1.9 invariant (Blocker 2 fix): parsed_resume.experiences[].location is
+    # populated by step_01 (md_parse), which currently does NOT extract location
+    # fields — the field will always be empty/absent here.  The S1.9 guard
+    # (above, in the step_07 section) already ran on parsed_p12 before this
+    # fallback fires, so any location that DID survive the guard is safe.
+    # However, if md_parse ever gains location extraction this assert will fire
+    # and remind the author to extend the S1.9 guard to this path as well.
+    assert all(
+        not (ex.get("location") or "").strip()
+        for ex in (parsed_resume.get("experiences") or [])
+    ), (
+        "S1.9 invariant: md_parse now emits experience locations — "
+        "the header-context validator must be applied at the fallback "
+        "reconstruction path in step_14_assemble_html before shipping."
+    )
     _p12_companies = parsed_p12.get("companies") or []
     if not _p12_companies:
         _exps = (parsed_resume.get("experiences") or [])[:ROLE_CAP]
         _p12_companies = [
             {
                 "name": ex.get("company", ""),
-                "location": ex.get("location", ""),
+                # S1.9 (Blocker 2): apply header-context validator to any
+                # location that md_parse may have populated.  Currently always
+                # empty (see assert above) but guard is here as belt-and-
+                # suspenders for future md_parse changes.
+                "location": (ex.get("location") or "")
+                    if _loc_in_header(
+                        (ex.get("location") or "").strip(),
+                        (ex.get("company") or "").strip(),
+                        raw_text,
+                    )
+                    else "",
                 "title": ex.get("role", ""),
                 "date_range": f"{ex.get('start_date','')} – {ex.get('end_date','')}".strip(" –"),
                 "team": "",
@@ -4119,11 +4145,13 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         # S1.9: location truth guard — render as "location | dates" only when
         # location is non-empty; otherwise render "dates" alone (no leading " | ").
         _loc = (co.get('location') or '').strip()
-        _loc_dates = f"{_loc} | {co.get('date_range', '')}" if _loc else co.get('date_range', '')
+        # S1.9 / Blocker 3: use `or ''` not `.get(..., '')` — `.get` returns None when
+        # value is explicitly null in LLM JSON; f-string would render literal "None".
+        _loc_dates = f"{_loc} | {(co.get('date_range') or '')}" if _loc else (co.get('date_range') or '')
         company_html_parts.append(f"""
 <div class="entry">
   <div class="entry-header"><span>{co_name}</span><span>{_loc_dates}</span></div>
-  <div class="entry-subhead"><span>{co.get('title', '')}</span>{_team_span}</div>
+  <div class="entry-subhead"><span>{(co.get('title') or '')}</span>{_team_span}</div>
   {bullet_html}
 </div>
 """)
@@ -5028,24 +5056,30 @@ def main():
     except Exception as _e_ef:
         log(f"[entity_fidelity] guard error: {_e_ef} — pipeline continues")
 
-    # S1.9 location truth-engine guard (Layer 1b, post entity-fidelity).
-    # Any location string produced by step_07 that does NOT appear verbatim in the
-    # source raw_text is stripped to empty string — it was hallucinated by the LLM.
-    # This is a deterministic post-LLM validator; the prompt rule (AC1) is a first
-    # line of defence but LLMs can still ignore it; this layer catches escapes.
+    # S1.9 location truth-engine guard v2 (Layer 1b, post entity-fidelity).
+    # Iter-1 used a naive full-text substring scan: `_loc in raw_text`.
+    # Iter-2 (Blocker 1 fix): validate only against *header windows* — windows
+    # of raw_text that contain the company name AND a date pattern.  This
+    # prevents context-pull false negatives where a city name appears in a
+    # bullet body ("collaborated with NY risk team") but was never the role
+    # location.  See `_loc_in_header()` and `_build_header_windows()` above.
+    #
+    # Matching is case-insensitive + whitespace-normalised, so minor formatting
+    # differences (" Gurugram ", "gurugram") do not cause false strips.
     try:
         _stripped_locs: list[str] = []
         for _co in (parsed_p12.get("companies") or []):
             _loc = (_co.get("location") or "").strip()
-            if _loc and _loc not in raw_text:
-                _stripped_locs.append(f"{_co.get('name','?')}: {_loc!r} → ''")
+            _co_name = (_co.get("name") or "").strip()
+            if _loc and not _loc_in_header(_loc, _co_name, raw_text):
+                _stripped_locs.append(f"{_co_name or '?'}: {_loc!r} → ''")
                 _co["location"] = ""
         if _stripped_locs:
             log(f"[location_truth] stripped {len(_stripped_locs)} hallucinated location(s): {_stripped_locs}")
             try:
                 logbook.append(
                     "step_07_location_truth", "filter",
-                    f"stripped {len(_stripped_locs)} hallucinated location(s) not found verbatim in source",
+                    f"stripped {len(_stripped_locs)} location(s) absent from role-header lines (S1.9 v2)",
                     body="\n".join(f"- {s}" for s in _stripped_locs),
                 )
             except Exception:

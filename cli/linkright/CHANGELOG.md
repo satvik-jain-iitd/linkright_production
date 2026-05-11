@@ -2,6 +2,17 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.1.6] - 2026-05-11
+
+### Fixed
+- **Critical (S1.9 iter 2 — Blocker 1):** iter-1 used a naive full-text substring scan for location validation (`_loc in raw_text`). This allowed context-pull false negatives: a city name appearing in a bullet body ("collaborated with NY risk team") would validate as a real role location. Fixed by replacing the scan with a header-context validator (`loc_in_header` in `resume/lib/location_guard.py`). Only locations present in *header windows* — raw_text windows containing the company name AND a date pattern — are preserved. Substring matches in bullet narrative do NOT validate a location; only header-row presence does.
+- **Critical (S1.9 iter 2 — Blocker 2):** fallback reconstruction path in `step_14_assemble_html` (triggered when step_07 LLM exhausts all providers) copies `parsed_resume.experiences[].location` blindly. Added: (1) invariant assertion that md_parse does not populate experience locations — fires if that ever changes; (2) header-context validator applied inline on the fallback location field.
+- **Critical (S1.9 iter 2 — Blocker 3):** `co.get('date_range', '')` returns `None` (not `''`) when the LLM emits `"date_range": null` in JSON. An f-string then renders `"Gurugram | None"`. Fixed all dict-get calls in the HTML assembly section to use `(co.get('field') or '')` pattern. Same fix applied to `title`, `team`, and prompt-call arguments.
+- **Tests (S1.9 iter 2 — Blocker 4):** added `cli/linkright/tests/test_location_truth_guard.py` with 12 test cases covering: pure fabrication blocked, header-match passes, body-context false-negative blocked, multi-company differential, empty location pass-through, whitespace/case variants, fallback reconstruction guard, and `date_range: null` null-safe render.
+
+### Added
+- `resume/lib/location_guard.py` — standalone stdlib-only module exposing `build_header_windows()` and `loc_in_header()`. Zero heavyweight imports; directly testable without LLM/embedding dependencies.
+
 ## [0.1.5] - 2026-05-11
 
 ### Fixed
