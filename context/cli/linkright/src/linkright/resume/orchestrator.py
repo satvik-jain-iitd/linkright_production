@@ -102,6 +102,7 @@ from .profile_facts import (
     value_in_text,
 )
 from .lib.metric_magnitude import score_metric_consistency as _score_metric_consistency
+from ..llm.oracle import oracle_embed as _oracle_embed, OracleUnavailable as _OracleUnavailable
 
 
 # ── Module-level retry counter (populated by any step that re-prompts on
@@ -2904,6 +2905,7 @@ def step_11_rank(
     jd_req_clusters: list[dict] | None = None,
     career_level: str = "mid",
     weight_matrix: dict | None = None,
+    jd_req_texts: list[str] | None = None,
 ) -> dict:
     """Rank verbose bullets by BRS (bullet relevance score).
 
@@ -2911,14 +2913,52 @@ def step_11_rank(
     deduplication (1× per cluster per company, anti-stuffing).
     S3.1: *career_level* + *weight_matrix* apply signal multipliers so
     career-appropriate signals rank higher.
+    S5.1: When *jd_req_texts* is provided (or derivable from cluster canonical_labels),
+    blends 70% BRS + 30% Oracle nomic-embed-text cosine alignment for semantically
+    richer ranking. Graceful fallback to BRS-only when Oracle is unavailable.
     """
     step = "step_11_rank"
+
+    # S5.1: derive jd_req_texts from cluster canonical_labels when not provided explicitly
+    if jd_req_texts is None and jd_req_clusters:
+        jd_req_texts = [
+            cl["canonical_label"]
+            for cl in jd_req_clusters
+            if cl.get("canonical_label")
+        ]
+
+    # S5.1: batch-embed JD requirement texts ONCE before the per-bullet loop.
+    # Falls back gracefully to None (BRS-only mode) if Oracle is unavailable.
+    _req_embeddings: list[list[float]] | None = None
+    _embedding_mode = "brs_only"
+    if jd_req_texts:
+        try:
+            _req_embeddings = _oracle_embed(jd_req_texts)
+            if _req_embeddings:
+                _embedding_mode = "blend_70_30"
+                logbook.append(
+                    step, "s5_1_embed",
+                    f"S5.1: Oracle embedded {len(_req_embeddings)} JD req texts "
+                    f"({len(_req_embeddings[0])}-dim); blend mode: 70% BRS + 30% alignment",
+                )
+        except _OracleUnavailable as _e:
+            logbook.append(
+                step, "s5_1_embed_fallback",
+                f"S5.1: Oracle unavailable ({_e}) — falling back to BRS-only scoring",
+            )
+        except Exception as _e:
+            logbook.append(
+                step, "s5_1_embed_fallback",
+                f"S5.1: Oracle embed error ({type(_e).__name__}: {_e}) — falling back to BRS-only",
+            )
+
     logbook.append(
         step, "starting",
         "scoring every verbose paragraph using a simplified BRS: specificity (#numbers), "
         "proof signal match count, JD-keyword hits, verb strength. Range 0-1. "
         + (f"S3.2 cluster-aware: {len(jd_req_clusters)} clusters | " if jd_req_clusters else "no clusters (legacy) | ")
-        + f"S3.1 signal-weights: career_level='{career_level}'",
+        + f"S3.1 signal-weights: career_level='{career_level}' | "
+        + f"S5.1 alignment: {_embedding_mode}",
     )
 
     # S3.1: load weight matrix if not provided (allows injection in tests)
@@ -3015,6 +3055,25 @@ def step_11_rank(
             penalty = _score_metric_consistency(raw_text)
             if penalty > 0.0:
                 p["_weighted_brs"] = round(p["_weighted_brs"] * (1.0 - 0.15 * penalty), 4)
+        # S5.1: blend 70% _weighted_brs + 30% Oracle cosine alignment when available.
+        # Each bullet is embedded individually; alignment = max cosine against any JD req.
+        if _req_embeddings:
+            for p in paras:
+                bullet_text = (p.get("text_html") or "").strip()
+                alignment = 0.0
+                try:
+                    bullet_vecs = _oracle_embed([bullet_text])
+                    if bullet_vecs and bullet_vecs[0]:
+                        bullet_emb = bullet_vecs[0]
+                        alignment = max(
+                            cosine.cosine(bullet_emb, req_emb)
+                            for req_emb in _req_embeddings
+                            if req_emb
+                        ) if _req_embeddings else 0.0
+                except (_OracleUnavailable, Exception):
+                    alignment = 0.0
+                p["_alignment_score"] = round(alignment, 4)
+                p["_weighted_brs"] = round(0.70 * p["_weighted_brs"] + 0.30 * alignment, 4)
         paras.sort(key=lambda p: p["_weighted_brs"], reverse=True)
         ranked[co] = paras
 
@@ -3037,18 +3096,20 @@ def step_11_rank(
         bucket = round(s, 1)
         score_hist[bucket] = score_hist.get(bucket, 0) + 1
 
+    alignment_info = f"mode={_embedding_mode}; reqs_embedded={len(_req_embeddings) if _req_embeddings else 0}"
     body_md = f"""**Artifact:** `artifacts/11_ranked_bullets.json`
 
 **Scores:** min={min(all_scores) if all_scores else 0:.2f}, max={max(all_scores) if all_scores else 0:.2f}, count={len(all_scores)}
 **Distribution:** {dict(sorted(score_hist.items()))}
 **S3.2 Clusters:** {cluster_info}
+**S5.1 Alignment:** {alignment_info}
 
 **Evaluation:** {status.upper()}
 
 **Gaps:**
 {chr(10).join(f'- {g}' for g in gaps) if gaps else '- none'}
 """
-    logbook.append(step, "eval", f"rank {status}; {len(all_scores)} paragraphs scored; {cluster_info}", body_md)
+    logbook.append(step, "eval", f"rank {status}; {len(all_scores)} paragraphs scored; {cluster_info}; {alignment_info}", body_md)
     return ranked
 
 
@@ -5790,6 +5851,9 @@ def main():
         parsed_p12.get("jd_keywords", []),
         jd_req_clusters=parsed_p12.get("jd_requirement_clusters"),
         career_level=parsed_p12.get("career_level", "mid"),
+        # S5.1: pass jd_req_texts derived from parsed clusters; step_11_rank also
+        # derives them from canonical_labels if not provided but clusters are present.
+        jd_req_texts=None,  # let step_11_rank derive from jd_requirement_clusters
     )
 
     _see_and_continue(
