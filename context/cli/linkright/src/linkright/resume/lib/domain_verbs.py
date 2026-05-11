@@ -198,7 +198,7 @@ def replace_weak_verb(
     # Replace the weak verb at the start of text (case-insensitive, preserve HTML lead)
     # Pattern: optional leading HTML tags, then the weak verb word
     pattern = re.compile(
-        r"^((?:<[^>]+>)*\s*)(" + re.escape(weak) + r")(\b)",
+        r"^((?:<[^>]+>)*\s*)(" + re.escape(weak) + r")\b",
         re.IGNORECASE,
     )
     new_text, n_subs = pattern.subn(r"\g<1>" + strong, text, count=1)
