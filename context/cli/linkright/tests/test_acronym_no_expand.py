@@ -94,6 +94,25 @@ def test_lowercase_variants_blocked_by_upper_set():
         )
 
 
+@pytest.mark.parametrize("variant,text", [
+    # pat_b form: "Genai (General AI)" — starts [A-Z] then lowercase. Scorer must not learn.
+    ("Genai",  "Led Genai (General AI) integration for search"),
+    ("Mlops",  "Built Mlops (Machine Learning Ops) platform"),
+    ("Oauth",  "Secured via Oauth (Open Auth) 2.0"),
+])
+def test_scorecard_does_not_learn_mixed_case_variant(variant, text):
+    """_learnable_expansions_from_text must not learn mixed-case protected variants.
+
+    'Genai' (capital G, lower rest) matches pat_b regex but must be blocked by
+    the case-insensitive _KNOWN_UPPER check. Without this fix the scorer would
+    learn the pair and penalise bullets where the variant appears unexpanded.
+    """
+    learned = _learnable_expansions_from_text(text)
+    assert variant not in learned, (
+        f"Mixed-case variant '{variant}' was incorrectly learned: {learned.get(variant)!r}"
+    )
+
+
 # ── AC5-identity: scorecard IS the shared set (no independent copy) ───────────
 
 def test_scorecard_known_acronyms_is_shared_set():
