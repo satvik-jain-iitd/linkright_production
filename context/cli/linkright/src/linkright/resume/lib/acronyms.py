@@ -66,3 +66,34 @@ def load_acronym_bank(*, _force_reload: bool = False) -> dict[str, str]:
 def bank_size() -> int:
     """Return the number of entries currently in the cached bank (for telemetry)."""
     return len(load_acronym_bank())
+
+
+def _merge_bank_into_expansions(
+    bank: dict[str, str],
+    learned: dict[str, str],
+    no_expand_upper: frozenset[str],
+) -> dict[str, str]:
+    """Merge bank entries into *learned* dict, applying the same guard as
+    orchestrator.py step_14 (lines 4664-4680).
+
+    Rules (mirroring the inline wire-in block exactly):
+    - Skip entry if its key is already in *learned* (per-run learned has priority).
+    - Skip entry if ``key.upper()`` is in *no_expand_upper* (silently suppressed
+      at step_14 to prevent expanding universally-known tokens like API/ML/LLM).
+    - Otherwise add to *learned* in place.
+
+    Args:
+        bank:            Output of :func:`load_acronym_bank`.
+        learned:         The ``_LEARNED_EXPANSIONS`` dict accumulating all known
+                         expansions for this step_14 run.  Mutated in place.
+        no_expand_upper: The ``_UNIVERSAL_NO_EXPAND_UPPER`` frozenset.
+
+    Returns:
+        The same *learned* dict (mutated in place) for convenience.
+
+    Extracted for testability (S2.1 Blocker 3 — AC4 coverage).
+    """
+    for key, expansion in bank.items():
+        if key not in learned and key.upper() not in no_expand_upper:
+            learned[key] = expansion
+    return learned

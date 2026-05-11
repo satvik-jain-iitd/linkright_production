@@ -4,30 +4,6 @@
 # Domain keys: tech, cloud, devops, data, AI, security, business, product, healthcare, marketing, HR, finance
 
 # ─── TECH ──────────────────────────────────────────────────────────────────────
-API:
-  expansion: Application Programming Interface
-  domain: tech
-SDK:
-  expansion: Software Development Kit
-  domain: tech
-REST:
-  expansion: Representational State Transfer
-  domain: tech
-HTTP:
-  expansion: Hypertext Transfer Protocol
-  domain: tech
-HTTPS:
-  expansion: Hypertext Transfer Protocol Secure
-  domain: tech
-JSON:
-  expansion: JavaScript Object Notation
-  domain: tech
-XML:
-  expansion: Extensible Markup Language
-  domain: tech
-SQL:
-  expansion: Structured Query Language
-  domain: tech
 NoSQL:
   expansion: Not Only SQL
   domain: tech
@@ -58,20 +34,11 @@ RTO:
 MTTR:
   expansion: Mean Time To Recovery
   domain: tech
-SaaS:
-  expansion: Software as a Service
-  domain: tech
 PaaS:
   expansion: Platform as a Service
   domain: tech
 IaaS:
   expansion: Infrastructure as a Service
-  domain: tech
-JWT:
-  expansion: JSON Web Token
-  domain: tech
-OAuth:
-  expansion: Open Authorization
   domain: tech
 SSO:
   expansion: Single Sign-On
@@ -82,20 +49,11 @@ RBAC:
 LDAP:
   expansion: Lightweight Directory Access Protocol
   domain: tech
-DNS:
-  expansion: Domain Name System
-  domain: tech
 TCP:
   expansion: Transmission Control Protocol
   domain: tech
 UDP:
   expansion: User Datagram Protocol
-  domain: tech
-TLS:
-  expansion: Transport Layer Security
-  domain: tech
-SSL:
-  expansion: Secure Sockets Layer
   domain: tech
 CDN:
   expansion: Content Delivery Network
@@ -109,35 +67,8 @@ GraphQL:
 WebSocket:
   expansion: WebSocket Protocol
   domain: tech
-HTML:
-  expansion: HyperText Markup Language
-  domain: tech
-CSS:
-  expansion: Cascading Style Sheets
-  domain: tech
-UI:
-  expansion: User Interface
-  domain: tech
-UX:
-  expansion: User Experience
-  domain: tech
-CLI:
-  expansion: Command-Line Interface
-  domain: tech
 IDE:
   expansion: Integrated Development Environment
-  domain: tech
-OS:
-  expansion: Operating System
-  domain: tech
-CPU:
-  expansion: Central Processing Unit
-  domain: tech
-GPU:
-  expansion: Graphics Processing Unit
-  domain: tech
-RAM:
-  expansion: Random Access Memory
   domain: tech
 POSIX:
   expansion: Portable Operating System Interface
@@ -172,12 +103,6 @@ P2P:
 IoT:
   expansion: Internet of Things
   domain: tech
-AR:
-  expansion: Augmented Reality
-  domain: tech
-VR:
-  expansion: Virtual Reality
-  domain: tech
 PWA:
   expansion: Progressive Web App
   domain: tech
@@ -192,12 +117,6 @@ CSR:
   domain: tech
 
 # ─── CLOUD ─────────────────────────────────────────────────────────────────────
-AWS:
-  expansion: Amazon Web Services
-  domain: cloud
-GCP:
-  expansion: Google Cloud Platform
-  domain: cloud
 GKE:
   expansion: Google Kubernetes Engine
   domain: cloud
@@ -379,15 +298,6 @@ OLTP:
 CDC:
   expansion: Change Data Capture
   domain: data
-ML:
-  expansion: Machine Learning
-  domain: data
-MLOps:
-  expansion: Machine Learning Operations
-  domain: data
-NLP:
-  expansion: Natural Language Processing
-  domain: data
 AUC:
   expansion: Area Under the Curve
   domain: data
@@ -414,9 +324,6 @@ RNN:
   domain: data
 LSTM:
   expansion: Long Short-Term Memory
-  domain: data
-GAN:
-  expansion: Generative Adversarial Network
   domain: data
 VAE:
   expansion: Variational Autoencoder
@@ -462,15 +369,6 @@ PII:
   domain: data
 
 # ─── AI ────────────────────────────────────────────────────────────────────────
-LLM:
-  expansion: Large Language Model
-  domain: AI
-RAG:
-  expansion: Retrieval-Augmented Generation
-  domain: AI
-RLHF:
-  expansion: Reinforcement Learning from Human Feedback
-  domain: AI
 SFT:
   expansion: Supervised Fine-Tuning
   domain: AI
@@ -495,35 +393,11 @@ AGI:
 ASI:
   expansion: Artificial Super Intelligence
   domain: AI
-NLU:
-  expansion: Natural Language Understanding
-  domain: AI
-NLG:
-  expansion: Natural Language Generation
-  domain: AI
-OCR:
-  expansion: Optical Character Recognition
-  domain: AI
-ASR:
-  expansion: Automatic Speech Recognition
-  domain: AI
-TTS:
-  expansion: Text-to-Speech
-  domain: AI
-RL:
-  expansion: Reinforcement Learning
-  domain: AI
 PPO:
   expansion: Proximal Policy Optimization
   domain: AI
 DPO:
   expansion: Direct Preference Optimization
-  domain: AI
-GPT:
-  expansion: Generative Pre-trained Transformer
-  domain: AI
-BERT:
-  expansion: Bidirectional Encoder Representations from Transformers
   domain: AI
 T5:
   expansion: Text-to-Text Transfer Transformer
@@ -586,9 +460,6 @@ IDS:
   domain: security
 IPS:
   expansion: Intrusion Prevention System
-  domain: security
-VPN:
-  expansion: Virtual Private Network
   domain: security
 MFA:
   expansion: Multi-Factor Authentication
@@ -709,12 +580,6 @@ SAM:
 SOM:
   expansion: Serviceable Obtainable Market
   domain: business
-B2B:
-  expansion: Business-to-Business
-  domain: business
-B2C:
-  expansion: Business-to-Consumer
-  domain: business
 SMB:
   expansion: Small and Medium Business
   domain: business
@@ -747,9 +612,6 @@ CHRO:
   domain: business
 
 # ─── PRODUCT ───────────────────────────────────────────────────────────────────
-PM:
-  expansion: Product Manager
-  domain: product
 PRD:
   expansion: Product Requirements Document
   domain: product
@@ -876,9 +738,6 @@ CPA:
   domain: marketing
 ROAS:
   expansion: Return on Ad Spend
-  domain: marketing
-CRM:
-  expansion: Customer Relationship Management
   domain: marketing
 MQL:
   expansion: Marketing Qualified Lead
