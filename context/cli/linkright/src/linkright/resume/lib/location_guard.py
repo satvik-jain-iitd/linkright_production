@@ -34,9 +34,9 @@ __all__ = ["build_header_windows", "loc_in_header"]
 
 # Date patterns that appear in role-header lines.
 _DATE_PAT = re.compile(
-    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}"
-    r"|\d{2}/\d{4}"
-    r"|Present",
+    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}"
+    r"|\d{2}/\d{4}"
+    r"|Present",
     re.IGNORECASE,
 )
 
