@@ -34,38 +34,6 @@ _WEAK_VERBS: frozenset[str] = frozenset({
     "leveraged",
 })
 
-# Map career_level keywords → industry domain (for inference fallback).
-# Keys are lowercase substrings matched against career_level string.
-_CAREER_LEVEL_TO_INDUSTRY: dict[str, str] = {
-    "exec":        "pm",
-    "director":    "pm",
-    "vp":          "pm",
-    "senior pm":   "pm",
-    "pm":          "pm",
-    "product":     "pm",
-    "eng":         "tech",
-    "engineer":    "tech",
-    "dev":         "tech",
-    "sde":         "tech",
-    "data":        "data",
-    "analyst":     "data",
-    "scientist":   "data",
-    "ml":          "data",
-    "sales":       "sales",
-    "account":     "sales",
-    "finance":     "finance",
-    "financial":   "finance",
-    "accounting":  "finance",
-    "market":      "marketing",
-    "growth":      "marketing",
-    "legal":       "legal",
-    "counsel":     "legal",
-    "attorney":    "legal",
-    "oper":        "operations",
-    "supply":      "operations",
-    "logistics":   "operations",
-}
-
 _DEFAULT_INDUSTRY = "tech"
 
 # ── Module-level cache ─────────────────────────────────────────────────────────
