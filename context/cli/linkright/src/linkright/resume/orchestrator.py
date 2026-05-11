@@ -4700,6 +4700,36 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         out = out.replace("<!-- PLACEHOLDER -->", email, 1)
         out = out.replace("<!-- PLACEHOLDER -->", linkedin, 1)
         out = out.replace("<!-- PLACEHOLDER -->", portfolio, 1)
+    else:
+        import warnings
+        warnings.warn(
+            f"S1.10: expected \u22654 contact <!-- PLACEHOLDER --> markers in template "
+            f"but found {len(placeholders)}. Contact fields may be missing in output. "
+            "Check the HTML template for missing <!-- PLACEHOLDER --> tags.",
+            stacklevel=2,
+        )
+    # S1.10 — convert "LinkedIn: {url}" / "Portfolio: {url}" spans to clickable anchors.
+    # After placeholder substitution above, the template renders:
+    #   <span><b>LinkedIn:</b> https://...</span>  or  <span><b>LinkedIn:</b> </span>
+    # We replace the former with a black (color: var(--ui-text-primary-color)) anchor per
+    # brand-design-spec rule 2 (font color always primary/black) + rule 4 (color only on
+    # metrics + dividers). The S6-2 stripper below removes the latter (empty-value) spans.
+    _link_style = "text-decoration: none; color: var(--ui-text-primary-color);"
+    def _hyperlink_contact_span(m: re.Match) -> str:
+        label_text = m.group(1).strip()  # e.g. "LinkedIn" or "Portfolio"
+        url_raw = m.group(2).strip()
+        if not url_raw:
+            # Empty URL — leave as-is so S6-2 stripper can remove it.
+            return m.group(0)
+        url = url_raw if url_raw.startswith("http") else f"https://{url_raw}"
+        return (f'<span><a href="{url}" target="_blank" '
+                f'style="{_link_style}">{label_text}</a></span>')
+    out = re.sub(
+        r'<span><b>(LinkedIn|Portfolio):</b>\s*(.*?)</span>',
+        _hyperlink_contact_span,
+        out,
+        flags=re.DOTALL,
+    )
     # Summary
     out = out.replace(
         '<div class="professional-summary"><!-- PLACEHOLDER: Professional Summary (injected by Phase 3.5a) --></div>',

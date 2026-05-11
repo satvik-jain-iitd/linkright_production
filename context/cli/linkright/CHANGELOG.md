@@ -11,6 +11,23 @@
 - **HTML template:** when location is empty after validation, renders `<span>{dates}</span>` alone — no leading ` | ` separator, no orphan artifacts.
 - **Prompt hardening (PHASE_1_2_SYSTEM):** location field schema hint updated to "VERBATIM from a role-header line ONLY (format: Company | Location | Dates)". Parsing rules section adds explicit instruction: location MUST appear in a role-header line; body-context mentions do not validate; never invent.
 
+## [0.5.13] — 2026-05-11
+
+### Fixed
+- **S1.10 (redo on canonical repo):** LinkedIn and Portfolio in resume header now render as
+  anchor-text hyperlinks (`<a href="...">LinkedIn</a>` / `<a href="...">Portfolio</a>`)
+  instead of full URL strings. Applies to the mid-career template via the `step_14`
+  post-processor path in `orchestrator.py`, and via the `assemble_html` MCP tool
+  `_create_contact_link` for agent-driven usage. `TEMPLATE_PATH` is hardcoded to
+  `cv-a4-mid-career.html` — other templates reached via `assemble_html` MCP only.
+  Anchor color uses `var(--ui-text-primary-color)` (resolves to body black) per
+  brand-design-spec rules 2+4 — no brand blue (`#4285F4`) on contact text.
+  `re.DOTALL` flag added to S1.10 regex (defensive against newline in URLs).
+  `warnings.warn` fires when fewer than 4 `<!-- PLACEHOLDER -->` markers found.
+  Empty URL → no orphan anchor (S6-2 stripper handles; `_create_contact_link` returns "").
+  URL without scheme → `https://` prepended defensively.
+  35 tests committed at `tests/test_contact_hyperlinks.py`.
+
 ## [0.5.12] — 2026-05-11
 
 ### Fixed
@@ -20,7 +37,6 @@
   3. `RESUME_PARSE_FALLBACK` prompt Education example and format rule updated: example changed from `| Year` to `| 2024`; rule extended with "NEVER write the literal word 'Year' — output only Degree | Institution if no year is present".
 - **DRY**: Inline `re.compile` + `import re as _re` inside `_project_line` hot-path replaced with the shared `_sanitize_year` import from `md_parse`. Single regex source of truth.
 - **Tests**: Added `tests/test_year_sanitization.py` (37 tests) covering all placeholder variants, real-year passthroughs, and integration paths for both Education and Projects parse → render chain. All 37 pass.
-
 
 ## [0.5.11] — 2026-05-10
 
