@@ -237,13 +237,17 @@ _MONTHS = {m.lower(): i for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1
 )}
 
-_CAREER_LEVEL_MIN_YEARS = {
-    "fresher": 0.0,
-    "entry": 1.0,
-    "mid": 3.0,
-    "senior": 6.0,
-    "executive": 10.0,
-}
+def _bucket_from_years(y: float) -> str:
+    if y == 0:
+        return "fresher"
+    if y <= 2.5:
+        return "entry"
+    if y <= 5.5:
+        return "mid"
+    if y <= 9.5:
+        return "senior"
+    return "executive"
+
 
 # S5-1: `profile` field — canonical for selection, priority, bullet distribution.
 # Derived deterministically from `career_level` (after S5-5 validator override)
@@ -1576,71 +1580,12 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
         logbook.append(step, "error", f"JSON parse failed: {e}")
         raise
 
-    # S5-5 / F-R2: B1 career_level consistency check with retry + deterministic
-    # override. If LLM's career_level disagrees with rule-computed bucket, retry
-    # ONCE with violation highlighted. If still wrong, OVERRIDE the field with
-    # the correct bucket (LLM never overrules deterministic computation).
+    # S5.4: career_level always deterministic — computed from total_years, never from LLM.
     total_years = _compute_total_experience_years(parsed.get("companies", []))
-
-    def _bucket_from_years(y: float) -> str:
-        if y == 0:
-            return "fresher"
-        if y <= 2.5:  # boundary 2 with tolerance
-            return "entry"
-        if y <= 5.5:
-            return "mid"
-        if y <= 9.5:
-            return "senior"
-        return "executive"
-
-    def _level_violates(level: str, years: float) -> bool:
-        lv = (level or "").strip().lower()
-        if lv not in _CAREER_LEVEL_MIN_YEARS:
-            return True  # unknown level is a violation
-        return years + 1.0 < _CAREER_LEVEL_MIN_YEARS[lv]
-
-    # S1.1 deterministic guard: total_years==0 ALWAYS means fresher regardless of LLM output.
-    # B1's existing guard (total_years > 0 and _level_violates) never fires at 0, so without
-    # this branch an LLM-hallucinated career_level="entry" for a 0-year candidate would slip through.
-    if total_years == 0 and parsed.get("career_level") != "fresher":
-        logbook.append(step, "eval", f"B1 override: total_years==0 → forced career_level='fresher' (was '{parsed.get('career_level')}')")
+    if total_years == 0:
         parsed["career_level"] = "fresher"
-
-    retry_fired = False
-    override_applied = False
-    if total_years > 0 and _level_violates(parsed.get("career_level"), total_years):
-        expected = _bucket_from_years(total_years)
-        retry_note = (
-            f"RETRY NOTE: your previous response claimed career_level='{parsed.get('career_level')}' "
-            f"but the candidate has only {total_years:.1f} years of work experience. "
-            f"The correct bucket per the Parsing Rules is '{expected}'. Emit exactly that. "
-            f"Keep every other field the same."
-        )
-        logbook.append(
-            step, "eval",
-            f"B1 violation detected: career_level='{parsed.get('career_level')}' vs {total_years:.1f}y; retrying once",
-        )
-        _note_retry(step)
-        retry_fired = True
-        try:
-            parsed_retry, usage_retry = _call_phase_1_2(extra_retry_note=retry_note)
-            usage = usage_retry  # use retry provenance
-            if not _level_violates(parsed_retry.get("career_level"), total_years):
-                parsed = parsed_retry
-            else:
-                # Deterministic override — LLM stubborn; force the correct bucket.
-                parsed = parsed_retry
-                logbook.append(
-                    step, "eval",
-                    f"B1 override: LLM insisted on career_level='{parsed.get('career_level')}' after retry; forcing '{expected}' based on {total_years:.1f}y",
-                )
-                parsed["career_level"] = expected
-                override_applied = True
-        except Exception as e:
-            # Retry LLM failed; override directly on the original parsed dict.
-            logbook.append(step, "eval", f"B1 retry call failed ({e}); applying deterministic override")
-            parsed["career_level"] = expected
-            override_applied = True
+    else:
+        parsed["career_level"] = _bucket_from_years(total_years)
 
     # S5-1: derive profile from (now-validated) career_level deterministically.
     parsed["profile"] = _derive_profile(parsed.get("career_level", "mid"))
@@ -1662,6 +1607,11 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
             if len(new_reqs) > len(reqs):
                 log(f"[step_07 low_reqs retry] lifted {len(reqs)} → {len(new_reqs)} reqs; using retry")
                 parsed = parsed_r
+                # S5.4: re-enforce deterministic career_level — LLM retry must never overwrite it.
+                if total_years == 0:
+                    parsed["career_level"] = "fresher"
+                else:
+                    parsed["career_level"] = _bucket_from_years(total_years)
                 parsed["profile"] = _derive_profile(parsed.get("career_level", "mid"))
         except Exception as exc:
             log(f"[step_07 low_reqs retry] failed ({exc}); keeping original")
@@ -1693,8 +1643,6 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
         json.dumps({
             "parsed": parsed,
             "usage": usage,
-            "b1_retry_fired": retry_fired,
-            "b1_override_applied": override_applied,
         }, indent=2),
         encoding="utf-8",
     )
@@ -1704,10 +1652,6 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
     kw_lower = [k.lower() for k in kw]
     platform_signals = ["platform", "multi-tenan", "sso", "scim", "rbac", "identity", "dashboard"]
     platform_hits = [s for s in platform_signals if any(s in k for k in kw_lower)]
-
-    # Post-retry/override, re-check violation (should be False now)
-    level = (parsed.get("career_level") or "").strip().lower()
-    career_level_violation = _level_violates(parsed.get("career_level"), total_years) if total_years > 0 else False
 
     # B2/F01: scan career_summary for hallucinated years claims.
     career_summary = parsed.get("career_summary") or ""
@@ -1719,13 +1663,6 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
                 break
 
     gaps: list[str] = []
-    if career_level_violation:
-        gaps.append(
-            f"B1/F02: career_level='{level}' requires ≥{_CAREER_LEVEL_MIN_YEARS[level]}y "
-            f"but candidate has {total_years}y (+1 tolerance) — prompt/LLM inflated the level"
-        )
-    elif parsed.get("career_level") not in ("mid", "senior"):
-        gaps.append(f"career_level={parsed.get('career_level')} — expected 'mid' for ~4 yrs")
     if summary_violation:
         gaps.append(
             f"B2/F01: career_summary claims '{summary_violation}' but candidate has "
