@@ -474,6 +474,13 @@ def collect(run_dir: Path, retry_map: Optional[dict[str, int]] = None) -> dict:
         except Exception:
             pass
 
+    # KNOWN GAP (S5.1 — 2026-05-12): step_11_rank now makes one Oracle embed call
+    # per bullet when Oracle is live and JD req embeddings are available. These
+    # per-bullet calls (~15-25 per typical resume) are NOT counted here because
+    # they are fire-and-forget inside orchestrator.py and don't write a JSONL
+    # artifact. The count above therefore under-reports oracle_embed_calls when
+    # S5.1 alignment mode is active. Fix tracked in follow-up S5.x telemetry task.
+
     # Wall time — best-effort from pipeline.log first/last timestamps
     wall_time_s = 0.0
     log_path = logs_dir / "pipeline.log"

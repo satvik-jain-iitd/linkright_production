@@ -3057,10 +3057,14 @@ def step_11_rank(
                 p["_weighted_brs"] = round(p["_weighted_brs"] * (1.0 - 0.15 * penalty), 4)
         # S5.1: blend 70% _weighted_brs + 30% Oracle cosine alignment when available.
         # Each bullet is embedded individually; alignment = max cosine against any JD req.
+        # Fix 5: always set _alignment_score=0.0 in BRS-only path so schema is consistent.
         if _req_embeddings:
             for p in paras:
                 bullet_text = (p.get("text_html") or "").strip()
-                alignment = 0.0
+                # Fix 4: skip embed call entirely for empty bullets.
+                if not bullet_text:
+                    p["_alignment_score"] = 0.0
+                    continue
                 try:
                     bullet_vecs = _oracle_embed([bullet_text])
                     if bullet_vecs and bullet_vecs[0]:
@@ -3070,10 +3074,21 @@ def step_11_rank(
                             for req_emb in _req_embeddings
                             if req_emb
                         ) if _req_embeddings else 0.0
+                        # Fix 1: only write blend when Oracle successfully returned an
+                        # embedding. If the call fails or returns empty, leave
+                        # _weighted_brs at its BRS-only value and set score to 0.0.
+                        p["_alignment_score"] = round(alignment, 4)
+                        p["_weighted_brs"] = round(0.70 * p["_weighted_brs"] + 0.30 * alignment, 4)
+                    else:
+                        # Oracle returned but with empty/None embedding — skip blend.
+                        p["_alignment_score"] = 0.0
                 except (_OracleUnavailable, Exception):
-                    alignment = 0.0
-                p["_alignment_score"] = round(alignment, 4)
-                p["_weighted_brs"] = round(0.70 * p["_weighted_brs"] + 0.30 * alignment, 4)
+                    # Oracle unavailable mid-loop — skip blend, preserve BRS score.
+                    p["_alignment_score"] = 0.0
+        else:
+            # BRS-only mode: no Oracle embeddings available.
+            for p in paras:
+                p["_alignment_score"] = 0.0
         paras.sort(key=lambda p: p["_weighted_brs"], reverse=True)
         ranked[co] = paras
 
