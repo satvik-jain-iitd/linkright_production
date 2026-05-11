@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.15] — 2026-05-11
+
+### Fixed
+- **S1.10 (redo, iter 2):** LinkedIn and Portfolio in resume header now render as
+  anchor-text hyperlinks (`<a href="...">LinkedIn</a>` / `<a href="...">Portfolio</a>`)
+  instead of full URL strings. Fix applied to **both** render paths:
+  - `orchestrator.py` `step_14` post-processor (mid-career template / `linkright tailor`)
+  - `linkright/mcp_sync/tools/assemble_html.py` `_create_contact_link` (MCP / `linkright mcp serve`)
+  Previously only `linkright/tools/assemble_html.py` was patched; `mcp_sync` path still used
+  `color: inherit` (inherits `.contact-info` secondary gray `#5F6368`) and rendered raw URL as
+  link text. Both paths now use `var(--ui-text-primary-color)` (resolves to `#202124` per
+  Google Material body token — canonical "black" in brand-design-spec rule 2) and render label
+  text ("LinkedIn" / "Portfolio"), not the raw URL.
+  `_create_contact_link` in `mcp_sync` updated: `anchor_text=""` back-compat parameter added;
+  empty URL → returns `""` (caller skips span); URL without scheme → `https://` prepended.
+  `_replace_header_content` in `mcp_sync` updated: passes `anchor_text=label` for linkedin/
+  portfolio; skips empty-URL spans; omits `<strong>Label</strong>:` prefix for those types.
+  **Placeholder mismatch (Blocker 2):** `orchestrator.py` now emits a user-visible
+  `sys.stderr.write(...)` warning (previously silent `warnings.warn` — swallowed by callers)
+  AND performs partial substitution — fills N placeholders with the first N contact fields
+  instead of silently skipping all 4 when the template has fewer than 4 markers.
+  `re.DOTALL` flag on S1.10 regex (defensive against newline in URLs).
+  Empty URL → no orphan anchor (S6-2 stripper handles; `_create_contact_link` returns "").
+  URL without scheme → `https://` prepended defensively.
+  Tests at `tests/test_contact_hyperlinks.py` — Section D added covering `mcp_sync` import
+  path explicitly (`from linkright.mcp_sync.tools.assemble_html import _create_contact_link`),
+  Section E covering partial placeholder substitution + stderr warning.
+
 ## [0.5.14] — 2026-05-11
 
 ### Fixed

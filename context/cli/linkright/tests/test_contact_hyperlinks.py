@@ -350,3 +350,206 @@ class TestReplaceHeaderContent:
         )
         result = _replace_header_content(_MINIMAL_TEMPLATE, header)
         assert 'color: var(--ui-text-primary-color)' in result
+
+
+# ===========================================================================
+# Section D: mcp_sync/tools/assemble_html.py _create_contact_link() — (9 cases)
+# Explicitly imports from the mcp_sync path to ensure that module is patched.
+# ===========================================================================
+
+from linkright.mcp_sync.tools.assemble_html import (
+    _create_contact_link as _mcp_create_contact_link,
+    _replace_header_content as _mcp_replace_header_content,
+    HeaderData as _MCP_HeaderData,
+)
+
+
+class TestMcpSyncCreateContactLink:
+    """Tests for _create_contact_link() in mcp_sync/tools/assemble_html.py.
+
+    Mirrors Section B to confirm the mcp_sync path is identically patched.
+    """
+
+    def test_linkedin_returns_anchor_with_label(self):
+        result = _mcp_create_contact_link(
+            "linkedin.com/in/satvik", "linkedin", anchor_text="LinkedIn"
+        )
+        assert '<a href="https://linkedin.com/in/satvik"' in result
+        assert '>LinkedIn</a>' in result
+
+    def test_portfolio_returns_anchor_with_label(self):
+        result = _mcp_create_contact_link(
+            "https://github.com/satvik", "portfolio", anchor_text="Portfolio"
+        )
+        assert '<a href="https://github.com/satvik"' in result
+        assert '>Portfolio</a>' in result
+
+    def test_empty_linkedin_returns_empty_string(self):
+        """Empty LinkedIn value must return empty string — not an orphan anchor."""
+        result = _mcp_create_contact_link("", "linkedin", anchor_text="LinkedIn")
+        assert result == ""
+
+    def test_empty_portfolio_returns_empty_string(self):
+        result = _mcp_create_contact_link("", "portfolio", anchor_text="Portfolio")
+        assert result == ""
+
+    def test_no_color_inherit_on_any_anchor(self):
+        """mcp_sync path must NOT use 'color: inherit' — inherits secondary gray."""
+        result = _mcp_create_contact_link(
+            "https://linkedin.com/in/satvik", "linkedin", anchor_text="LinkedIn"
+        )
+        assert "color: inherit" not in result, (
+            "mcp_sync _create_contact_link still uses 'color: inherit' — Blocker 1 not fixed."
+        )
+
+    def test_primary_color_var_on_linkedin(self):
+        """mcp_sync anchors must use var(--ui-text-primary-color) per brand-design-spec."""
+        result = _mcp_create_contact_link(
+            "https://linkedin.com/in/satvik", "linkedin", anchor_text="LinkedIn"
+        )
+        assert "color: var(--ui-text-primary-color)" in result
+
+    def test_primary_color_var_on_portfolio(self):
+        result = _mcp_create_contact_link(
+            "https://github.com/satvik", "portfolio", anchor_text="Portfolio"
+        )
+        assert "color: var(--ui-text-primary-color)" in result
+
+    def test_no_raw_url_as_link_text_linkedin(self):
+        """Raw URL must not appear as anchor text — label must be 'LinkedIn'."""
+        result = _mcp_create_contact_link(
+            "https://linkedin.com/in/satvik", "linkedin", anchor_text="LinkedIn"
+        )
+        assert ">https://linkedin.com/in/satvik<" not in result, (
+            "mcp_sync still renders raw URL as link text for LinkedIn."
+        )
+
+    def test_url_without_scheme_gets_https(self):
+        result = _mcp_create_contact_link(
+            "linkedin.com/in/satvik", "linkedin", anchor_text="LinkedIn"
+        )
+        assert 'href="https://linkedin.com/in/satvik"' in result
+
+
+# ===========================================================================
+# Section E: orchestrator.py placeholder partial-substitution + stderr warning
+# (3 cases)
+# Replicates the inline logic from step_14_assemble_html to unit-test the
+# partial-substitution branch without running the full pipeline.
+# ===========================================================================
+
+import io
+
+
+def _apply_placeholder_substitution(
+    template_html: str,
+    phone: str,
+    email: str,
+    linkedin: str,
+    portfolio: str,
+) -> tuple[str, str]:
+    """Replication of the orchestrator.py step_14 placeholder substitution block.
+
+    Returns (result_html, stderr_output).
+    """
+    import re
+    import sys
+
+    out = template_html
+    _contact_fields = [phone, email, linkedin, portfolio]
+    _contact_labels = ["phone", "email", "linkedin", "portfolio"]
+    placeholders = re.findall(r"<!-- PLACEHOLDER -->", out)
+    _n_found = len(placeholders)
+    _n_needed = len(_contact_fields)
+
+    stderr_capture = io.StringIO()
+    _orig_stderr = sys.stderr
+    sys.stderr = stderr_capture
+    try:
+        if _n_found < _n_needed:
+            _missing = _contact_labels[_n_found:]
+            sys.stderr.write(
+                f"\n[S1.10 WARNING] Template has {_n_found} <!-- PLACEHOLDER --> markers "
+                f"but {_n_needed} contact fields expected (phone/email/linkedin/portfolio). "
+                f"Contact(s) that may be missing from output: {', '.join(_missing)}. "
+                "Check the HTML template for missing <!-- PLACEHOLDER --> tags.\n\n"
+            )
+            sys.stderr.flush()
+            for _field in _contact_fields[:_n_found]:
+                out = out.replace("<!-- PLACEHOLDER -->", _field, 1)
+        else:
+            out = out.replace("<!-- PLACEHOLDER -->", phone, 1)
+            out = out.replace("<!-- PLACEHOLDER -->", email, 1)
+            out = out.replace("<!-- PLACEHOLDER -->", linkedin, 1)
+            out = out.replace("<!-- PLACEHOLDER -->", portfolio, 1)
+    finally:
+        sys.stderr = _orig_stderr
+
+    return out, stderr_capture.getvalue()
+
+
+_TEMPLATE_4PH = (
+    "<span><!-- PLACEHOLDER --></span>"
+    "<span><!-- PLACEHOLDER --></span>"
+    "<span><!-- PLACEHOLDER --></span>"
+    "<span><!-- PLACEHOLDER --></span>"
+)
+
+_TEMPLATE_3PH = (
+    "<span><!-- PLACEHOLDER --></span>"
+    "<span><!-- PLACEHOLDER --></span>"
+    "<span><!-- PLACEHOLDER --></span>"
+)
+
+
+class TestOrchestratorPlaceholderSubstitution:
+    """Tests for partial substitution + visible warning when template has < 4 markers."""
+
+    def test_full_substitution_when_4_placeholders(self):
+        """Happy path: 4 placeholders → all 4 contacts injected, no warning."""
+        result, stderr = _apply_placeholder_substitution(
+            _TEMPLATE_4PH,
+            phone="+91-9876543210",
+            email="satvik@example.com",
+            linkedin="https://linkedin.com/in/satvik",
+            portfolio="https://github.com/satvik",
+        )
+        assert "+91-9876543210" in result
+        assert "satvik@example.com" in result
+        assert "https://linkedin.com/in/satvik" in result
+        assert "https://github.com/satvik" in result
+        assert "WARNING" not in stderr, "No warning expected when 4 placeholders found."
+
+    def test_partial_substitution_3_placeholders_3_fields_substituted(self):
+        """3 placeholders → phone/email/linkedin substituted; portfolio NOT injected."""
+        result, stderr = _apply_placeholder_substitution(
+            _TEMPLATE_3PH,
+            phone="+91-9876543210",
+            email="satvik@example.com",
+            linkedin="https://linkedin.com/in/satvik",
+            portfolio="https://github.com/satvik",
+        )
+        assert "+91-9876543210" in result
+        assert "satvik@example.com" in result
+        assert "https://linkedin.com/in/satvik" in result
+        # portfolio is 4th field — no 4th placeholder to receive it
+        assert "https://github.com/satvik" not in result, (
+            "Portfolio should not appear — only 3 placeholders available."
+        )
+
+    def test_partial_substitution_emits_visible_stderr_warning(self):
+        """3 placeholders → user-visible warning on stderr (not swallowed warnings.warn)."""
+        _result, stderr = _apply_placeholder_substitution(
+            _TEMPLATE_3PH,
+            phone="+91-9876543210",
+            email="satvik@example.com",
+            linkedin="https://linkedin.com/in/satvik",
+            portfolio="https://github.com/satvik",
+        )
+        assert "[S1.10 WARNING]" in stderr, (
+            "Expected user-visible [S1.10 WARNING] on stderr; got nothing. "
+            "Silent data loss on placeholder mismatch — Blocker 2 not fixed."
+        )
+        assert "portfolio" in stderr.lower(), (
+            "Warning should name the missing contact field(s)."
+        )

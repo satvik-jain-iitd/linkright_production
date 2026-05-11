@@ -4694,20 +4694,29 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     linkedin = (contact.get("linkedin") or "").strip()
     portfolio = (contact.get("portfolio") or "").strip()
     # Replace one-by-one contact placeholders in order
+    _contact_fields = [phone, email, linkedin, portfolio]
+    _contact_labels = ["phone", "email", "linkedin", "portfolio"]
     placeholders = re.findall(r"<!-- PLACEHOLDER -->", out)
-    if len(placeholders) >= 4:
+    _n_found = len(placeholders)
+    _n_needed = len(_contact_fields)
+    if _n_found < _n_needed:
+        # Partial substitution — fill however many placeholders exist, skip the rest.
+        # Silently missing contacts cause silent data loss; emit a visible user warning.
+        _missing = _contact_labels[_n_found:]
+        sys.stderr.write(
+            f"\n[S1.10 WARNING] Template has {_n_found} <!-- PLACEHOLDER --> markers "
+            f"but {_n_needed} contact fields expected (phone/email/linkedin/portfolio). "
+            f"Contact(s) that may be missing from output: {', '.join(_missing)}. "
+            "Check the HTML template for missing <!-- PLACEHOLDER --> tags.\n\n"
+        )
+        sys.stderr.flush()
+        for _field in _contact_fields[:_n_found]:
+            out = out.replace("<!-- PLACEHOLDER -->", _field, 1)
+    else:
         out = out.replace("<!-- PLACEHOLDER -->", phone, 1)
         out = out.replace("<!-- PLACEHOLDER -->", email, 1)
         out = out.replace("<!-- PLACEHOLDER -->", linkedin, 1)
         out = out.replace("<!-- PLACEHOLDER -->", portfolio, 1)
-    else:
-        import warnings
-        warnings.warn(
-            f"S1.10: expected \u22654 contact <!-- PLACEHOLDER --> markers in template "
-            f"but found {len(placeholders)}. Contact fields may be missing in output. "
-            "Check the HTML template for missing <!-- PLACEHOLDER --> tags.",
-            stacklevel=2,
-        )
     # S1.10 — convert "LinkedIn: {url}" / "Portfolio: {url}" spans to clickable anchors.
     # After placeholder substitution above, the template renders:
     #   <span><b>LinkedIn:</b> https://...</span>  or  <span><b>LinkedIn:</b> </span>
