@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0] - 2026-05-11
+
+### Added
+- **S2.1 (Acronym expansion bank):** Pre-stored 293 acronyms across 12 industry domains; step_14 now resolves known acronyms from the bank before falling back to per-run LLM lookup, cutting LLM calls for common acronyms to zero. (#124)
+- **S2.2 (Domain verb prefix maps):** Pre-stored strong-verb prefix maps for 8 industry domains; step_10 now deterministically replaces weak verbs (worked/helped/assisted/supported/participated/contributed/involved/utilized/leveraged) without an LLM retry loop. Industry inferred from job title at each company. (#125)
+- **S2.3 (Verb taxonomy):** 2D impact-category × industry verb matrix (720 entries, 9 categories × 8 industries × 10 verbs); step_10 now selects verbs matched to both the bullet's achievement type and the candidate's industry domain. S2.2 flat list retained as fallback. (#126)
+
 ## [0.5.24] - 2026-05-11
 
 ### Added
