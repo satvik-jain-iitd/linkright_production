@@ -2,6 +2,11 @@
 
 All notable changes to LinkRight will be documented in this file.
 
+## [0.1.5] - 2026-05-11
+
+### Fixed
+- **Critical (S1.9):** step_07 LLM hallucinated location strings (e.g. "New York, USA") for roles whose source PDF contained no location data. Two-layer fix: (1) PHASE_1_2_SYSTEM prompt now explicitly instructs the LLM that companies[].location MUST appear verbatim in the source text or be empty string; (2) deterministic post-LLM validator strips any location not found verbatim in the raw resume text. HTML template updated to render empty location as "{company} | {dates}" with no leading " | ".
+
 ## [0.1.4] - 2026-05-10
 
 ### Fixed

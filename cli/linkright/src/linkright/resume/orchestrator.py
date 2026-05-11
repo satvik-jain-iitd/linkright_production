@@ -4116,9 +4116,13 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         # real org units like "Payments Risk Squad", not specializations).
         _team = (co.get('team') or '').strip()
         _team_span = f"<span>{_team}</span>" if _team else ""
+        # S1.9: location truth guard — render as "location | dates" only when
+        # location is non-empty; otherwise render "dates" alone (no leading " | ").
+        _loc = (co.get('location') or '').strip()
+        _loc_dates = f"{_loc} | {co.get('date_range', '')}" if _loc else co.get('date_range', '')
         company_html_parts.append(f"""
 <div class="entry">
-  <div class="entry-header"><span>{co_name}</span><span>{co.get('location', '')} | {co.get('date_range', '')}</span></div>
+  <div class="entry-header"><span>{co_name}</span><span>{_loc_dates}</span></div>
   <div class="entry-subhead"><span>{co.get('title', '')}</span>{_team_span}</div>
   {bullet_html}
 </div>
@@ -5023,6 +5027,31 @@ def main():
                 pass
     except Exception as _e_ef:
         log(f"[entity_fidelity] guard error: {_e_ef} — pipeline continues")
+
+    # S1.9 location truth-engine guard (Layer 1b, post entity-fidelity).
+    # Any location string produced by step_07 that does NOT appear verbatim in the
+    # source raw_text is stripped to empty string — it was hallucinated by the LLM.
+    # This is a deterministic post-LLM validator; the prompt rule (AC1) is a first
+    # line of defence but LLMs can still ignore it; this layer catches escapes.
+    try:
+        _stripped_locs: list[str] = []
+        for _co in (parsed_p12.get("companies") or []):
+            _loc = (_co.get("location") or "").strip()
+            if _loc and _loc not in raw_text:
+                _stripped_locs.append(f"{_co.get('name','?')}: {_loc!r} → ''")
+                _co["location"] = ""
+        if _stripped_locs:
+            log(f"[location_truth] stripped {len(_stripped_locs)} hallucinated location(s): {_stripped_locs}")
+            try:
+                logbook.append(
+                    "step_07_location_truth", "filter",
+                    f"stripped {len(_stripped_locs)} hallucinated location(s) not found verbatim in source",
+                    body="\n".join(f"- {s}" for s in _stripped_locs),
+                )
+            except Exception:
+                pass
+    except Exception as _e_loc:
+        log(f"[location_truth] guard error: {_e_loc} — pipeline continues")
 
     # S5-6 / F-NEW-1: step_04 was removed. Phase 1+2 is the single canonical
     # source of JD requirements. No artifact 04 emitted.
