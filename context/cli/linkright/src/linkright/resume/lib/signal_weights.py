@@ -41,7 +41,7 @@ _DEFAULT_MULTIPLIER: float = 1.0
 
 # Valid career levels (mirrors _CAREER_LEVEL_MIN_YEARS in orchestrator.py)
 _VALID_CAREER_LEVELS = frozenset(
-    {"fresher", "early_career", "mid", "senior", "executive"}
+    {"fresher", "early_career", "entry", "mid", "senior", "executive"}
 )
 
 
@@ -105,6 +105,8 @@ def apply_signal_weights(
         The same list (mutated) — caller should sort by "_weighted_brs" DESC.
     """
     cl = (career_level or "").strip().lower()
+    if cl == "entry":
+        cl = "early_career"
     if cl not in _VALID_CAREER_LEVELS:
         cl = "mid"
 

@@ -253,61 +253,76 @@ class TestApplySignalWeightsBehavior:
             assert "_weighted_brs" in bullets[0], f"Missing _weighted_brs for career_level={cl}"
 
 
-# ── (d) Wire-in integration: apply_signal_weights used in orchestrator ────────
-class TestIntegrationOrchestratorWireIn:
-    """Verify apply_signal_weights is imported and used in step_11_rank — not inlined."""
+# ── (d) Wire-in integration: step_11_rank functional calls ───────────────────
+class TestStep11RankSignalWireIn:
+    """Functional integration: step_11_rank uses apply_signal_weights."""
 
-    def test_apply_signal_weights_importable_and_callable(self):
-        from linkright.resume.lib.signal_weights import apply_signal_weights
-        assert callable(apply_signal_weights)
+    def _make_bullet(self, signal: str) -> dict:
+        # Include digits so brs() produces a non-zero score (needed so multipliers have effect)
+        return {
+            "text_html": f"Led {signal} initiative impacting 50 teams across 3 regions saving $2M annually",
+            "signal": signal,
+            "alignment": 0.5,
+        }
 
-    def test_orchestrator_imports_apply_signal_weights(self):
-        """AC6(d): orchestrator.py must import apply_signal_weights from signal_weights."""
-        from pathlib import Path
-        orchestrator_path = (
-            Path(__file__).parent.parent
-            / "src" / "linkright" / "resume" / "orchestrator.py"
-        )
-        src = orchestrator_path.read_text(encoding="utf-8")
-        assert "apply_signal_weights" in src, (
-            "orchestrator.py must import and use apply_signal_weights from signal_weights"
-        )
-        assert "from .lib.signal_weights import load_signal_weights, apply_signal_weights" in src, (
-            "orchestrator.py must have explicit import of both functions from .lib.signal_weights"
-        )
+    def _call_step11(self, monkeypatch, tmp_path, verbose_all, jd_keywords, career_level, weight_matrix=None):
+        import linkright.resume.orchestrator as orch
+        import linkright.resume.lib.logbook as lb
+        monkeypatch.setattr(orch, "ARTIFACTS", tmp_path)
+        monkeypatch.setattr(lb, "_VISION_PATH", tmp_path / "vision.md")
+        from linkright.resume.orchestrator import step_11_rank
+        kwargs = dict(verbose_all=verbose_all, jd_keywords=jd_keywords, career_level=career_level)
+        if weight_matrix is not None:
+            kwargs["weight_matrix"] = weight_matrix
+        return step_11_rank(**kwargs)
 
-    def test_orchestrator_passes_career_level_to_step_11_rank(self):
-        """AC5: call site must pass career_level= kwarg from parsed_p12."""
-        from pathlib import Path
-        orchestrator_path = (
-            Path(__file__).parent.parent
-            / "src" / "linkright" / "resume" / "orchestrator.py"
-        )
-        src = orchestrator_path.read_text(encoding="utf-8")
-        assert 'career_level=parsed_p12.get("career_level"' in src, (
-            "step_11_rank call site must pass career_level= from parsed_p12"
-        )
-
-    def test_step_11_rank_signature_accepts_career_level(self):
-        """AC4: step_11_rank function signature must include career_level parameter."""
-        from pathlib import Path
-        orchestrator_path = (
-            Path(__file__).parent.parent
-            / "src" / "linkright" / "resume" / "orchestrator.py"
-        )
-        src = orchestrator_path.read_text(encoding="utf-8")
-        assert "career_level: str = " in src, (
-            "step_11_rank signature must include career_level parameter with default"
+    def test_executive_influence_bullet_ranks_first_for_executive(self, monkeypatch, tmp_path):
+        """executive-influence bullet should rank above build-execution for executive level."""
+        from linkright.resume.lib.signal_weights import load_signal_weights
+        verbose_all = {
+            "Company A": {
+                "paragraphs": [self._make_bullet("build-execution"), self._make_bullet("executive-influence")],
+                "company_brs": 0.8,
+            }
+        }
+        result = self._call_step11(monkeypatch, tmp_path, verbose_all, ["leadership"], "executive", load_signal_weights())
+        ranked = result["Company A"]
+        assert ranked[0]["signal"] == "executive-influence", (
+            f"Expected executive-influence first, got {ranked[0]['signal']}"
         )
 
-    def test_step_11_rank_uses_weighted_brs_for_sort(self):
-        """Sorting key in step_11_rank must be _weighted_brs, not raw _brs."""
-        from pathlib import Path
-        orchestrator_path = (
-            Path(__file__).parent.parent
-            / "src" / "linkright" / "resume" / "orchestrator.py"
+    def test_build_execution_ranks_first_for_fresher(self, monkeypatch, tmp_path):
+        """build-execution bullet should rank above executive-influence for fresher level."""
+        from linkright.resume.lib.signal_weights import load_signal_weights
+        verbose_all = {
+            "Company A": {
+                "paragraphs": [self._make_bullet("executive-influence"), self._make_bullet("build-execution")],
+                "company_brs": 0.8,
+            }
+        }
+        result = self._call_step11(monkeypatch, tmp_path, verbose_all, [], "fresher", load_signal_weights())
+        ranked = result["Company A"]
+        assert ranked[0]["signal"] == "build-execution", (
+            f"Expected build-execution first, got {ranked[0]['signal']}"
         )
-        src = orchestrator_path.read_text(encoding="utf-8")
-        assert '"_weighted_brs"' in src, (
-            "step_11_rank must sort by _weighted_brs (not raw _brs)"
+
+    def test_injected_weight_matrix_overrides_disk(self, monkeypatch, tmp_path):
+        """weight_matrix parameter is actually used (not disk-loaded matrix)."""
+        from linkright.resume.lib.signal_weights import load_signal_weights
+        disk_matrix = load_signal_weights()
+        # Synthetic matrix: for "mid" level, give build-execution a huge weight
+        # so it beats executive-influence (opposite of normal mid weights)
+        synthetic_matrix = {s: dict(level_map) for s, level_map in disk_matrix.items()}
+        synthetic_matrix["build-execution"]["mid"] = 2.5
+        synthetic_matrix["executive-influence"]["mid"] = 0.5
+        verbose_all = {
+            "Company A": {
+                "paragraphs": [self._make_bullet("executive-influence"), self._make_bullet("build-execution")],
+                "company_brs": 0.8,
+            }
+        }
+        result = self._call_step11(monkeypatch, tmp_path, verbose_all, [], "mid", synthetic_matrix)
+        ranked = result["Company A"]
+        assert ranked[0]["signal"] == "build-execution", (
+            "Injected matrix should have promoted build-execution above executive-influence"
         )
