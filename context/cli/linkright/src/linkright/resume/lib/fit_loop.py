@@ -250,12 +250,6 @@ def apply_strategy(
         bb = parsed_p12.setdefault("bullet_budget", {})
         bb["projects_total"] = min(3, n_projects)
 
-    elif strategy == "L0_trim_skills":
-        # Handled by orchestrator reading skills_max_chars; we just decrement here.
-        # Progressive: 480 → 360 → 240 (each 120c step = ~1 rendered line).
-        current = int(parsed_p12.get("skills_max_chars") or 480)
-        parsed_p12["skills_max_chars"] = max(240, current - 120)
-
     elif strategy == "L1_tighten_width":
         # Lower target_max_cu by 2 CU — signals next width POC pass to trim harder
         override = parsed_p12.setdefault("width_override", {})
