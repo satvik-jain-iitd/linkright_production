@@ -3086,6 +3086,24 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
         except Exception:
             pass
 
+    # S1.6: strip trailing punctuation residues (,. .. ;; ,, trailing-comma etc.)
+    # Anchored to end-of-string so mid-sentence punctuation is never disturbed.
+    # AC3: clean single "." at end is preserved (,. → . then no more rules fire).
+    def _clean_trailing_punct(html: str) -> str:
+        h = html or ""
+        h = re.sub(r",\.+\s*$", ".", h)      # ,. or ,.. → .
+        h = re.sub(r"\.+,\s*$", ".", h)       # ., or .., → .
+        h = re.sub(r"\.{2,}\s*$", ".", h)     # .. or ... → .
+        h = re.sub(r";{2,}\s*$", ";", h)      # ;; → ;
+        h = re.sub(r",{2,}\s*$", ",", h)      # ,, → ,
+        h = re.sub(r",\s*$", "", h)            # trailing stray comma → remove
+        h = re.sub(r"\s+([.,;])$", r"\1", h)  # trailing ' .' / ' ,' → strip space
+        return h.rstrip()
+
+    for _co, _bullets in output.items():
+        for _b in _bullets:
+            _b["text_html"] = _clean_trailing_punct(_b.get("text_html", "") or "")
+
     out_path = ARTIFACTS / "12_condensed_bullets.json"
     out_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
