@@ -267,10 +267,23 @@ def ingest_from_markdown(
     """
     if llm_call_fn is None:
         # Import here to allow tests to bypass without LLM keys
+        # AC6 / per NEVER-agent-mode-for-hypothesis-tests memory: always force direct mode.
+        # If LR_LLM_MODE=agent is set globally, it would route through agent_chat (Claude
+        # subscription billing). Override to "direct" for this function to prevent accidental
+        # per-token charges on bulk markdown ingest.
+        import os as _os
         from ..llm.direct import chat_with_fallback as _fallback
-        llm_call_fn = lambda sys_, usr: _fallback(  # noqa: E731
-            sys_, usr, temperature=0.2, max_tokens=2000
-        )
+        _saved_mode = _os.environ.get("LR_LLM_MODE", "")
+
+        def llm_call_fn(sys_: str, usr: str) -> tuple[str, dict]:  # noqa: E731
+            _os.environ["LR_LLM_MODE"] = "direct"
+            try:
+                return _fallback(sys_, usr, temperature=0.2, max_tokens=2000)
+            finally:
+                if _saved_mode:
+                    _os.environ["LR_LLM_MODE"] = _saved_mode
+                else:
+                    _os.environ.pop("LR_LLM_MODE", None)
 
     md_text = md_path.read_text(encoding="utf-8", errors="replace")
     chunks = split_into_chunks(md_text)

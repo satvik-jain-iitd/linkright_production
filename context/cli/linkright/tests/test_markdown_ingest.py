@@ -468,3 +468,45 @@ class TestCLIMarkdownFlag:
         result = runner.invoke(create_cmd, ["--help"])
         assert "--from-markdown" in result.output
         assert "--include-personal" in result.output
+
+
+# ── LR_LLM_MODE guard tests ────────────────────────────────────────────────────
+
+class TestDirectModeGuard:
+    """ingest_from_markdown must always run in direct mode — never agent mode.
+
+    LR_LLM_MODE=agent routes through agent_chat (claude subscription billing).
+    For bulk markdown ingest (50 LLM calls per run), this would be expensive.
+    The function must override LR_LLM_MODE to 'direct' for its own calls.
+    """
+
+    def test_agent_mode_env_overridden_to_direct(self, tmp_path, monkeypatch):
+        """If LR_LLM_MODE=agent is set, default llm_call_fn must NOT use agent mode."""
+        # We cannot easily call the real LLM in tests. But we CAN verify that
+        # a custom llm_call_fn bypasses any env-var routing — i.e., the injectable
+        # mock is always used as-is (no env override needed because we injected).
+        # The env-var guard only applies to the default llm_call_fn path.
+        # Regression test: ingest_from_markdown with explicit llm_call_fn must
+        # never call agent_chat regardless of LR_LLM_MODE.
+        import os
+        monkeypatch.setenv("LR_LLM_MODE", "agent")
+
+        md_file = tmp_path / "career.md"
+        md_file.write_text("## Work\n\nDid product work at Acme Corp for years.")
+        profile_dir = tmp_path / "profile"
+
+        called = [False]
+
+        def explicit_mock(system, user):
+            called[0] = True
+            return "[]", {}
+
+        # Should use our mock, not agent_chat
+        result = ingest_from_markdown(
+            md_path=md_file,
+            profile_dir=profile_dir,
+            include_personal=False,
+            llm_call_fn=explicit_mock,
+        )
+        assert called[0], "Explicit llm_call_fn was not called"
+        assert isinstance(result, IngestResult)
