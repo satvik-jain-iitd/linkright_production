@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.16] — 2026-05-11
+
+### Fixed
+- **PKG-1 REGRESSION (CRITICAL):** HTML resume templates (`resume/templates/*.html`, `templates/*.html`) were re-dropped from the wheel during PR #112's rebase — `package-data` entry from PR #109 (v0.5.13) was inadvertently reverted. v0.5.13/0.5.14/0.5.15 wheels all crash at step 14 with `FileNotFoundError: cv-a4-mid-career.html`. This hotfix restores `"resume/templates/**", "templates/**"` to `[tool.setuptools.package-data]`. Verified locally: wheel built from this commit contains all 4 HTML templates under `linkright/resume/templates/` + the standard template under `linkright/templates/`.
+
 ## [0.5.15] — 2026-05-11
 
 ### Fixed
