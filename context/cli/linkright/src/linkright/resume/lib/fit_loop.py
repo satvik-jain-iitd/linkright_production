@@ -183,11 +183,14 @@ def choose_strategy(
             return "E1_expand_bullets"
         if iter_n == 1:
             n_projects = len(parsed_p12.get("projects", []))
-            if n_projects > 0:
+            # E2 guarded to util_pct < 75 — confident headroom only. Above 75%
+            # the projects section risks tipping over 1-page; E_accept is safer.
+            util_pct = fit_result.get("util_pct", 0.0)
+            if n_projects > 0 and util_pct < 75.0:
                 return "E2_surface_projects"
-        # No more expand options — accept underflow rather than shrinking an
-        # already-sparse resume. If E2 caused overflow, util_underflow will be
-        # False on the next iteration and the shrink path fires correctly.
+        # No more expand options — signal acceptance so the orchestrator can
+        # break immediately (no wasted re-render). util_underflow is accepted
+        # as "best achievable" at this page density.
         return "E_accept"
 
     # ── SHRINK PATH ──────────────────────────────────────────────────────────

@@ -277,8 +277,13 @@ class TestApplyStrategyEAccept:
         assert parsed == parsed_before, "E_accept must not mutate parsed_p12"
         assert condensed == condensed_before, "E_accept must not mutate condensed"
 
-    def test_choose_strategy_returns_e_accept_iter2_underflow(self):
-        """iter_n=2 + underflow → E_accept (exhaust expand, don't shrink)."""
+    def test_e_accept_at_iter1_no_projects(self):
+        """iter_n=1 + underflow + no projects → E_accept (actual production path).
+
+        This is the realistic scenario: E1 fired at iter_n=0, E2 skipped
+        because no projects, E_accept returned at iter_n=1 so the orchestrator
+        breaks without a wasted re-render.
+        """
         from linkright.resume.lib.fit_loop import choose_strategy
         fit = {
             "page_count": 1, "any_wrap": False, "wrap_bullets": [],
@@ -292,7 +297,27 @@ class TestApplyStrategyEAccept:
             "bullet_budget": {"company_1_total": 6},
             "skills_max_chars": 480,
         }
-        strategy = choose_strategy(fit, parsed, {}, iter_n=2)
+        strategy = choose_strategy(fit, parsed, {}, iter_n=1)
         assert strategy == "E_accept", (
-            f"iter_n=2 underflow with no projects must return E_accept, got {strategy!r}"
+            f"iter_n=1 underflow with no projects must return E_accept, got {strategy!r}"
+        )
+
+    def test_e2_blocked_above_75pct(self):
+        """E2 must not fire when util_pct >= 75 — too close to 1-page limit."""
+        from linkright.resume.lib.fit_loop import choose_strategy
+        fit = {
+            "page_count": 1, "any_wrap": False, "wrap_bullets": [],
+            "util_pct": 78.0, "util_overflow": False, "util_underflow": True,
+            "success": False,
+        }
+        parsed = {
+            "companies": [{"name": "A"}],
+            "projects": [{"title": "P1"}, {"title": "P2"}],
+            "dropped_sections": [],
+            "bullet_budget": {"company_1_total": 6},
+            "skills_max_chars": 480,
+        }
+        strategy = choose_strategy(fit, parsed, {}, iter_n=1)
+        assert strategy == "E_accept", (
+            f"util_pct=78 (≥75) with projects must return E_accept not E2, got {strategy!r}"
         )

@@ -5572,6 +5572,10 @@ def main():
             fit_result, parsed_p12, condensed, fit_iter
         )
         iter_log["strategy_chosen"] = strategy
+        if strategy == "E_accept":
+            # Underflow accepted — no mutation needed, don't burn another render.
+            log(f"[fit_iter {fit_iter}] E_accept: underflow accepted, exiting loop")
+            break
         fit_loop.apply_strategy(strategy, parsed_p12, condensed)
         log(f"[fit_iter {fit_iter}] applying {strategy} for next iter")
 
