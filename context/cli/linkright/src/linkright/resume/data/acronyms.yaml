@@ -1,0 +1,1063 @@
+# LinkRight Acronym Expansion Bank — v1.0 (S2.1)
+# 250+ entries across 12 industry domains.
+# Format: ACRONYM: {expansion: "Full Phrase", domain: "domain_key"}
+# Domain keys: tech, cloud, devops, data, AI, security, business, product, healthcare, marketing, HR, finance
+
+# ─── TECH ──────────────────────────────────────────────────────────────────────
+API:
+  expansion: Application Programming Interface
+  domain: tech
+SDK:
+  expansion: Software Development Kit
+  domain: tech
+REST:
+  expansion: Representational State Transfer
+  domain: tech
+HTTP:
+  expansion: Hypertext Transfer Protocol
+  domain: tech
+HTTPS:
+  expansion: Hypertext Transfer Protocol Secure
+  domain: tech
+JSON:
+  expansion: JavaScript Object Notation
+  domain: tech
+XML:
+  expansion: Extensible Markup Language
+  domain: tech
+SQL:
+  expansion: Structured Query Language
+  domain: tech
+NoSQL:
+  expansion: Not Only SQL
+  domain: tech
+ORM:
+  expansion: Object-Relational Mapping
+  domain: tech
+MVC:
+  expansion: Model-View-Controller
+  domain: tech
+TDD:
+  expansion: Test-Driven Development
+  domain: tech
+BDD:
+  expansion: Behavior-Driven Development
+  domain: tech
+SLA:
+  expansion: Service Level Agreement
+  domain: tech
+SLO:
+  expansion: Service Level Objective
+  domain: tech
+RPO:
+  expansion: Recovery Point Objective
+  domain: tech
+RTO:
+  expansion: Recovery Time Objective
+  domain: tech
+MTTR:
+  expansion: Mean Time To Recovery
+  domain: tech
+SaaS:
+  expansion: Software as a Service
+  domain: tech
+PaaS:
+  expansion: Platform as a Service
+  domain: tech
+IaaS:
+  expansion: Infrastructure as a Service
+  domain: tech
+JWT:
+  expansion: JSON Web Token
+  domain: tech
+OAuth:
+  expansion: Open Authorization
+  domain: tech
+SSO:
+  expansion: Single Sign-On
+  domain: tech
+RBAC:
+  expansion: Role-Based Access Control
+  domain: tech
+LDAP:
+  expansion: Lightweight Directory Access Protocol
+  domain: tech
+DNS:
+  expansion: Domain Name System
+  domain: tech
+TCP:
+  expansion: Transmission Control Protocol
+  domain: tech
+UDP:
+  expansion: User Datagram Protocol
+  domain: tech
+TLS:
+  expansion: Transport Layer Security
+  domain: tech
+SSL:
+  expansion: Secure Sockets Layer
+  domain: tech
+CDN:
+  expansion: Content Delivery Network
+  domain: tech
+gRPC:
+  expansion: Google Remote Procedure Call
+  domain: tech
+GraphQL:
+  expansion: Graph Query Language
+  domain: tech
+WebSocket:
+  expansion: WebSocket Protocol
+  domain: tech
+HTML:
+  expansion: HyperText Markup Language
+  domain: tech
+CSS:
+  expansion: Cascading Style Sheets
+  domain: tech
+UI:
+  expansion: User Interface
+  domain: tech
+UX:
+  expansion: User Experience
+  domain: tech
+CLI:
+  expansion: Command-Line Interface
+  domain: tech
+IDE:
+  expansion: Integrated Development Environment
+  domain: tech
+OS:
+  expansion: Operating System
+  domain: tech
+CPU:
+  expansion: Central Processing Unit
+  domain: tech
+GPU:
+  expansion: Graphics Processing Unit
+  domain: tech
+RAM:
+  expansion: Random Access Memory
+  domain: tech
+POSIX:
+  expansion: Portable Operating System Interface
+  domain: tech
+UTF:
+  expansion: Unicode Transformation Format
+  domain: tech
+ASCII:
+  expansion: American Standard Code for Information Interchange
+  domain: tech
+CRUD:
+  expansion: Create Read Update Delete
+  domain: tech
+OOP:
+  expansion: Object-Oriented Programming
+  domain: tech
+FP:
+  expansion: Functional Programming
+  domain: tech
+SOLID:
+  expansion: Single Responsibility Open-Closed Liskov Substitution Interface Segregation Dependency Inversion
+  domain: tech
+DDD:
+  expansion: Domain-Driven Design
+  domain: tech
+CQRS:
+  expansion: Command Query Responsibility Segregation
+  domain: tech
+P2P:
+  expansion: Peer-to-Peer
+  domain: tech
+IoT:
+  expansion: Internet of Things
+  domain: tech
+AR:
+  expansion: Augmented Reality
+  domain: tech
+VR:
+  expansion: Virtual Reality
+  domain: tech
+PWA:
+  expansion: Progressive Web App
+  domain: tech
+SPA:
+  expansion: Single-Page Application
+  domain: tech
+SSR:
+  expansion: Server-Side Rendering
+  domain: tech
+CSR:
+  expansion: Client-Side Rendering
+  domain: tech
+
+# ─── CLOUD ─────────────────────────────────────────────────────────────────────
+AWS:
+  expansion: Amazon Web Services
+  domain: cloud
+GCP:
+  expansion: Google Cloud Platform
+  domain: cloud
+GKE:
+  expansion: Google Kubernetes Engine
+  domain: cloud
+EKS:
+  expansion: Elastic Kubernetes Service
+  domain: cloud
+ECS:
+  expansion: Elastic Container Service
+  domain: cloud
+EC2:
+  expansion: Elastic Compute Cloud
+  domain: cloud
+S3:
+  expansion: Simple Storage Service
+  domain: cloud
+RDS:
+  expansion: Relational Database Service
+  domain: cloud
+IAM:
+  expansion: Identity and Access Management
+  domain: cloud
+VPC:
+  expansion: Virtual Private Cloud
+  domain: cloud
+AKS:
+  expansion: Azure Kubernetes Service
+  domain: cloud
+CIDR:
+  expansion: Classless Inter-Domain Routing
+  domain: cloud
+SQS:
+  expansion: Simple Queue Service
+  domain: cloud
+SNS:
+  expansion: Simple Notification Service
+  domain: cloud
+Lambda:
+  expansion: AWS Lambda Serverless Functions
+  domain: cloud
+CloudFront:
+  expansion: Amazon CloudFront CDN
+  domain: cloud
+Route53:
+  expansion: Amazon Route 53 DNS Service
+  domain: cloud
+ELB:
+  expansion: Elastic Load Balancer
+  domain: cloud
+ALB:
+  expansion: Application Load Balancer
+  domain: cloud
+NLB:
+  expansion: Network Load Balancer
+  domain: cloud
+ACM:
+  expansion: AWS Certificate Manager
+  domain: cloud
+KMS:
+  expansion: Key Management Service
+  domain: cloud
+EBS:
+  expansion: Elastic Block Store
+  domain: cloud
+EFS:
+  expansion: Elastic File System
+  domain: cloud
+EMR:
+  expansion: Elastic MapReduce
+  domain: cloud
+Fargate:
+  expansion: AWS Fargate Serverless Containers
+  domain: cloud
+
+# ─── DEVOPS ────────────────────────────────────────────────────────────────────
+K8s:
+  expansion: Kubernetes
+  domain: devops
+CI:
+  expansion: Continuous Integration
+  domain: devops
+CD:
+  expansion: Continuous Deployment
+  domain: devops
+IaC:
+  expansion: Infrastructure as Code
+  domain: devops
+GitOps:
+  expansion: Git Operations
+  domain: devops
+SRE:
+  expansion: Site Reliability Engineering
+  domain: devops
+DORA:
+  expansion: DevOps Research and Assessment
+  domain: devops
+MTBF:
+  expansion: Mean Time Between Failures
+  domain: devops
+APM:
+  expansion: Application Performance Monitoring
+  domain: devops
+SIEM:
+  expansion: Security Information and Event Management
+  domain: devops
+OKR:
+  expansion: Objectives and Key Results
+  domain: devops
+KPI:
+  expansion: Key Performance Indicator
+  domain: devops
+P99:
+  expansion: 99th Percentile Latency
+  domain: devops
+P95:
+  expansion: 95th Percentile Latency
+  domain: devops
+P50:
+  expansion: 50th Percentile Latency
+  domain: devops
+HELM:
+  expansion: Helm Kubernetes Package Manager
+  domain: devops
+HPA:
+  expansion: Horizontal Pod Autoscaler
+  domain: devops
+VPA:
+  expansion: Vertical Pod Autoscaler
+  domain: devops
+PVC:
+  expansion: Persistent Volume Claim
+  domain: devops
+CRD:
+  expansion: Custom Resource Definition
+  domain: devops
+YAML:
+  expansion: Yet Another Markup Language
+  domain: devops
+TF:
+  expansion: Terraform Infrastructure as Code
+  domain: devops
+Ansible:
+  expansion: Ansible Configuration Management
+  domain: devops
+Jenkins:
+  expansion: Jenkins Continuous Integration Server
+  domain: devops
+ArgoCD:
+  expansion: Argo Continuous Delivery
+  domain: devops
+Prometheus:
+  expansion: Prometheus Monitoring System
+  domain: devops
+Grafana:
+  expansion: Grafana Observability Dashboard
+  domain: devops
+ELK:
+  expansion: Elasticsearch Logstash Kibana
+  domain: devops
+OTEL:
+  expansion: OpenTelemetry Observability Framework
+  domain: devops
+
+# ─── DATA ──────────────────────────────────────────────────────────────────────
+ETL:
+  expansion: Extract Transform Load
+  domain: data
+ELT:
+  expansion: Extract Load Transform
+  domain: data
+DWH:
+  expansion: Data Warehouse
+  domain: data
+OLAP:
+  expansion: Online Analytical Processing
+  domain: data
+OLTP:
+  expansion: Online Transaction Processing
+  domain: data
+CDC:
+  expansion: Change Data Capture
+  domain: data
+ML:
+  expansion: Machine Learning
+  domain: data
+MLOps:
+  expansion: Machine Learning Operations
+  domain: data
+NLP:
+  expansion: Natural Language Processing
+  domain: data
+AUC:
+  expansion: Area Under the Curve
+  domain: data
+ROC:
+  expansion: Receiver Operating Characteristic
+  domain: data
+F1:
+  expansion: F1 Score
+  domain: data
+BLEU:
+  expansion: Bilingual Evaluation Understudy
+  domain: data
+ROUGE:
+  expansion: Recall-Oriented Understudy for Gisting Evaluation
+  domain: data
+DNN:
+  expansion: Deep Neural Network
+  domain: data
+CNN:
+  expansion: Convolutional Neural Network
+  domain: data
+RNN:
+  expansion: Recurrent Neural Network
+  domain: data
+LSTM:
+  expansion: Long Short-Term Memory
+  domain: data
+GAN:
+  expansion: Generative Adversarial Network
+  domain: data
+VAE:
+  expansion: Variational Autoencoder
+  domain: data
+KNN:
+  expansion: K-Nearest Neighbors
+  domain: data
+SVM:
+  expansion: Support Vector Machine
+  domain: data
+XGBoost:
+  expansion: Extreme Gradient Boosting
+  domain: data
+GBM:
+  expansion: Gradient Boosting Machine
+  domain: data
+BI:
+  expansion: Business Intelligence
+  domain: data
+HDFS:
+  expansion: Hadoop Distributed File System
+  domain: data
+Spark:
+  expansion: Apache Spark Data Processing
+  domain: data
+Kafka:
+  expansion: Apache Kafka Event Streaming
+  domain: data
+Flink:
+  expansion: Apache Flink Stream Processing
+  domain: data
+dbt:
+  expansion: Data Build Tool
+  domain: data
+DAG:
+  expansion: Directed Acyclic Graph
+  domain: data
+MDM:
+  expansion: Master Data Management
+  domain: data
+PII:
+  expansion: Personally Identifiable Information
+  domain: data
+
+# ─── AI ────────────────────────────────────────────────────────────────────────
+LLM:
+  expansion: Large Language Model
+  domain: AI
+RAG:
+  expansion: Retrieval-Augmented Generation
+  domain: AI
+RLHF:
+  expansion: Reinforcement Learning from Human Feedback
+  domain: AI
+SFT:
+  expansion: Supervised Fine-Tuning
+  domain: AI
+PEFT:
+  expansion: Parameter-Efficient Fine-Tuning
+  domain: AI
+LoRA:
+  expansion: Low-Rank Adaptation
+  domain: AI
+MoE:
+  expansion: Mixture of Experts
+  domain: AI
+CoT:
+  expansion: Chain of Thought
+  domain: AI
+ToT:
+  expansion: Tree of Thought
+  domain: AI
+AGI:
+  expansion: Artificial General Intelligence
+  domain: AI
+ASI:
+  expansion: Artificial Super Intelligence
+  domain: AI
+NLU:
+  expansion: Natural Language Understanding
+  domain: AI
+NLG:
+  expansion: Natural Language Generation
+  domain: AI
+OCR:
+  expansion: Optical Character Recognition
+  domain: AI
+ASR:
+  expansion: Automatic Speech Recognition
+  domain: AI
+TTS:
+  expansion: Text-to-Speech
+  domain: AI
+RL:
+  expansion: Reinforcement Learning
+  domain: AI
+PPO:
+  expansion: Proximal Policy Optimization
+  domain: AI
+DPO:
+  expansion: Direct Preference Optimization
+  domain: AI
+GPT:
+  expansion: Generative Pre-trained Transformer
+  domain: AI
+BERT:
+  expansion: Bidirectional Encoder Representations from Transformers
+  domain: AI
+T5:
+  expansion: Text-to-Text Transfer Transformer
+  domain: AI
+ViT:
+  expansion: Vision Transformer
+  domain: AI
+CLIP:
+  expansion: Contrastive Language-Image Pre-training
+  domain: AI
+DALL-E:
+  expansion: DALL-E Image Generation Model
+  domain: AI
+VLM:
+  expansion: Vision-Language Model
+  domain: AI
+SLM:
+  expansion: Small Language Model
+  domain: AI
+QLoRA:
+  expansion: Quantized Low-Rank Adaptation
+  domain: AI
+FLAN:
+  expansion: Fine-tuned Language Model
+  domain: AI
+KV:
+  expansion: Key-Value Cache
+  domain: AI
+
+# ─── SECURITY ──────────────────────────────────────────────────────────────────
+AML:
+  expansion: Anti-Money Laundering
+  domain: security
+KYC:
+  expansion: Know Your Customer
+  domain: security
+PCI:
+  expansion: Payment Card Industry
+  domain: security
+GDPR:
+  expansion: General Data Protection Regulation
+  domain: security
+HIPAA:
+  expansion: Health Insurance Portability and Accountability Act
+  domain: security
+SOC2:
+  expansion: System and Organization Controls 2
+  domain: security
+ISO27001:
+  expansion: ISO 27001 Information Security Standard
+  domain: security
+WAF:
+  expansion: Web Application Firewall
+  domain: security
+SOC:
+  expansion: Security Operations Center
+  domain: security
+IDS:
+  expansion: Intrusion Detection System
+  domain: security
+IPS:
+  expansion: Intrusion Prevention System
+  domain: security
+VPN:
+  expansion: Virtual Private Network
+  domain: security
+MFA:
+  expansion: Multi-Factor Authentication
+  domain: security
+2FA:
+  expansion: Two-Factor Authentication
+  domain: security
+ZTA:
+  expansion: Zero Trust Architecture
+  domain: security
+OWASP:
+  expansion: Open Web Application Security Project
+  domain: security
+CVE:
+  expansion: Common Vulnerabilities and Exposures
+  domain: security
+CVSS:
+  expansion: Common Vulnerability Scoring System
+  domain: security
+DLP:
+  expansion: Data Loss Prevention
+  domain: security
+PKI:
+  expansion: Public Key Infrastructure
+  domain: security
+SAML:
+  expansion: Security Assertion Markup Language
+  domain: security
+XSS:
+  expansion: Cross-Site Scripting
+  domain: security
+CSRF:
+  expansion: Cross-Site Request Forgery
+  domain: security
+SQLi:
+  expansion: SQL Injection
+  domain: security
+SSRF:
+  expansion: Server-Side Request Forgery
+  domain: security
+RCE:
+  expansion: Remote Code Execution
+  domain: security
+IAB:
+  expansion: Internet Advertising Bureau
+  domain: security
+CASB:
+  expansion: Cloud Access Security Broker
+  domain: security
+SOAR:
+  expansion: Security Orchestration Automation and Response
+  domain: security
+ZTNA:
+  expansion: Zero Trust Network Access
+  domain: security
+
+# ─── BUSINESS ──────────────────────────────────────────────────────────────────
+PnL:
+  expansion: Profit and Loss
+  domain: business
+ARR:
+  expansion: Annual Recurring Revenue
+  domain: business
+MRR:
+  expansion: Monthly Recurring Revenue
+  domain: business
+CAC:
+  expansion: Customer Acquisition Cost
+  domain: business
+LTV:
+  expansion: Lifetime Value
+  domain: business
+NPS:
+  expansion: Net Promoter Score
+  domain: business
+CSAT:
+  expansion: Customer Satisfaction Score
+  domain: business
+ARPU:
+  expansion: Average Revenue Per User
+  domain: business
+DAU:
+  expansion: Daily Active Users
+  domain: business
+MAU:
+  expansion: Monthly Active Users
+  domain: business
+WoW:
+  expansion: Week-over-Week
+  domain: business
+MoM:
+  expansion: Month-over-Month
+  domain: business
+QoQ:
+  expansion: Quarter-over-Quarter
+  domain: business
+YoY:
+  expansion: Year-over-Year
+  domain: business
+ROI:
+  expansion: Return on Investment
+  domain: business
+EBITDA:
+  expansion: Earnings Before Interest Taxes Depreciation and Amortization
+  domain: business
+IPO:
+  expansion: Initial Public Offering
+  domain: business
+GTM:
+  expansion: Go-to-Market
+  domain: business
+TAM:
+  expansion: Total Addressable Market
+  domain: business
+SAM:
+  expansion: Serviceable Addressable Market
+  domain: business
+SOM:
+  expansion: Serviceable Obtainable Market
+  domain: business
+B2B:
+  expansion: Business-to-Business
+  domain: business
+B2C:
+  expansion: Business-to-Consumer
+  domain: business
+SMB:
+  expansion: Small and Medium Business
+  domain: business
+SME:
+  expansion: Subject Matter Expert
+  domain: business
+M&A:
+  expansion: Mergers and Acquisitions
+  domain: business
+VC:
+  expansion: Venture Capital
+  domain: business
+PE:
+  expansion: Private Equity
+  domain: business
+CEO:
+  expansion: Chief Executive Officer
+  domain: business
+CTO:
+  expansion: Chief Technology Officer
+  domain: business
+CFO:
+  expansion: Chief Financial Officer
+  domain: business
+COO:
+  expansion: Chief Operating Officer
+  domain: business
+CHRO:
+  expansion: Chief Human Resources Officer
+  domain: business
+
+# ─── PRODUCT ───────────────────────────────────────────────────────────────────
+PM:
+  expansion: Product Manager
+  domain: product
+PRD:
+  expansion: Product Requirements Document
+  domain: product
+MVP:
+  expansion: Minimum Viable Product
+  domain: product
+MLP:
+  expansion: Minimum Lovable Product
+  domain: product
+WAU:
+  expansion: Weekly Active Users
+  domain: product
+JTBD:
+  expansion: Jobs to Be Done
+  domain: product
+CX:
+  expansion: Customer Experience
+  domain: product
+A/B:
+  expansion: A/B Testing
+  domain: product
+AB:
+  expansion: A/B Testing
+  domain: product
+ICE:
+  expansion: Impact Confidence Ease
+  domain: product
+RICE:
+  expansion: Reach Impact Confidence Effort
+  domain: product
+CR:
+  expansion: Conversion Rate
+  domain: product
+CVR:
+  expansion: Conversion Rate
+  domain: product
+TTM:
+  expansion: Time to Market
+  domain: product
+PoC:
+  expansion: Proof of Concept
+  domain: product
+RFC:
+  expansion: Request for Comments
+  domain: product
+RACI:
+  expansion: Responsible Accountable Consulted Informed
+  domain: product
+GSD:
+  expansion: Getting Stuff Done
+  domain: product
+
+# ─── HEALTHCARE ────────────────────────────────────────────────────────────────
+EHR:
+  expansion: Electronic Health Record
+  domain: healthcare
+PHI:
+  expansion: Protected Health Information
+  domain: healthcare
+HL7:
+  expansion: Health Level Seven
+  domain: healthcare
+FHIR:
+  expansion: Fast Healthcare Interoperability Resources
+  domain: healthcare
+ICD:
+  expansion: International Classification of Diseases
+  domain: healthcare
+CPT:
+  expansion: Current Procedural Terminology
+  domain: healthcare
+HMO:
+  expansion: Health Maintenance Organization
+  domain: healthcare
+PPO:
+  expansion: Preferred Provider Organization
+  domain: healthcare
+ACO:
+  expansion: Accountable Care Organization
+  domain: healthcare
+PACS:
+  expansion: Picture Archiving and Communication System
+  domain: healthcare
+FDA:
+  expansion: Food and Drug Administration
+  domain: healthcare
+CMS:
+  expansion: Centers for Medicare and Medicaid Services
+  domain: healthcare
+DICOM:
+  expansion: Digital Imaging and Communications in Medicine
+  domain: healthcare
+LOINC:
+  expansion: Logical Observation Identifiers Names and Codes
+  domain: healthcare
+NPI:
+  expansion: National Provider Identifier
+  domain: healthcare
+IVF:
+  expansion: In Vitro Fertilization
+  domain: healthcare
+ICU:
+  expansion: Intensive Care Unit
+  domain: healthcare
+
+# ─── MARKETING ─────────────────────────────────────────────────────────────────
+SEO:
+  expansion: Search Engine Optimization
+  domain: marketing
+SEM:
+  expansion: Search Engine Marketing
+  domain: marketing
+CPC:
+  expansion: Cost Per Click
+  domain: marketing
+CPM:
+  expansion: Cost Per Mille
+  domain: marketing
+CTR:
+  expansion: Click-Through Rate
+  domain: marketing
+CPA:
+  expansion: Cost Per Acquisition
+  domain: marketing
+ROAS:
+  expansion: Return on Ad Spend
+  domain: marketing
+CRM:
+  expansion: Customer Relationship Management
+  domain: marketing
+MQL:
+  expansion: Marketing Qualified Lead
+  domain: marketing
+SAL:
+  expansion: Sales Accepted Lead
+  domain: marketing
+SDR:
+  expansion: Sales Development Representative
+  domain: marketing
+ABM:
+  expansion: Account-Based Marketing
+  domain: marketing
+PPC:
+  expansion: Pay Per Click
+  domain: marketing
+SMM:
+  expansion: Social Media Marketing
+  domain: marketing
+CLV:
+  expansion: Customer Lifetime Value
+  domain: marketing
+CRO:
+  expansion: Conversion Rate Optimization
+  domain: marketing
+TOFU:
+  expansion: Top of Funnel
+  domain: marketing
+MOFU:
+  expansion: Middle of Funnel
+  domain: marketing
+BOFU:
+  expansion: Bottom of Funnel
+  domain: marketing
+UAC:
+  expansion: Universal App Campaign
+  domain: marketing
+GA4:
+  expansion: Google Analytics 4
+  domain: marketing
+
+# ─── HR ────────────────────────────────────────────────────────────────────────
+ATS:
+  expansion: Applicant Tracking System
+  domain: HR
+HRIS:
+  expansion: Human Resources Information System
+  domain: HR
+PIP:
+  expansion: Performance Improvement Plan
+  domain: HR
+TNA:
+  expansion: Training Needs Assessment
+  domain: HR
+L&D:
+  expansion: Learning and Development
+  domain: HR
+DEI:
+  expansion: Diversity Equity and Inclusion
+  domain: HR
+EAP:
+  expansion: Employee Assistance Program
+  domain: HR
+ESOP:
+  expansion: Employee Stock Ownership Plan
+  domain: HR
+ESPP:
+  expansion: Employee Stock Purchase Plan
+  domain: HR
+HRD:
+  expansion: Human Resource Development
+  domain: HR
+HRBP:
+  expansion: Human Resources Business Partner
+  domain: HR
+FTE:
+  expansion: Full-Time Equivalent
+  domain: HR
+PTO:
+  expansion: Paid Time Off
+  domain: HR
+EEO:
+  expansion: Equal Employment Opportunity
+  domain: HR
+HCM:
+  expansion: Human Capital Management
+  domain: HR
+
+# ─── FINANCE ───────────────────────────────────────────────────────────────────
+IRR:
+  expansion: Internal Rate of Return
+  domain: finance
+NPV:
+  expansion: Net Present Value
+  domain: finance
+EPS:
+  expansion: Earnings Per Share
+  domain: finance
+DCF:
+  expansion: Discounted Cash Flow
+  domain: finance
+CAGR:
+  expansion: Compound Annual Growth Rate
+  domain: finance
+AUM:
+  expansion: Assets Under Management
+  domain: finance
+NAV:
+  expansion: Net Asset Value
+  domain: finance
+WACC:
+  expansion: Weighted Average Cost of Capital
+  domain: finance
+P/E:
+  expansion: Price-to-Earnings Ratio
+  domain: finance
+EV:
+  expansion: Enterprise Value
+  domain: finance
+FCF:
+  expansion: Free Cash Flow
+  domain: finance
+EBIT:
+  expansion: Earnings Before Interest and Taxes
+  domain: finance
+OPEX:
+  expansion: Operating Expenditure
+  domain: finance
+CAPEX:
+  expansion: Capital Expenditure
+  domain: finance
+YTM:
+  expansion: Yield to Maturity
+  domain: finance
+CDS:
+  expansion: Credit Default Swap
+  domain: finance
+FX:
+  expansion: Foreign Exchange
+  domain: finance
+COGS:
+  expansion: Cost of Goods Sold
+  domain: finance
+GP:
+  expansion: Gross Profit
+  domain: finance
+GM:
+  expansion: Gross Margin
+  domain: finance
+EBITA:
+  expansion: Earnings Before Interest Taxes and Amortization
+  domain: finance
+ROCE:
+  expansion: Return on Capital Employed
+  domain: finance
+ROE:
+  expansion: Return on Equity
+  domain: finance
+ROA:
+  expansion: Return on Assets
+  domain: finance
+LBO:
+  expansion: Leveraged Buyout
+  domain: finance
+SPAC:
+  expansion: Special Purpose Acquisition Company
+  domain: finance
+PIPE:
+  expansion: Private Investment in Public Equity
+  domain: finance
+FCI:
+  expansion: Financial Crime Investigation
+  domain: finance
+FATF:
+  expansion: Financial Action Task Force
+  domain: finance
+BSA:
+  expansion: Bank Secrecy Act
+  domain: finance
+OFAC:
+  expansion: Office of Foreign Assets Control
+  domain: finance
