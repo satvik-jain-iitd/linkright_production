@@ -715,3 +715,14 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
 
     console.print(f"[green]✓[/] Deleted: {target_preview}")
     return True
+
+
+# ── Markdown ingest (S3.4) — re-exported here for CLI import convenience ─────
+# Full implementation in markdown_ingest.py. Importing via pipeline.py keeps
+# the CLI's import surface consistent with other profile operations.
+
+from .markdown_ingest import (  # noqa: E402,F401
+    ingest_from_markdown,
+    print_privacy_audit,
+    IngestResult,
+)
