@@ -73,23 +73,6 @@ def _suggest_professional_email(local: str) -> str:
 
 # ── LinkedIn quality ───────────────────────────────────────────────────────────
 
-# Matches slugs that are ONLY letters/hyphens with NO trailing digits.
-# A clean slug = letters and hyphens only, e.g. "satvik-jain", "john-smith"
-# A numeric slug = ends with digits or IS purely numeric, e.g.:
-#   - user-1837492      (all numeric suffix after last hyphen)
-#   - john-doe-12345    (trailing digits)
-#   - 1234567           (fully numeric)
-_SLUG_WITH_TRAILING_NUMBERS = re.compile(
-    r"(?:^|/in/)([a-z0-9][a-z0-9\-]*\d{4,}[a-z0-9\-]*)$",
-    re.IGNORECASE,
-)
-
-_PURE_NUMERIC_SLUG = re.compile(r"(?:^|/in/)\d+/?$")
-
-# Extract the slug portion from a LinkedIn URL or bare path
-_LINKEDIN_SLUG_EXTRACT = re.compile(r"(?:linkedin\.com)?(?:/in/)?([^/?#\s]+)", re.IGNORECASE)
-
-
 def _extract_linkedin_slug(url: str) -> str:
     """Pull the slug portion out of a LinkedIn URL (or bare slug)."""
     url = url.strip().rstrip("/")

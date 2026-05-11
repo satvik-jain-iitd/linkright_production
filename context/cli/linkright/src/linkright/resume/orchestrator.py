@@ -966,6 +966,17 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
         )
         click.echo(f"  Contact overrides saved to {_overrides_path}")
 
+        # Also write to profile contact.yaml so step_14 picks up edits in THIS run.
+        # step_14 reads via load_contact() from linkright.profile.pipeline which
+        # reads contact.yaml (not profile_overrides.json). Writing both ensures
+        # the user's edits actually appear in the generated PDF today — not just
+        # in future runs.
+        try:
+            from linkright.profile.pipeline import save_contact as _save_contact, _profile_dir as _pdir
+            _save_contact(_pdir(), contact)
+        except Exception as _e:
+            log(f"[step_01b] could not persist to profile contact.yaml: {_e}; resume PDF may use stale contact")
+
     logbook.append(
         "step_01b_verify_contact_details",
         "result",
