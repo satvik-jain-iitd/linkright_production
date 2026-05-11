@@ -10,7 +10,6 @@ AC6: Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -240,6 +239,9 @@ class TestBankMergeLogic:
         result = _merge_bank_into_expansions(bank, learned, _UNIVERSAL_NO_EXPAND_UPPER)
 
         assert "CAGR" in result
+        assert result is learned, (
+            "_merge_bank_into_expansions must mutate learned in-place and return the same object"
+        )
 
     def test_live_bank_loaded_and_merged(self):
         """End-to-end: load real bank, merge with empty learned — result must
