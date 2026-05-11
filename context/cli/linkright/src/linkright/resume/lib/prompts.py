@@ -202,6 +202,7 @@ Return ONLY valid JSON — no markdown, no commentary:
 }
 
 Parsing rules:
+- IMPORTANT: Extract ONLY terms that appear in the JD text provided. Never include terms that appear only in the candidate's profile, resume, or prior context.
 - Extract 18-25 JD keywords as plain strings (skills, tools, action verbs, domain terms). When the JD names specific platform primitives verbatim (SSO, SCIM, RBAC, multi-tenancy, dashboards, audit logs, webhooks, etc.), include them VERBATIM as separate keywords — do not paraphrase or fold into broader terms.
 - HARD RULE (no contamination): jd_keywords MUST contain ONLY terms that appear LITERALLY in the JD text. NEVER include terms found only in the candidate's resume context (e.g., user's prior tech stack, user's past projects, user's domain) unless those terms ALSO appear word-for-word in the JD. The list represents the JOB's keyword profile — not the candidate's. Per Jane 2026-05-02: "the resume terms (e.g., 'AML', 'NICE Actimize', 'SAS') leaking into JD keywords misleads downstream bullet-ranking + scoring."
 - career_level: MUST reflect the CANDIDATE'S total years of work experience — NEVER the JD's target-role seniority label. Compute years by summing active durations across all entries in `companies[]` (reverse-chronological). Use these buckets:

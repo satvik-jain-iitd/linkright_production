@@ -1665,6 +1665,25 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
         except Exception as exc:
             log(f"[step_07 low_reqs retry] failed ({exc}); keeping original")
 
+    # S5.3: structural contamination guard — strip jd_keywords not present in
+    # the raw JD text.  The LLM sometimes leaks resume-sourced terms (e.g.
+    # "AML", "NICE Actimize") because both JD and candidate profile appear in
+    # the same context window.  This deterministic post-pass removes any
+    # keyword that cannot be found verbatim (case-insensitive) in jd_text,
+    # which is the ground truth for "what the job actually requires."
+    if jd_text:
+        _jd_lower = jd_text.lower()
+        raw_kws: list = parsed.get("jd_keywords") or []
+        filtered_kws = [kw for kw in raw_kws if isinstance(kw, str) and kw.lower() in _jd_lower]
+        removed = len(raw_kws) - len(filtered_kws)
+        if removed:
+            logbook.append(
+                step, "eval",
+                f"S5.3 contamination guard: removed {removed}/{len(raw_kws)} keyword(s) absent from JD text",
+                body=f"Removed: {[k for k in raw_kws if isinstance(k, str) and k.lower() not in _jd_lower]}",
+            )
+        parsed["jd_keywords"] = filtered_kws
+
     out_path = ARTIFACTS / "07_jd_parse_strategy.json"
     out_path.write_text(
         json.dumps({
