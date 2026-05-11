@@ -73,6 +73,7 @@ except ImportError:
     pass
 
 from .lib import logbook, llm, embedder, cosine, telemetry
+from .lib.location_guard import build_header_windows, loc_in_header as _loc_in_header
 from .lib import prompts as P
 from .lib import width_poc
 from .lib import fit_loop
@@ -3838,12 +3839,25 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     _p12_companies = parsed_p12.get("companies") or []
     if not _p12_companies:
         _exps = (parsed_resume.get("experiences") or [])[:ROLE_CAP]
+        # S1.9 (Blocker 2): apply header-context validator to any
+        # location that md_parse may have populated.  Currently always
+        # empty (see invariant assertion in tests) but guard is here as
+        # belt-and-suspenders for future md_parse changes.
+        assert isinstance(_loc_in_header, type(lambda: None)), (
+            "_loc_in_header must be callable — location_guard structural dependency"
+        )
         _p12_companies = [
             {
                 "name": ex.get("company", ""),
-                "location": ex.get("location", ""),
+                "location": (ex.get("location") or "")
+                    if _loc_in_header(
+                        (ex.get("location") or "").strip(),
+                        (ex.get("company") or "").strip(),
+                        raw_text,
+                    )
+                    else "",
                 "title": ex.get("role", ""),
-                "date_range": f"{ex.get('start_date','')} – {ex.get('end_date','')}".strip(" –"),
+                "date_range": f"{(ex.get('start_date') or '')} – {(ex.get('end_date') or '')}".strip(" –"),
                 "team": "",
             }
             for ex in _exps
@@ -4160,10 +4174,19 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         # real org units like "Payments Risk Squad", not specializations).
         _team = (co.get('team') or '').strip()
         _team_span = f"<span>{_team}</span>" if _team else ""
+        # S1.9: location truth guard — render as "location | dates" only when
+        # location is non-empty; otherwise render "dates" alone (no leading " | ").
+        # Use (co.get('x') or '') everywhere — LLM JSON may emit null for any field.
+        _loc = (co.get('location') or '').strip()
+        _loc_dates = (
+            f"{_loc} | {(co.get('date_range') or '')}"
+            if _loc
+            else (co.get('date_range') or '')
+        )
         company_html_parts.append(f"""
 <div class="entry">
-  <div class="entry-header"><span>{co_name}</span><span>{co.get('location', '')} | {co.get('date_range', '')}</span></div>
-  <div class="entry-subhead"><span>{co.get('title', '')}</span>{_team_span}</div>
+  <div class="entry-header"><span>{co_name}</span><span>{_loc_dates}</span></div>
+  <div class="entry-subhead"><span>{(co.get('title') or '')}</span>{_team_span}</div>
   {bullet_html}
 </div>
 """)
@@ -5087,6 +5110,37 @@ def main():
                 pass
     except Exception as _e_ef:
         log(f"[entity_fidelity] guard error: {_e_ef} — pipeline continues")
+
+    # S1.9 location truth-engine guard v2 (Layer 1b, post entity-fidelity).
+    # Iter-1 used a naive full-text substring scan: `_loc in raw_text`.
+    # Iter-2 (Blocker 1 fix): validate only against *header windows* — windows
+    # of raw_text that contain the company name AND a date pattern.  This
+    # prevents context-pull false negatives where a city name appears in a
+    # bullet body ("collaborated with NY risk team") but was never the role
+    # location.  See `location_guard.py` docstring for full rationale.
+    #
+    # Matching is case-insensitive + whitespace-normalised, so minor formatting
+    # differences (" Gurugram ", "gurugram") do not cause false strips.
+    try:
+        _stripped_locs: list[str] = []
+        for _co in (parsed_p12.get("companies") or []):
+            _loc = (_co.get("location") or "").strip()
+            _co_name = (_co.get("name") or "").strip()
+            if _loc and not _loc_in_header(_loc, _co_name, raw_text):
+                _stripped_locs.append(f"{_co_name or '?'}: {_loc!r} → ''")
+                _co["location"] = ""
+        if _stripped_locs:
+            log(f"[location_truth] stripped {len(_stripped_locs)} location(s) absent from role-header lines (S1.9 v2): {_stripped_locs}")
+            try:
+                logbook.append(
+                    "step_07_location_truth", "filter",
+                    f"stripped {len(_stripped_locs)} location(s) absent from role-header lines (S1.9 v2)",
+                    body="\n".join(f"- {s}" for s in _stripped_locs),
+                )
+            except Exception:
+                pass
+    except Exception as _e_loc:
+        log(f"[location_truth] guard error: {_e_loc} — pipeline continues")
 
     # S5-6 / F-NEW-1: step_04 was removed. Phase 1+2 is the single canonical
     # source of JD requirements. No artifact 04 emitted.
