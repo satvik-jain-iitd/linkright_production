@@ -1,10 +1,22 @@
 # Changelog
 
+## [0.5.12] — 2026-05-11
+
+### Fixed
+- **F-S1.11 (iter-2)**: Education section year-placeholder sanitization — three root-cause gaps closed:
+  1. `_parse_education` in `md_parse.py` now calls `_sanitize_year()` at parse time (same as projects). LLM-emitted `"Year"` literal from the RESUME_PARSE_FALLBACK prompt was reaching the HTML renderer unchecked.
+  2. Orchestrator education render site now calls `_sanitize_year()` as defense-in-depth, catching values that arrive via the step_07 LLM JSON path (bypasses md_parse).
+  3. `RESUME_PARSE_FALLBACK` prompt Education example and format rule updated: example changed from `| Year` to `| 2024`; rule extended with "NEVER write the literal word 'Year' — output only Degree | Institution if no year is present".
+- **DRY**: Inline `re.compile` + `import re as _re` inside `_project_line` hot-path replaced with the shared `_sanitize_year` import from `md_parse`. Single regex source of truth.
+- **Tests**: Added `tests/test_year_sanitization.py` (37 tests) covering all placeholder variants, real-year passthroughs, and integration paths for both Education and Projects parse → render chain. All 37 pass.
+
+
 ## [0.5.11] — 2026-05-10
 
 ### Fixed
 - **UX-11**: `linkright tailor` — no longer asks for resume when profile exists. Auto-detects `~/.linkright/profile/inputs/resume.pdf` (or `.md`) and uses it silently. Prompt only shown if no profile has been built.
 - **UX-12**: `linkright tailor` JD prompt now offers 3 options: (1) path to a JD file, (2) paste JD inline, (3) pick from saved jobs in Oracle DB (`linkright jobs find` feed). Discovery option fetches `jd_text` from `sync.linkright.in/api/discoveries/<id>` and stages to a temp file.
+
 
 ## [0.5.10] — 2026-05-10
 

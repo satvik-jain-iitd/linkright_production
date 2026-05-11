@@ -6,6 +6,41 @@ from __future__ import annotations
 
 import re
 
+# Placeholder strings that the LLM emits when no year is present in source
+# text. These are the literal schema-example words copied verbatim from the
+# prompt — never real years. Any match → coerce to empty string.
+_YEAR_PLACEHOLDER_RE = re.compile(
+    r"^(year|years?|yyyy|n/?a|unknown|present|tbd|tba|—|-)$",
+    re.IGNORECASE,
+)
+
+# A real year value must contain at least one 4-digit year (1900-2099) or a
+# recognisable date fragment like "Mar 2024" or "2023-2024".
+_YEAR_DIGIT_RE = re.compile(r"\b(19|20)\d{2}\b")
+
+
+def _sanitize_year(raw: str) -> str:
+    """Return the year string cleaned up, or '' if it is a placeholder.
+
+    Accepts: "2024", "2023-2024", "Mar 2024 — Present", "2024 — Now"
+    Rejects (→ empty string): "Year", "YEAR", "yyyy", "N/A", "", "—", "-"
+
+    F-S1.11 fix: LLM copies the prompt schema example word "Year" verbatim
+    when the source PDF has no parseable year for a project. Callers must use
+    this helper before storing the year field so the downstream renderer never
+    sees a placeholder.
+    """
+    s = raw.strip()
+    if not s:
+        return ""
+    # Reject known placeholder literals
+    if _YEAR_PLACEHOLDER_RE.match(s):
+        return ""
+    # Require at least one 4-digit year digit sequence to be considered real
+    if not _YEAR_DIGIT_RE.search(s):
+        return ""
+    return s
+
 
 def parse_resume_markdown(text: str) -> dict:
     """Return {education, skills, certifications, experiences, projects}."""
@@ -29,10 +64,14 @@ def _parse_education(text: str) -> list[dict]:
             continue
         # Accept pipe, em-dash, or en-dash as field separator (matches prod route.ts).
         parts = [p.strip() for p in re.split(r"\s*[\|—–]\s*", l[2:])]
+        # F-S1.11: sanitize education year — same placeholder-coercion as
+        # _parse_top_level_projects. LLM may emit "Year" verbatim from the
+        # prompt schema example; coerce to empty string at parse time so the
+        # downstream renderer never shows "(Year)" in the Education section.
         entry = {
             "degree": parts[0] if len(parts) > 0 else "",
             "institution": parts[1] if len(parts) > 1 else "",
-            "year": parts[2] if len(parts) > 2 else "",
+            "year": _sanitize_year(parts[2]) if len(parts) > 2 else "",
         }
         if entry["degree"] or entry["institution"]:
             out.append(entry)
@@ -150,7 +189,9 @@ def _parse_top_level_projects(text: str) -> list[dict]:
         # Accept pipe, em-dash, or en-dash as field separator (matches prod).
         parts = [p.strip() for p in re.split(r"\s*[\|—–]\s*", header)]
         title = parts[0] if parts else ""
-        year = parts[1] if len(parts) > 1 else ""
+        # F-S1.11: sanitize year — coerce placeholder words ("Year", "yyyy",
+        # etc.) to empty string so downstream renderer never shows "(Year)".
+        year = _sanitize_year(parts[1]) if len(parts) > 1 else ""
         body = "\n".join(lines[1:])
         one_liner = ""
         bullets = []

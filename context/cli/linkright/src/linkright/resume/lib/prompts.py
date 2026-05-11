@@ -25,7 +25,7 @@ RESUME_PARSE_FALLBACK = """You are a resume parser. Extract all sections from th
 Write your output in the Markdown format below — do NOT write JSON.
 
 ## EDUCATION
-- Degree Name | Institution Name | Year
+- Degree Name | Institution Name | 2024
 
 ## SKILLS
 Skill1, Skill2, Skill3, Python, React, SQL
@@ -52,21 +52,21 @@ One-liner: One sentence describing what this project was and its scope
 
 ## PROJECTS
 
-### Project Name | Year
+### Project Name | 2024
 One-liner: One sentence describing what this project is and its purpose
 - Key achievement or outcome
 - Another achievement
 
 Rules:
 - NEVER fabricate or infer. Only extract what is EXPLICITLY in the source.
-- ## EDUCATION: one line per degree, format: Degree | Institution | Year. Omit section if none.
+- ## EDUCATION: one line per degree, format: Degree | Institution | YYYY (e.g. 2024). If no year is stated in the source, omit the year field entirely — output only 'Degree | Institution' with no trailing pipe. NEVER write the literal word 'Year' or any placeholder as the year value. Omit section if none.
 - ## SKILLS: comma-separated list of skills. Omit section if none.
 - ## CERTIFICATIONS: one per line. Omit section if none.
 - ### header format: Company | Role | Start | End (use "Present" if current)
 - SEPARATOR RULE (CRITICAL): every field in every ### or education header MUST be separated by a single pipe '|' with spaces (" | "). NEVER use em-dash (—), en-dash (–), comma, slash, or any other separator. Re-format source em-dashes into pipes.
 - bullets: exact text from resume, max 8 per role
 - **Project:** blocks inside ## EXPERIENCE: only when resume explicitly names a project under a role. Skip if none.
-- ## PROJECTS: for standalone portfolio/personal/side projects NOT under any company. Each gets a ### header with name and year.
+- ## PROJECTS: for standalone portfolio/personal/side projects NOT under any company. Each gets a ### header with name and year (4-digit year extracted from the source text, e.g. '2024' or '2023-2024'). If NO year is stated in the source, omit the year field entirely — write '### Project Name' with no pipe. NEVER write the word 'Year' or any placeholder text as the year value.
 - Do not add commentary or text outside this format."""
 
 
