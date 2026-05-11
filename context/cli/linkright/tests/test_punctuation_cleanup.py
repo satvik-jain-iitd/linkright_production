@@ -9,15 +9,15 @@ import pytest
 
 
 def _clean_trailing_punct(html: str) -> str:
-    """Mirror of orchestrator.py step_12_condense._clean_trailing_punct."""
+    """Mirror of orchestrator.py _clean_trailing_punct (defined before step12_llm_failed block)."""
     h = html or ""
-    h = re.sub(r",\.+\s*$", ".", h)
-    h = re.sub(r"\.+,\s*$", ".", h)
-    h = re.sub(r"\.{2,}\s*$", ".", h)
-    h = re.sub(r";{2,}\s*$", ";", h)
-    h = re.sub(r",{2,}\s*$", ",", h)
-    h = re.sub(r",\s*$", "", h)
-    h = re.sub(r"\s+([.,;])$", r"\1", h)
+    h = re.sub(r",\s*\.+\s*$", ".", h)    # ,. or , . → .  (optional space handled)
+    h = re.sub(r"\.+,\s*$", ".", h)        # ., or .., → .
+    h = re.sub(r"\.{2,}\s*$", ".", h)      # .. or ... → .
+    h = re.sub(r";{2,}\s*$", ";", h)       # ;; → ;
+    h = re.sub(r",\s*$", "", h)             # trailing stray comma → remove (runs BEFORE ,, rule)
+    h = re.sub(r",{2,}\s*$", ",", h)       # ,, → , (after stray-comma rule so single , preserved)
+    h = re.sub(r"\s+([.,;])$", r"\1", h)   # trailing ' .' / ' ,' → strip space
     return h.rstrip()
 
 
