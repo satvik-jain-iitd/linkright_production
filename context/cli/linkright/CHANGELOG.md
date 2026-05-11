@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.19] — 2026-05-11
+
+### Fixed
+- **S1.2 — fabrication guard stripping real action verbs:** The JD-fishing guard
+  in `lib/jd_keyphrase.py` was flagging universal resume action verbs (led, drove,
+  managed, built, launched, etc.) as fabricated JD-fishing terms because they
+  appear in JD text but may not appear verbatim in source nuggets. The guard was
+  designed for domain-specific acronyms (SOX, GDPR, Kubernetes), not generic
+  action verbs. Fixed by adding ~80 action verb forms (base, past, progressive,
+  plural) to `_STOPWORDS` — they are now transparent to both the resume and
+  cover-letter guards. Domain-specific terms like SOX and GDPR still fire
+  correctly. 15 new unit tests in `tests/test_fabrication_guard_verbs.py`.
+
 ## [0.5.18] — 2026-05-11
 
 ### Fixed
