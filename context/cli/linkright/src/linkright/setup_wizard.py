@@ -735,7 +735,19 @@ def run_check() -> int:
         print("No config found. Run `linkright setup` first.")
         return 1
     cfg = yaml.safe_load(cfg_path.read_text()) or {}
-    groq_key = os.environ.get("GROQ_API_KEY", "")
+
+    # S1.4: load managed .env FIRST — same source the pipeline reads at runtime.
+    # os.environ alone is a false-negative: keys stored in ~/.linkright/.env are
+    # not exported to the shell, so the check showed "✗ not set" even though the
+    # pipeline worked fine.
+    try:
+        from linkright.keys.env_writer import read_all_managed
+        _managed = read_all_managed()
+    except ImportError:
+        _managed = {}
+
+    # Groq key: prefer shell env (user-exported) then managed .env file.
+    groq_key = os.environ.get("GROQ_API_KEY") or _managed.get("GROQ_API_KEY", "")
     masked = (groq_key[:6] + "…" + groq_key[-4:]) if len(groq_key) > 12 else "(not set)"
 
     # Warn if user is still on legacy agent mode (v0.3.0 default)
@@ -758,7 +770,7 @@ def run_check() -> int:
         ok, msg = _smoke_groq_key(groq_key)
         print(f"  Groq key:  {'✓' if ok else '✗'}  {msg}")
     else:
-        print("  Groq key:  ✗  not set — run `linkright setup` to configure")
+        print("  Groq key:  ✗  not set — run `linkright keys add groq`")
 
     # Embedder
     emb_key = cfg.get("embedder_tier")
@@ -772,13 +784,11 @@ def run_check() -> int:
         ok, msg = _smoke_pdf()
         print(f"  PDF:       {'✓' if ok else '✗'}  {msg}")
 
-    # Multi-key status
+    # Multi-key status (reuse _managed — avoids second .env read)
     try:
-        from linkright.keys.env_writer import read_all_managed
         from linkright.keys.catalogue import PROVIDERS, resilience_score
-        managed = read_all_managed()
-        total = sum(1 for p in PROVIDERS for v in p.all_env_vars if managed.get(v))
-        pcount = sum(1 for p in PROVIDERS if any(managed.get(v) for v in p.all_env_vars))
+        total = sum(1 for p in PROVIDERS for v in p.all_env_vars if _managed.get(v))
+        pcount = sum(1 for p in PROVIDERS if any(_managed.get(v) for v in p.all_env_vars))
         if total:
             score = resilience_score(total, pcount)
             print(f"  API keys:  ✓  {_plural(total, 'key')} across {_plural(pcount, 'provider')} — {score}")

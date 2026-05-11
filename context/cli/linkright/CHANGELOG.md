@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.21] - 2026-05-11
+
+### Fixed
+- **S1.4 (setup --check Groq false-negative):** `run_check()` now calls
+  `read_all_managed()` before falling back to `os.environ`, so keys stored via
+  `linkright keys add groq` (in `~/.linkright/.env`) are resolved correctly.
+  Previously the check showed `✗ not set` even though the pipeline worked.
+  8 new unit + integration tests added (`tests/test_setup_check_groq.py`).
+
 ## [0.5.20] - 2026-05-11
 
 > Note: 0.5.18 is reserved — claimed by S1.1 (PR #116) and S1.2 (PR #117)
