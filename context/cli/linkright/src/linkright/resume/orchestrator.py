@@ -74,6 +74,7 @@ except ImportError:
     pass
 
 from .lib import logbook, llm, embedder, cosine, telemetry
+from .lib import jd_cluster
 from .lib.location_guard import build_header_windows, loc_in_header as _loc_in_header
 from .lib import prompts as P
 from .lib import width_poc
@@ -2869,36 +2870,129 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
 # Step 11 — BRS ranking (local)
 # ────────────────────────────────────────────────────────────────────────────
 
-def step_11_rank(verbose_all: dict, jd_keywords: list[str]) -> dict:
+_KW_STOPWORDS: frozenset[str] = frozenset({
+    # 3-char (already filtered by >=4, but explicit for clarity)
+    "and", "for", "the", "has", "can", "are", "its", "not", "but", "was",
+    # 4-char common English stopwords not domain-specific
+    "with", "from", "that", "work", "will", "have", "must", "make",
+    "need", "used", "been", "this", "they", "also", "over", "such",
+    "then", "when", "than", "what", "your", "very", "only", "just",
+    "more", "some", "most", "each", "both", "into", "does", "able",
+    "help", "role", "give", "take", "show", "find", "keep", "come",
+    "high", "good", "best", "last", "next", "long", "well", "full",
+    # 5-char stopwords
+    "which", "their", "there", "would", "could", "about", "other",
+    "those", "these", "using", "being", "doing", "often", "while",
+    "under", "above", "where", "every", "first", "since", "until",
+    "given", "large", "small", "based", "known", "clear", "quite",
+    "cross",
+})
+
+def step_11_rank(
+    verbose_all: dict,
+    jd_keywords: list[str],
+    jd_req_clusters: list[dict] | None = None,
+) -> dict:
+    """Rank verbose bullets by BRS (bullet relevance score).
+
+    S3.2: When *jd_req_clusters* is provided (list of cluster dicts produced by
+    ``jd_cluster.cluster_requirements``), the keyword-overlap component uses
+    cluster-level deduplication so that hitting 3 bullets covering different
+    members of the same "communication" cluster doesn't score 3× — it scores 1×
+    per cluster per company, preventing keyword-stuffing inflation.
+    """
     step = "step_11_rank"
     logbook.append(
         step, "starting",
         "scoring every verbose paragraph using a simplified BRS: specificity (#numbers), "
-        "proof signal match count, JD-keyword hits, verb strength. Range 0-1.",
+        "proof signal match count, JD-keyword hits, verb strength. Range 0-1. "
+        + (f"S3.2 cluster-aware: {len(jd_req_clusters)} clusters" if jd_req_clusters else "no clusters (legacy mode)"),
     )
 
     kw_set = set(k.lower() for k in jd_keywords)
 
-    def brs(para: dict) -> float:
+    # S3.2: build a map from every individual keyword → cluster_id so we can
+    # count cluster hits instead of individual-keyword hits.
+    # If no clusters supplied, fall back to legacy per-keyword counting.
+    kw_to_cluster: dict[str, str] = {}
+    if jd_req_clusters:
+        for cl in jd_req_clusters:
+            cid = cl["cluster_id"]
+            # >= 4 + stopword filter: keeps domain terms (Java, REST, JSON, data, team)
+            # while excluding short connectives AND common 4-5 char stopwords (with, from, that, will)
+            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) >= 4 and w.lower() not in _KW_STOPWORDS]
+            for w in label_words:
+                kw_to_cluster[w] = cid
+            # Also index meaningful words from every member req_id in this cluster.
+            # req_ids typically look like "r1", "req_stakeholder", etc. — only useful
+            # if they are descriptive slugs. We skip pure numeric ids.
+            for req_id in cl.get("member_req_ids", []):
+                for part in req_id.replace("-", "_").split("_"):
+                    if len(part) > 3 and not part.isdigit() and part.lower() not in _KW_STOPWORDS:
+                        kw_to_cluster[part.lower()] = cid
+        # In cluster mode, canonical-label keyword matching replaces jd_keywords
+        # LLM set — clusters cover the same signal more precisely (deduped,
+        # anti-stuffing) so kw_set is intentionally unused in the brs() inner fn.
+        logbook.append(
+            step, "cluster_mode",
+            f"jd_keyword signal replaced by {len(jd_req_clusters)} req clusters; "
+            f"kw_to_cluster has {len(kw_to_cluster)} entries",
+        )
+
+    def brs(para: dict, covered_clusters: set[str] | None = None) -> tuple[float, set[str]]:
+        """Return (score, new_cluster_ids_hit) for this paragraph.
+
+        *covered_clusters*: cluster IDs already consumed by higher-ranked bullets
+        in this company. If a cluster is already covered, this bullet gets 0
+        credit for it (anti-stuffing).
+        """
         text = (para.get("text_html") or "").lower()
         # Specificity: number of digit tokens
         nums = len(re.findall(r"\d+(?:\.\d+)?", text))
         # Proof signals
         signals = len(re.findall(P.PROOF_REGEX, text))
-        # Keyword hits
-        kw_hits = sum(1 for kw in kw_set if kw and kw in text)
+        # Keyword hits — cluster-deduped when clusters are available
+        # Always use cluster path when jd_req_clusters provided — empty kw_to_cluster
+        # means zero cluster hits, not fallback to legacy (which would contradict the
+        # logbook entry and silently skip dedup).
+        if jd_req_clusters:
+            # Map text words → which clusters they mention
+            text_words = set(re.findall(r"[a-z]+", text))
+            clusters_mentioned = set()
+            for w in text_words:
+                cid = kw_to_cluster.get(w)
+                if cid:
+                    clusters_mentioned.add(cid)
+            # Only count clusters not yet covered by prior bullets
+            uncovered = clusters_mentioned - (covered_clusters or set())
+            kw_hits = len(uncovered)
+            new_covered = clusters_mentioned  # caller merges these in
+        else:
+            kw_hits = sum(1 for kw in kw_set if kw and kw in text)
+            new_covered = set()
         # Length bonus (150-350 band)
         L = len(text)
         len_bonus = 1.0 if 150 <= L <= 350 else (0.5 if L < 150 else 0.7)
         score = (nums * 0.15 + signals * 0.10 + kw_hits * 0.05) * len_bonus
-        return round(min(score, 1.0), 3)
+        return round(min(score, 1.0), 3), new_covered
 
     ranked = {}
     for co, data in verbose_all.items():
         paras = list(data.get("paragraphs", []))
+        # First pass: score without dedup to get initial order
         for p in paras:
-            p["_brs"] = brs(p)
+            p["_brs"], _ = brs(p, covered_clusters=None)
         paras.sort(key=lambda p: p["_brs"], reverse=True)
+        # Second pass (S3.2): re-score top-down with cluster dedup so
+        # lower-ranked bullets don't get credit for already-covered clusters.
+        if jd_req_clusters:
+            covered: set[str] = set()
+            for p in paras:
+                score, new_cls = brs(p, covered_clusters=covered)
+                p["_brs"] = score
+                covered.update(new_cls)
+            # Re-sort after dedup pass (order may shift)
+            paras.sort(key=lambda p: p["_brs"], reverse=True)
         ranked[co] = paras
 
     out_path = ARTIFACTS / "11_ranked_bullets.json"
@@ -2913,6 +3007,7 @@ def step_11_rank(verbose_all: dict, jd_keywords: list[str]) -> dict:
         if spread < 0.15:
             gaps.append(f"BRS spread is compressed ({spread:.2f}) — scorer is under-discriminating")
 
+    cluster_info = f"clusters={len(jd_req_clusters)}" if jd_req_clusters else "clusters=none"
     status = "pass" if not gaps else "partial"
     score_hist = {}
     for s in all_scores:
@@ -2923,13 +3018,14 @@ def step_11_rank(verbose_all: dict, jd_keywords: list[str]) -> dict:
 
 **Scores:** min={min(all_scores) if all_scores else 0:.2f}, max={max(all_scores) if all_scores else 0:.2f}, count={len(all_scores)}
 **Distribution:** {dict(sorted(score_hist.items()))}
+**S3.2 Clusters:** {cluster_info}
 
 **Evaluation:** {status.upper()}
 
 **Gaps:**
 {chr(10).join(f'- {g}' for g in gaps) if gaps else '- none'}
 """
-    logbook.append(step, "eval", f"rank {status}; {len(all_scores)} paragraphs scored", body_md)
+    logbook.append(step, "eval", f"rank {status}; {len(all_scores)} paragraphs scored; {cluster_info}", body_md)
     return ranked
 
 
@@ -5512,6 +5608,18 @@ def main():
     reqs_with_emb = step_05_embed_reqs(canonical_reqs)
     step_done(detail=f"{len(reqs_with_emb)} requirements embedded")
 
+    # S3.2: JD requirement clustering — group semantically-related reqs so that
+    # step_11 scores bullets against clusters (not N redundant individual items).
+    # Controlled by LR_CLUSTER_THRESHOLD (default 0.75); at 1.0 every req is its
+    # own cluster (backward-compatible).
+    _req_clusters = jd_cluster.cluster_requirements(reqs_with_emb)
+    parsed_p12["jd_requirement_clusters"] = _req_clusters
+    logbook.append(
+        "step_05b_cluster_reqs", "result",
+        f"clustered {len(reqs_with_emb)} reqs → {len(_req_clusters)} clusters "
+        f"(threshold={os.environ.get('LR_CLUSTER_THRESHOLD', '0.75')})",
+    )
+
     step_start("Scoring role alignment", index=7, total=9)
     role_result = step_06_role_scores(
         nuggets_with_emb,
@@ -5654,7 +5762,7 @@ def main():
     except Exception as _e:
         log(f"[v8-guards] failed ({_e}) — continuing with raw step_10 output")
 
-    ranked = step_11_rank(verbose_all, parsed_p12.get("jd_keywords", []))
+    ranked = step_11_rank(verbose_all, parsed_p12.get("jd_keywords", []), jd_req_clusters=parsed_p12.get("jd_requirement_clusters"))
 
     _see_and_continue(
         "Bullets drafted and ranked",
