@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.tree import Tree
 
+from linkright.ui.theme import LR_THEME
 from .pipeline import _profile_dir, load_metadata, load_nuggets
 
 
@@ -171,7 +172,7 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
                      terminal wrap on small windows).
     """
     profile_dir = profile_dir or _profile_dir()
-    console = Console()
+    console = Console(theme=LR_THEME)
     meta = load_metadata(profile_dir)
     nuggets = load_nuggets(profile_dir)
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.23] - 2026-05-11
+
+### Added
+- **S1.8 (CLI terminal UI consistency):** `linkright/ui.py` promoted to
+  `linkright/ui/` package with two new submodules:
+  - `ui/theme.py` — `LR_THEME` Rich theme with 10 named style aliases
+    (brand.primary `#4285F4`, brand.secondary `#EA4335`, metric.positive
+    `#34A853`, text.secondary `#5F6368`, divider `#DADCE0`, + 5 more)
+  - `ui/patterns.py` — 6 rendering primitives: `picker()`, `status_event()`,
+    `insight_block()`, `code_block()`, `progress_indicator()`, `tree_branch()`
+- All existing `ui.*` public names re-exported from `ui/__init__.py` — zero
+  import breakage for callers.
+- `doctor` command migrated from raw ANSI escapes (`\033[32m`) to Rich
+  `status_event()` calls — output is now colour-safe and respects `NO_COLOR`.
+- All `profile/` `Console()` instances updated to `Console(theme=LR_THEME)`.
+- 11 new tests in `tests/test_cli_ui_snapshot.py`.
+
 ## [0.5.22] - 2026-05-11
 
 ### Fixed

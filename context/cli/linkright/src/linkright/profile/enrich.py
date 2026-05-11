@@ -256,10 +256,11 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
     from rich.console import Console
     from rich.panel import Panel
     from linkright.ui import step_start, step_done, step_error, step_warn, step_detail, section_header, lr_text, TEAL
+    from linkright.ui.theme import LR_THEME
 
     profile_dir = profile_dir or _profile_dir()
     nuggets = load_nuggets(profile_dir)
-    console = Console()
+    console = Console(theme=LR_THEME)
 
     if not nuggets:
         console.print("[yellow]No nuggets to enrich. Run `linkright profile create` first.[/]")

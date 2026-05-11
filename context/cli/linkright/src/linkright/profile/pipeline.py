@@ -341,9 +341,10 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
         lr_text, lr_select, step_done, section_header,
         TEAL as _TEAL, GOLD as _GOLD, CORAL as _CORAL,
     )
+    from linkright.ui.theme import LR_THEME
     _DIM = "dim"
     profile_dir = profile_dir or _profile_dir()
-    console = Console()
+    console = Console(theme=LR_THEME)
 
     existing = load_contact(profile_dir)
     if not existing and raw_text_fallback:
@@ -497,6 +498,7 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
     from rich.console import Console
     from rich.panel import Panel
     from linkright.ui import lr_select, lr_text, step_done, step_warn, TEAL as _TEAL, CORAL as _CORAL
+    from linkright.ui.theme import LR_THEME
 
     profile_dir = profile_dir or _profile_dir()
     highlights_path = profile_dir / "highlights.jsonl"
@@ -507,7 +509,7 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
     if not highlights:
         return {"locked": 0, "skipped": 0, "edited": 0}
 
-    console = Console()
+    console = Console(theme=LR_THEME)
     console.print()
     console.print(Panel(
         f"[bold]Truth engine[/] — {len(highlights)} highlights to confirm.\n\n"
@@ -621,10 +623,11 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
     """
     import questionary
     from rich.console import Console
+    from linkright.ui.theme import LR_THEME
 
     profile_dir = profile_dir or _profile_dir()
     nuggets = load_nuggets(profile_dir)
-    console = Console()
+    console = Console(theme=LR_THEME)
 
     if not nuggets:
         console.print("[yellow]No nuggets in this profile.[/]")
