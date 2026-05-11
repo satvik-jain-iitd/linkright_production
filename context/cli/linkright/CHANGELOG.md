@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.23] - 2026-05-11
+
+### Added
+- **S1.8 (CLI terminal UI consistency):** `linkright/ui.py` promoted to
+  `linkright/ui/` package with two new submodules:
+  - `ui/theme.py` — `LR_THEME` Rich theme with 10 named style aliases
+    (brand.primary `#4285F4`, brand.secondary `#EA4335`, metric.positive
+    `#34A853`, text.secondary `#5F6368`, divider `#DADCE0`, + 5 more)
+  - `ui/patterns.py` — 6 rendering primitives: `picker()`, `status_event()`,
+    `insight_block()`, `code_block()`, `progress_indicator()`, `tree_branch()`
+- All existing `ui.*` public names re-exported from `ui/__init__.py` — zero
+  import breakage for callers.
+- `doctor` command migrated from raw ANSI escapes (`\033[32m`) to Rich
+  `status_event()` calls — output is now colour-safe and respects `NO_COLOR`.
+- All `profile/` `Console()` instances updated to `Console(theme=LR_THEME)`.
+- `step_done()` and `step_start()` now honour their `accent` parameter.
+- 11 new tests in `tests/test_cli_ui_snapshot.py`.
+
 ## [0.5.22] - 2026-05-11
 
 ### Fixed
@@ -73,29 +91,6 @@
   leak to the user's terminal when a step has no explicit friendly-verb mapping.
   Added `"run_start"` → `"🚀 Starting pipeline"` to `_STEP_VERBS` so the pipeline
   init message is also human-readable.
-
-## [Unreleased]
-
-**Resume diagnostics** - restored gap sentinels using profile-derived facts
-instead of hardcoded user or employer literals.
-
-### Fixed
-
-- Raw resume, parsed-company, nugget-attribution, primary-role, and deep RCA
-  diagnostics now compare against expected name/company facts loaded from the
-  local profile or career-signal metadata when available. Runs with no profile
-  metadata continue to degrade cleanly with the existing generic checks. (#91)
-
-## [0.5.17] — 2026-05-11
-
-### Fixed
-- **S1.6 — trailing punctuation residue cleanup:** `step_12_condense` now strips
-  trailing `,.` / `.,` / `..` / `;;` / `,,` / stray trailing commas / `_space_ .`
-  patterns from every condensed bullet's `text_html` before writing
-  `12_condensed_bullets.json`. Applied via a new `_clean_trailing_punct` helper
-  using end-anchored regex — mid-sentence punctuation is never disturbed. Clean
-  single `.` endings are preserved. Covered by 18 new unit tests in
-  `tests/test_punctuation_cleanup.py`.
 
 ## [0.5.16] — 2026-05-11
 

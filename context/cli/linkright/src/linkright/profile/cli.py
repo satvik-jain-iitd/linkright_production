@@ -53,9 +53,10 @@ def _offer_enrich(profile_dir: Path) -> None:
     import questionary
     from rich.console import Console
     from rich.panel import Panel
+    from linkright.ui.theme import LR_THEME
 
     _TEAL = "#0FBEAF"
-    console = Console()
+    console = Console(theme=LR_THEME)
 
     nuggets = load_nuggets(profile_dir)
     if not nuggets:

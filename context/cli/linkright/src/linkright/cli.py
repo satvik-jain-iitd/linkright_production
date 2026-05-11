@@ -570,24 +570,24 @@ def doctor_cmd(auto_fix: bool) -> None:
         pass  # version-check is fully optional; no crash if helper fails
 
     # 11. Render the table
-    GREEN = "\033[32m"; RED = "\033[31m"; DIM = "\033[2m"; RST = "\033[0m"
-    width = max(len(label) for label, _, _ in rows)
-    click.echo("LinkRight doctor — environment & deps check\n")
+    from linkright.ui import console as _con
+    from linkright.ui.patterns import status_event
+    label_width = max(len(label) for label, _, _ in rows)
+    _con.print("\nLinkRight doctor — environment & deps check\n")
     failures = 0
     for label, ok, detail in rows:
-        mark = f"{GREEN}✓{RST}" if ok else f"{RED}✗{RST}"
+        status_event(label, ok, detail, label_width=label_width, console=_con)
         if not ok:
             failures += 1
-        click.echo(f"  {mark}  {label:<{width}}  {DIM}{detail}{RST}")
-    click.echo("")
+    _con.print()
     if failures == 0:
-        click.echo(f"{GREEN}All checks passed.{RST} You're good to run `linkright tailor`.")
+        _con.print("[metric.positive]All checks passed.[/] You're good to run `linkright tailor`.")
         return
 
     # AR walkthrough F-PRE-2 fix: pluralization
     issue_word = "issue" if failures == 1 else "issues"
-    click.echo(
-        f"{RED}{failures} {issue_word} above.{RST} "
+    _con.print(
+        f"[error]{failures} {issue_word} above.[/] "
         f"Run `linkright doctor --auto-fix` to attempt the suggested fixes "
         f"(prompted per step), or `linkright setup` for the wizard."
     )

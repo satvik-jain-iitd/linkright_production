@@ -6,7 +6,17 @@ from rich.panel import Panel
 import questionary
 from questionary import Style as QStyle
 
-console = Console()
+from linkright.ui.theme import LR_THEME
+from linkright.ui.patterns import (  # noqa: F401 — re-exported for callers
+    picker,
+    status_event,
+    insight_block,
+    code_block,
+    progress_indicator,
+    tree_branch,
+)
+
+console = Console(theme=LR_THEME)
 
 TEAL   = "#0FBEAF"
 GOLD   = "#E5B80B"
@@ -81,10 +91,10 @@ def lr_banner(version: str = "", subtitle: str = "Your local-first career OS  ·
     for line in _ASCII_LINES:
         console.print("  " + _render_gradient_line(line))
     console.print()
-    console.print(f"  [{GOLD}]◆[/]  [bold white]{subtitle}[/]")
+    console.print(f"  [step.gold]◆[/]  [bold white]{subtitle}[/]")
     if version:
-        console.print(f"     [{GOLD}]v{version}[/]")
-    console.print(f"\n  [{TEAL}]{'─' * rule_w}[/]\n")
+        console.print(f"     [step.gold]v{version}[/]")
+    console.print(f"\n  [step.accent]{'─' * rule_w}[/]\n")
 
 
 def qs_style(accent: str = TEAL) -> QStyle:
@@ -150,7 +160,7 @@ def lr_text(prompt: str, default: str = "", accent: str = TEAL):
 
 def step_start(label: str, accent: str = TEAL, index: int | None = None, total: int | None = None) -> None:
     suffix = f"  [dim]({index} of {total})[/]" if index is not None and total is not None else ""
-    console.print(f"\n  [{GOLD}]✨[/]  [bold]{label}[/]{suffix}")
+    console.print(f"\n  [step.gold]✨[/]  [bold {accent}]{label}[/]{suffix}")
 
 
 def step_done(label: str = "done", detail: str = "", accent: str = TEAL) -> None:
@@ -159,11 +169,11 @@ def step_done(label: str = "done", detail: str = "", accent: str = TEAL) -> None
 
 
 def step_warn(message: str) -> None:
-    console.print(f"      [{CORAL}]⚠[/]  [{CORAL}]{message}[/]")
+    console.print(f"      [step.warn]⚠[/]  [step.warn]{message}[/]")
 
 
 def step_error(message: str) -> None:
-    console.print(f"      [{CORAL}]✗[/]  [{CORAL}]{message}[/]")
+    console.print(f"      [error]✗[/]  [error]{message}[/]")
 
 
 def step_detail(message: str) -> None:
@@ -179,7 +189,7 @@ def success_card(
     key_w = max((len(k) for k, _ in fields), default=8) + 2
     lines: list[str] = []
     for k, v in fields:
-        lines.append(f"  [{GOLD}]{k:<{key_w}}[/]  [{accent}]{v}[/]")
+        lines.append(f"  [step.gold]{k:<{key_w}}[/]  [{accent}]{v}[/]")
     if next_steps:
         lines.append("")
         lines.append("  [dim]Next steps:[/]")
@@ -201,4 +211,4 @@ def section_header(title: str, accent: str = TEAL) -> None:
 
 
 def info_line(key: str, value: str, key_width: int = 16, accent: str = TEAL) -> None:
-    console.print(f"      [{GOLD}]{key:<{key_width}}[/]  [{accent}]{value}[/]")
+    console.print(f"      [step.gold]{key:<{key_width}}[/]  [{accent}]{value}[/]")
