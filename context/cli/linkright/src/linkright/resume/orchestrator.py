@@ -78,7 +78,7 @@ from .lib import width_poc
 from .lib import fit_loop
 from .lib.pdf_parse import extract_text
 from .lib.graph_context import get_subliminal_context
-from .lib.md_parse import parse_resume_markdown
+from .lib.md_parse import parse_resume_markdown, _sanitize_year, _YEAR_PLACEHOLDER_RE, _YEAR_DIGIT_RE
 from .lib.width_config import (
     STEP12_MIN_CHARS,
     STEP12_MAX_CHARS,
@@ -4241,11 +4241,15 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     skills_html = f'<span class="text-line">{", ".join(_kept_skills)}</span>' if _kept_skills else ""
 
     # Build education HTML
+    # F-S1.11 defense-in-depth: re-sanitize year at render time; primary fix is
+    # at _parse_education (md_parse.py) but parsed_p12 education entries arrive
+    # from the step_07 LLM JSON path which bypasses md_parse, so sanitize here too.
     edu_html_parts = []
     for e in parsed_p12.get("education", []):
+        _edu_year = _sanitize_year(e.get("year") or "")
         edu_html_parts.append(f"""
 <div class="entry">
-  <div class="entry-header"><span>{e.get('institution', '')}</span><span>{e.get('year', '')}</span></div>
+  <div class="entry-header"><span>{e.get('institution', '')}</span><span>{_edu_year}</span></div>
   <div class="entry-subhead"><span>{e.get('degree', '')}</span><span>{e.get('gpa', '')}</span></div>
   <span class="text-line">{e.get('highlights', '')}</span>
 </div>
@@ -4267,18 +4271,11 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         title = (p.get("title") or p.get("name") or "").strip()
         one = (p.get("one_liner") or p.get("description") or "").strip()
         year = (p.get("year") or "").strip()
-        # F-S1.11 defense-in-depth: discard placeholder year strings that the
-        # LLM may have copied verbatim from the prompt schema example ("Year",
-        # "yyyy", etc.). _sanitize_year in md_parse.py already strips these at
-        # parse time; this guard catches any that arrive via other code paths
-        # (e.g. side-gig date_range or externally-built project dicts).
-        # A real year must contain at least one 4-digit sequence (1900-2099).
-        import re as _re
-        _YEAR_PLACEHOLDER = _re.compile(
-            r'^(year|years?|yyyy|n/?a|unknown|tbd|tba|—|-)$', _re.IGNORECASE
-        )
-        if year and (_YEAR_PLACEHOLDER.match(year) or not _re.search(r'\b(19|20)\d{2}\b', year)):
-            year = ""
+        # F-S1.11 defense-in-depth: use the shared _sanitize_year helper
+        # (imported from md_parse) — single source of truth for placeholder
+        # regex. Catches projects arriving via side-gig date_range or any
+        # code path that bypasses md_parse._parse_top_level_projects.
+        year = _sanitize_year(year)
         # 2026-05-02: surface key_achievements when present. Earlier renderer
         # silently dropped this field, hollowing the Projects section to title-
         # only — leaving 200+ chars of real content unrendered + tanking page

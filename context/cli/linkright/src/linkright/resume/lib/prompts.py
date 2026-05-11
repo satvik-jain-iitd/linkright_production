@@ -25,7 +25,7 @@ RESUME_PARSE_FALLBACK = """You are a resume parser. Extract all sections from th
 Write your output in the Markdown format below — do NOT write JSON.
 
 ## EDUCATION
-- Degree Name | Institution Name | Year
+- Degree Name | Institution Name | 2024
 
 ## SKILLS
 Skill1, Skill2, Skill3, Python, React, SQL
@@ -59,7 +59,7 @@ One-liner: One sentence describing what this project is and its purpose
 
 Rules:
 - NEVER fabricate or infer. Only extract what is EXPLICITLY in the source.
-- ## EDUCATION: one line per degree, format: Degree | Institution | Year. Omit section if none.
+- ## EDUCATION: one line per degree, format: Degree | Institution | YYYY (e.g. 2024). If no year is stated in the source, omit the year field entirely — output only 'Degree | Institution' with no trailing pipe. NEVER write the literal word 'Year' or any placeholder as the year value. Omit section if none.
 - ## SKILLS: comma-separated list of skills. Omit section if none.
 - ## CERTIFICATIONS: one per line. Omit section if none.
 - ### header format: Company | Role | Start | End (use "Present" if current)

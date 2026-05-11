@@ -64,10 +64,14 @@ def _parse_education(text: str) -> list[dict]:
             continue
         # Accept pipe, em-dash, or en-dash as field separator (matches prod route.ts).
         parts = [p.strip() for p in re.split(r"\s*[\|—–]\s*", l[2:])]
+        # F-S1.11: sanitize education year — same placeholder-coercion as
+        # _parse_top_level_projects. LLM may emit "Year" verbatim from the
+        # prompt schema example; coerce to empty string at parse time so the
+        # downstream renderer never shows "(Year)" in the Education section.
         entry = {
             "degree": parts[0] if len(parts) > 0 else "",
             "institution": parts[1] if len(parts) > 1 else "",
-            "year": parts[2] if len(parts) > 2 else "",
+            "year": _sanitize_year(parts[2]) if len(parts) > 2 else "",
         }
         if entry["degree"] or entry["institution"]:
             out.append(entry)
