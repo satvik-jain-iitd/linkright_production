@@ -80,7 +80,7 @@ from .lib import prompts as P
 from .lib import width_poc
 from .lib import fit_loop
 from .lib.domain_verbs import replace_weak_verb, infer_industry, _WEAK_VERBS as _DOMAIN_WEAK_VERBS
-from .lib.verb_taxonomy import replace_with_taxonomy_verb
+from .lib.verb_taxonomy import replace_with_taxonomy_verb, get_career_level_verb_prefs, format_career_vocab_guidance
 from .lib.signal_weights import load_signal_weights, apply_signal_weights
 from .lib.pdf_parse import extract_text
 from .lib.graph_context import get_subliminal_context
@@ -2167,6 +2167,10 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
             strategy_description=strategy_desc,
             career_level=career_level,
         )
+        # S4.2: inject career-level vocabulary profile into the system prompt.
+        # Placed before any peer-language guidance (lr-nm2) that may follow.
+        _career_vocab_hint = format_career_vocab_guidance(career_level)
+        sys = sys + "\n\n" + _career_vocab_hint
         usr = llm.subst(
             P.PHASE_4A_VERBOSE_USER,
             jd_keywords_compact=jd_keywords_compact,

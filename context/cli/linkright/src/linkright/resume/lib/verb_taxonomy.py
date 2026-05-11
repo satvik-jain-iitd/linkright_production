@@ -1,17 +1,25 @@
-"""verb_taxonomy.py — S2.3: 2D impact-category × industry verb matrix.
+"""verb_taxonomy.py — S2.3 + S4.2: 2D impact-category × industry verb matrix
+                      + career-level vocabulary profiles.
 
 Provides deterministic taxonomy-based verb selection for step_10 bullets.
 Selection uses two axes:
   1. Impact category — classified from bullet text (9 categories from FlowCV)
   2. Industry domain — inferred from candidate's job title (same 8 as S2.2)
 
+S4.2 adds career-level vocabulary profiles (fresher / early_career / mid /
+senior / executive) with three buckets each (authority / credibility / energy).
+These are injected into the step_10 LLM prompt as preference hints.
+
 Public API:
     load_verb_taxonomy() -> dict[str, dict[str, list[str]]]
     classify_impact_category(bullet_text: str) -> str
     get_taxonomy_verb(category: str, industry: str, used_verbs: set[str]) -> str | None
     replace_with_taxonomy_verb(text: str, industry: str, used_verbs: set[str]) -> tuple[str, str | None]
+    get_career_level_verb_prefs(career_level: str) -> dict[str, list[str]]
+    format_career_vocab_guidance(career_level: str) -> str
 
 S2.3 — 2026-05-11
+S4.2 — 2026-05-12
 """
 
 from __future__ import annotations
@@ -38,6 +46,28 @@ _CATEGORIES = (
 
 _DEFAULT_CATEGORY = "Achievement"
 _DEFAULT_INDUSTRY = "tech"
+
+# S4.2 — alias map for career level normalisation.
+# Handles common synonyms that the pipeline may emit.
+_CAREER_LEVEL_ALIASES: dict[str, str] = {
+    "entry":        "early_career",
+    "entry_level":  "early_career",
+    "junior":       "early_career",
+    "intern":       "fresher",
+    "fresher":      "fresher",
+    "early_career": "early_career",
+    "mid":          "mid",
+    "mid_level":    "mid",
+    "senior":       "senior",
+    "sr":           "senior",
+    "executive":    "executive",
+    "exec":         "executive",
+    "vp":           "executive",
+    "c_level":      "executive",
+    "director":     "senior",
+}
+
+_DEFAULT_CAREER_LEVEL = "mid"
 
 # ── Priority-ordered keyword classifier ──────────────────────────────────────
 # Each tuple: (keyword_set_as_frozenset_or_str, category)
@@ -66,11 +96,26 @@ _CATEGORY_RULES: list[tuple[tuple[str, ...], str]] = [
 ]
 
 
-# ── Module-level cache ─────────────────────────────────────────────────────────
+# ── Module-level caches ────────────────────────────────────────────────────────
 
 _TAXONOMY_CACHE: dict[str, dict[str, list[str]]] | None = None
+_CAREER_PREFS_CACHE: dict[str, dict[str, list[str]]] | None = None
 
 _YAML_PATH = Path(__file__).parent.parent / "data" / "verb_taxonomy.yaml"
+
+# Top-level YAML key that holds the career-level section.
+_CAREER_PREFS_KEY = "career_level_preferences"
+
+
+# ── Internal helpers ───────────────────────────────────────────────────────────
+
+def _load_raw_yaml() -> dict:
+    """Read YAML from disk (uncached). Raises FileNotFoundError if missing."""
+    with open(_YAML_PATH, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    if not isinstance(data, dict):
+        raise ValueError(f"verb_taxonomy.yaml must be a YAML mapping, got {type(data)}")
+    return data
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -79,19 +124,100 @@ def load_verb_taxonomy() -> dict[str, dict[str, list[str]]]:
     """Load the verb taxonomy YAML, module-cached.
 
     Returns a nested dict: category → industry → list[str] of past-tense verbs.
+    The ``career_level_preferences`` top-level key is excluded from the returned
+    dict (it has a different structure and is accessed via
+    ``get_career_level_verb_prefs`` instead).
+
     Raises FileNotFoundError if the YAML is missing (never silently returns empty).
     """
     global _TAXONOMY_CACHE
     if _TAXONOMY_CACHE is None:
-        with open(_YAML_PATH, "r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-        if not isinstance(data, dict):
-            raise ValueError(f"verb_taxonomy.yaml must be a YAML mapping, got {type(data)}")
+        data = _load_raw_yaml()
         _TAXONOMY_CACHE = {
             cat: {ind: list(verbs) for ind, verbs in ind_map.items()}
             for cat, ind_map in data.items()
+            if cat != _CAREER_PREFS_KEY  # S4.2: skip career-level section
         }
     return _TAXONOMY_CACHE
+
+
+def get_career_level_verb_prefs(career_level: str) -> dict[str, list[str]]:
+    """Return verb preference buckets for the given career level.
+
+    Parameters
+    ----------
+    career_level:
+        Career level string as emitted by the pipeline (e.g. ``"mid"``,
+        ``"senior"``, ``"entry"``, ``"fresher"``).  Aliases such as
+        ``"entry"`` and ``"entry_level"`` are mapped to ``"early_career"``.
+        Unknown values fall back to ``"mid"``.
+
+    Returns
+    -------
+    dict with three keys:
+        ``authority``   — verbs that signal scope / governance / executive presence
+        ``credibility`` — verbs that signal proven impact and measurable delivery
+        ``energy``      — verbs that signal hustle, execution, and hands-on building
+
+    Each value is a list of Title Case past-tense verb strings (may be empty
+    list for that level, e.g. ``authority`` for ``"fresher"``).
+    """
+    global _CAREER_PREFS_CACHE
+    if _CAREER_PREFS_CACHE is None:
+        data = _load_raw_yaml()
+        raw = data.get(_CAREER_PREFS_KEY, {})
+        _CAREER_PREFS_CACHE = {
+            lvl: {
+                "authority":   list(buckets.get("authority") or []),
+                "credibility": list(buckets.get("credibility") or []),
+                "energy":      list(buckets.get("energy") or []),
+            }
+            for lvl, buckets in raw.items()
+        }
+
+    normalised = _CAREER_LEVEL_ALIASES.get((career_level or "").strip().lower(), _DEFAULT_CAREER_LEVEL)
+    return _CAREER_PREFS_CACHE.get(
+        normalised,
+        {"authority": [], "credibility": [], "energy": []},
+    )
+
+
+def format_career_vocab_guidance(career_level: str) -> str:
+    """Format a verb-preference hint for injection into an LLM prompt.
+
+    Produces a short paragraph that the LLM can use to calibrate verb tone
+    for the candidate's seniority level.  Empty buckets are omitted from the
+    output so the prompt stays concise.
+
+    Parameters
+    ----------
+    career_level:
+        Same values accepted as ``get_career_level_verb_prefs``.
+
+    Returns
+    -------
+    Non-empty string, e.g.::
+
+        Career-level verb preferences (career_level=mid):
+        - Authority verbs (use freely): Led, Defined, Established, Aligned, Directed
+        - Credibility verbs (use for impact): Drove, Optimized, Scaled, Improved, Reduced, Increased
+        - Energy verbs (use sparingly): Shipped, Deployed, Launched
+    """
+    prefs = get_career_level_verb_prefs(career_level)
+    normalised = _CAREER_LEVEL_ALIASES.get((career_level or "").strip().lower(), _DEFAULT_CAREER_LEVEL)
+
+    lines = [f"Career-level verb preferences (career_level={normalised}):"]
+    if prefs["authority"]:
+        lines.append(f"- Authority verbs (use freely): {', '.join(prefs['authority'])}")
+    if prefs["credibility"]:
+        lines.append(f"- Credibility verbs (use for impact): {', '.join(prefs['credibility'])}")
+    if prefs["energy"]:
+        lines.append(f"- Energy verbs (use sparingly): {', '.join(prefs['energy'])}")
+    if len(lines) == 1:
+        # No verbs at all for this level — still return something meaningful
+        lines.append("- No verb preference overrides for this level; use judgment.")
+
+    return "\n".join(lines)
 
 
 def classify_impact_category(bullet_text: str) -> str:
