@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.0] - 2026-05-11
+
+### Added
+- **S3.1 (Signal-weighting matrix):** 13-signal × 5-career-level multiplier matrix; step_11 bullet ranking now weights signals differently per career level so executive resumes surface executive-influence bullets first.
+- **S3.2 (JD requirement clustering):** Cosine-similarity clustering groups semantically-related JD requirements (e.g. "communicate" + "collaborate" + "stakeholder alignment" → one cluster); step_11 ranking scores against clusters not individual reqs, eliminating keyword-stuffing and reducing LLM calls.
+- **S3.4 (Markdown profile ingestion):** Adds `--from-markdown <file.md>` flag to `linkright profile create`.
+  Long-form career narrative documents (Obsidian exports, diary-style prose, 95KB career profiles)
+  can now be ingested into the nugget store without manual copy-paste.
+  New `markdown_ingest.py` module handles: ATX-heading-based chunking, section classification
+  (career-relevant / personal-life / mixed), privacy gate (personal-life sections skipped by default,
+  `--include-personal` to opt in), one LLM call per chunk (never one giant prompt), deterministic
+  Jaccard dedup (≥0.8 token-overlap against existing nuggets), token budget guard (≤50 LLM calls
+  per run ≈ 25% of hourly Groq free-tier limit), and end-of-run privacy audit log (sections skipped,
+  nuggets extracted, nuggets deduped). Unit tests in `tests/test_markdown_ingest.py` use a minimal
+  synthetic document — no real personal data.
+
+### Fixed
+- **S3.3 (Truth Engine Layer 1):** Personal-details verification prompt at pipeline start; checks professional email format + LinkedIn slug quality; user can edit/skip each field; --no-pause / LR_NO_PAUSE=1 bypasses for CI/scripted use.
+- **S3.3 Blocker 1:** step_01b_verify_contact_details now silently skips on non-TTY stdin (MCP/pipe mode) and catches EOFError from questionary — no more crash in MCP subprocesses.
+- **S3.3 Blocker 2:** save_contact() now calls mkdir(parents=True, exist_ok=True) before writing contact.yaml — edits no longer silently lost when ~/.linkright/profile/ doesn't exist.
+- **S3.3 Blocker 3:** _UNPROFESSIONAL_WORDS regex now uses \b word boundaries — hotel.manager, catherine.james, radical.ideas no longer false-positive; hotgirl99 still warned (via digit detection; compound words without separator e.g. hotguy are a known gap — rare edge case).
+
+
 ## [0.6.0] - 2026-05-11
 
 ### Added
