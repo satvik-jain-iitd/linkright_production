@@ -327,7 +327,7 @@ class TestStep11RankClusterDedup:
 
         score_a = ranked["CompanyA"][0]["_brs"]
         score_b = ranked["CompanyB"][0]["_brs"]
-        # Both bullets reference 'stakeholder' + 'alignment' (both >=5 chars → c1)
+        # Both bullets reference 'stakeholder' + 'alignment' (both >=4 chars → c1)
         # covered_clusters resets per company, so both must receive cluster credit
         assert score_a > 0, "CompanyA bullet did not score cluster c1"
         assert score_b > 0, "CompanyB bullet did not score cluster c1 — cross-company reset broken"

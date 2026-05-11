@@ -2748,7 +2748,7 @@ def step_11_rank(
             # if they are descriptive slugs. We skip pure numeric ids.
             for req_id in cl.get("member_req_ids", []):
                 for part in req_id.replace("-", "_").split("_"):
-                    if len(part) > 3 and not part.isdigit():
+                    if len(part) > 3 and not part.isdigit() and part.lower() not in _KW_STOPWORDS:
                         kw_to_cluster[part.lower()] = cid
         # In cluster mode, canonical-label keyword matching replaces jd_keywords
         # LLM set — clusters cover the same signal more precisely (deduped,
