@@ -141,7 +141,7 @@ def test_run_check_calls_read_all_managed():
             with (
                 patch("linkright.setup_wizard.Path") as mock_path,
                 patch("linkright.keys.env_writer.read_all_managed", side_effect=fake_read_all),
-                patch("linkright.setup_wizard._smoke_groq_key", return_value=(True, "ok")),
+                patch("linkright.setup_wizard._smoke_groq_key", return_value=(True, "ok")) as mock_smoke,
                 patch("linkright.setup_wizard._smoke_embedder", return_value=(True, "ok")),
                 patch("builtins.print"),
             ):
@@ -157,8 +157,9 @@ def test_run_check_calls_read_all_managed():
 
                 from linkright.setup_wizard import run_check
                 run_check()
+
+                assert read_all_called, "run_check() did not call read_all_managed() — S1.4 fix not wired"
+                mock_smoke.assert_called_once_with("gsk_from_managed")
         finally:
             if saved is not None:
                 os.environ["GROQ_API_KEY"] = saved
-
-        assert read_all_called, "run_check() did not call read_all_managed() — S1.4 fix not wired"
