@@ -206,6 +206,18 @@ class TestFresherRanking:
         # Default multiplier is 1.0, so _weighted_brs == _brs
         assert bullets[0]["_weighted_brs"] == pytest.approx(0.4 * 1.0, abs=1e-4)
 
+    def test_entry_career_level_aliased_to_early_career(self):
+        """'entry' must alias to 'early_career' weights — not fall back to 'mid'."""
+        from linkright.resume.lib.signal_weights import load_signal_weights, apply_signal_weights
+
+        matrix = load_signal_weights()
+        bullet = {"text_html": "Built system impacting 10K users saving 5hrs/week", "_brs": 0.8, "signal": "build-execution"}
+        result_entry = apply_signal_weights([dict(bullet)], "entry", matrix)
+        result_ec = apply_signal_weights([dict(bullet)], "early_career", matrix)
+        assert result_entry[0]["_weighted_brs"] == result_ec[0]["_weighted_brs"], (
+            "entry should alias to early_career weights"
+        )
+
 
 # ── Apply returns same list (mutation in-place) ───────────────────────────────
 class TestApplySignalWeightsBehavior:
@@ -307,22 +319,29 @@ class TestStep11RankSignalWireIn:
         )
 
     def test_injected_weight_matrix_overrides_disk(self, monkeypatch, tmp_path):
-        """weight_matrix parameter is actually used (not disk-loaded matrix)."""
+        """weight_matrix parameter is actually used (not disk-loaded matrix).
+
+        Disk at "executive": executive-influence=2.0 > build-execution=0.7,
+        so if injection were ignored, executive-influence would win.
+        Synthetic matrix inverts this so build-execution must win — proving
+        the injected matrix is actually consumed.
+        """
         from linkright.resume.lib.signal_weights import load_signal_weights
         disk_matrix = load_signal_weights()
-        # Synthetic matrix: for "mid" level, give build-execution a huge weight
-        # so it beats executive-influence (opposite of normal mid weights)
+        # Invert the disk ordering at "executive" level:
+        # disk has executive-influence[executive]=2.0 > build-execution[executive]=0.7
         synthetic_matrix = {s: dict(level_map) for s, level_map in disk_matrix.items()}
-        synthetic_matrix["build-execution"]["mid"] = 2.5
-        synthetic_matrix["executive-influence"]["mid"] = 0.5
+        synthetic_matrix["build-execution"]["executive"] = 5.0
+        synthetic_matrix["executive-influence"]["executive"] = 0.1
         verbose_all = {
             "Company A": {
                 "paragraphs": [self._make_bullet("executive-influence"), self._make_bullet("build-execution")],
                 "company_brs": 0.8,
             }
         }
-        result = self._call_step11(monkeypatch, tmp_path, verbose_all, [], "mid", synthetic_matrix)
+        result = self._call_step11(monkeypatch, tmp_path, verbose_all, [], "executive", synthetic_matrix)
         ranked = result["Company A"]
         assert ranked[0]["signal"] == "build-execution", (
-            "Injected matrix should have promoted build-execution above executive-influence"
+            "Injected matrix should have promoted build-execution above executive-influence "
+            "(disk ordering is opposite: executive-influence[executive]=2.0 > build-execution[executive]=0.7)"
         )

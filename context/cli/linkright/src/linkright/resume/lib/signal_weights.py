@@ -41,8 +41,9 @@ _DEFAULT_MULTIPLIER: float = 1.0
 
 # Valid career levels (mirrors _CAREER_LEVEL_MIN_YEARS in orchestrator.py)
 _VALID_CAREER_LEVELS = frozenset(
-    {"fresher", "early_career", "entry", "mid", "senior", "executive"}
+    {"fresher", "early_career", "mid", "senior", "executive"}
 )
+# "entry" is aliased below so _VALID_CAREER_LEVELS stays a pure YAML-key enum
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
