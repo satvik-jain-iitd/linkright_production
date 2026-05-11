@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 
-from linkright.llm.oracle import oracle_generate, oracle_health
+from linkright.llm.oracle import oracle_generate
 
 _VERB_RE = re.compile(r"^(?:●\s*)?([A-Z][a-z]+)\b")
 
@@ -22,17 +22,15 @@ def _brs_score(bullet: str) -> float:
 def enforce_verb_coherence(
     bullets: list[dict],  # each dict has keys: text_html, _weighted_brs, others
     section_id: str = "unknown",
+    _oracle_ok: bool = False,
 ) -> list[dict]:
     """
     For each duplicate leading verb in the section, attempt Oracle rephrase.
-    Reverts if rephrased bullet's structure is unsound (length heuristic proxy).
+    Reverts if rephrased bullet's structure heuristic fails.
     Max 1 attempt per bullet. Oracle unavailable → skip silently.
     """
-    if not bullets:
+    if not bullets or not _oracle_ok:
         return bullets
-
-    if not oracle_health():
-        return bullets  # skip silently if Oracle down
 
     # Count verbs
     verb_counts: Counter = Counter()

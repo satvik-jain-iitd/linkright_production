@@ -14,8 +14,7 @@ def test_no_duplicates_unchanged():
         {"text_html": "Led team of 5", "_weighted_brs": 0.8},
         {"text_html": "Built pipeline", "_weighted_brs": 0.75},
     ]
-    with patch("linkright.resume.lib.coherence.oracle_health", return_value=True):
-        result = enforce_verb_coherence(bullets, "Acme")
+    result = enforce_verb_coherence(bullets, "Acme", _oracle_ok=True)
     assert result == bullets  # unchanged
 
 
@@ -29,9 +28,8 @@ def test_duplicate_verb_rephrased():
     ]
     mock_resp = MagicMock()
     mock_resp.text = rephrased
-    with patch("linkright.resume.lib.coherence.oracle_health", return_value=True), \
-         patch("linkright.resume.lib.coherence.oracle_generate", return_value=mock_resp):
-        result = enforce_verb_coherence(bullets, "Acme")
+    with patch("linkright.resume.lib.coherence.oracle_generate", return_value=mock_resp):
+        result = enforce_verb_coherence(bullets, "Acme", _oracle_ok=True)
     assert result[0]["text_html"] == bullets[0]["text_html"]  # first kept
     assert result[1]["text_html"] == rephrased  # second rephrased
     assert result[1].get("_verb_coherence_rephrased") is True
@@ -42,8 +40,7 @@ def test_oracle_down_skips_silently():
         {"text_html": "Led team of 5", "_weighted_brs": 0.8},
         {"text_html": "Led migration", "_weighted_brs": 0.75},
     ]
-    with patch("linkright.resume.lib.coherence.oracle_health", return_value=False):
-        result = enforce_verb_coherence(bullets, "Acme")
+    result = enforce_verb_coherence(bullets, "Acme", _oracle_ok=False)
     assert result == bullets  # unchanged — silent skip
 
 
@@ -55,7 +52,6 @@ def test_bad_rephrase_reverts():
     ]
     mock_resp = MagicMock()
     mock_resp.text = "x"  # too short
-    with patch("linkright.resume.lib.coherence.oracle_health", return_value=True), \
-         patch("linkright.resume.lib.coherence.oracle_generate", return_value=mock_resp):
-        result = enforce_verb_coherence(bullets, "Acme")
+    with patch("linkright.resume.lib.coherence.oracle_generate", return_value=mock_resp):
+        result = enforce_verb_coherence(bullets, "Acme", _oracle_ok=True)
     assert result[1]["text_html"] == "Led migration"  # reverted
