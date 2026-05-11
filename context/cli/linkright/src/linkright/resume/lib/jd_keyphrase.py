@@ -129,20 +129,28 @@ def extract_jd_terms(jd_text: str, *, min_len: int = 3) -> set[str]:
     - Capitalized noun-like tokens (Kubernetes, Terraform)
     - Multi-char hyphenated compounds (end-to-end, micro-services)
     - Lowercase tech-vocab tokens of 4+ chars
+
+    S5.3: all returned terms are guaranteed to be present (case-insensitive)
+    in the source jd_text.  This is always true for single tokens extracted
+    from the text itself, but the explicit gate keeps the contract clear and
+    future-proofs against any phrase-level extraction added later.
     """
     if not jd_text:
         return set()
     plain = re.sub(r"<[^>]+>", " ", jd_text)
+    jd_lower = jd_text.lower()
     terms: set[str] = set()
 
     # Acronyms — keep original case for clarity but compare lowercased
     for m in _ACRO_RE.finditer(plain):
-        terms.add(m.group(0).lower())
+        tok = m.group(0).lower()
+        if tok in jd_lower:
+            terms.add(tok)
 
     # General tokens
     for m in _TOKEN_RE.finditer(plain):
         n = _norm(m.group(0))
-        if len(n) >= min_len and n not in _STOPWORDS:
+        if len(n) >= min_len and n not in _STOPWORDS and n in jd_lower:
             terms.add(n)
 
     return terms
