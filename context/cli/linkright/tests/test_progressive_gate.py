@@ -1,6 +1,5 @@
 """Unit tests for S5.5 progressive validation gate — _should_regenerate()."""
 import json
-import pathlib
 from linkright.resume.orchestrator import _should_regenerate
 from linkright.resume.cli import _read_quality_metrics
 
