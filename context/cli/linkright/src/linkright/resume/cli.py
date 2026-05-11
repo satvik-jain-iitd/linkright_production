@@ -39,7 +39,7 @@ def resume_group() -> None:
 
 
 def _read_quality_metrics(run_dir: Path) -> dict:
-    """Read JD coverage and width hit-rate from pipeline artifacts.
+    """Read JD coverage, width hit-rate, and below-threshold bullet count from pipeline artifacts.
 
     Returns a dict with keys:
       jd_coverage_pct      — float or None
@@ -48,6 +48,7 @@ def _read_quality_metrics(run_dir: Path) -> dict:
       width_hit_pct        — float or None
       width_hit_bullets    — int (bullets in target band)
       width_total_bullets  — int (total bullets)
+      below_threshold_count — int (bullets flagged _below_threshold by S5.5 gate)
     """
     result: dict = {
         "jd_coverage_pct": None,
@@ -56,6 +57,7 @@ def _read_quality_metrics(run_dir: Path) -> dict:
         "width_hit_pct": None,
         "width_hit_bullets": 0,
         "width_total_bullets": 0,
+        "below_threshold_count": 0,
     }
     # JD coverage — from 06_role_scores.json
     role_scores_path = run_dir / "artifacts" / "06_role_scores.json"
@@ -84,6 +86,21 @@ def _read_quality_metrics(run_dir: Path) -> dict:
                 result["width_hit_pct"] = float(hit_pct)
                 result["width_total_bullets"] = int(total)
                 result["width_hit_bullets"] = round(int(total) * float(hit_pct) / 100)
+        except Exception:
+            pass
+
+    # S5.5 — below-threshold bullet count — from 11_ranked_bullets.json
+    ranked_path = run_dir / "artifacts" / "11_ranked_bullets.json"
+    if ranked_path.exists():
+        try:
+            ranked = json.loads(ranked_path.read_text())
+            count = sum(
+                1
+                for bullets in ranked.values()
+                for b in bullets
+                if b.get("_below_threshold")
+            )
+            result["below_threshold_count"] = count
         except Exception:
             pass
 
@@ -139,6 +156,14 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
         wid_pct = metrics["width_hit_pct"]
         wid_str = f"{metrics['width_hit_bullets']}/{metrics['width_total_bullets']} bullets ({wid_pct:.1f}%)"
         fields.append(("Width hits", _fmt_metric_value(wid_str, wid_pct)))
+
+    # S5.5 — warn when bullets flagged below BRS threshold
+    if metrics["below_threshold_count"] > 0:
+        n = metrics["below_threshold_count"]
+        fields.append((
+            "Quality",
+            f"[#FF5733]⚠  {n} bullet{'s' if n != 1 else ''} below quality threshold — consider manual review[/]",
+        ))
 
     opener = {"darwin": "open", "linux": "xdg-open", "win32": "start"}.get(sys.platform, "open")
     next_steps = [

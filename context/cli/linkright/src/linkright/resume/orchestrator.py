@@ -2898,6 +2898,26 @@ _KW_STOPWORDS: frozenset[str] = frozenset({
     "cross",
 })
 
+
+# ────────────────────────────────────────────────────────────────────────────
+# S5.5 — Progressive validation gate
+# ────────────────────────────────────────────────────────────────────────────
+
+def _should_regenerate(brs: float, threshold: float = 0.60) -> bool:
+    """Return True if this bullet's BRS is low enough to warrant a regen attempt.
+
+    Default threshold 0.60 (on the 0.0–1.0 BRS scale used by step_11_rank).
+    Override at runtime via ``LR_BRS_THRESHOLD`` env var.
+    """
+    env_threshold = os.environ.get("LR_BRS_THRESHOLD")
+    if env_threshold:
+        try:
+            threshold = float(env_threshold)
+        except ValueError:
+            pass
+    return brs < threshold
+
+
 def step_11_rank(
     verbose_all: dict,
     jd_keywords: list[str],
@@ -5791,6 +5811,24 @@ def main():
         jd_req_clusters=parsed_p12.get("jd_requirement_clusters"),
         career_level=parsed_p12.get("career_level", "mid"),
     )
+
+    # S5.5 — Progressive validation gate: flag bullets below BRS threshold.
+    # Runs between step_11 (rank) and step_12 (condense / width expansion).
+    # Bullets with _brs < threshold get _below_threshold=True so step_12's
+    # width expansion skips them and the success card can warn the user.
+    _brs_weak_count = 0
+    for _co_bullets in ranked.values():
+        for _para in _co_bullets:
+            _score = _para.get("_weighted_brs", _para.get("_brs", 1.0))
+            if _should_regenerate(_score):
+                _para["_below_threshold"] = True
+                _brs_weak_count += 1
+    if _brs_weak_count:
+        log(f"[S5.5 gate] {_brs_weak_count} bullet(s) below BRS threshold — flagged _below_threshold=True")
+        logbook.append(
+            "s5_5_progressive_gate", "result",
+            f"{_brs_weak_count} bullet(s) below threshold; flagged for manual review",
+        )
 
     _see_and_continue(
         "Bullets drafted and ranked",
