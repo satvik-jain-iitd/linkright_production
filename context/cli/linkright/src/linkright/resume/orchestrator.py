@@ -236,15 +236,6 @@ _MONTHS = {m.lower(): i for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1
 )}
 
-_CAREER_LEVEL_MIN_YEARS = {
-    "fresher": 0.0,
-    "entry": 1.0,
-    "mid": 3.0,
-    "senior": 6.0,
-    "executive": 10.0,
-}
-
-
 def _bucket_from_years(y: float) -> str:
     if y == 0:
         return "fresher"
@@ -1615,6 +1606,11 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
             if len(new_reqs) > len(reqs):
                 log(f"[step_07 low_reqs retry] lifted {len(reqs)} → {len(new_reqs)} reqs; using retry")
                 parsed = parsed_r
+                # S5.4: re-enforce deterministic career_level — LLM retry must never overwrite it.
+                if total_years == 0:
+                    parsed["career_level"] = "fresher"
+                else:
+                    parsed["career_level"] = _bucket_from_years(total_years)
                 parsed["profile"] = _derive_profile(parsed.get("career_level", "mid"))
         except Exception as exc:
             log(f"[step_07 low_reqs retry] failed ({exc}); keeping original")
@@ -1634,10 +1630,6 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
     platform_signals = ["platform", "multi-tenan", "sso", "scim", "rbac", "identity", "dashboard"]
     platform_hits = [s for s in platform_signals if any(s in k for k in kw_lower)]
 
-    # Post-retry/override, re-check violation (should be False now)
-    level = (parsed.get("career_level") or "").strip().lower()
-    career_level_violation = False
-
     # B2/F01: scan career_summary for hallucinated years claims.
     career_summary = parsed.get("career_summary") or ""
     summary_violation: Optional[str] = None
@@ -1648,13 +1640,6 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
                 break
 
     gaps: list[str] = []
-    if career_level_violation:
-        gaps.append(
-            f"B1/F02: career_level='{level}' requires ≥{_CAREER_LEVEL_MIN_YEARS[level]}y "
-            f"but candidate has {total_years}y (+1 tolerance) — prompt/LLM inflated the level"
-        )
-    elif parsed.get("career_level") not in ("mid", "senior"):
-        gaps.append(f"career_level={parsed.get('career_level')} — expected 'mid' for ~4 yrs")
     if summary_violation:
         gaps.append(
             f"B2/F01: career_summary claims '{summary_violation}' but candidate has "
