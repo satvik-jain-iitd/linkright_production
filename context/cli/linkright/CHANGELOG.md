@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.8.0] - 2026-05-12
+
+### Added
+- **S4.1 (Peer-vs-applicant language bank):** Added seniority-tone calibration for
+  step_10 bullet generation. New `peer_applicant_bank.yaml` (86 phrase entries across
+  3 bands: junior/mid/senior) and `peer_applicant.py` lib map `career_level` → tone
+  band and inject a structured verb-guidance section into the PHASE_4A_VERBOSE_SYSTEM
+  prompt. Senior/executive candidates now get peer-to-panel verbs (co-led, championed,
+  evangelized); junior candidates get strong-contributor verbs (shipped, built, drove).
+  Fabrication safeguard preserved: guidance instructs LLM to use verbs only where
+  evidence naturally supports it.
+- **S4.2 (Career-level vocabulary profile):** Extended `verb_taxonomy.yaml` with a new
+  `career_level_preferences` top-level section defining three verb buckets — authority,
+  credibility, and energy — for five career levels (fresher / early_career / mid / senior /
+  executive). Added `get_career_level_verb_prefs(career_level)` and
+  `format_career_vocab_guidance(career_level)` to `verb_taxonomy.py` with alias
+  normalisation (e.g. "entry" → early_career). Injected the formatted guidance into the
+  `step_10_verbose_bullets` system prompt so the LLM calibrates verb tone by seniority:
+  executives get "Oversaw / Governed / Stewarded", mid-level gets "Drove / Optimized /
+  Scaled", freshers get "Built / Shipped / Launched". The existing `load_verb_taxonomy`
+  is protected from the new section via an explicit skip guard.
+- **S4.3 (Metric-magnitude consistency):** Bullets that mix wildly different magnitude tiers (e.g. "5% overhead on a $50B platform") are now penalised up to 15% in step_11 BRS ranking, so recruiters see the most credibly-scoped achievements first.
+- **S4.4 (Success box quality signals):** After `linkright resume tailor` completes, the success
+  box now shows two quality signals alongside the PDF path and duration:
+  `JD Coverage` (X/Y reqs covered, %) read from `artifacts/06_role_scores.json`, and
+  `Width hits` (X/Y bullets in 108-120 char target band, %) read from the `width_poc` block
+  in `artifacts/16_telemetry.json`. Values below 80% render in coral (#FF5733) as a visual
+  warning. Both fields are omitted gracefully when the artifact files are absent or malformed
+  (no crash). Adds `_read_quality_metrics()` and `_fmt_metric_value()` helpers to
+  `resume/cli.py`. Tests in `tests/test_success_box.py` (17 passing: AC1-AC4).
+
+### Fixed
+- **S4.5 (Success box path wrap):** Fixed `linkright resume tailor` success card
+  showing the PDF path mid-word wrapped across lines. `_render_success_card` in
+  `resume/cli.py` now passes the filename and full path as two separate lines
+  (`filename\nfull_path`). `success_card()` in `ui/__init__.py` was updated to
+  handle multi-line field values: the first line renders on the key row in accent
+  colour, and continuation lines are indented to the value column and rendered
+  dimmed. Rich `Text(overflow="fold")` is used for the panel body so that even
+  on 80-col terminals the filename component is never broken mid-word (fold only
+  occurs at path-separator boundaries). 15 new tests in
+  `tests/test_success_box_render.py` verify no mid-word wraps at 80, 100, and
+  120 col widths via both the helper primitives and the `success_card()` module
+  function.
+
+
 ## [0.7.0] - 2026-05-11
 
 ### Added
