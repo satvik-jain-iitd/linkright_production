@@ -33,6 +33,13 @@ DROP_SECTION_ORDER: list[str] = [
     "Skills &amp; Competencies",
 ]
 
+# S1.12: expand mode thresholds — target band is 85-92%.
+UTIL_UNDERFLOW_THRESHOLD = 85.0
+UTIL_OVERFLOW_THRESHOLD_CONST = 92.0
+
+# Cap for E1 expand: never exceed this per-company bullet count.
+E1_EXPAND_CAP = 8
+
 
 def _estimate_util_from_html(html_path: Path) -> float:
     """Estimate page utilization (%) from rendered HTML using same heuristic as
@@ -96,11 +103,17 @@ def evaluate_fit(pdf_path: Path, width_poc_results: dict | None,
 
     Returns:
         dict with keys: page_count, any_wrap, wrap_bullets, util_pct,
-        util_overflow, success.
+        util_overflow, util_underflow, success.
 
     2026-05-02: util_overflow flag added — triggers when heuristic says >100%
     even if pypdf reports 1 page. This catches silent clip behind
     `.page { overflow: hidden }` that the user surfaced manually.
+
+    2026-05-11 S1.12: util_underflow flag added — triggers when util_pct is
+    measurable (> 0.0) but below 85% target band. Drives EXPAND strategies
+    E1/E2 in choose_strategy to pad the resume up to target utilization.
+    util_underflow is deliberately False when util_pct == 0.0 (no HTML signal
+    available) so missing-HTML does not incorrectly suppress success.
     """
     try:
         reader = PdfReader(str(pdf_path))
@@ -119,8 +132,13 @@ def evaluate_fit(pdf_path: Path, width_poc_results: dict | None,
     # active trim when util > 92% — gives breathing space at bottom even if
     # PDF render says 1 page (avoids the cluttered "fits exactly to edge" look
     # the user surfaced in 1:54 AM screenshot).
-    UTIL_OVERFLOW_THRESHOLD = 92.0
+    UTIL_OVERFLOW_THRESHOLD = UTIL_OVERFLOW_THRESHOLD_CONST
     util_overflow = util_pct > UTIL_OVERFLOW_THRESHOLD
+
+    # S1.12: underflow — util is measurable but below 85% target floor.
+    # util_pct == 0.0 means no HTML was provided; treat as "no signal" so we
+    # don't penalise a first-pass run that skips HTML.
+    util_underflow = util_pct > 0.0 and util_pct < UTIL_UNDERFLOW_THRESHOLD
 
     return {
         "page_count": page_count,
@@ -128,7 +146,8 @@ def evaluate_fit(pdf_path: Path, width_poc_results: dict | None,
         "wrap_bullets": wrap_bullets,
         "util_pct": util_pct,
         "util_overflow": util_overflow,
-        "success": page_count == 1 and not wrap_bullets and not util_overflow,
+        "util_underflow": util_underflow,
+        "success": page_count == 1 and not wrap_bullets and not util_overflow and not util_underflow,
     }
 
 
@@ -141,13 +160,36 @@ def choose_strategy(
     """Pick the next fitness strategy based on current pipeline state.
 
     Returns a strategy string that `apply_strategy` knows how to mutate for.
+
+    Strategy priority (highest to lowest):
+      EXPAND (S1.12): E1_expand_bullets → E2_surface_projects
+        — only fire when util_underflow=True AND not any_wrap AND page_count==1.
+        — never fire alongside overflow or wrap (those always take precedence).
+      SHRINK: L0_trim_skills → L1_tighten_width → L2_drop_one_bullet →
+              L3_drop_section → L6_drop_one_bullet_combined.
     """
     dropped = set(parsed_p12.get("dropped_sections", []))
     page_count = fit_result.get("page_count", 0)
     any_wrap = fit_result.get("any_wrap", False)
     util_overflow = fit_result.get("util_overflow", False)
+    util_underflow = fit_result.get("util_underflow", False)
     skills_max_chars = int(parsed_p12.get("skills_max_chars") or 480)
 
+    # ── EXPAND PATH (S1.12) ──────────────────────────────────────────────────
+    # Fire ONLY when: page fits (count==1), no wrap, no overflow, and util < 85%.
+    # Never expand into a wrapping or overflowing state.
+    if util_underflow and not any_wrap and not util_overflow and page_count == 1:
+        if iter_n == 0:
+            return "E1_expand_bullets"
+        if iter_n == 1:
+            n_projects = len(parsed_p12.get("projects", []))
+            if n_projects > 0:
+                return "E2_surface_projects"
+        # iter_n >= 2 or no projects: fall through to shrink paths below
+        # (underflow that persists after 2 expand attempts is likely a layout
+        # constraint — don't keep expanding indefinitely).
+
+    # ── SHRINK PATH ──────────────────────────────────────────────────────────
     # 2026-05-02: L0 — Skills trim is the EASIEST space-saving lever. Fire it
     # FIRST when util > 92% but page still fits. Per memory
     # `feedback_skills_trim_before_width_fill`: trim Skills (drop generics,
@@ -187,7 +229,34 @@ def apply_strategy(
 
     Returns (parsed_p12, condensed) for chaining — but mutations are applied in place.
     """
-    if strategy == "L1_tighten_width":
+    if strategy == "E1_expand_bullets":
+        # S1.12 EXPAND: increment each company_i_total by 2, capped at E1_EXPAND_CAP.
+        # Only touches company_i_total keys — awards, projects, voluntary budgets
+        # are left unchanged.
+        bb = parsed_p12.setdefault("bullet_budget", {})
+        n_companies = len(parsed_p12.get("companies", []))
+        for i in range(1, n_companies + 1):
+            key = f"company_{i}_total"
+            current = bb.get(key, 4)
+            bb[key] = min(E1_EXPAND_CAP, current + 2)
+
+    elif strategy == "E2_surface_projects":
+        # S1.12 EXPAND: surface the Projects section that may have been dropped,
+        # and allocate up to 3 project bullets in the budget.
+        dropped = parsed_p12.setdefault("dropped_sections", [])
+        if "Projects" in dropped:
+            dropped.remove("Projects")
+        n_projects = len(parsed_p12.get("projects", []))
+        bb = parsed_p12.setdefault("bullet_budget", {})
+        bb["projects_total"] = min(3, n_projects)
+
+    elif strategy == "L0_trim_skills":
+        # Handled by orchestrator reading skills_max_chars; we just decrement here.
+        # Progressive: 480 → 360 → 240 (each 120c step = ~1 rendered line).
+        current = int(parsed_p12.get("skills_max_chars") or 480)
+        parsed_p12["skills_max_chars"] = max(240, current - 120)
+
+    elif strategy == "L1_tighten_width":
         # Lower target_max_cu by 2 CU — signals next width POC pass to trim harder
         override = parsed_p12.setdefault("width_override", {})
         current = override.get("target_max_cu", STEP13_TARGET_CU_MAX)
