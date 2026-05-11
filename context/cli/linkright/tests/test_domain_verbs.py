@@ -282,7 +282,7 @@ class TestReplaceWeakVerb:
 # ── (e) Integration: verify AC4 wire-in via infer_industry + get_strong_verb ─
 class TestIntegrationWireIn:
     """Mirrors the AC4 pattern from orchestrator.step_10:
-    parse_p12 → infer_industry(career_level) → replace_weak_verb per bullet.
+    parse_p12 → infer_industry(co_title or career_level) → replace_weak_verb per bullet.
 
     This does NOT import orchestrator (avoids heavy dep chain).
     Instead it confirms the helper pattern the production code follows.
@@ -302,6 +302,89 @@ class TestIntegrationWireIn:
         assert infer_industry("legal counsel") == "legal"
         assert infer_industry("operations director") == "operations"
         assert infer_industry("") == "tech"  # fallback
+
+    def test_infer_industry_from_job_title_strings(self):
+        """Bug-fix 2 (S2.2): orchestrator now calls infer_industry(co_title)
+        — a full job title — not a seniority bucket like "mid"/"senior".
+        Verify the priority list correctly maps real job titles.
+        """
+        from linkright.resume.lib.domain_verbs import infer_industry
+        # PM titles
+        assert infer_industry("Senior Product Manager") == "pm"
+        assert infer_industry("VP of Product") == "pm"
+        assert infer_industry("Product Lead") == "pm"
+        # Tech titles
+        assert infer_industry("Software Engineer") == "tech"
+        assert infer_industry("Backend Developer") == "tech"
+        assert infer_industry("SDE II") == "tech"
+        # Data titles
+        assert infer_industry("Data Scientist") == "data"
+        assert infer_industry("ML Engineer") == "data"
+        assert infer_industry("Data Analyst") == "data"
+        # Finance titles
+        assert infer_industry("Finance Controller") == "finance"
+        assert infer_industry("Chief Financial Officer") == "finance"
+        assert infer_industry("Finance Analyst") == "finance"
+        # Marketing titles
+        assert infer_industry("Growth Marketing Manager") == "marketing"
+        assert infer_industry("Senior Marketing Lead") == "marketing"
+        # Sales titles
+        assert infer_industry("Account Executive") == "sales"
+        assert infer_industry("Sales Director") == "sales"
+        # Legal titles
+        assert infer_industry("Legal Counsel") == "legal"
+        assert infer_industry("Senior Attorney") == "legal"
+        # Operations titles
+        assert infer_industry("Supply Chain Manager") == "operations"
+        assert infer_industry("Operations Director") == "operations"
+        # Seniority buckets (old call site) should fall back to "tech" since they
+        # carry no domain keyword — verifies the function still works for old callers.
+        assert infer_industry("mid") == "tech"
+        assert infer_industry("senior") == "tech"
+        assert infer_industry("manager") == "tech"
+        assert infer_industry("entry") == "tech"
+
+    def test_pre_seeding_prevents_within_company_verb_duplication(self):
+        """Bug-fix 1 (S2.2): used_verbs must be pre-seeded with strong verbs
+        from THIS company's accepted bullets BEFORE replace_weak_verb is called.
+
+        Scenario: bullet[0] already has strong verb "Launched" (LLM-generated).
+        bullet[1] has weak verb "helped". Without pre-seeding, replace_weak_verb
+        could return "Launched" again. With pre-seeding, it skips "Launched" and
+        returns a different verb.
+        """
+        from linkright.resume.lib.domain_verbs import (
+            replace_weak_verb, get_strong_verb, load_domain_verbs, _WEAK_VERBS,
+        )
+        verbs = load_domain_verbs()
+        # Find the first verb in pm list to use as our "already present" verb
+        first_pm_verb = verbs["pm"][0]
+
+        bullets = [
+            {"text_html": f"{first_pm_verb} the new onboarding flow", "verb": first_pm_verb},
+            {"text_html": "helped stakeholders align on OKRs", "verb": "helped"},
+        ]
+
+        # === Scenario A: WITHOUT pre-seeding (old buggy behavior) ===
+        used_no_preseed: set[str] = set()
+        _, verb_a = replace_weak_verb(bullets[1]["text_html"], "pm", used_no_preseed)
+        # Without pre-seeding, first call picks first verb from list — which IS first_pm_verb
+        assert verb_a == first_pm_verb, (
+            f"Without pre-seeding, expected '{first_pm_verb}' (first in pm list), got '{verb_a}'"
+        )
+
+        # === Scenario B: WITH pre-seeding (fixed behavior) ===
+        used_with_preseed: set[str] = {
+            p["verb"] for p in bullets
+            if p.get("verb") and p["verb"].lower() not in _WEAK_VERBS
+        }
+        assert first_pm_verb in used_with_preseed, "Strong verb should be in used set after pre-seeding"
+        _, verb_b = replace_weak_verb(bullets[1]["text_html"], "pm", used_with_preseed)
+        # With pre-seeding, first_pm_verb is already used → replacement is a different verb
+        assert verb_b is not None, "Should still find a replacement verb"
+        assert verb_b != first_pm_verb, (
+            f"With pre-seeding, replacement should NOT be '{first_pm_verb}' (already present), got '{verb_b}'"
+        )
 
     def test_full_pipeline_pattern_weak_verb_replaced(self):
         """Simulate the exact orchestrator loop for a single company.

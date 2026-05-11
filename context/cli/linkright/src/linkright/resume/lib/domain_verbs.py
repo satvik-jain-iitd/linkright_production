@@ -92,7 +92,7 @@ _CAREER_LEVEL_PRIORITY: list[tuple[str, str]] = [
     ("logistics",   "operations"),
     ("supply chain","operations"),
     ("operations",  "operations"),
-    ("oper",        "operations"),
+    ("oper ",       "operations"),  # space suffix avoids matching developer/cooperate
     # Tech domain
     ("engineer",    "tech"),
     ("developer",   "tech"),
