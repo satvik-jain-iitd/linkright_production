@@ -7,29 +7,19 @@ from resume text such as "led GenAI (Gen-Artificial Intelligence) strategy".
 
 These tests cover two enforcement layers:
 - AC1: scorecard._learnable_expansions_from_text blocks known acronyms (no penalty)
-- AC2: _UNIVERSAL_NO_EXPAND (mirrored) blocks corpus learning (no expansion)
+- AC2: _UNIVERSAL_NO_EXPAND (imported directly) blocks corpus learning (no expansion)
 - AC3: case-insensitive guard blocks lowercase corpus variants
 - AC4: domain-specific acronyms (AML, SOX) remain learnable
+- AC5: single source of truth — scorecard._COMMON_KNOWN_ACRONYMS IS _UNIVERSAL_NO_EXPAND
 """
 import pytest
+from linkright.resume.data.no_expand import _UNIVERSAL_NO_EXPAND, _UNIVERSAL_NO_EXPAND_UPPER
 from linkright.resume.scorecard import _learnable_expansions_from_text, _COMMON_KNOWN_ACRONYMS
 
 
-# ── Mirror of orchestrator._UNIVERSAL_NO_EXPAND (can't import directly) ──────
-
-def _no_expand_set() -> set:
-    """Mirror of orchestrator._UNIVERSAL_NO_EXPAND — kept in sync with S1.5 fix."""
-    return {
-        "PM", "AI", "ML", "AR", "VR", "API", "SQL", "AWS", "GCP", "iOS", "OS",
-        "UX", "UI", "REST", "JSON", "XML", "CSS", "JS", "PDF", "URL", "SDK",
-        "HTML", "HTTP", "HTTPS", "DNS", "VPN", "SSL", "TLS", "DB", "RPC",
-        "CPU", "GPU", "RAM", "SSD", "CLI", "GUI", "B2B", "B2C", "SaaS",
-        "CRM", "ERP", "JD", "HR", "QA",
-        "LLM", "LLMs", "NLP", "MCP", "RAG", "GenAI", "GPT", "BERT", "GAN",
-        "MLOps", "AIOps", "NLU", "NLG", "XAI", "RL", "RLHF", "DL", "CV",
-        "OCR", "NER", "ASR", "TTS", "STT",
-        "OAuth", "JWT",
-    }
+def _no_expand_set() -> frozenset:
+    """Live reference — imported from data/no_expand.py, not a mirror."""
+    return _UNIVERSAL_NO_EXPAND
 
 
 # ── AC1: scorecard does NOT learn known AI acronyms ──────────────────────────
@@ -97,15 +87,28 @@ def test_term_in_universal_no_expand(term):
 # ── AC4: case-insensitive guard blocks lowercase corpus variants ──────────────
 
 def test_lowercase_variants_blocked_by_upper_set():
-    """Case-insensitive set must catch lowercase corpus variants like 'genai'."""
-    no_expand_upper = {t.upper() for t in _no_expand_set()}
+    """Imported _UNIVERSAL_NO_EXPAND_UPPER must block lowercase corpus variants."""
     for term in ["genai", "llm", "rag", "nlp", "mcp", "gpt", "oauth", "jwt"]:
-        assert term.upper() in no_expand_upper, (
+        assert term.upper() in _UNIVERSAL_NO_EXPAND_UPPER, (
             f"Lowercase corpus variant '{term}' not blocked by _UNIVERSAL_NO_EXPAND_UPPER"
         )
 
 
-# ── AC5: domain-specific acronyms remain learnable ───────────────────────────
+# ── AC5-identity: scorecard IS the shared set (no independent copy) ───────────
+
+def test_scorecard_known_acronyms_is_shared_set():
+    """_COMMON_KNOWN_ACRONYMS must be the same object as _UNIVERSAL_NO_EXPAND.
+
+    Proves single source of truth — the two enforcement layers share one frozenset,
+    drift between them is structurally impossible.
+    """
+    assert _COMMON_KNOWN_ACRONYMS is _UNIVERSAL_NO_EXPAND, (
+        "_COMMON_KNOWN_ACRONYMS is a separate copy — scorecard.py must import "
+        "from data/no_expand.py, not define its own set."
+    )
+
+
+# ── AC6: domain-specific acronyms remain learnable ───────────────────────────
 
 @pytest.mark.parametrize("acronym,text", [
     ("AML",  "Led AML (Anti-Money Laundering) compliance initiative"),
