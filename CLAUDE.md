@@ -186,15 +186,38 @@ Stale worktrees confuse future sessions.
 ### Rule 7 — Parallel-session memory hygiene
 If you observe unexpected file changes mid-session that you didn't make, assume another Satvik-driven Claude session did them. Do NOT revert. Re-read the file, narrow your edit to your scope, and continue.
 
-## CLI Release Rule (MANDATORY — every code PR)
+## CLI Release Rule (MANDATORY — fragment-based, Sprint 2+)
 
-Every PR that touches code under `context/cli/linkright/` **must** include:
-1. Version bump in `context/cli/linkright/pyproject.toml` (patch `X.Y.Z+1` for bugfix, minor for feature)
-2. CHANGELOG entry prepended to `context/cli/linkright/CHANGELOG.md`
+### In every code PR (NEVER touch pyproject.toml or CHANGELOG.md directly)
 
-**Why this exists:** The `cli-publish` CI workflow triggers ONLY on `pyproject.toml` changes. A merged code PR without a bump means the fix never reaches users — `linkright update` returns nothing new. Established after PR #96 incident (2026-05-09).
+Every PR that touches code under `context/cli/linkright/` **must** write exactly one fragment file:
 
-**Never** create a separate "bump PR" after the fact. The bump goes IN the code PR, same commit or final commit before merge.
+```
+context/cli/linkright/changelogs/unreleased/<sprint-item-slug>.md
+```
+
+Format (copy from `changelogs/TEMPLATE.md`):
+```markdown
+## [type: Fixed]
+<!-- pr: 123 -->
+- **S?.? (short title):** Description of what changed and why.
+```
+
+**Do NOT touch `pyproject.toml` or `CHANGELOG.md` in code PRs.** These are now owned exclusively by the release script.
+
+### At sprint end (after ALL PRs merged to main)
+
+```bash
+# On main branch, from linkright_production/ root:
+bash scripts/release-cli.sh patch    # bugfix sprint
+bash scripts/release-cli.sh minor    # feature sprint
+```
+
+This script: compiles fragments → bumps version → updates CHANGELOG → commits → pushes → `cli-publish.yml` auto-triggers → PyPI publish.
+
+**Why this replaces the old rule:** The old rule (bump in PR) caused O(N²) forced rebases — every merge to main forced every open PR to rebase `pyproject.toml` and `CHANGELOG.md`. A sprint with 7 parallel PRs needed 21+ manual rebases. Fragment files are unique per PR → zero conflicts. Established 2026-05-11 after Sprint 1 (7-PR serial rebase pain).
+
+**Never** bump version manually in a PR again. `scripts/release-cli.sh` is the only version-bumper.
 
 ---
 
