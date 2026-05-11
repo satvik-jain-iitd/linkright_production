@@ -111,7 +111,8 @@ answer: Built launch analytics that improved activation by 20%.
     assert not any("expected companies missing from nugget attribution" in str(args) for args in captured)
 
 
-def test_deep_rca_raw_check_flags_missing_expected_company(tmp_path: Path):
+def test_deep_rca_raw_check_flags_missing_expected_company(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("LINKRIGHT_HOME", str(tmp_path / "missing-home"))
     from harness.resume.deep_rca import check_00_raw
 
     run = tmp_path / "run"
