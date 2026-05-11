@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.18] — 2026-05-11
+
+### Fixed
+- **S1.1 — experience years rounding + fresher-drop:** Summary now uses
+  `max(1, math.ceil(total_years))` for non-fresher candidates, so a 4.7-year
+  candidate writes "5+ years" instead of "4+ years" and passes adjacent
+  year-band JD filters (e.g. "5-7 years" job postings). For `career_level ==
+  "fresher"` (total_years == 0, set deterministically by the B1 consistency
+  check), the years phrase is omitted entirely from the summary — fixing the
+  "0+ years of experience" bug from QA. The B2/F01 hallucination validator is
+  also tightened: ceiling-rounded `display_years` replaces the loose
+  `user_total_years + 1.0` tolerance. Covered by 13 new unit tests in
+  `tests/test_experience_rounding.py`.
+
 ## [0.5.17] - 2026-05-11
 
 ### Fixed

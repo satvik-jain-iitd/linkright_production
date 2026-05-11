@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import click
 import json
+import math
 import os
 import re
 import sys
@@ -1736,15 +1737,29 @@ def step_09_summary(parsed_p12: dict, retrieved: dict, raw_text: str) -> str:
     # B2/F01: compute total work years to feed the grounding constraint.
     user_total_years = _compute_total_experience_years(parsed_p12.get("companies", []))
 
+    # S1.1: ceiling-round for non-fresher (4.7 → 5, min 1); fresher drops years phrase entirely.
+    # Condition: career_level == "fresher" only. Sub-1yr candidates with career_level "entry"
+    # still get display_years=1 (ceil + floor of 1) so they hit adjacent year-band JD filters.
+    # Only career_level "fresher" (total_years==0) truly drops the phrase.
+    _career_level_p12 = parsed_p12.get("career_level", "")
+    _is_fresher = (_career_level_p12 == "fresher")
+    display_years = 0 if _is_fresher else max(1, math.ceil(user_total_years))
+
     def _build_user_msg() -> str:
+        if _is_fresher:
+            years_str = "entry-level (do NOT include years of experience in the summary)"
+            years_ceiling_str = "0"
+        else:
+            years_str = str(display_years)
+            years_ceiling_str = str(display_years)
         return llm.subst(
             P.PROFESSIONAL_SUMMARY_USER,
             target_role=parsed_p12.get("target_role", ""),
             target_company=parsed_p12.get("company_name", ""),
             jd_keywords=", ".join(parsed_p12.get("jd_keywords", [])[:10]),
-            career_level=parsed_p12.get("career_level", ""),
-            user_total_years=f"{user_total_years:.1f}",
-            user_total_years_plus_one=f"{user_total_years + 1.0:.0f}",
+            career_level=_career_level_p12,
+            user_total_years=years_str,
+            user_total_years_plus_one=years_ceiling_str,
             companies=", ".join(c.get("name", "") for c in parsed_p12.get("companies", [])[:3]),
             resume_bullets_text=bullets_text,
         )
@@ -1768,11 +1783,18 @@ def step_09_summary(parsed_p12: dict, retrieved: dict, raw_text: str) -> str:
         companies_str = ", ".join(c.get("name", "") for c in parsed_p12.get("companies", [])[:2])
         role = parsed_p12.get("target_role", "Product Manager")
         kws = ", ".join(parsed_p12.get("jd_keywords", [])[:4])
-        summary = (
-            f"Product leader with {user_total_years:.0f}+ years of experience at {companies_str}, "
-            f"specializing in {kws}. Proven track record driving cross-functional initiatives "
-            f"and delivering measurable business outcomes as a {role}."
-        )[:300]
+        if _is_fresher:
+            summary = (
+                f"Aspiring {role} with hands-on experience in {kws}. "
+                f"Eager to drive impact and contribute to {companies_str or 'a forward-thinking team'} "
+                f"in a {role} capacity."
+            )[:300]
+        else:
+            summary = (
+                f"Product leader with {display_years}+ years of experience at {companies_str}, "
+                f"specializing in {kws}. Proven track record driving cross-functional initiatives "
+                f"and delivering measurable business outcomes as a {role}."
+            )[:300]
         (ARTIFACTS / "09_professional_summary.html").write_text(
             f"<div class='summary-line'>{summary}</div>\n", encoding="utf-8"
         )
@@ -1803,10 +1825,13 @@ def step_09_summary(parsed_p12: dict, retrieved: dict, raw_text: str) -> str:
 
     # B2/F01: regex validator for years-claim hallucination. If violated, re-prompt once.
     def _years_violation(s: str) -> Optional[str]:
-        if user_total_years <= 0:
+        if _is_fresher:
+            mm = re.search(r"\b(\d+)\+?\s*years?\b", s, flags=re.IGNORECASE)
+            return mm.group(0) if mm else None
+        if display_years <= 0:
             return None
         for mm in re.finditer(r"\b(\d+)\+?\s*years?\b", s, flags=re.IGNORECASE):
-            if int(mm.group(1)) > user_total_years + 1.0:
+            if int(mm.group(1)) > display_years:
                 return mm.group(0)
         return None
 
@@ -1815,11 +1840,11 @@ def step_09_summary(parsed_p12: dict, retrieved: dict, raw_text: str) -> str:
         _note_retry(step)
         logbook.append(
             step, "eval",
-            f"B2/F01 violation detected: '{violation}' exceeds user_total_years={user_total_years:.1f}+1; re-prompting once",
+            f"B2/F01 violation detected: '{violation}' exceeds display_years={display_years} (raw={user_total_years:.1f}); re-prompting once",
         )
         user_retry = _build_user_msg() + (
             f"\n\nRETRY: your previous response claimed '{violation}' which exceeds the "
-            f"candidate's actual {user_total_years:.1f} years. Remove/correct this claim."
+            f"candidate's actual experience (display_years={display_years}). Remove/correct this claim."
         )
         try:
             text2, usage2 = llm.tier_chat(
