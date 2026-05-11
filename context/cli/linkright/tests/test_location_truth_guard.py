@@ -1,5 +1,5 @@
 """
-Unit tests for the S1.9 location truth-engine guard (iter 2).
+Unit tests for the S1.9 location truth-engine guard (iter 2/3).
 
 Covers:
   1. Pure fabrication blocked
@@ -14,6 +14,8 @@ Covers:
   10. Multiple occurrences of company name — only header window counts
   11. Location substring that matches non-header window without date
   12. None vs empty string normalisation in loc_in_header
+  13. step_14_assemble_html accepts raw_text parameter (no NameError) [iter-3]
+  14. Fallback reconstruction simulation — no crash on empty companies [iter-3]
 """
 
 from __future__ import annotations
@@ -271,3 +273,109 @@ def test_none_loc_treated_as_empty():
     except (TypeError, AttributeError):
         # Acceptable: function may require str. Caller always passes str in prod.
         pass
+
+
+# ── Test 13: step_14_assemble_html accepts raw_text parameter (no NameError) ─
+
+def test_step14_signature_accepts_raw_text():
+    """
+    Regression guard for S1.9 iter-3 NameError fix.
+
+    The fallback path in step_14_assemble_html calls
+    _loc_in_header(loc, name, raw_text).  Before the fix, raw_text was not a
+    parameter, causing NameError when step_07 exhausted all providers and
+    returned an empty companies list.
+
+    This test verifies that:
+      1. step_14_assemble_html has a 'raw_text' parameter in its signature.
+      2. The parameter has a default value (empty string) so existing callers
+         without the argument continue to work (backward-compatible).
+    """
+    import inspect
+    from linkright.resume.orchestrator import step_14_assemble_html
+
+    sig = inspect.signature(step_14_assemble_html)
+    assert "raw_text" in sig.parameters, (
+        "step_14_assemble_html must declare raw_text parameter "
+        "(fallback path calls _loc_in_header(loc, name, raw_text))"
+    )
+    param = sig.parameters["raw_text"]
+    assert param.default == "", (
+        "raw_text must default to '' so existing call sites without the arg "
+        "continue to work without modification"
+    )
+
+
+# ── Test 14: Fallback reconstruction simulation — no crash on empty companies ─
+
+def test_fallback_reconstruction_no_crash():
+    """
+    Simulates the step_14 fallback block when parsed_p12.get('companies') == [].
+
+    Reproduces the exact logic at orchestrator.py:3840-3865 in isolation so we
+    can confirm it does not crash with raw_text provided.  This is a pure-logic
+    unit test (no file I/O, no template loading).
+
+    Before the fix: raw_text was a free name -> NameError on this path.
+    After the fix: raw_text is a parameter (default '') -> no crash.
+    """
+    from linkright.resume.lib.location_guard import loc_in_header as _loc_in_header
+
+    raw_text = RAW_WITH_HEADERS  # non-empty: includes company headers with locations
+    ROLE_CAP = 4
+
+    parsed_resume = {
+        "experiences": [
+            {"company": "American Express", "role": "Senior PM", "location": "Gurugram",
+             "start_date": "Jul 2024", "end_date": "Present"},
+            {"company": "Sprinklr", "role": "Analyst", "location": None,
+             "start_date": "Apr 2022", "end_date": "Jul 2024"},
+            {"company": "ContentStack", "role": "PM",
+             "start_date": "Nov 2024", "end_date": "Jun 2025"},
+        ]
+    }
+    parsed_p12_empty = {"companies": []}
+
+    _p12_companies = parsed_p12_empty.get("companies") or []
+
+    # This is the exact branch that crashed before the fix
+    if not _p12_companies:
+        _exps = (parsed_resume.get("experiences") or [])[:ROLE_CAP]
+        _p12_companies = [
+            {
+                "name": ex.get("company", ""),
+                "location": (ex.get("location") or "")
+                    if _loc_in_header(
+                        (ex.get("location") or "").strip(),
+                        (ex.get("company") or "").strip(),
+                        raw_text,
+                    )
+                    else "",
+                "title": ex.get("role", ""),
+                "date_range": f"{(ex.get('start_date') or '')} - {(ex.get('end_date') or '')}".strip(" -"),
+                "team": "",
+            }
+            for ex in _exps
+            if (ex.get("company") or "").strip()
+        ]
+
+    # Should reconstruct 3 companies (not crash)
+    assert len(_p12_companies) == 3
+
+    # AmEx has "Gurugram" in header -> preserved
+    amex = next(c for c in _p12_companies if c["name"] == "American Express")
+    assert amex["location"] == "Gurugram"
+
+    # Sprinklr has None location -> stripped to ""
+    sprinklr = next(c for c in _p12_companies if c["name"] == "Sprinklr")
+    assert sprinklr["location"] == ""
+
+    # ContentStack has no location key -> stripped to ""
+    contentstack = next(c for c in _p12_companies if c["name"] == "ContentStack")
+    assert contentstack["location"] == ""
+
+    # No "None" literal in any date_range
+    for co in _p12_companies:
+        assert "None" not in co.get("date_range", ""), (
+            f"date_range for {co['name']} must not contain 'None' literal"
+        )

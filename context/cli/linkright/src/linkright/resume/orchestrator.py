@@ -1932,7 +1932,7 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
             jd_requirements_list=jd_requirements_list,
             company_name=co_name,
             company_title=co.get("title", ""),
-            company_dates=co.get("date_range", ""),
+            company_dates=(co.get("date_range") or ""),
             company_team=co.get("team", ""),
             company_chunks=company_chunks,
             bullet_count=bullet_count,
@@ -3779,7 +3779,7 @@ def _compute_header_font_size(name: str, role: str, max_width_mm: float = 175.0)
 # Step 14 — HTML assembly
 # ────────────────────────────────────────────────────────────────────────────
 
-def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, bullets_per_co: dict) -> Path:
+def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, bullets_per_co: dict, raw_text: str = "") -> Path:
     step = "step_14_assemble_html"
     logbook.append(
         step, "starting",
@@ -5398,7 +5398,7 @@ def main():
         # Prune companies with no bullets (prevents empty <section>...</section>)
         condensed_pruned = _prune_outline(condensed)
 
-        html_path = step_14_assemble_html(parsed_p12, parsed, summary, condensed_pruned)
+        html_path = step_14_assemble_html(parsed_p12, parsed, summary, condensed_pruned, raw_text)
         pdf_path = step_15_pdf(html_path)
 
         # ─── Evaluate fit ───────────────────────────────────────────────────
