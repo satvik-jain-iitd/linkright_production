@@ -285,14 +285,14 @@ class TestStep11RankClusterDedup:
         paras = ranked["AcmeCorp"]
         # First bullet (higher score) should have scored the cluster
         # Second bullet cannot claim c1 again — its cluster contribution is 0
-        # Verify: the two BRS scores are NOT identical (dedup changed the second)
         scores = [p["_brs"] for p in paras]
-        assert scores[0] >= scores[1], "Higher-ranked bullet must have BRS >= lower"
-        # Specifically: only 1 bullet benefits from the cluster kw_hit bonus.
-        # At least one bullet must have a lower score than if both got credit.
-        # (If dedup is broken both would have identical cluster contribution.)
-        assert not (scores[0] == scores[1] and scores[0] > 0), (
-            "Both bullets got identical positive cluster BRS — dedup is not working"
+        # gap = one cluster kw_hit credit not awarded to second bullet (dedup).
+        # Formula: kw_hits * 0.05 * len_bonus. Both bullets <150 chars → len_bonus=0.5.
+        # Bullet 1: (nums=1)*0.15 + (kw_hits=1)*0.05 all ×0.5 = 0.100
+        # Bullet 2: (nums=1)*0.15 + (kw_hits=0)*0.05 all ×0.5 = 0.075  (c1 deduped)
+        # Expected gap = 0.025 = 1 cluster hit × 0.05 × len_bonus 0.5
+        assert scores[0] - scores[1] == pytest.approx(0.025, abs=1e-6), (
+            f"Score gap {scores[0] - scores[1]:.6f} != 0.025 — dedup or scoring broken"
         )
 
     def test_cross_company_cluster_resets(self, monkeypatch, tmp_path):

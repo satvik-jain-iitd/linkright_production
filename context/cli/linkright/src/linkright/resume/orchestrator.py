@@ -2720,11 +2720,10 @@ def step_11_rank(
     if jd_req_clusters:
         for cl in jd_req_clusters:
             cid = cl["cluster_id"]
-            # Index canonical label words as cluster keys (>=5 chars only).
-            # Filter is >=5, not >2, to exclude common connectives like "and",
-            # "for", "the", "has", "can" (all len=3) that would spuriously match
-            # every bullet and collapse kw_to_cluster to the last cluster.
-            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) >= 5]
+            # Index canonical label words as cluster keys (>=4 chars only).
+            # >= 4 excludes 1-3 char connectives (and, for, the, has, can) while
+            # keeping domain terms (Java, REST, JSON, data, SQL, SaaS, team, Node).
+            label_words = [w.lower() for w in (cl.get("canonical_label") or "").split() if len(w) >= 4]
             for w in label_words:
                 kw_to_cluster[w] = cid
             # Also index meaningful words from every member req_id in this cluster.
@@ -2756,7 +2755,10 @@ def step_11_rank(
         # Proof signals
         signals = len(re.findall(P.PROOF_REGEX, text))
         # Keyword hits — cluster-deduped when clusters are available
-        if jd_req_clusters and kw_to_cluster:
+        # Always use cluster path when jd_req_clusters provided — empty kw_to_cluster
+        # means zero cluster hits, not fallback to legacy (which would contradict the
+        # logbook entry and silently skip dedup).
+        if jd_req_clusters:
             # Map text words → which clusters they mention
             text_words = set(re.findall(r"[a-z]+", text))
             clusters_mentioned = set()
