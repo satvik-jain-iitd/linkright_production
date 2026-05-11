@@ -160,12 +160,12 @@ def lr_text(prompt: str, default: str = "", accent: str = TEAL):
 
 def step_start(label: str, accent: str = TEAL, index: int | None = None, total: int | None = None) -> None:
     suffix = f"  [dim]({index} of {total})[/]" if index is not None and total is not None else ""
-    console.print(f"\n  [step.gold]✨[/]  [bold]{label}[/]{suffix}")
+    console.print(f"\n  [step.gold]✨[/]  [bold {accent}]{label}[/]{suffix}")
 
 
 def step_done(label: str = "done", detail: str = "", accent: str = TEAL) -> None:
     detail_str = f"  [dim]— {detail}[/]" if detail else ""
-    console.print(f"      [step.accent]●[/]  {label}{detail_str}")
+    console.print(f"      [{accent}]●[/]  {label}{detail_str}")
 
 
 def step_warn(message: str) -> None:
