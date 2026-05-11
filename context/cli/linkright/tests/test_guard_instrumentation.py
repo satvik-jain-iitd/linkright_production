@@ -1,6 +1,5 @@
 import json
 import pathlib
-from unittest.mock import patch
 
 
 def test_log_guard_decision_writes_jsonl(tmp_path, monkeypatch):
