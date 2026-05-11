@@ -46,7 +46,15 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
     duration_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
 
     pdf_path = run_dir / "artifacts" / "15_final_resume.pdf"
-    pdf_line = str(pdf_path) if pdf_path.exists() else "(PDF not produced — see logs/pipeline.log)"
+    if pdf_path.exists():
+        # AC3: bold filename on first line, dimmed full path on second line.
+        # The newline is handled by success_card() which indents continuation
+        # lines to the value column — no mid-word wrap occurs because each
+        # line segment is a self-contained Rich Text span (no spaces to break
+        # on, and overflow="fold" is the fallback for absurdly long paths).
+        pdf_line = pdf_path.name + "\n" + str(pdf_path)
+    else:
+        pdf_line = "(PDF not produced — see logs/pipeline.log)"
 
     fields = [("PDF", pdf_line), ("Took", duration_str)]
 
