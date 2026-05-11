@@ -15,6 +15,7 @@ tools on the same FastMCP instance in their respective `register_mcp()` hooks
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -238,7 +239,8 @@ async def linkright_tailor_resume(params: TailorResumeInput) -> str:
     if params.run_id:
         cmd.extend(["--run-id", params.run_id])
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    _env = {**os.environ, "LR_NO_PAUSE": "1"}
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900, env=_env)
     if proc.returncode != 0:
         return json.dumps({"error": "tailor failed",
                            "stderr": proc.stderr[-1500:],
@@ -270,7 +272,8 @@ async def linkright_improve_resume(params: ImproveResumeInput) -> str:
     if params.target_dim:
         cmd.extend(["--target-dim", params.target_dim])
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    _env = {**os.environ, "LR_NO_PAUSE": "1"}
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=_env)
     if proc.returncode != 0:
         return json.dumps({"error": "improve failed",
                            "stderr": proc.stderr[-1500:]})

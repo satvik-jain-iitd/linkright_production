@@ -304,6 +304,7 @@ def _extract_contact_from_text(raw_text: str) -> dict:
 def save_contact(profile_dir: Path, contact: dict) -> None:
     """Persist user-confirmed contact to `profile_dir/contact.yaml`."""
     path = profile_dir / "contact.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(contact, f, sort_keys=False)
 
