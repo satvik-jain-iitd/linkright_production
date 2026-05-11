@@ -103,7 +103,7 @@ instead of hardcoded user or employer literals.
   local profile or career-signal metadata when available. Runs with no profile
   metadata continue to degrade cleanly with the existing generic checks. (#91)
 
-## [0.5.17] — 2026-05-11
+## [0.5.18] — 2026-05-11
 
 ### Fixed
 - **S1.6 — trailing punctuation residue cleanup:** `step_12_condense` now strips

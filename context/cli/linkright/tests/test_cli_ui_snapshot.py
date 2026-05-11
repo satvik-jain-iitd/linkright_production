@@ -88,21 +88,42 @@ def test_patterns_exports_all_primitives():
 
 # ── AC5: doctor uses Rich, no raw ANSI escapes ────────────────────────────────
 
-def test_doctor_output_has_no_raw_ansi():
-    """Doctor table must not contain raw ANSI escape sequences."""
+def test_doctor_output_has_no_raw_ansi(monkeypatch):
+    """Doctor table must not contain raw ANSI escape sequences.
+
+    Module-level Rich Console captures sys.stdout at construction time, so
+    CliRunner cannot buffer it.  Fix: swap linkright.ui.console for a recording
+    Console before invocation — doctor_cmd does a lazy local import
+    (`from linkright.ui import console as _con`) so the swap takes effect.
+    """
     from click.testing import CliRunner
+    from rich.console import Console
+    from linkright.ui.theme import LR_THEME
+    import linkright.ui as ui_mod
     from linkright.cli import doctor_cmd
+
+    recording = Console(theme=LR_THEME, record=True, force_terminal=False, width=80)
+    monkeypatch.setattr(ui_mod, "console", recording)
+
     runner = CliRunner()
     result = runner.invoke(doctor_cmd, [])
-    # CliRunner swallows exceptions — verify command ran (0=pass, 1=failures found, both OK)
     assert result.exit_code in (0, 1), (
         f"doctor_cmd raised an unhandled exception: {result.exception!r}\n{result.output}"
     )
-    assert "\033[" not in result.output, (
+    text = recording.export_text()
+    assert text, "Doctor produced no output — monkeypatch did not wire correctly (AC5 fail)"
+    assert "doctor" in text.lower(), (
+        "Expected 'doctor' heading missing from captured output (AC5 content check fail)"
+    )
+    assert "\033[" not in text, (
         "Raw ANSI escape found in doctor output — not using Rich console (AC5 fail)"
     )
-    assert "\x1b[" not in result.output, (
+    assert "\x1b[" not in text, (
         "Raw ESC sequence found in doctor output — not using Rich console (AC5 fail)"
+    )
+    # Belt-and-suspenders: also verify no raw ANSI via any click.echo() fallback path
+    assert "\033[" not in result.output, (
+        "Raw ANSI found via click.echo — legacy code path still active (AC5 fail)"
     )
 
 
