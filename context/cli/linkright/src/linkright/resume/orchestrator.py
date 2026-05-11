@@ -115,6 +115,30 @@ def _note_retry(step_name: str) -> None:
     RETRY_COUNTS[step_name] = RETRY_COUNTS.get(step_name, 0) + 1
 
 
+def _log_guard_decision(
+    bullet_text: str,
+    source_excerpt: str,
+    decision: str,
+    run_id: str = "unknown",
+) -> None:
+    """S5.7 Phase 0: append training triplet to ~/.linkright/training-data/fabrication-guard/."""
+    try:
+        import json as _json, pathlib as _pathlib, time as _time
+        data_dir = _pathlib.Path.home() / ".linkright" / "training-data" / "fabrication-guard"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        log_file = data_dir / f"{run_id}.jsonl"
+        row = {
+            "bullet": bullet_text[:400],
+            "source": source_excerpt[:600],
+            "decision": decision,
+            "ts": int(_time.time()),
+        }
+        with log_file.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # never crash the pipeline for telemetry
+
+
 # ── Iter-04 (2026-04-23): Output purity + outline pruning helpers ──────────
 # Used by Step 10, Step 12, Step 13 (via width_poc), and Step 14 to keep
 # LLM commentary out of final HTML and prevent blank-section shells in PDF.
@@ -2539,6 +2563,8 @@ def _apply_fabrication_guards(
             if not text:
                 continue
             original = text
+            _bullet_metric_strips = 0
+            _bullet_jd_strips = 0
 
             # --- Metric guard ---
             fab_metrics = _find_fab_metrics(text, co_src)
@@ -2548,6 +2574,7 @@ def _apply_fabrication_guards(
                 new = pat.sub("", text, count=1)
                 if new != text:
                     metric_strips += 1
+                    _bullet_metric_strips += 1
                     text = new
 
             # --- JD-fishing guard ---
@@ -2558,6 +2585,7 @@ def _apply_fabrication_guards(
                 new = pat.sub("", text, count=1)
                 if new != text:
                     jd_strips += 1
+                    _bullet_jd_strips += 1
                     text = new
 
             if text != original:
@@ -2570,6 +2598,27 @@ def _apply_fabrication_guards(
                 bullets_touched += 1
                 if len(examples) < 3:
                     examples.append(f"{co_name}: '{original[:80]}' → '{text[:80]}'")
+                # S5.7 Phase 0: compound label when both guards fired on this bullet
+                if _bullet_metric_strips and _bullet_jd_strips:
+                    _guard_decision = "stripped_metric+jd_term"
+                elif _bullet_metric_strips:
+                    _guard_decision = "stripped_metric"
+                else:
+                    _guard_decision = "stripped_jd_term"
+                _log_guard_decision(
+                    bullet_text=original,
+                    source_excerpt="; ".join(co_sources.get(co_name, [])[:3]),
+                    decision=_guard_decision,
+                    run_id=str(ARTIFACTS.parent.name) if ARTIFACTS != ROOT / "artifacts" else "unknown",
+                )
+            else:
+                # S5.7 Phase 0: log accepted decision
+                _log_guard_decision(
+                    bullet_text=original,
+                    source_excerpt="; ".join(co_sources.get(co_name, [])[:3]),
+                    decision="accepted",
+                    run_id=str(ARTIFACTS.parent.name) if ARTIFACTS != ROOT / "artifacts" else "unknown",
+                )
 
     try:
         logbook.append(
