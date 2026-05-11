@@ -812,3 +812,33 @@ Interpersonal:
     - Bridged
     - Coached
     - Unified
+
+# ── Career-level vocabulary profile — S4.2 ────────────────────────────────────
+# Three buckets per level:
+#   authority   — verbs that signal scope / governance / executive presence
+#   credibility — verbs that signal proven impact and measurable delivery
+#   energy      — verbs that signal hustle, execution, and hands-on building
+# Empty list = "do not use" at this level.
+# Verb case follows resume convention (Title Case, past tense).
+
+career_level_preferences:
+  fresher:
+    authority:   []
+    energy:      [Built, Shipped, Launched, Developed, Created, Implemented, Deployed, Coded]
+    credibility: [Assisted, Supported, Contributed, Collaborated]
+  early_career:
+    authority:   []
+    energy:      [Built, Shipped, Launched, Delivered, Implemented, Deployed, Automated]
+    credibility: [Drove, Owned, Led, Managed, Executed]
+  mid:
+    authority:   [Led, Defined, Established, Aligned, Directed]
+    energy:      [Shipped, Deployed, Launched]
+    credibility: [Drove, Optimized, Scaled, Improved, Reduced, Increased]
+  senior:
+    authority:   [Oversaw, Governed, Established, Directed, Shaped, Championed]
+    energy:      [Launched, Scaled]
+    credibility: [Drove, Optimized, Transformed, Accelerated, Spearheaded]
+  executive:
+    authority:   [Oversaw, Governed, Established, Directed, Shaped, Stewarded, Evangelized, Chartered]
+    energy:      []
+    credibility: [Transformed, Accelerated, Championed, Orchestrated]
