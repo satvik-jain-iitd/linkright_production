@@ -5927,6 +5927,14 @@ def main():
     if _ranked_artifact.exists():
         _ranked_artifact.write_text(json.dumps(ranked, indent=2), encoding="utf-8")
 
+    # S5.6: cross-bullet verb coherence (after ranking, before step_12)
+    try:
+        from linkright.resume.lib.coherence import enforce_verb_coherence
+        for _co, _co_bullets in ranked.items():
+            ranked[_co] = enforce_verb_coherence(_co_bullets, section_id=_co)
+    except Exception:
+        pass  # never crash pipeline
+
     _see_and_continue(
         "Bullets drafted and ranked",
         f"Ranked {sum(len(v) for v in ranked.values())} bullets across "
