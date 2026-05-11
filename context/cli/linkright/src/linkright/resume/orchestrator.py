@@ -4527,13 +4527,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     # ════════════════════════════════════════════════════════════════════════
     # Tiny whitelist: universally-known tokens that NEVER need expansion.
     # Anything domain-specific is auto-learned, never hardcoded.
-    _UNIVERSAL_NO_EXPAND = {
-        "PM", "AI", "ML", "AR", "VR", "API", "SQL", "AWS", "GCP", "iOS", "OS",
-        "UX", "UI", "REST", "JSON", "XML", "CSS", "JS", "PDF", "URL", "SDK",
-        "HTML", "HTTP", "HTTPS", "DNS", "VPN", "SSL", "TLS", "DB", "RPC",
-        "CPU", "GPU", "RAM", "SSD", "CLI", "GUI", "B2B", "B2C", "SaaS",
-        "CRM", "ERP", "JD", "HR", "QA",
-    }
+    from .data.no_expand import _UNIVERSAL_NO_EXPAND, _UNIVERSAL_NO_EXPAND_UPPER
 
     # Pattern: "Capitalized Words (XYZ)" where XYZ is a 2-6 char uppercase token
     # (lowercase 's' suffix allowed for plurals like "PIs"). Matches "Anti-Money
@@ -4589,7 +4583,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             for m in _LEARN_PATTERN.finditer(text):
                 words = m.group(1).strip().rstrip(",.;:")
                 ac = m.group(2).strip()
-                if ac in _UNIVERSAL_NO_EXPAND:
+                if ac.upper() in _UNIVERSAL_NO_EXPAND_UPPER:
                     continue
                 word_list = [w for w in re.split(r"[\s\-]+", words) if w]
                 if not word_list:
@@ -4609,7 +4603,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             for m in _LEARN_PATTERN_INV.finditer(text):
                 ac = m.group(1).strip()
                 words = m.group(2).strip().rstrip(",.;:")
-                if ac in _UNIVERSAL_NO_EXPAND or ac in learned:
+                if ac.upper() in _UNIVERSAL_NO_EXPAND_UPPER or ac in learned:
                     continue
                 if len(words) > 80:
                     continue
@@ -4649,7 +4643,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         # Persistent corpus pairs WIN over this-run only if not already learned this run.
         # i.e., resume's own definition takes priority; corpus fills gaps.
         for _ac, _exp in _persistent_acronyms.items():
-            if _ac not in _LEARNED_EXPANSIONS and _ac not in _UNIVERSAL_NO_EXPAND:
+            if _ac not in _LEARNED_EXPANSIONS and _ac.upper() not in _UNIVERSAL_NO_EXPAND_UPPER:
                 _LEARNED_EXPANSIONS[_ac] = _exp
         # Contribute back: this-run learned pairs added to corpus for future runs.
         _new_to_corpus = merge_acronyms(_CORPUS, _LEARNED_EXPANSIONS)
@@ -4674,7 +4668,7 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             return text
         out = text
         for ac, expansion in learned.items():
-            if ac in already_seen or ac in _UNIVERSAL_NO_EXPAND:
+            if ac in already_seen or ac.upper() in _UNIVERSAL_NO_EXPAND_UPPER:
                 continue
             pattern = re.compile(rf"\b{re.escape(ac)}\b")
             m = pattern.search(out)

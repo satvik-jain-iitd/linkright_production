@@ -326,16 +326,9 @@ def _s_tense_consistency(ctx: dict[str, Any]) -> float:
 
 # Phase 1.4 — Acronym expansion check (first-use must have full form)
 _ACRONYM_RE = re.compile(r"\b([A-Z]{2,5})\b")
-_COMMON_KNOWN_ACRONYMS = {
-    # Universally-known tech/programming/internet acronyms ONLY.
-    # Domain-specific acronyms (AML, KYC, K8s, WCAG, etc.) MUST come from
-    # auto-learn (orchestrator's _learn_acronym_expansions) — no domain bias here.
-    "PM", "AI", "ML", "AR", "VR", "API", "SQL", "AWS", "GCP", "iOS", "OS",
-    "UX", "UI", "REST", "JSON", "XML", "CSS", "JS", "PDF", "URL", "SDK",
-    "HTML", "HTTP", "HTTPS", "DNS", "VPN", "SSL", "TLS", "DB", "RPC",
-    "CPU", "GPU", "RAM", "SSD", "CLI", "GUI", "B2B", "B2C", "SaaS",
-    "CRM", "ERP", "JD", "HR", "QA", "MCP", "RAG", "LLM", "NLP", "OAuth", "JWT",
-}
+# S1.5: single source of truth in data/no_expand.py — imported directly so
+# scorecard and orchestrator can never drift apart again.
+from linkright.resume.data.no_expand import _UNIVERSAL_NO_EXPAND as _COMMON_KNOWN_ACRONYMS, _UNIVERSAL_NO_EXPAND_UPPER as _KNOWN_UPPER
 
 
 # v5.8 — relaxed scorer dim per user-aligned design (Decision #1):
@@ -374,7 +367,7 @@ def _learnable_expansions_from_text(text: str) -> dict:
         ac = m.group(2).strip()
         if not _is_real_acronym(ac):
             continue
-        if ac in _COMMON_KNOWN_ACRONYMS:
+        if ac.upper() in _KNOWN_UPPER:
             continue
         if len(words) > 80:
             continue
@@ -385,7 +378,7 @@ def _learnable_expansions_from_text(text: str) -> dict:
         words = m.group(2).strip().rstrip(",.;:")
         if not _is_real_acronym(ac):
             continue
-        if ac in _COMMON_KNOWN_ACRONYMS or ac in learned:
+        if ac.upper() in _KNOWN_UPPER or ac in learned:
             continue
         if len(words) > 80:
             continue

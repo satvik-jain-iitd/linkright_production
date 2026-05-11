@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.20] - 2026-05-11
+
+> Note: 0.5.18 is reserved — claimed by S1.1 (PR #116) and S1.2 (PR #117)
+> which branched from the same 0.5.17 base. Whichever merges last must rebase
+> to the next available version above the highest merged version.
+
+### Fixed
+- **S1.5 (GenAI acronym expansion error):** Moved `_UNIVERSAL_NO_EXPAND` to a
+  new shared module `resume/data/no_expand.py` — single source of truth imported
+  by both `orchestrator.py` and `scorecard.py`, so the two enforcement layers
+  can never drift apart again. Added ~25 AI/ML terms (`GenAI`, `LLM`, `NLP`,
+  `MCP`, `RAG`, `GPT`, `BERT`, `GAN`, `MLOps`, `AIOps`, `NLU`, `NLG`, `XAI`,
+  `OCR`, `NER`, `OAuth`, `JWT` + others). All 4 no-expand check sites in
+  orchestrator now use case-insensitive `_UNIVERSAL_NO_EXPAND_UPPER` to block
+  lowercase corpus variants. `_COMMON_KNOWN_ACRONYMS` in scorecard is now a
+  direct alias to `_UNIVERSAL_NO_EXPAND` — the identity is enforced by a test.
+
 ## [0.5.19] — 2026-05-11
 
 ### Fixed
