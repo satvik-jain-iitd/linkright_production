@@ -1,10 +1,15 @@
 # Changelog
 
-## [0.5.13] — 2026-05-11
+## [0.5.14] — 2026-05-11
 
 ### Fixed
-- **PKG-1**: HTML resume templates (`resume/templates/*.html`, `templates/*.html`) were not bundled in the PyPI wheel. `package-data` only included `resume/lib/*.mjs` — every `pip`/`pipx` install crashed at step 14 (assemble HTML) with `FileNotFoundError: cv-a4-mid-career.html`. Added both template directories to `[tool.setuptools.package-data]`.
-
+- **S1.9 (iter 3 — NameError on fallback path):** `step_14_assemble_html` referenced `raw_text` as a free name inside the `if not _p12_companies:` fallback block, but `raw_text` was not a parameter of the function — only a local variable in `main()`. When step_07 exhausted all LLM providers the fallback fired and crashed with `NameError: name 'raw_text' is not defined`. Fixed by adding `raw_text: str = ""` to the function signature (default-empty for backward compat) and passing `raw_text` at the call site (`orchestrator.py:5401`). Two regression tests added (tests 13–14 in `test_location_truth_guard.py`): signature introspection guard + fallback-path simulation with empty companies dict.
+- **S1.9 (iter 3 — null date_range in step_10):** `co.get("date_range", "")` at step_10 call site (`orchestrator.py:1935`) returns `None` when LLM emits `null`. Changed to `(co.get("date_range") or "")` matching the pattern applied in iter-2.
+- **S1.9 (iter 2 — header-context validator):** iter-1 used a naive full-text substring scan for location validation (`_loc in raw_text`). This allowed context-pull false negatives: a city name appearing in a bullet body ("collaborated with NY risk team") would validate as a real role location. Fixed by replacing the scan with a header-context validator (`loc_in_header` in `resume/lib/location_guard.py`). Header-context validator strips locations not present in role-header lines. Substring matches in bullet narrative do NOT validate; only header-row presence does.
+- **S1.9 (Blocker 2 — fallback reconstruction path):** the fallback companies list in `step_14_assemble_html` (triggered when step_07 LLM exhausts all providers) now runs `loc_in_header()` on every experience location before including it. Added invariant callable-check assertion so future readers see the structural dependency.
+- **S1.9 (Blocker 3 — null date_range):** `co.get('date_range', '')` returns `None` (not `''`) when the LLM emits `"date_range": null`. An f-string then renders `"Gurugram | None"`. All dict-get calls in HTML assembly now use `(co.get('field') or '')` pattern.
+- **HTML template:** when location is empty after validation, renders `<span>{dates}</span>` alone — no leading ` | ` separator, no orphan artifacts.
+- **Prompt hardening (PHASE_1_2_SYSTEM):** location field schema hint updated to "VERBATIM from a role-header line ONLY (format: Company | Location | Dates)". Parsing rules section adds explicit instruction: location MUST appear in a role-header line; body-context mentions do not validate; never invent.
 
 ## [0.5.12] — 2026-05-11
 
