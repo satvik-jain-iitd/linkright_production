@@ -77,7 +77,7 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 | Idea | Status | Reason | Revisit |
 |---|---|---|---|
 | Personal-details photo policy | 🔴 REJECTED for resume | LinkRight resumes are text-only by design | LinkedIn pillar workstream (future) |
-| Professional email format check | 🟡 PLANNED (S3.3) | Part of personal-details verification at pipeline start | — |
+| Professional email format check | 🟢 IMPLEMENTED (PR #128 v0.7.0) | Part of personal-details verification at pipeline start | — |
 | No FB/IG inclusion | 🟢 IMPLEMENTED | Implicit by parse contract — not extracted at all | — |
 | GPA gating ("only if asked or above-average") | 🔵 DEFERRED | Low impact; most users self-curate. Re-eval if QA finds it | Next PRD |
 | "Present" date handling | 🔵 DEFERRED | Low impact; pipeline passes "Present" string through correctly today | Next PRD |
@@ -89,28 +89,28 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 | # | Recommendation | Status | Expected behavior + success metric |
 |---|---|---|---|
 | 6.1 | Company-prestige tier weighting in BRS | 🔵 DEFERRED | Heavy data-curation; revisit Q3 |
-| 6.2 | Peer-vs-applicant phrase bank (JD-seniority keyed) | 🟡 PLANNED S4.1 | Cross-company verb-similarity drops ≥30% on test corpus |
+| 6.2 | Peer-vs-applicant phrase bank (JD-seniority keyed) | 🟢 IMPLEMENTED (PR #136 v0.8.0) | `peer_applicant_bank.yaml` 86 entries, 3 seniority bands; injected into step_10 system prompt |
 | 6.3 | Controlled-uncertainty framing for gappy nuggets | 🔵 DEFERRED | Needs phrasing research |
-| 6.4 | Career-level vocab profile (exec/mid/entry tone) | 🟡 PLANNED S4.2 | Exec-level resumes show ≥80% authority verbs in scorer |
-| 6.5 | Metric-magnitude consistency enforcement | 🟡 PLANNED S4.3 | Zero %-next-to-$B in same bullet on test corpus |
-| 6.6 | Email-format + LinkedIn-handle quality check | 🟡 PLANNED S3.3 | All test-corpus resumes pass quality check |
-| 6.7 | Signal-weighting matrix (13×5) | 🟡 PLANNED S3.1 | Signal-fit-score per career-level rises ≥15% on test corpus |
+| 6.4 | Career-level vocab profile (exec/mid/entry tone) | 🟢 IMPLEMENTED (PR #135 v0.8.0) | 5 career-levels × 3 verb buckets in `career_level_preferences`; authority/credibility/energy injected into step_10 |
+| 6.5 | Metric-magnitude consistency enforcement | 🟢 IMPLEMENTED (PR #132 v0.8.0) | `score_metric_consistency()` in metric_magnitude.py; up to 15% BRS penalty for mixed-tier bullets |
+| 6.6 | Email-format + LinkedIn-handle quality check | 🟢 IMPLEMENTED (PR #128 v0.7.0) | `check_email_quality()` + `check_linkedin_quality()` in contact_quality.py; step_01b verify gate |
+| 6.7 | Signal-weighting matrix (13×5) | 🟢 IMPLEMENTED (PR #130 v0.7.0) | `signal_weights.yaml` 13-signal × 5-career-level multipliers applied in step_11 BRS scoring |
 | 6.8 | Show-vs-tell template library | 🔵 DEFERRED | Needs audience-detection model |
-| 6.9 | Industry-domain verb taxonomy | 🟡 PLANNED S2.2 | Step_10 verb-retry-loop count <1 per run on test corpus |
-| 6.10 | Cluster-aware JD requirement matching | 🟡 PLANNED S3.2 | Step_11 LLM calls halved on test corpus |
+| 6.9 | Industry-domain verb taxonomy | 🟢 IMPLEMENTED (PR #125 v0.6.0) | `domain_verbs.yaml` prefix maps; deterministic verb substitution eliminates LLM retry loops |
+| 6.10 | Cluster-aware JD requirement matching | 🟢 IMPLEMENTED (PR #129 v0.7.0) | `jd_cluster.py` cosine-similarity grouping; `covered_clusters` anti-stuffing in step_11 |
 
 ### 4.3 From FlowCV Tips Part 7.2 — 10 pre-stored data layer recommendations
 
 | # | Pre-stored Layer | Status | Sprint |
 |---|---|---|---|
-| 7.2.1 | Acronym expansion bank (~250 × 12 domains) | 🟡 PLANNED | S2.1 |
-| 7.2.2 | Verb taxonomy (impact × industry) | 🟡 PLANNED | S2.3 |
-| 7.2.3 | Career-level signal-weighting matrix | 🟡 PLANNED | S3.1 |
-| 7.2.4 | Peer-vs-applicant language bank | 🟡 PLANNED | S4.1 |
+| 7.2.1 | Acronym expansion bank (~250 × 12 domains) | 🟢 IMPLEMENTED | PR #124 v0.6.0 — 344 entries across 12 domains |
+| 7.2.2 | Verb taxonomy (impact × industry) | 🟢 IMPLEMENTED | PR #126 v0.6.0 — 720 entries, 2D impact × industry matrix |
+| 7.2.3 | Career-level signal-weighting matrix | 🟢 IMPLEMENTED | PR #130 v0.7.0 — 13 × 5 multipliers in signal_weights.yaml |
+| 7.2.4 | Peer-vs-applicant language bank | 🟢 IMPLEMENTED | PR #136 v0.8.0 — 86 entries, 3 seniority bands |
 | 7.2.5 | Show-vs-tell template library | 🔵 DEFERRED | — |
-| 7.2.6 | Industry-domain verb prefix maps | 🟡 PLANNED | S2.2 |
+| 7.2.6 | Industry-domain verb prefix maps | 🟢 IMPLEMENTED | PR #125 v0.6.0 — deterministic weak-verb replacement |
 | 7.2.7 | Width-style profile per career level | 🔵 DEFERRED | — |
-| 7.2.8 | JD requirement clustering | 🟡 PLANNED | S3.2 |
+| 7.2.8 | JD requirement clustering | 🟢 IMPLEMENTED | PR #129 v0.7.0 — cosine-similarity grouping, anti-stuffing |
 | 7.2.9 | Metric magnitude comparables | 🔵 DEFERRED | — |
 | 7.2.10 | Bullet signal co-occurrence rules | 🔵 DEFERRED | — |
 
@@ -118,7 +118,7 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 
 | Item | Status | Sprint |
 |---|---|---|
-| Truth Engine Layer 1 (personal-details verify at start) | 🟡 PLANNED | S3.3 |
+| Truth Engine Layer 1 (personal-details verify at start) | 🟢 IMPLEMENTED (PR #128 v0.7.0) | S3.3 |
 | Truth Engine Layer 3 (critique step at end) | 🔵 DEFERRED | Next PRD |
 | Strategy-review checkpoint at step_07b | 🔵 DEFERRED | Next PRD |
 
@@ -127,17 +127,17 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 | Finding ID | Severity | Status | Sprint |
 |---|---|---|---|
 | QA-F1: "0+ years of experience" in summary | ❌ Blocker | 🟢 **DONE** (subsumed by S1.11 PR #110 v0.5.12) | S1.1 (separate scope: full ceiling-rounding rule) |
-| QA-F2: Fabrication guard strips real verbs | ❌ Blocker | 🟡 PLANNED | S1.2 |
-| QA-F3: Internal step names visible in spinner | ❌ Blocker | 🟡 PLANNED | S1.3 (blocks S1.8) |
-| QA-F4: setup --check Groq false-negative | ❌ Blocker | 🟡 PLANNED | S1.4 |
-| QA-F5: Success box path truncation | ⚠️ Friction | 🟡 PLANNED | S4.5 |
-| QA-F6: HF Hub warning leak | ⚠️ Friction | 🟡 PLANNED | S1.7 |
-| QA-F7a: Trailing ",." punctuation | ⚠️ Friction | 🟡 PLANNED | S1.6 |
+| QA-F2: Fabrication guard strips real verbs | ❌ Blocker | 🟢 **DONE** (PR #117 v0.5.18) | S1.2 — `_STOPWORDS` verb block; action verbs never flagged |
+| QA-F3: Internal step names visible in spinner | ❌ Blocker | 🟢 **DONE** (PR #114 v0.5.17) | S1.3 — human-friendly spinner labels throughout |
+| QA-F4: setup --check Groq false-negative | ❌ Blocker | 🟢 **DONE** (PR #119 v0.5.18) | S1.4 — resolves managed .env Groq key correctly |
+| QA-F5: Success box path truncation | ⚠️ Friction | 🟢 **DONE** (PR #133 v0.8.0) | S4.5 — two-line filename + path, no mid-word wrap |
+| QA-F6: HF Hub warning leak | ⚠️ Friction | 🟢 **DONE** (PR #120 v0.5.19) | S1.7 — HF Hub + tokenizers warning suppressed |
+| QA-F7a: Trailing ",." punctuation | ⚠️ Friction | 🟢 **DONE** (PR #115 v0.5.17) | S1.6 — trailing punctuation residues stripped |
 | QA-F7b: "at 50" dangling number | ⚠️ Friction | 🔵 DEFERRED | symptom of F2 fix; re-test |
 | QA-F7c: Grammar break ("conducting usability along by leveraging") | ⚠️ Friction | 🔵 DEFERRED | LLM-glitch; re-test post-fixes |
-| QA-F7d: "Gen-artificial intelligence" expansion | ❌ Blocker | 🟡 PLANNED | S1.5 |
+| QA-F7d: "Gen-artificial intelligence" expansion | ❌ Blocker | 🟢 **DONE** (PR #118 v0.5.19) | S1.5 — GenAI/LLM/RAG protected from expansion |
 | QA-F8: Duplicate bullets for same nugget | ⚠️ Friction | 🔵 DEFERRED | de-dup pass needs work |
-| QA-F9: Coverage 25% not surfaced | ⚠️ Friction | 🟡 PLANNED | S4.4 |
+| QA-F9: Coverage 25% not surfaced | ⚠️ Friction | 🟢 **DONE** (PR #134 v0.8.0) | S4.4 — success box shows JD coverage % + width hit-rate |
 | QA-F10: tldr duplicate of no-args | ⚠️ Friction | 🔵 DEFERRED | low impact |
 | QA-Good × 3 (doctor, stories empty state, auth status) | 🟢 IMPLEMENTED | — | |
 | QA-Excellent × 4 (update, spinner UX, cache hit msg, doctor flow) | 🟢 IMPLEMENTED | — | |
@@ -146,9 +146,9 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 
 | Idea | Status | Reason | Sprint / Revisit |
 |---|---|---|---|
-| CLI terminal UI consistency (Claude-Code-style patterns + LinkRight palette) | 🟡 PLANNED | High visible-quality lever — first-impression polish unlocks trust. Start NOW. | Sprint 1 — S1.8 |
+| CLI terminal UI consistency (Claude-Code-style patterns + LinkRight palette) | 🟢 IMPLEMENTED (PR #121 v0.5.21) | High visible-quality lever — first-impression polish unlocks trust. | Sprint 1 — S1.8 |
 | LinkRight mascot character (sprite / ASCII art for welcome banner, like Claude Code's blob) | 🔵 DEFERRED | Branding asset — needs design exploration, not blocking. Will live in `linkright/ui/mascot.py` future. | Q3 2026 or post-v1 release |
-| Markdown profile ingestion + privacy gate (long-doc career narratives → nuggets) | 🟡 PLANNED | Satvik has 95KB `satvik_jain_career_profile.md` already written; today's pipeline only takes PDF. Unlocks deep-context data without re-writing. Privacy gate critical for sensitive personal sections. | Sprint 3 — S3.4 |
+| Markdown profile ingestion + privacy gate (long-doc career narratives → nuggets) | 🟢 IMPLEMENTED (PR #131 v0.7.0) | Chunked LLM, Jaccard dedup, privacy gate. Surfaces Sukha/ContentStack/Navii from satvik_jain_career_profile.md as Projects. | Sprint 3 — S3.4 |
 
 ### 4.7 From 2026-05-11 first end-to-end test run (Satvik's resume + Anthropic Claude Code JD)
 
@@ -160,8 +160,8 @@ Real bugs surfaced by running pipeline against canonical resume. All items are �
 | Locations "New York, USA" for AmEx + Sprinklr (Satvik only worked from Gurugram) | step_01 parse contract does NOT extract `location` field → step_07 LLM free-types plausible-sounding location | S1.9 ✅ **DONE PR #111 v0.5.14** — header-context validator | P0 |
 | LinkedIn + Portfolio full URLs in header | HTML render uses raw URL text instead of anchor text "LinkedIn"/"Portfolio" | S1.10 ✅ **DONE PR #112 v0.5.15** — anchor-text hyperlinks, no brand color on body anchors | P1 |
 | Music project bullet shows "(Year)" literal placeholder | step_01 parser emits `"year": "Year"` literal for projects when PDF text doesn't have year — should be empty | S1.11 ✅ **DONE PR #110 v0.5.12** — `_sanitize_year` at both parse + render layers (education + projects covered) | P0 |
-| ~70% page utilization (whitespace below Education) vs 85-92% target | Strategy (`_BULLET_BUDGETS`) too conservative for mid-level rich career profile; projects budget=0 dropped 2 of 3 source projects; no page-fit EXPAND-mode | S1.12 NEW — strategy whitespace under-utilization | P0 |
-| Bullets truncated mid-sentence ("at.", "&.", ", 3.") | step_12 condense over-truncating at width limit, leaving orphan words + S1.6 trailing-punctuation symptom | S1.6 (expanded scope: orphan-word + over-truncation) | P0 |
+| ~70% page utilization (whitespace below Education) vs 85-92% target | Strategy (`_BULLET_BUDGETS`) too conservative for mid-level rich career profile; projects budget=0 dropped 2 of 3 source projects; no page-fit EXPAND-mode | S1.12 ✅ **DONE PR #122 v0.5.22** — EXPAND mode added to page-fit loop | P0 |
+| Bullets truncated mid-sentence ("at.", "&.", ", 3.") | step_12 condense over-truncating at width limit, leaving orphan words + S1.6 trailing-punctuation symptom | S1.6 ✅ **DONE PR #115 v0.5.17** — trailing punctuation residues stripped | P0 |
 | Sukha / ContentStack / Navii missing from resume | Source PDF (Satvik-Jain-Resume.pdf) does NOT list these — they're in `satvik_jain_career_profile.md` only | S3.4 (markdown ingestion) — will surface them as Projects per `project_satvik_resume_classification.md` routing rule | Deferred to S3.4 |
 | Music project bullet content tautology ("Co-creating with AI") | Source nugget thin — step_01 captured only "Co-creating with AI" as key_achievement; needs enrichment | S3.4 (markdown ingestion enriches sparse nuggets) | Deferred to S3.4 |
 
@@ -187,16 +187,48 @@ Session 1 ran 6 PR cycles end-to-end (PRD → bd issue → designer-developer �
 4. **Socratic review style** — Satvik's PR #100 review (3 open-ended questions + pattern-prompts + "subtlest one" tagging) drove Tejas to apply principles, not patches. Worth replicating for future external-contributor reviews. Memory: `feedback_socratic_review_style.md`.
 5. **Reviewer-block cadence** — design-litigation reviews 15-30 min; rebase-integrity reviews 1-3 min. Lean focused-scope when scope is mechanical.
 
-**Sprint 1 next dispatch queue (in priority order for session 2):**
+**Sprint 1 all done — remaining items shipped in session 2 (2026-05-11):**
 
-1. **S1.3 spinner labels** (unblocks S1.8) — quick win, designer-developer scope
-2. **S1.4 Groq false-negative** + **S1.7 HF warning leak** — both caveman scope, can parallel
-3. **S1.1 years rule** (full ceiling-rounding + total_years calc fix — note QA-F1 partially addressed by S1.11 already)
-4. **S1.2 fab-guard verb stripping**
-5. **S1.5 Gen-AI acronym expansion**
-6. **S1.6 trailing-punctuation + orphan-word truncation**
-7. **S1.8 UI patterns** (Claude-Code-style terminal UI) — after S1.3 lands
-8. **S1.12 whitespace strategy** (page-fit expand-mode) — biggest item, may span 2 sprints
+| Item | Outcome |
+|---|---|
+| S1.1 Experience rounding | ✅ PR #116 → v0.5.18 |
+| S1.2 Fabrication guard verbs | ✅ PR #117 → v0.5.18 |
+| S1.3 Spinner labels | ✅ PR #114 → v0.5.17 |
+| S1.4 Groq false-negative | ✅ PR #119 → v0.5.18 |
+| S1.5 Gen-AI acronym | ✅ PR #118 → v0.5.19 |
+| S1.6 Trailing punctuation | ✅ PR #115 → v0.5.17 |
+| S1.7 HF Hub warning | ✅ PR #120 → v0.5.19 |
+| S1.8 CLI terminal UI | ✅ PR #121 → v0.5.21 |
+| S1.12 Page-fit expand | ✅ PR #122 → v0.5.22 |
+| Worker S1.2 sync (lr-w75) | ✅ sync-resume-engine PR #34 — jd_keyphrase.py verb block |
+
+**Sprint 2 outcomes (session 2, v0.6.0):**
+
+| Item | Outcome |
+|---|---|
+| S2.1 Acronym expansion bank (344 entries, 12 domains) | ✅ PR #124 → v0.6.0 |
+| S2.2 Industry-domain verb prefix maps | ✅ PR #125 → v0.6.0 |
+| S2.3 Verb taxonomy (720 entries, impact × industry 2D) | ✅ PR #126 → v0.6.0 |
+| Fragment-based CHANGELOG infra | ✅ PR #123 → no version bump (infra only) |
+
+**Sprint 3 outcomes (session 2, v0.7.0):**
+
+| Item | Outcome |
+|---|---|
+| S3.3 Truth Engine Layer 1 — personal-details verify | ✅ PR #128 → v0.7.0 |
+| S3.2 JD requirement clustering | ✅ PR #129 → v0.7.0 |
+| S3.1 Signal-weighting matrix (13 × 5) | ✅ PR #130 → v0.7.0 |
+| S3.4 Markdown profile ingestion + privacy gate | ✅ PR #131 → v0.7.0 |
+
+**Sprint 4 outcomes (session 2, v0.8.0):**
+
+| Item | Outcome |
+|---|---|
+| S4.3 Metric-magnitude consistency enforcement | ✅ PR #132 → v0.8.0 |
+| S4.5 Success box path wrap fix | ✅ PR #133 → v0.8.0 |
+| S4.4 JD coverage % + width hit-rate in success box | ✅ PR #134 → v0.8.0 |
+| S4.2 Career-level vocab profile | ✅ PR #135 → v0.8.0 |
+| S4.1 Peer-vs-applicant language bank | ✅ PR #136 → v0.8.0 |
 
 **No idea silently dropped.** Every audit row above has explicit status + revisit-date.
 
@@ -272,49 +304,49 @@ For freshers, the "0+ years" phrasing is harmful — better to omit the years cl
 
 ## 6. 5-Sprint Roadmap (6 weeks, 31 items)
 
-### Sprint 1 — Bug-fix sprint + UI foundation (Week of 2026-05-11, 12 items)
+### Sprint 1 — Bug-fix sprint + UI foundation ✅ COMPLETE (v0.5.12–v0.5.24)
 
-| ID | Title | Priority | Effort | Source | Subagent |
-|---|---|---|---|---|---|
-| S1.1 | Experience rounding rule + fresher-drop + total_years calc fix + summary-uses-total-years | P0 | M | QA-F1 + Satvik 2026-05-11 (both runs) | product-owner-qa |
-| S1.2 | Fix step_10b fabrication guard stripping real verbs | P0 | M | QA-F2 | product-owner-qa |
-| S1.3 | Hide internal step names in spinner labels | P0 | S | QA-F3 | designer-developer |
-| S1.4 | Fix `setup --check` Groq false-negative | P0 | S | QA-F4 | caveman:cavecrew-builder |
-| S1.5 | Fix Gen-AI acronym expansion error | P0 | S | QA-F7d | designer-developer |
-| S1.6 | Strip trailing ",." double-punctuation + orphan-word truncation ("at.", "&.", ", 3.") | P0 | M | QA-F7a + Satvik 2026-05-11 run 1 (root: step_12 condense over-truncating) | product-owner-qa |
-| S1.7 | Suppress HF Hub warning leak in setup --check | P1 | S | QA-F6 | caveman:cavecrew-builder |
-| S1.8 | CLI Terminal UI consistency (Claude-Code-style patterns + LinkRight palette) | P0 | M | Satvik 2026-05-11 | designer-developer |
-| ✅ S1.9 | Location-fact truth-engine guard — **DONE PR #111 v0.5.14** (header-context validator, fallback path guard, null-render fix, 16 tests) | P0 | M | Satvik 2026-05-11 | product-owner-qa |
-| ✅ S1.10 | LinkedIn/Portfolio as hyperlinks — **DONE PR #112 v0.5.15** (anchor-text, no brand-color on body anchors, partial substitution + visible warning, 47 tests, both orchestrator + mcp_sync paths) | P1 | S | Satvik 2026-05-11 | designer-developer |
-| ✅ S1.11 | Year placeholder bug — **DONE PR #110 v0.5.12** (_sanitize_year at parse + render layers, education + projects, 37 tests) | P0 | S | Satvik 2026-05-11 | caveman:cavecrew-builder |
-| **S1.12** | **Strategy whitespace under-utilization — page-fit expand-mode + project surfacing** | **P0** | **L** | **Satvik 2026-05-11 run 1 (final PDF ~70% utilized vs 85-92% target band)** | **product-owner-qa** |
+| ID | Title | Priority | Effort | Outcome |
+|---|---|---|---|---|
+| ✅ S1.1 | Experience rounding rule + fresher-drop + total_years calc fix | P0 | M | PR #116 v0.5.18 |
+| ✅ S1.2 | Fix step_10b fabrication guard stripping real verbs | P0 | M | PR #117 v0.5.18 |
+| ✅ S1.3 | Hide internal step names in spinner labels | P0 | S | PR #114 v0.5.17 |
+| ✅ S1.4 | Fix `setup --check` Groq false-negative | P0 | S | PR #119 v0.5.18 |
+| ✅ S1.5 | Fix Gen-AI acronym expansion error | P0 | S | PR #118 v0.5.19 |
+| ✅ S1.6 | Strip trailing ",." double-punctuation + orphan-word truncation | P0 | M | PR #115 v0.5.17 |
+| ✅ S1.7 | Suppress HF Hub warning leak in setup --check | P1 | S | PR #120 v0.5.19 |
+| ✅ S1.8 | CLI Terminal UI consistency (Claude-Code-style patterns + LinkRight palette) | P0 | M | PR #121 v0.5.21 |
+| ✅ S1.9 | Location-fact truth-engine guard | P0 | M | PR #111 v0.5.14 |
+| ✅ S1.10 | LinkedIn/Portfolio as hyperlinks | P1 | S | PR #112 v0.5.15 |
+| ✅ S1.11 | Year placeholder bug | P0 | S | PR #110 v0.5.12 |
+| ✅ S1.12 | Strategy whitespace under-utilization — page-fit expand-mode | P0 | L | PR #122 v0.5.22 |
 
-### Sprint 2 — Token-cost foundations (Week of 2026-05-18, 3 items)
+### Sprint 2 — Token-cost foundations ✅ COMPLETE (v0.6.0)
 
-| ID | Title | Priority | Effort | Source | Subagent |
-|---|---|---|---|---|---|
-| S2.1 | Acronym expansion bank (~250 × 12 domains) | P1 | M | FlowCV-7.2 #1 | product-owner-qa |
-| S2.2 | Industry-domain verb prefix maps | P1 | M | FlowCV-7.2 #6 + 6.9 | product-owner-qa |
-| S2.3 | Verb taxonomy (impact-cat × industry, ~640 entries) | P1 | L | FlowCV-7.2 #2 | product-owner-qa |
+| ID | Title | Priority | Effort | Outcome |
+|---|---|---|---|---|
+| ✅ S2.1 | Acronym expansion bank (344 entries × 12 domains) | P1 | M | PR #124 v0.6.0 |
+| ✅ S2.2 | Industry-domain verb prefix maps | P1 | M | PR #125 v0.6.0 |
+| ✅ S2.3 | Verb taxonomy (720 entries, impact-cat × industry) | P1 | L | PR #126 v0.6.0 |
 
-### Sprint 3 — Token + subliminal + truth + long-doc ingest (Week of 2026-05-25, 4 items)
+### Sprint 3 — Subliminal + truth + long-doc ingest ✅ COMPLETE (v0.7.0)
 
-| ID | Title | Priority | Effort | Source | Subagent |
-|---|---|---|---|---|---|
-| S3.1 | Signal-weighting matrix (13 × 5) | P1 | M | FlowCV-7.2 #3 + 6.7 | product-owner-qa |
-| S3.2 | JD requirement clustering (8-15 clusters per JD) | P1 | M | FlowCV-7.2 #8 + 6.10 | product-owner-qa |
-| S3.3 | Truth Engine Layer 1 — personal-details verify at start | P1 | M | FlowCV-4 + 6.6 + LinkRight 🔮 | product-owner-qa |
-| **S3.4** | **Markdown profile ingestion + privacy gate** | **P1** | **M** | **Satvik 2026-05-11** | **product-owner-qa** |
+| ID | Title | Priority | Effort | Outcome |
+|---|---|---|---|---|
+| ✅ S3.1 | Signal-weighting matrix (13 × 5) | P1 | M | PR #130 v0.7.0 |
+| ✅ S3.2 | JD requirement clustering (8-15 clusters per JD) | P1 | M | PR #129 v0.7.0 |
+| ✅ S3.3 | Truth Engine Layer 1 — personal-details verify at start | P1 | M | PR #128 v0.7.0 |
+| ✅ S3.4 | Markdown profile ingestion + privacy gate | P1 | M | PR #131 v0.7.0 |
 
-### Sprint 4 — Subliminal polish + UX (Week of 2026-06-01, 5 items)
+### Sprint 4 — Subliminal polish + UX ✅ COMPLETE (v0.8.0)
 
-| ID | Title | Priority | Effort | Source | Subagent |
-|---|---|---|---|---|---|
-| S4.1 | Peer-vs-applicant language bank | P2 | M | FlowCV-7.2 #4 + 6.2 | product-owner-qa |
-| S4.2 | Career-level vocab profile | P2 | M | FlowCV-6.4 | product-owner-qa |
-| S4.3 | Metric-magnitude consistency enforcement | P2 | S | FlowCV-6.5 | designer-developer |
-| S4.4 | Surface JD coverage % + width-hit-rate in success box | P2 | S | QA-F9 | designer-developer |
-| S4.5 | Fix success box path wrap | P2 | S | QA-F5 | caveman:cavecrew-builder |
+| ID | Title | Priority | Effort | Outcome |
+|---|---|---|---|---|
+| ✅ S4.1 | Peer-vs-applicant language bank | P2 | M | PR #136 v0.8.0 |
+| ✅ S4.2 | Career-level vocab profile | P2 | M | PR #135 v0.8.0 |
+| ✅ S4.3 | Metric-magnitude consistency enforcement | P2 | S | PR #132 v0.8.0 |
+| ✅ S4.4 | Surface JD coverage % + width-hit-rate in success box | P2 | S | PR #134 v0.8.0 |
+| ✅ S4.5 | Fix success box path wrap | P2 | S | PR #133 v0.8.0 |
 
 ### Sprint 5 — Local-model quality + pipeline optimization (Week of 2026-06-08, 7 items)
 
