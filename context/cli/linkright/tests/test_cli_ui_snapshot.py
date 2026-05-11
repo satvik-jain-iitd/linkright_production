@@ -1,10 +1,11 @@
 """Tests for S1.8 — CLI terminal UI consistency.
 
 Verifies:
-AC1: LR_THEME exports the 9 required named styles
+AC1: LR_THEME exports the 10 required named styles
 AC2: Module-level console is Console(theme=LR_THEME)
 AC3: patterns.py exports all 6 primitives
-AC4: lr_banner renders gradient lines (spot-check)
+AC4: DEFERRED — banner gradient uses pillar colours (Teal/Purple/Sage/Pink),
+     not theme aliases; full AC4 test added when banner migrated to LR_THEME.
 AC5: doctor uses Rich console — no raw ANSI escapes in output
 AC6: Each primitive renders expected content (structural snapshot)
 
@@ -39,7 +40,7 @@ REQUIRED_STYLES = [
 ]
 
 def test_lr_theme_has_required_styles():
-    """LR_THEME must export all 9 required named style aliases."""
+    """LR_THEME must export all 10 required named style aliases."""
     from linkright.ui.theme import LR_THEME
     for name in REQUIRED_STYLES:
         assert name in LR_THEME.styles, (
@@ -93,6 +94,10 @@ def test_doctor_output_has_no_raw_ansi():
     from linkright.cli import doctor_cmd
     runner = CliRunner()
     result = runner.invoke(doctor_cmd, [])
+    # CliRunner swallows exceptions — verify command ran (0=pass, 1=failures found, both OK)
+    assert result.exit_code in (0, 1), (
+        f"doctor_cmd raised an unhandled exception: {result.exception!r}\n{result.output}"
+    )
     assert "\033[" not in result.output, (
         "Raw ANSI escape found in doctor output — not using Rich console (AC5 fail)"
     )

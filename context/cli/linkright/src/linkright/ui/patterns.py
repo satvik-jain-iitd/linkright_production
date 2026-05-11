@@ -73,10 +73,10 @@ def insight_block(
     """★ Insight block with horizontal rules — mirrors Claude Code style."""
     con = _con(console)
     rule = "─" * 49
-    con.print(f"\n[step.accent]`★ Insight {rule[:40]}`[/]")
+    con.print(f"\n[step.accent]★ Insight {rule[:40]}[/]")
     for line in lines:
         con.print(f"{' ' * indent}{line}")
-    con.print(f"[step.accent]`{rule}`[/]\n")
+    con.print(f"[step.accent]{rule}[/]\n")
 
 
 # ── 4. code_block ─────────────────────────────────────────────────────────────

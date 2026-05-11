@@ -173,7 +173,7 @@ def step_warn(message: str) -> None:
 
 
 def step_error(message: str) -> None:
-    console.print(f"      [step.warn]✗[/]  [step.warn]{message}[/]")
+    console.print(f"      [error]✗[/]  [error]{message}[/]")
 
 
 def step_detail(message: str) -> None:
