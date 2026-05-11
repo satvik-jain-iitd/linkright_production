@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+**Resume diagnostics** - restored gap sentinels using profile-derived facts
+instead of hardcoded user or employer literals.
+
+### Fixed
+
+- Raw resume, parsed-company, nugget-attribution, primary-role, and deep RCA
+  diagnostics now compare against expected name/company facts loaded from the
+  local profile or career-signal metadata when available. Runs with no profile
+  metadata continue to degrade cleanly with the existing generic checks. (#91)
+
 ## [0.5.16] — 2026-05-11
 
 ### Fixed

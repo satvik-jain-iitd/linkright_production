@@ -27,6 +27,27 @@ from typing import Callable, Optional
 
 from ._paths import RUNS_ROOT as RUNS, ensure_runs_root  # noqa: E402
 
+try:
+    from linkright.resume.profile_facts import (
+        ExpectedProfileFacts,
+        load_expected_profile_facts,
+        missing_expected_values,
+        value_in_text,
+    )
+except Exception:  # pragma: no cover - only exercised in non-installed checkout mode
+    class ExpectedProfileFacts:  # type: ignore[no-redef]
+        name = ""
+        companies: tuple[str, ...] = ()
+
+    def load_expected_profile_facts(*_args, **_kwargs) -> ExpectedProfileFacts:  # type: ignore[no-redef]
+        return ExpectedProfileFacts()
+
+    def missing_expected_values(*_args, **_kwargs) -> list[str]:  # type: ignore[no-redef]
+        return []
+
+    def value_in_text(*_args, **_kwargs) -> bool:  # type: ignore[no-redef]
+        return True
+
 ROOT = Path(__file__).resolve().parent
 ensure_runs_root()
 DATE_TAG = dt.date.today().isoformat()
@@ -67,12 +88,17 @@ def check_00_raw(run: Path) -> tuple[str, str, dict]:
         return "⏸", "file missing", {}
     text = p.read_text(encoding="utf-8", errors="ignore")
     n = len(text)
-    # TODO: hardcoded user-specific company markers removed. Restore as
-    # profile-derived check in follow-up PR (read expected companies from
-    # profile metadata).
+    expected = load_expected_profile_facts(run_dir=run)
+    missing_companies = [co for co in expected.companies if not value_in_text(text, co)]
     if n < 2000:
-        return "❌", f"too short: {n} chars", {"chars": n}
-    return "✅", f"{n} chars", {"chars": n}
+        return "❌", f"too short: {n} chars", {"chars": n, "expected_companies": list(expected.companies)}
+    if missing_companies:
+        return (
+            "❌",
+            f"raw text missing expected companies: {missing_companies}",
+            {"chars": n, "expected_companies": list(expected.companies), "missing_companies": missing_companies},
+        )
+    return "✅", f"{n} chars", {"chars": n, "expected_companies": list(expected.companies)}
 
 
 def check_01_parsed(run: Path) -> tuple[str, str, dict]:
@@ -83,6 +109,15 @@ def check_01_parsed(run: Path) -> tuple[str, str, dict]:
     exp = parsed.get("experiences") or parsed.get("companies") or []
     if not isinstance(exp, list):
         return "❌", "no experiences/companies list", {}
+    expected = load_expected_profile_facts(run_dir=run)
+    parsed_companies = [
+        (x.get("company") or x.get("name") or "").strip()
+        for x in exp
+        if isinstance(x, dict)
+    ]
+    missing_companies = missing_expected_values(expected.companies, parsed_companies)
+    if missing_companies:
+        return "❌", f"missing expected companies: {missing_companies}", {"companies": len(exp), "missing_companies": missing_companies}
     if len(exp) < 3:
         return "⚠", f"only {len(exp)} companies parsed", {"companies": len(exp)}
     return "✅", f"{len(exp)} companies parsed", {"companies": len(exp)}
