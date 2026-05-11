@@ -115,8 +115,11 @@ def test_linkedin_warn_all_numeric_slug():
 
 
 def test_email_warn_informal_word():
-    """Local-part with informal keyword → warn."""
-    ok, msg = check_email_quality("coolkid@hotmail.com")
+    """Local-part with standalone informal keyword → warn.
+    'cool.kid' has 'cool' as a standalone word (dot acts as non-word boundary).
+    Note: 'coolkid' (no separator) no longer triggers — same rule as hotel/hot.
+    """
+    ok, msg = check_email_quality("cool.kid@hotmail.com")
     assert not ok
 
 
@@ -124,3 +127,29 @@ def test_linkedin_https_url():
     """Full https URL with clean slug → no warn."""
     ok, msg = check_linkedin_quality("https://www.linkedin.com/in/satvik-jain")
     assert ok, f"Should not warn for clean full URL; got: {msg}"
+
+
+# ── AC7 word-boundary tests — no false-positives on substrings ────────────────
+
+def test_email_no_warn_hotel_manager():
+    """'hot' is substring of 'hotel' — no word boundary match, no warn."""
+    ok, msg = check_email_quality("hotel.manager@gmail.com")
+    assert ok, f"'hotel' should NOT trigger 'hot' warn; got: {msg}"
+
+
+def test_email_no_warn_catherine():
+    """'cat' is substring of 'catherine' — no word boundary match, no warn."""
+    ok, msg = check_email_quality("catherine.james@gmail.com")
+    assert ok, f"'catherine' should NOT trigger 'cat' warn; got: {msg}"
+
+
+def test_email_no_warn_radical():
+    """'rad' is substring of 'radical' — no word boundary match, no warn."""
+    ok, msg = check_email_quality("radical.ideas@gmail.com")
+    assert ok, f"'radical' should NOT trigger 'rad' warn; got: {msg}"
+
+
+def test_email_warn_hot_standalone():
+    """'hot' as standalone word (hotgirl99) DOES warn."""
+    ok, msg = check_email_quality("hotgirl99@gmail.com")
+    assert not ok, "Standalone 'hot' in local-part with digits should warn"

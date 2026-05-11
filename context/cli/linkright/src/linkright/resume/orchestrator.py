@@ -833,6 +833,9 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
     from pathlib import Path as _Path
 
     _no_pause = no_pause or os.environ.get("LR_NO_PAUSE") == "1"
+    # Also skip silently in non-TTY environments (MCP subprocesses, CI pipes, etc.)
+    if not _no_pause and not sys.stdin.isatty():
+        _no_pause = True
     if _no_pause:
         return parsed.get("contact_info", {}) or {}
 
@@ -921,7 +924,7 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
                 contact[key] = new_val.strip()
                 _changed[key] = new_val.strip()
 
-    except ImportError:
+    except (ImportError, EOFError):
         # Fallback: plain input() prompts
         _CHOICES_HELP = "e=email / l=linkedin / p=phone / w=portfolio / s=skip all"
         while True:
@@ -975,7 +978,7 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
             from linkright.profile.pipeline import save_contact as _save_contact, _profile_dir as _pdir
             _save_contact(_pdir(), contact)
         except Exception as _e:
-            log(f"[step_01b] could not persist to profile contact.yaml: {_e}; resume PDF may use stale contact")
+            log(f"[step_01b] could not persist to profile contact.yaml: {_e}; profile dir missing — edits saved to profile_overrides.json (next run) but not applied to current PDF; run 'linkright init' to fix")
 
     logbook.append(
         "step_01b_verify_contact_details",

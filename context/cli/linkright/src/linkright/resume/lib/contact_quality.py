@@ -14,9 +14,9 @@ _CASUAL_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com"}
 
 # Local-part patterns that suggest an unprofessional address
 _UNPROFESSIONAL_WORDS = re.compile(
-    r"(?:cool|hot|sexy|gamer|princess|ninja|wizard|beast|swag|lol|wtf|omg|"
+    r"\b(?:cool|hot|sexy|gamer|princess|ninja|wizard|beast|swag|lol|wtf|omg|"
     r"dude|bro|sis|babe|cutie|lovely|crazy|epic|awesome|chill|rad|killer|"
-    r"rockstar|legend|hero|unicorn|demon|angel|dragon|wolf|tiger|fox|cat|dog)",
+    r"rockstar|legend|hero|unicorn|demon|angel|dragon|wolf|tiger|fox|cat|dog)\b",
     re.IGNORECASE,
 )
 
