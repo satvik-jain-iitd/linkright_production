@@ -1523,7 +1523,7 @@ Artifacts: <vision.md path, PDF path, terminal log>
 
 | # | Question | Owner | Resolve by |
 |---|---|---|---|
-| 12.1 | §3.4 (Courses) vs §3.5 (Certificates) boundary: where does "Coursera Specialization" land? Is the issued PDF a "certificate" or are the underlying modules "courses"? Proposed: if exam-tested → §3.5; if completion-only → §3.4. | Satvik | Sprint 2 kickoff |
+| 12.1 | ✅ RESOLVED 2026-05-11 — exam-tested credential → §3.5 Certificates; completion-only program → §3.4 Courses. Coursera Specialization with issued PDF but no exam = §3.4 Courses. | Satvik | Done |
 | 12.2 | Subliminal-signal scoring weights — empirical (run autonomous testing pipeline to learn) or heuristic (Satvik picks)? Proposed: heuristic for v1, refine empirically in autonomous-pipeline iterations | Satvik | Sprint 3 kickoff |
 | 12.3 | Graphify post-merge hook installation — inner repo (`repo/`) only, or outer too? Proposed: inner only since outer has no code | Claude (already decided) | Done |
 | 12.4 | LLM provider preference for autonomous testing pipeline — direct mode (free tier) or agent mode (subscription)? Proposed: direct mode default (per memory `feedback_never_agent_mode_for_hypothesis_tests.md`) | Claude (already decided) | Done |
