@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.22] - 2026-05-11
+
+### Fixed
+- **S1.7 (suppress HF Hub warning leak):** `linkright/__init__.py` now sets
+  `HF_HUB_DISABLE_PROGRESS_BARS=1` and `TOKENIZERS_PARALLELISM=false` via
+  `os.environ.setdefault` (preserves user overrides), and raises `huggingface_hub`,
+  `tokenizers`, and `fastembed` loggers to `ERROR` level before any lazy import
+  can trigger them. Prevents progress bars and auth-token warnings from
+  appearing in the user's terminal during profile/embed operations.
+  7 new tests added (`tests/test_hf_warning_suppression.py`).
+
 ## [0.5.21] - 2026-05-11
 
 ### Fixed
