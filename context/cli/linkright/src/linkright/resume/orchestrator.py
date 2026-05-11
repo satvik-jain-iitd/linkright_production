@@ -78,6 +78,7 @@ from .lib.location_guard import build_header_windows, loc_in_header as _loc_in_h
 from .lib import prompts as P
 from .lib import width_poc
 from .lib import fit_loop
+from .lib.domain_verbs import replace_weak_verb, infer_industry, _WEAK_VERBS as _DOMAIN_WEAK_VERBS
 from .lib.pdf_parse import extract_text
 from .lib.graph_context import get_subliminal_context
 from .lib.md_parse import parse_resume_markdown, _sanitize_year, _YEAR_PLACEHOLDER_RE, _YEAR_DIGIT_RE
@@ -1936,7 +1937,7 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
     jd_requirements_list = "\n".join(f"{r['id']}: {r.get('text','')}" for r in reqs)
 
     verbose_all: dict[str, dict] = {}
-    used_verbs: list[str] = []
+    used_verbs: set[str] = set()
     dropped_stats = {}
 
     # S5-7: token-conservative — iterate only companies that resume_strategy
@@ -2235,10 +2236,39 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
                     "_synthesized": True,
                 })
 
+        # S2.2 — Weak-verb deterministic replacement.
+        # After all bullets are finalised for this company, scan each accepted
+        # bullet for a weak opening verb and replace it with an industry-
+        # appropriate strong verb from domain_verbs.yaml. No LLM retry needed.
+        #
+        # Bug-fix 1 (S2.2): Pre-seed used_verbs with strong verbs already
+        # present in THIS company's accepted bullets BEFORE running replace_weak_verb.
+        # Without this, bullet[1]'s weak-verb replacement could pick a verb already
+        # used by bullet[0] (strong, LLM-generated) — causing within-company duplication.
+        used_verbs.update(
+            p["verb"] for p in accepted
+            if p.get("verb") and p["verb"].lower() not in _DOMAIN_WEAK_VERBS
+        )
+        #
+        # Bug-fix 2 (S2.2): Infer industry from the candidate's actual job title
+        # at this company (co["title"]), not from career_level (a seniority bucket
+        # like "mid" / "senior" that never matches industry keywords).
+        _co_title = co.get("title", "").strip()
+        _industry = parsed_p12.get("industry") or infer_industry(_co_title or career_level)
+        for p in accepted:
+            txt = p.get("text_html", "")
+            new_txt, new_verb = replace_weak_verb(txt, _industry, used_verbs)
+            if new_verb:
+                p["text_html"] = new_txt
+                p["verb"] = new_verb
+                log(f"[step_10 S2.2 verb-swap] {co_name}: weak→'{new_verb}' in bullet (industry={_industry})")
+
+        # Seed used_verbs with all verbs from this company's final bullets
+        # (strong originals were already seeded above; this catches newly swapped-in verbs).
         for p in accepted:
             v = p.get("verb")
             if v:
-                used_verbs.append(v)
+                used_verbs.add(v)
 
         verbose_all[co_name] = {
             "paragraphs": accepted,
