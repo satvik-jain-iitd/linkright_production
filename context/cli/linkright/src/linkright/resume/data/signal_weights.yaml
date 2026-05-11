@@ -1,0 +1,104 @@
+# signal_weights.yaml — S3.1: 13-signal × 5-career-level multiplier matrix.
+#
+# Each cell is a float in [0.5, 2.5].
+# Applied in step_11_rank: weighted_brs = base_brs * weight_matrix[signal][career_level]
+#
+# Design principles:
+#   executive:    surface executive-influence + leadership + revenue-impact first
+#   senior:       surface scale + growth + leadership; balanced build-execution
+#   mid:          surface revenue-impact + data-driven + build-execution; balanced
+#   early_career: surface build-execution + automation + data-driven; downweight exec
+#   fresher:      surface build-execution + user-empathy + execution; heavily downweight exec
+#
+# S3.1 — 2026-05-11
+
+leadership:
+  executive:    1.8
+  senior:       1.5
+  mid:          1.2
+  early_career: 0.9
+  fresher:      0.7
+
+regulatory-tech:
+  executive:    1.4
+  senior:       1.3
+  mid:          1.1
+  early_career: 0.9
+  fresher:      0.8
+
+revenue-impact:
+  executive:    1.6
+  senior:       1.4
+  mid:          1.6
+  early_career: 1.2
+  fresher:      0.9
+
+data-driven:
+  executive:    1.2
+  senior:       1.4
+  mid:          1.5
+  early_career: 1.5
+  fresher:      1.3
+
+cost-reduction:
+  executive:    1.5
+  senior:       1.4
+  mid:          1.3
+  early_career: 1.0
+  fresher:      0.8
+
+growth:
+  executive:    1.5
+  senior:       1.7
+  mid:          1.4
+  early_career: 1.2
+  fresher:      1.0
+
+scale:
+  executive:    1.4
+  senior:       1.8
+  mid:          1.3
+  early_career: 1.0
+  fresher:      0.7
+
+executive-influence:
+  executive:    2.0
+  senior:       1.2
+  mid:          0.9
+  early_career: 0.6
+  fresher:      0.5
+
+build-execution:
+  executive:    0.7
+  senior:       1.2
+  mid:          1.3
+  early_career: 1.8
+  fresher:      2.0
+
+user-empathy:
+  executive:    1.0
+  senior:       1.2
+  mid:          1.3
+  early_career: 1.4
+  fresher:      1.6
+
+ambiguity-resolution:
+  executive:    1.5
+  senior:       1.4
+  mid:          1.3
+  early_career: 1.1
+  fresher:      0.9
+
+automation:
+  executive:    0.8
+  senior:       1.3
+  mid:          1.4
+  early_career: 1.7
+  fresher:      1.5
+
+execution:
+  executive:    1.0
+  senior:       1.2
+  mid:          1.3
+  early_career: 1.4
+  fresher:      1.5

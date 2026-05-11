@@ -81,6 +81,7 @@ from .lib import width_poc
 from .lib import fit_loop
 from .lib.domain_verbs import replace_weak_verb, infer_industry, _WEAK_VERBS as _DOMAIN_WEAK_VERBS
 from .lib.verb_taxonomy import replace_with_taxonomy_verb
+from .lib.signal_weights import load_signal_weights, apply_signal_weights
 from .lib.pdf_parse import extract_text
 from .lib.graph_context import get_subliminal_context
 from .lib.md_parse import parse_resume_markdown, _sanitize_year, _YEAR_PLACEHOLDER_RE, _YEAR_DIGIT_RE
@@ -2892,22 +2893,28 @@ def step_11_rank(
     verbose_all: dict,
     jd_keywords: list[str],
     jd_req_clusters: list[dict] | None = None,
+    career_level: str = "mid",
+    weight_matrix: dict | None = None,
 ) -> dict:
     """Rank verbose bullets by BRS (bullet relevance score).
 
-    S3.2: When *jd_req_clusters* is provided (list of cluster dicts produced by
-    ``jd_cluster.cluster_requirements``), the keyword-overlap component uses
-    cluster-level deduplication so that hitting 3 bullets covering different
-    members of the same "communication" cluster doesn't score 3× — it scores 1×
-    per cluster per company, preventing keyword-stuffing inflation.
+    S3.2: When *jd_req_clusters* is provided, keyword-overlap uses cluster-level
+    deduplication (1× per cluster per company, anti-stuffing).
+    S3.1: *career_level* + *weight_matrix* apply signal multipliers so
+    career-appropriate signals rank higher.
     """
     step = "step_11_rank"
     logbook.append(
         step, "starting",
         "scoring every verbose paragraph using a simplified BRS: specificity (#numbers), "
         "proof signal match count, JD-keyword hits, verb strength. Range 0-1. "
-        + (f"S3.2 cluster-aware: {len(jd_req_clusters)} clusters" if jd_req_clusters else "no clusters (legacy mode)"),
+        + (f"S3.2 cluster-aware: {len(jd_req_clusters)} clusters | " if jd_req_clusters else "no clusters (legacy) | ")
+        + f"S3.1 signal-weights: career_level='{career_level}'",
     )
+
+    # S3.1: load weight matrix if not provided (allows injection in tests)
+    if weight_matrix is None:
+        weight_matrix = load_signal_weights()
 
     kw_set = set(k.lower() for k in jd_keywords)
 
@@ -2983,22 +2990,23 @@ def step_11_rank(
         for p in paras:
             p["_brs"], _ = brs(p, covered_clusters=None)
         paras.sort(key=lambda p: p["_brs"], reverse=True)
-        # Second pass (S3.2): re-score top-down with cluster dedup so
-        # lower-ranked bullets don't get credit for already-covered clusters.
+        # Second pass (S3.2): re-score top-down with cluster dedup
         if jd_req_clusters:
             covered: set[str] = set()
             for p in paras:
                 score, new_cls = brs(p, covered_clusters=covered)
                 p["_brs"] = score
                 covered.update(new_cls)
-            # Re-sort after dedup pass (order may shift)
             paras.sort(key=lambda p: p["_brs"], reverse=True)
+        # S3.1: apply signal × career-level multipliers; final sort by _weighted_brs
+        apply_signal_weights(paras, career_level, weight_matrix)
+        paras.sort(key=lambda p: p["_weighted_brs"], reverse=True)
         ranked[co] = paras
 
     out_path = ARTIFACTS / "11_ranked_bullets.json"
     out_path.write_text(json.dumps(ranked, indent=2), encoding="utf-8")
 
-    all_scores = [p["_brs"] for paras in ranked.values() for p in paras]
+    all_scores = [p["_weighted_brs"] for paras in ranked.values() for p in paras]
     gaps: list[str] = []
     if not all_scores:
         gaps.append("no paragraphs to rank")
@@ -5762,7 +5770,12 @@ def main():
     except Exception as _e:
         log(f"[v8-guards] failed ({_e}) — continuing with raw step_10 output")
 
-    ranked = step_11_rank(verbose_all, parsed_p12.get("jd_keywords", []), jd_req_clusters=parsed_p12.get("jd_requirement_clusters"))
+    ranked = step_11_rank(
+        verbose_all,
+        parsed_p12.get("jd_keywords", []),
+        jd_req_clusters=parsed_p12.get("jd_requirement_clusters"),
+        career_level=parsed_p12.get("career_level", "mid"),
+    )
 
     _see_and_continue(
         "Bullets drafted and ranked",
