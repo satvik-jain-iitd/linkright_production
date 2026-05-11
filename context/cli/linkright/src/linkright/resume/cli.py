@@ -38,6 +38,65 @@ def resume_group() -> None:
     """
 
 
+def _read_quality_metrics(run_dir: Path) -> dict:
+    """Read JD coverage and width hit-rate from pipeline artifacts.
+
+    Returns a dict with keys:
+      jd_coverage_pct      — float or None
+      jd_covered           — int (covered req count)
+      jd_total             — int (total req count)
+      width_hit_pct        — float or None
+      width_hit_bullets    — int (bullets in target band)
+      width_total_bullets  — int (total bullets)
+    """
+    result: dict = {
+        "jd_coverage_pct": None,
+        "jd_covered": 0,
+        "jd_total": 0,
+        "width_hit_pct": None,
+        "width_hit_bullets": 0,
+        "width_total_bullets": 0,
+    }
+    # JD coverage — from 06_role_scores.json
+    role_scores_path = run_dir / "artifacts" / "06_role_scores.json"
+    if role_scores_path.exists():
+        try:
+            data = json.loads(role_scores_path.read_text())
+            pct = data.get("coverage_pct")
+            covered = data.get("covered_reqs", [])
+            gaps = data.get("gaps", [])
+            if pct is not None:
+                result["jd_coverage_pct"] = float(pct)
+                result["jd_covered"] = len(covered) if isinstance(covered, list) else 0
+                result["jd_total"] = result["jd_covered"] + (len(gaps) if isinstance(gaps, list) else 0)
+        except Exception:
+            pass
+
+    # Width hit-rate — from 16_telemetry.json width_poc block
+    telemetry_path = run_dir / "artifacts" / "16_telemetry.json"
+    if telemetry_path.exists():
+        try:
+            tel = json.loads(telemetry_path.read_text())
+            poc = tel.get("width_poc") or {}
+            hit_pct = poc.get("pct_bullets_at_target")
+            total = poc.get("total_bullets")
+            if hit_pct is not None and total is not None:
+                result["width_hit_pct"] = float(hit_pct)
+                result["width_total_bullets"] = int(total)
+                result["width_hit_bullets"] = round(int(total) * float(hit_pct) / 100)
+        except Exception:
+            pass
+
+    return result
+
+
+def _fmt_metric_value(value_str: str, pct: float, warn_color: str = "#FF5733") -> str:
+    """Wrap value_str in warning color markup when pct < 80, else return plain."""
+    if pct < 80.0:
+        return f"[{warn_color}]{value_str}[/]"
+    return value_str
+
+
 def _render_success_card(run_dir: Path, started_at: float) -> None:
     """Print the end-of-tailor success summary card."""
     from linkright.ui import success_card, TEAL
@@ -61,6 +120,17 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
                 fields.insert(1, ("Score", score_str))
         except Exception:
             pass
+
+    # S4.4 — surface JD coverage % and width hit-rate as quality signals
+    metrics = _read_quality_metrics(run_dir)
+    if metrics["jd_coverage_pct"] is not None:
+        cov_pct = metrics["jd_coverage_pct"]
+        cov_str = f"{metrics['jd_covered']}/{metrics['jd_total']} reqs ({cov_pct:.1f}%)"
+        fields.append(("JD Coverage", _fmt_metric_value(cov_str, cov_pct)))
+    if metrics["width_hit_pct"] is not None:
+        wid_pct = metrics["width_hit_pct"]
+        wid_str = f"{metrics['width_hit_bullets']}/{metrics['width_total_bullets']} bullets ({wid_pct:.1f}%)"
+        fields.append(("Width hits", _fmt_metric_value(wid_str, wid_pct)))
 
     opener = {"darwin": "open", "linux": "xdg-open", "win32": "start"}.get(sys.platform, "open")
     next_steps = [
