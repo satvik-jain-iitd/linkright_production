@@ -5814,8 +5814,8 @@ def main():
 
     # S5.5 — Progressive validation gate: flag bullets below BRS threshold.
     # Runs between step_11 (rank) and step_12 (condense / width expansion).
-    # Bullets with _brs < threshold get _below_threshold=True so step_12's
-    # width expansion skips them and the success card can warn the user.
+    # Bullets with _brs < threshold get _below_threshold=True; the success
+    # card reads this flag and warns the user.
     _brs_weak_count = 0
     for _co_bullets in ranked.values():
         for _para in _co_bullets:
@@ -5829,6 +5829,10 @@ def main():
             "s5_5_progressive_gate", "result",
             f"{_brs_weak_count} bullet(s) below threshold; flagged for manual review",
         )
+    # Persist flagged state so _read_quality_metrics in cli.py can read below_threshold_count.
+    _ranked_artifact = ARTIFACTS / "11_ranked_bullets.json"
+    if _ranked_artifact.exists():
+        _ranked_artifact.write_text(json.dumps(ranked, indent=2), encoding="utf-8")
 
     _see_and_continue(
         "Bullets drafted and ranked",
