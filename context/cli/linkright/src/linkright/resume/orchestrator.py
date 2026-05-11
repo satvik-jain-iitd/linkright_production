@@ -4267,6 +4267,18 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         title = (p.get("title") or p.get("name") or "").strip()
         one = (p.get("one_liner") or p.get("description") or "").strip()
         year = (p.get("year") or "").strip()
+        # F-S1.11 defense-in-depth: discard placeholder year strings that the
+        # LLM may have copied verbatim from the prompt schema example ("Year",
+        # "yyyy", etc.). _sanitize_year in md_parse.py already strips these at
+        # parse time; this guard catches any that arrive via other code paths
+        # (e.g. side-gig date_range or externally-built project dicts).
+        # A real year must contain at least one 4-digit sequence (1900-2099).
+        import re as _re
+        _YEAR_PLACEHOLDER = _re.compile(
+            r'^(year|years?|yyyy|n/?a|unknown|tbd|tba|—|-)$', _re.IGNORECASE
+        )
+        if year and (_YEAR_PLACEHOLDER.match(year) or not _re.search(r'\b(19|20)\d{2}\b', year)):
+            year = ""
         # 2026-05-02: surface key_achievements when present. Earlier renderer
         # silently dropped this field, hollowing the Projects section to title-
         # only — leaving 200+ chars of real content unrendered + tanking page
