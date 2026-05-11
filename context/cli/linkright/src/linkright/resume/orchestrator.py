@@ -3070,10 +3070,11 @@ def step_11_rank(
                     if bullet_vecs and bullet_vecs[0]:
                         bullet_emb = bullet_vecs[0]
                         alignment = max(
-                            cosine.cosine(bullet_emb, req_emb)
-                            for req_emb in _req_embeddings
-                            if req_emb
-                        ) if _req_embeddings else 0.0
+                            (cosine.cosine(bullet_emb, req_emb)
+                             for req_emb in _req_embeddings
+                             if req_emb),
+                            default=0.0,
+                        )
                         # Fix 1: only write blend when Oracle successfully returned an
                         # embedding. If the call fails or returns empty, leave
                         # _weighted_brs at its BRS-only value and set score to 0.0.
