@@ -100,6 +100,7 @@ from .profile_facts import (
     missing_expected_values,
     value_in_text,
 )
+from .lib.metric_magnitude import score_metric_consistency as _score_metric_consistency
 
 
 # ── Module-level retry counter (populated by any step that re-prompts on
@@ -3000,6 +3001,12 @@ def step_11_rank(
             paras.sort(key=lambda p: p["_brs"], reverse=True)
         # S3.1: apply signal × career-level multipliers; final sort by _weighted_brs
         apply_signal_weights(paras, career_level, weight_matrix)
+        # S4.3: metric-magnitude consistency penalty (max −15% on _weighted_brs)
+        for p in paras:
+            raw_text = p.get("text_html") or ""
+            penalty = _score_metric_consistency(raw_text)
+            if penalty > 0.0:
+                p["_weighted_brs"] = round(p["_weighted_brs"] * (1.0 - 0.15 * penalty), 4)
         paras.sort(key=lambda p: p["_weighted_brs"], reverse=True)
         ranked[co] = paras
 
