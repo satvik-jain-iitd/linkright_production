@@ -347,41 +347,47 @@ def _extract_contact_value(contact_str: str) -> tuple[str, str, str]:
     return label, value, link_type
 
 
-def _create_contact_link(value: str, link_type: str) -> str:
+def _create_contact_link(value: str, link_type: str, anchor_text: str = "") -> str:
     """Create a hyperlink for a contact value.
+
+    For linkedin and portfolio types the anchor_text parameter is used as the
+    visible label (e.g. "LinkedIn", "Portfolio") so the full URL is never shown.
+    Returns an empty string when value is empty — callers must skip rendering.
 
     Args:
         value: Contact value (email, phone, URL, etc.)
         link_type: Type of link (tel, mailto, linkedin, portfolio, unknown)
+        anchor_text: Override display text (used for linkedin / portfolio)
 
     Returns:
-        HTML anchor tag with proper href
+        HTML anchor tag with proper href, or empty string for empty value
     """
-    style = 'style="color: inherit; text-decoration: none;"'
+    # All contact anchors use color: var(--ui-text-primary-color) so they resolve to
+    # the template's primary (black) text color per brand-design-spec rule 2+4.
+    # Rule 2: font color is always black. Rule 4: brand color ONLY on metrics + dividers.
+    link_style = 'style="text-decoration: none; color: var(--ui-text-primary-color);"'
 
     if link_type == "tel":
         # Extract digits for tel: URL
         digits = "".join(c for c in value if c.isdigit() or c in ["+", "-"])
-        return f'<a href="tel:{digits}" {style}>{value}</a>'
+        return f'<a href="tel:{digits}" {link_style}>{value}</a>'
 
     elif link_type == "mailto":
-        return f'<a href="mailto:{value}" {style}>{value}</a>'
+        return f'<a href="mailto:{value}" {link_style}>{value}</a>'
 
     elif link_type == "linkedin":
-        # Ensure URL format
-        if not value.startswith("http"):
-            url = f"https://{value}"
-        else:
-            url = value
-        return f'<a href="{url}" {style}>{value}</a>'
+        if not value:
+            return ""
+        url = value if value.startswith("http") else f"https://{value}"
+        text = anchor_text or "LinkedIn"
+        return f'<a href="{url}" target="_blank" {link_style}>{text}</a>'
 
     elif link_type == "portfolio":
-        # Ensure URL format
-        if not value.startswith("http"):
-            url = f"https://{value}"
-        else:
-            url = value
-        return f'<a href="{url}" {style}>{value}</a>'
+        if not value:
+            return ""
+        url = value if value.startswith("http") else f"https://{value}"
+        text = anchor_text or "Portfolio"
+        return f'<a href="{url}" target="_blank" {link_style}>{text}</a>'
 
     else:
         # Unknown type: return as plain text
@@ -428,8 +434,16 @@ def _replace_header_content(html: str, header: HeaderData) -> str:
         if re.search(r'<a\s', value, re.IGNORECASE):
             link = value
         else:
-            link = _create_contact_link(value, link_type)
-        if label:
+            # linkedin/portfolio: pass label as anchor_text so the link reads
+            # "LinkedIn" / "Portfolio" instead of the raw URL string.
+            link = _create_contact_link(value, link_type, anchor_text=label)
+        if not link:
+            # Empty URL for linkedin/portfolio — skip entirely (AC3/AC4)
+            continue
+        if link_type in ("linkedin", "portfolio"):
+            # Anchor text already contains the label — no <strong>Label</strong>: prefix
+            contact_html.append(f'<span>{link}</span>')
+        elif label:
             contact_html.append(f'<span><strong>{label}</strong>: {link}</span>')
         else:
             contact_html.append(f'<span>{link}</span>')
