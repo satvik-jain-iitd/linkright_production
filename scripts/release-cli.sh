@@ -85,28 +85,29 @@ for f in "${REAL_FRAGMENTS[@]}"; do echo "    $(basename "$f")"; done
 NEW_ENTRY="## [$NEXT_VER] - $TODAY"$'\n'
 NEW_ENTRY+=$'\n'
 
-# Group bullets by type (Added / Fixed / Changed / Removed)
-declare -A TYPE_BULLETS
+# Group bullets by type — bash 3.x compatible (temp files instead of declare -A)
+BULLETS_TMPDIR=$(mktemp -d)
 for f in "${REAL_FRAGMENTS[@]}"; do
   TYPE=""
   while IFS= read -r line; do
-    if [[ "$line" =~ ^\#\#\ \[type:\ ([A-Za-z]+)\] ]]; then
+    if [[ "$line" =~ ^##\ \[type:\ ([A-Za-z]+)\] ]]; then
       TYPE="${BASH_REMATCH[1]}"
     elif [[ "$line" =~ ^-\  && -n "$TYPE" ]]; then
-      TYPE_BULLETS["$TYPE"]+="$line"$'\n'
+      printf '%s\n' "$line" >> "${BULLETS_TMPDIR}/${TYPE}"
     elif [[ "$line" =~ ^\ \  && -n "$TYPE" ]]; then
-      # continuation lines (indented)
-      TYPE_BULLETS["$TYPE"]+="$line"$'\n'
+      printf '%s\n' "$line" >> "${BULLETS_TMPDIR}/${TYPE}"
     fi
   done < "$f"
 done
 
 for TYPE in Added Fixed Changed Removed; do
-  if [[ -n "${TYPE_BULLETS[$TYPE]:-}" ]]; then
+  if [[ -f "${BULLETS_TMPDIR}/${TYPE}" ]]; then
     NEW_ENTRY+="### $TYPE"$'\n'
-    NEW_ENTRY+="${TYPE_BULLETS[$TYPE]}"$'\n'
+    NEW_ENTRY+="$(cat "${BULLETS_TMPDIR}/${TYPE}")"$'\n'
+    NEW_ENTRY+=$'\n'
   fi
 done
+rm -rf "${BULLETS_TMPDIR}"
 
 # ── 6. Prepend to CHANGELOG.md ───────────────────────────────────────────────
 echo "→ Prepending to $CHANGELOG..."
