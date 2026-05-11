@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.17] - 2026-05-11
+
+### Fixed
+- **S1.3 (hide internal step names in spinner):** `logbook._verb_for()` fallback
+  changed from `f"⚙️  Running {step_name}"` to `"⚙️  Processing..."` — raw
+  internal step identifiers (e.g. `step_07_phase_1_2`, `run_start`) no longer
+  leak to the user's terminal when a step has no explicit friendly-verb mapping.
+  Added `"run_start"` → `"🚀 Starting pipeline"` to `_STEP_VERBS` so the pipeline
+  init message is also human-readable.
+
 ## [Unreleased]
 
 **Resume diagnostics** - restored gap sentinels using profile-derived facts

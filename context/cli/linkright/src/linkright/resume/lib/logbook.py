@@ -27,6 +27,7 @@ _VISION_PATH: Path = Path(__file__).resolve().parent.parent / "vision.md"
 # 2026-05-01: friendly verbs per step for terminal progress emission. Mapped
 # to step name prefix so retry/sub-phase variants share the same verb.
 _STEP_VERBS: dict[str, str] = {
+    "run_start": "🚀 Starting pipeline",
     "step_00":  "📄 Reading resume PDF",
     "step_01":  "🧩 Parsing resume structure",
     "step_02":  "✨ Extracting career achievements",
@@ -49,7 +50,7 @@ _STEP_VERBS: dict[str, str] = {
 def _verb_for(step_name: str) -> str:
     """Return user-friendly verb for a step name (matches step_NN_* prefix)."""
     prefix = "_".join(step_name.split("_")[:2])  # "step_07"
-    return _STEP_VERBS.get(prefix, f"⚙️  Running {step_name}")
+    return _STEP_VERBS.get(prefix, "⚙️  Processing...")
 
 
 def _emit_progress(step_name: str, phase: str, context: str) -> None:
