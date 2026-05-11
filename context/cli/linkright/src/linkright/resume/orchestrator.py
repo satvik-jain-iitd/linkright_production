@@ -4448,8 +4448,9 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             "key_achievements": _sg_achievements,
         })
 
+    _proj_cap = int(parsed_p12.get("bullet_budget", {}).get("projects_total") or 6)
     projects_items: list[str] = []
-    for p in _projects_raw[:6]:  # cap 6 (was 4; raised to fit 2 side gigs + 2 real projects)
+    for p in _projects_raw[:_proj_cap]:  # cap from budget (default 6)
         if not isinstance(p, dict):
             continue
         line = _project_line(p)

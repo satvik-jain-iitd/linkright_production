@@ -119,13 +119,14 @@ class TestChooseStrategyExpand:
         strategy = choose_strategy(fit, parsed, {}, iter_n=1)
         assert strategy == "E2_surface_projects"
 
-    def test_iter1_no_projects_falls_through(self):
-        """iter_n=1 + underflow + no projects → falls through to shrink path (not expand)."""
+    def test_iter1_no_projects_accepts_underflow(self):
+        """iter_n=1 + underflow + no projects → E_accept (no-op), NOT a shrink strategy."""
         fit = self._underflow_fit()
         parsed = self._make_parsed(n_projects=0)
         strategy = choose_strategy(fit, parsed, {}, iter_n=1)
-        # Should NOT be an expand strategy
-        assert not strategy.startswith("E")
+        assert strategy == "E_accept", (
+            f"Expected E_accept (accept underflow, don't shrink sparse resume), got {strategy!r}"
+        )
 
 
 # ─── AC4: choose_strategy does NOT expand when any_wrap=True ─────────────────
@@ -255,3 +256,43 @@ class TestApplyStrategyE2:
         # No crash, Projects still not added to dropped
         assert "Projects" not in parsed["dropped_sections"]
         assert parsed["bullet_budget"]["projects_total"] == 1
+
+
+# ─── E_accept: no-op strategy — never shrinks sparse resume ──────────────────
+
+class TestApplyStrategyEAccept:
+    def test_e_accept_is_noop(self):
+        """E_accept must not mutate parsed_p12 or condensed."""
+        parsed = {
+            "bullet_budget": {"company_1_total": 4},
+            "companies": [{"name": "A"}],
+            "projects": [],
+            "dropped_sections": [],
+        }
+        condensed = {"A": [{"text_html": "Did X"}]}
+        import copy
+        parsed_before = copy.deepcopy(parsed)
+        condensed_before = copy.deepcopy(condensed)
+        apply_strategy("E_accept", parsed, condensed)
+        assert parsed == parsed_before, "E_accept must not mutate parsed_p12"
+        assert condensed == condensed_before, "E_accept must not mutate condensed"
+
+    def test_choose_strategy_returns_e_accept_iter2_underflow(self):
+        """iter_n=2 + underflow → E_accept (exhaust expand, don't shrink)."""
+        from linkright.resume.lib.fit_loop import choose_strategy
+        fit = {
+            "page_count": 1, "any_wrap": False, "wrap_bullets": [],
+            "util_pct": 72.0, "util_overflow": False, "util_underflow": True,
+            "success": False,
+        }
+        parsed = {
+            "companies": [{"name": "A"}],
+            "projects": [],
+            "dropped_sections": [],
+            "bullet_budget": {"company_1_total": 6},
+            "skills_max_chars": 480,
+        }
+        strategy = choose_strategy(fit, parsed, {}, iter_n=2)
+        assert strategy == "E_accept", (
+            f"iter_n=2 underflow with no projects must return E_accept, got {strategy!r}"
+        )

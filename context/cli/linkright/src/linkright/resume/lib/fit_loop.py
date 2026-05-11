@@ -185,9 +185,10 @@ def choose_strategy(
             n_projects = len(parsed_p12.get("projects", []))
             if n_projects > 0:
                 return "E2_surface_projects"
-        # iter_n >= 2 or no projects: fall through to shrink paths below
-        # (underflow that persists after 2 expand attempts is likely a layout
-        # constraint — don't keep expanding indefinitely).
+        # No more expand options — accept underflow rather than shrinking an
+        # already-sparse resume. If E2 caused overflow, util_underflow will be
+        # False on the next iteration and the shrink path fires correctly.
+        return "E_accept"
 
     # ── SHRINK PATH ──────────────────────────────────────────────────────────
     # 2026-05-02: L0 — Skills trim is the EASIEST space-saving lever. Fire it
@@ -249,6 +250,9 @@ def apply_strategy(
         n_projects = len(parsed_p12.get("projects", []))
         bb = parsed_p12.setdefault("bullet_budget", {})
         bb["projects_total"] = min(3, n_projects)
+
+    elif strategy == "E_accept":
+        pass  # no-op: accept underflow rather than shrinking a sparse resume
 
     elif strategy == "L1_tighten_width":
         # Lower target_max_cu by 2 CU — signals next width POC pass to trim harder
