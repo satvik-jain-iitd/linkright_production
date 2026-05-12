@@ -40,15 +40,18 @@ def _count_keys(managed: dict[str, str]) -> tuple[int, int]:
 
 
 def _warn_if_duplicate_value(key_val: str, target_slot: str) -> None:
-    """K-2/K-6: warn user if this key value is already stored in another slot."""
-    existing = read_all_managed()
-    for slot, val in existing.items():
-        if val == key_val and slot != target_slot:
-            click.echo(
-                f"  {YELLOW}⚠ This key value is already saved as {slot}.{RST}"
-                f" Adding it again as {target_slot} anyway (rotation slots share keys sometimes)."
-            )
-            return
+    """K-6: warn user if this key value is already stored in another slot. Best-effort — never raises."""
+    try:
+        existing = read_all_managed()
+        for slot, val in existing.items():
+            if val == key_val and slot != target_slot:
+                click.echo(
+                    f"  {YELLOW}⚠ This key value is already saved as {slot}.{RST}"
+                    f" Adding it again as {target_slot} anyway (rotation slots share keys sometimes)."
+                )
+                return
+    except Exception:
+        pass
 
 
 def _ping_and_report(spec: "ProviderSpec", api_key: str, updates: dict[str, str]) -> None:  # noqa: F821
@@ -322,6 +325,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         ok, msg = _validate_key_format(spec, key_value)
         if not ok:
             click.echo(f"  {YELLOW}Format warning: {msg}{RST}")
+        _warn_if_duplicate_value(key_value, slot)
         write_keys({slot: key_value})
         click.echo(f"  {GREEN}✓ Saved {slot} → ~/.linkright/.env{RST}")
         new_managed = read_all_managed()
@@ -398,6 +402,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
                 if slot is None:
                     click.echo(f"  {YELLOW}All slots filled — stopping at {_plural(imported, 'key')}.{RST}")
                     break
+                _warn_if_duplicate_value(raw_key, slot)
                 write_keys({slot: raw_key})
                 click.echo(f"  {GREEN}✓{RST} {slot}")
                 imported += 1
@@ -535,13 +540,16 @@ def keys_import(dry_run: bool) -> None:
         return
 
     proceed = questionary.confirm(
-        f"  Import {len(found_rows)} key(s) into ~/.linkright/.env?", default=True
+        f"  Import {_plural(len(found_rows), 'key')} into ~/.linkright/.env?", default=True
     ).ask()
     if not proceed:
         click.echo("  Aborted — no keys saved.")
         return
 
-    updates: dict[str, str] = {slot: key_val for _, slot, key_val in found_rows}
+    updates: dict[str, str] = {}
+    for _, slot, key_val in found_rows:
+        _warn_if_duplicate_value(key_val, slot)
+        updates[slot] = key_val
     write_keys(updates)
 
     click.echo(f"\n  {GREEN}✓ {_plural(len(updates), 'key')} imported → ~/.linkright/.env{RST}")
@@ -606,7 +614,7 @@ def keys_test() -> None:
     click.echo("")
     click.echo(f"{BOLD}LinkRight Keys — Live Test{RST}")
     click.echo("─" * 48)
-    click.echo(f"  {DIM}Testing {total} key(s) with 1-token completions…{RST}")
+    click.echo(f"  {DIM}Testing {_plural(total, 'key')} with 1-token completions…{RST}")
     click.echo("")
 
     alive = rate_limited = invalid = error = 0
