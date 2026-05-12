@@ -119,8 +119,8 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 | Item | Status | Sprint |
 |---|---|---|
 | Truth Engine Layer 1 (personal-details verify at start) | 🟢 IMPLEMENTED (PR #128 v0.7.0) | S3.3 |
-| Truth Engine Layer 3 (critique step at end) | 🔵 DEFERRED | Next PRD |
-| Strategy-review checkpoint at step_07b | 🔵 DEFERRED | Next PRD |
+| Truth Engine Layer 3 (critique step at end) | 🔵 DEFERRED | Next PRD — 2026-05-12 decision: defer |
+| Strategy-review checkpoint at step_07b | 🟡 PLANNED | Sprint 6 — 2026-05-12 decision: ship |
 
 ### 4.5 From 2026-05-11 stranger QA — 22 findings
 
@@ -136,7 +136,7 @@ These definitions resolve the "Courses vs Certificates" type ambiguity Satvik ra
 | QA-F7b: "at 50" dangling number | ⚠️ Friction | 🔵 DEFERRED | symptom of F2 fix; re-test |
 | QA-F7c: Grammar break ("conducting usability along by leveraging") | ⚠️ Friction | 🔵 DEFERRED | LLM-glitch; re-test post-fixes |
 | QA-F7d: "Gen-artificial intelligence" expansion | ❌ Blocker | 🟢 **DONE** (PR #118 v0.5.19) | S1.5 — GenAI/LLM/RAG protected from expansion |
-| QA-F8: Duplicate bullets for same nugget | ⚠️ Friction | 🔵 DEFERRED | de-dup pass needs work |
+| QA-F8: Duplicate bullets for same nugget | ⚠️ Friction | 🟡 PLANNED | Sprint 6 CLI polish omnibus — 2026-05-12 decision: ship |
 | QA-F9: Coverage 25% not surfaced | ⚠️ Friction | 🟢 **DONE** (PR #134 v0.8.0) | S4.4 — success box shows JD coverage % + width hit-rate |
 | QA-F10: tldr duplicate of no-args | ⚠️ Friction | 🔵 DEFERRED | low impact |
 | QA-Good × 3 (doctor, stories empty state, auth status) | 🟢 IMPLEMENTED | — | |
@@ -249,7 +249,7 @@ Weighted prioritisation matrix run 2026-05-11 across 12 hypotheses. Scoring: Qua
 | H9 — Background JD pre-processing pipeline | 48/100 | 🔴 REJECTED | — | Zero quality benefit. Speed gain real but S5.2 caching solves the same runtime problem without async infra overhead. Reject. |
 | H10 — Cross-bullet verb coherence enforcer (Oracle local) | 68/100 | 🟢 IMPLEMENTED | S5.6 | Local Oracle gemma3:1b (no API); 2-3 days; recruiter-visible quality signal; no fine-tuning needed |
 | H11 — Prompt compression / context pruning for step_10 | 62/100 | 🔵 DEFERRED | When billing matters | Quality risk if context stripped incorrectly. Revisit when token cost is real constraint (user-base growth, API billing pressure). |
-| H12 — Request-level output caching | 72/100 | 🟡 PLANNED | S5.2 | 3-4 days; most underrated win; 0 quality tradeoff; 100% token savings for iterative runs; cache hit rate must be verified ≥25% (Phase 0 instrumentation first) |
+| H12 — Request-level output caching | 72/100 | 🔵 DEFERRED | v2 | Phase 0 done (PR #149). Phase 1 deferred to v2 — 2026-05-12 decision. |
 
 **⚠️ Critical parallel action:** H3 (S5.7) requires 3 weeks total including data collection. Step_10b instrumentation to collect `(bullet, source_excerpt, guard_decision)` triplets must start in Sprint 1 — running passively in background while Sprints 1-4 execute. Without this, S5.7 cannot start until weeks after Sprint 5 begins.
 
@@ -356,12 +356,23 @@ For freshers, the "0+ years" phrasing is harmful — better to omit the years cl
 |---|---|---|---|---|---|---|
 | ✅ S5.0 | CLI pre-flight dependency guards + keys polish (pluralization, duplicate detection K-2/K-4/K-6) | P0 | —/100 | S | PRs #146 #147 #148 #150 v0.9.x | caveman:cavecrew-builder |
 | ✅ S5.1 | Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | P1 | 78/100 | S | PR #139 v0.9.0 | caveman:cavecrew-builder |
-| 🔵 S5.2 | Request-level output caching | P1 | 72/100 | M | Phase 0 ✅ PR #149 — `input_hash` in 16_telemetry.json. Phase 1 gated on hit rate ≥25% (~1 week data) | product-owner-qa |
+| 🔵 S5.2 | Request-level output caching | P1 | 72/100 | M | Phase 0 ✅ PR #149. Phase 1 deferred to v2 — 2026-05-12 decision | product-owner-qa |
 | ✅ S5.3 | JD keyword contamination prompt fix | P1 | 60/100 | S | PR #137 v0.9.0 | caveman:cavecrew-builder |
 | ✅ S5.4 | Career level classification → pure deterministic | P2 | 59/100 | S | PR #140 v0.9.0 | caveman:cavecrew-builder |
 | ✅ S5.5 | Progressive validation gate (early regen on BRS-weak bullets) | P1 | 68/100 | S | PR #138 v0.9.0 | designer-developer |
 | ✅ S5.6 | Cross-bullet verb coherence enforcer (Oracle local gemma3:1b) | P1 | 68/100 | M | PR #142 v0.9.0 | designer-developer |
 | 🔵 S5.7 | Fine-tuned fabrication guard (asymmetric loss, gemma3:1b) | P0 | 83/100 | L+ | Phase 0 ✅ PR #141 v0.9.0 — Phase 1+2 gated on FNR > 3% measurement | product-owner-qa |
+
+---
+
+### Sprint 6 — CLI polish + quality gates (planned 2026-05-12)
+
+> **Two workstreams in parallel.** Sprint 6 ships two PRs: one omnibus CLI polish, one pipeline quality gate.
+
+| ID | Title | Priority | Effort | Notes | Subagent |
+|---|---|---|---|---|---|
+| 🟡 S6.1 | step_07b interactive strategy review checkpoint | P1 | S | Mid-run pause after JD analyze; user approves outline before 60 LLM calls | designer-developer |
+| 🟡 S6.2 | CLI polish omnibus: tiered help + profile polish + jargon + bullet dedup | P1 | M | PR1 `--advanced-help` + PR3 profile show/status + PR6 jargon + QA-F8 dedup | caveman:cavecrew-builder |
 
 ---
 
@@ -1665,4 +1676,4 @@ Refresh THIS PRD when:
 
 ---
 
-*Document version 1.3 · Created 2026-05-11 · Updated 2026-05-12 (Session 4) · LinkRight CLI v0.9.0 · Sprint 1-4: complete · Sprint 5 (extended roadmap): in progress — S5.0–S5.6 ✅, S5.2 Phase 0 ✅ PR #149 (Phase 1 gated ≥25% hit rate), S5.7 Phase 1+2 gated*
+*Document version 1.4 · Created 2026-05-11 · Updated 2026-05-12 (Session 5) · LinkRight CLI v0.9.1 · Sprint 1-5: complete · S5.2 Phase 1 deferred to v2 · S5.7 Phase 1+2 gated · Sprint 6 planned: S6.1 (step_07b) + S6.2 (CLI polish omnibus)*
