@@ -155,6 +155,10 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
     if resume_path and not _markdown_only:
         try:
             from pypdf import PdfReader
+        except ImportError:
+            click.echo("pypdf is not installed — run `pip install pypdf`.", err=True)
+            sys.exit(1)
+        try:
             reader = PdfReader(str(resume_path))
             if len(reader.pages) == 0:
                 raise ValueError("empty PDF")
