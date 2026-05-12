@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1] - 2026-05-12
+
+### Added
+- **S5.2 Phase 0 (input hash instrumentation):** `16_telemetry.json` now records `input_hash` (sha256 of resume bytes + JD bytes + pipeline version, length-prefixed to prevent boundary collisions) per run. After 1 week of passive collection, hit rate is measured to gate Phase 1 (actual output caching). No behaviour change for users.
+- **S5.6 (Cross-bullet verb coherence enforcer):** Added `resume/lib/coherence.py` with `enforce_verb_coherence()` that detects duplicate leading verbs within a section, rephrases via Oracle gemma3:1b, and reverts if the rephrase is structurally unsound. Runs after step_11 ranking, before step_12. Oracle unavailable → skips silently.
+
+### Fixed
+- **CLI keys polish:** Replace `key(s)`/`provider(s)`/`slot(s)` with correct singular/plural throughout `keys add` output. Add duplicate key-value warning — if the same API key is entered twice across slots, user sees `⚠ This key value is already saved as <slot>` instead of silent overwrite.
+- **Hotfix (path prompt spaces):** `_sanitize_path_input` no longer truncates unquoted paths containing spaces (e.g. `Ruch_ Dubey_Resume.pdf`). shlex decoding is now applied only when the input uses shell quoting or backslash escapes; bare unquoted paths are passed through verbatim.
+- **S5.0 (Pre-flight guards):** Commands now check for required artifacts before dispatching any pipeline logic. `resume tailor` and `cover-letter` guard profile + LLM key; harness commands (`improve`, `fill-metrics`, `practice`, `strategy-review`, `critique`) guard profile + prior tailor run; `profile create` guards PDF readability. Users see a clear "run X first" message instead of a Python traceback.
+- **S5.0 polish (pre-flight guards):** Extended require_llm_key to check raw shell env vars (GROQ/GEMINI/CEREBRAS/SAMBANOVA/CLOUDFLARE/OPENROUTER/ZHIPU/Z_AI) in addition to linkright-managed .env — prevents false-block for users with keys set outside linkright. require_tailor_run now uses pipeline artifact sentinel (16_telemetry.json or 14_final_resume.html) instead of dir existence — avoids false-pass on partial/crashed runs. Added require_profile + require_llm_key guards to cover-letter command. Split ImportError from corrupt-PDF exception in profile create.
+
+
 ## [0.9.0] - 2026-05-12
 
 ### Added

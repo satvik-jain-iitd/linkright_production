@@ -1,3 +1,0 @@
-## [type: Fixed]
-<!-- pr: TBD -->
-- **S5.0 polish (pre-flight guards):** Extended require_llm_key to check raw shell env vars (GROQ/GEMINI/CEREBRAS/SAMBANOVA/CLOUDFLARE/OPENROUTER/ZHIPU/Z_AI) in addition to linkright-managed .env — prevents false-block for users with keys set outside linkright. require_tailor_run now uses pipeline artifact sentinel (16_telemetry.json or 14_final_resume.html) instead of dir existence — avoids false-pass on partial/crashed runs. Added require_profile + require_llm_key guards to cover-letter command. Split ImportError from corrupt-PDF exception in profile create.
