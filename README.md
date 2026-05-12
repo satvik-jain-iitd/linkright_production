@@ -1,8 +1,8 @@
 <div align="center">
 
-# LinkRight
+# LinkRight CLI
 
-**Local-first, agent-native career OS.**
+**Local-first, agent-native career OS.**  
 Tailor resumes, prep interviews, find jobs, draft content — all from your terminal, $0 cost with free-tier LLM keys.
 
 [![PyPI version](https://img.shields.io/pypi/v/linkright?color=blue)](https://pypi.org/project/linkright/)
@@ -13,7 +13,7 @@ Tailor resumes, prep interviews, find jobs, draft content — all from your term
 
 ---
 
-## ⚡ Install (one line)
+## ⚡ Install
 
 ```bash
 curl -fsSL https://install.linkright.in | bash
@@ -21,23 +21,13 @@ curl -fsSL https://install.linkright.in | bash
 
 Auto-detects macOS / Linux, installs Python + pipx if missing, then `pipx install 'linkright[full]'`. Idempotent — safe to re-run.
 
-> **Audit before piping?** The script is right here: [`scripts/install.sh`](./scripts/install.sh). Or use the raw GitHub URL: `curl -fsSL https://raw.githubusercontent.com/satvik-jain-iitd/linkright_production/main/scripts/install.sh | bash`
+> **Audit before piping?** See [`scripts/install.sh`](./scripts/install.sh)
 
-### Alternative — manual pip / pipx
-
-```bash
-# Recommended (isolated venv per CLI tool):
-pipx install 'linkright[full]'
-
-# Or system-wide pip:
-pip install 'linkright[full]'
-```
-
-Then configure interactively:
+### Alternative — pip / pipx
 
 ```bash
-linkright setup        # picks LLM / embedder / PDF, downloads chromium
-linkright doctor       # 9-check health verify
+pipx install 'linkright[full]'     # recommended (isolated env)
+pip install 'linkright[full]'      # or system-wide
 ```
 
 ---
@@ -45,62 +35,45 @@ linkright doctor       # 9-check health verify
 ## 🚀 First run
 
 ```bash
-pip install 'linkright[full]'
-linkright setup                # 5-step wizard — including guided API key setup, no .env editing needed
+linkright setup                                         # 5-step wizard — LLM key, embedder, PDF renderer
+linkright profile create -r ~/Documents/resume.pdf     # one-time profile build
+linkright tailor -j /path/to/jd.md                     # tailor to a JD
 ```
 
-Then:
-
-```bash
-linkright profile create -r ~/Documents/your_resume.pdf      # one-time
-linkright tailor -j /path/to/job-description.md              # per JD
-```
-
-That's it — tailored 1-page PDF in `~/.linkright/runs/<run-id>/artifacts/15_final_resume.pdf`.
+Output: `~/.linkright/runs/<id>/artifacts/15_final_resume.pdf`
 
 ---
 
 ## 🎯 What it does — 4 pillars
 
-| Pillar | Status | Subcommand |
+| Pillar | Status | Command |
 |---|---|---|
-| **Resume** — JD-aware tailoring with quality scorecard, truth-engine guards, interview-prep links | ✅ Live | `linkright tailor`, `t` |
-| **Job Search** — match scoring, top-N ranking against your career memory | 🟡 Scaffold | `linkright jobsearch` |
-| **Interview** — STAR seeds + screening Q's per resume bullet | 🟡 Scaffold + practice cards live | `linkright practice`, `p` |
-| **Content** — LinkedIn drafts, scheduling, performance tracking | ⚪ Scaffold only | `linkright content` |
+| **Resume** — JD-aware tailoring, truth-engine guards, scorecard, interview-prep seeds | ✅ Live | `linkright tailor` / `t` |
+| **Job Search** — match scoring, top-N ranking against career memory | 🟡 Scaffold | `linkright jobsearch` |
+| **Interview** — STAR seeds + screening Q's per bullet | 🟡 Practice cards live | `linkright practice` / `p` |
+| **Content** — LinkedIn drafts | ⚪ Scaffold | `linkright content` |
 
 ---
 
 ## 🛠️ Common workflow
 
 ```bash
-linkright tailor -j jd.md        # 1. Generate tailored resume (2-3 min)
-linkright critique               # 2. LLM review → 5 actionable issues
-linkright fill                   # 3. Resolve missing-metric gaps
-linkright practice               # 4. Interview prep cards
+linkright tailor -j jd.md     # 1. Generate tailored resume (2-3 min)
+linkright critique             # 2. LLM review → 5 actionable issues
+linkright fill                 # 3. Resolve metric gaps
+linkright practice             # 4. Interview prep cards
 ```
 
-Or use single-letter shortcuts: `linkright t`, `linkright crit`, `linkright f`, `linkright p`.
-
-**See everything:**
-
-```bash
-linkright tldr                   # one-page cheat sheet
-linkright --help                 # all top-level commands
-linkright resume --help          # all resume subcommands
-linkright doctor                 # health check anytime
-```
+Single-letter shortcuts: `t`, `crit`, `f`, `p`. Full help: `linkright tldr`
 
 ---
 
-## 🧠 Architecture (high-level)
+## 🧠 Two modes
 
-LinkRight runs in two modes:
+- **Direct mode** — calls free-tier LLM APIs via 7-provider cascade (Groq → Cerebras → SambaNova → Cloudflare → Z.ai → Gemini → OpenRouter). $0 with any 1 free key.
+- **Agent mode (MCP)** — exposes 11 tools to Claude Code / Cursor / Gemini CLI. Your AI agent drives LinkRight using its own LLM. Zero $ from LinkRight side.
 
-- **Direct mode** — calls free-tier LLM APIs itself via a 7-provider cascade (Groq → Cerebras → SambaNova → Cloudflare → Z.ai → Gemini → OpenRouter), with cooldown + circuit breakers. $0 with any 1 free key.
-- **Agent mode (MCP)** — exposes 11 tools to Claude Code / Cursor / Gemini CLI. Your existing AI agent drives LinkRight using its own LLM under your subscription. LinkRight provides functions, not LLM. Zero $ from LinkRight side.
-
-Data lives at `~/.linkright/` (config, profile, runs, cache, .env).
+Data: `~/.linkright/` (config, profile, runs, cache, .env)
 
 ---
 
@@ -108,19 +81,22 @@ Data lives at `~/.linkright/` (config, profile, runs, cache, .env).
 
 | Path | What |
 |---|---|
-| [`scripts/install.sh`](./scripts/install.sh) | The one-liner installer |
-| [`cli/linkright/`](./cli/linkright/) | CLI source (published to [PyPI](https://pypi.org/project/linkright/)) |
-| [`specs/`](./specs/) | Design docs, milestone records, PRDs |
-| [`.claude/`](./.claude/) | AI agent definitions for autonomous workflow |
+| [`context/cli/linkright/`](./context/cli/linkright/) | CLI source — published to [PyPI](https://pypi.org/project/linkright/) |
+| [`scripts/release-cli.sh`](./scripts/release-cli.sh) | Sprint-end release script (patch/minor bump → PyPI) |
+| [`scripts/install.sh`](./scripts/install.sh) | One-liner installer |
+| [`specs/`](./specs/) | Feature specs, PRDs, design docs |
+| [`.github/workflows/cli-publish.yml`](./.github/workflows/cli-publish.yml) | PyPI publish on version bump |
+
+> **Website, worker, extension, db?** → [`sync-resume-engine`](https://github.com/satvik-jain-iitd/sync-resume-engine)
 
 ---
 
 ## 🪪 Status
 
-**v0.1.2** on PyPI (May 2026 — alpha). Active solo development by [@satvik-jain-iitd](https://github.com/satvik-jain-iitd).
+**v0.9.2** on PyPI · May 2026 · Active solo development by [@satvik-jain-iitd](https://github.com/satvik-jain-iitd)
 
 ---
 
 ## 📜 License
 
-MIT — see [LICENSE](./LICENSE). Use it, fork it, ship it.
+MIT — see [LICENSE](./LICENSE)
