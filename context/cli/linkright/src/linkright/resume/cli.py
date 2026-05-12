@@ -212,7 +212,6 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     drafts bullets via LLM, scores + ranks, and renders a final PDF.
     """
     require_profile()
-    require_llm_key(llm_mode or Config.load().default_llm_mode)
     # Bare-command UX: auto-use profile resume when available; prompt only as fallback.
     if resume_path is None:
         from linkright.profile.pipeline import _profile_dir as _pdir_fn
@@ -296,6 +295,7 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     _started_at = time.monotonic()
     cfg = Config.load()
     llm_mode = llm_mode or cfg.default_llm_mode
+    require_llm_key(llm_mode)
     mode = mode or cfg.default_skill_mode
     run_id = run_id or datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
 

@@ -70,6 +70,11 @@ def coverletter_group(
     if ctx.invoked_subcommand:
         return
 
+    from linkright.resume.lib.preflight import require_profile, require_llm_key
+    from linkright.config import Config as _Config
+    require_profile()
+    require_llm_key(_Config.load().default_llm_mode)
+
     # Bare-command UX: if neither -j nor --from-discovery, prompt
     # interactively (file path first, paste fallback).
     pasted_jd_text: str = ""
