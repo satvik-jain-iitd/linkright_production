@@ -39,6 +39,21 @@ def _count_keys(managed: dict[str, str]) -> tuple[int, int]:
 
 
 
+def _warn_if_duplicate_value(key_val: str, target_slot: str) -> None:
+    """K-6: warn user if this key value is already stored in another slot. Best-effort — never raises."""
+    try:
+        existing = read_all_managed()
+        for slot, val in existing.items():
+            if val == key_val and slot != target_slot:
+                click.echo(
+                    f"  {YELLOW}⚠ This key value is already saved as {slot}.{RST}"
+                    f" Adding it again as {target_slot} anyway (rotation slots share keys sometimes)."
+                )
+                return
+    except Exception:
+        pass
+
+
 def _ping_and_report(spec: "ProviderSpec", api_key: str, updates: dict[str, str]) -> None:  # noqa: F821
     """K-7: fire a 1-token live ping and print ✓/✗ result. Best-effort — never raises."""
     try:
@@ -92,7 +107,7 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
         return
 
     # Recurse into the add flow for the selected provider
-    click.echo(f"\n  Adding key(s) for {BOLD}{next_spec.name}{RST}")
+    click.echo(f"\n  Adding keys for {BOLD}{next_spec.name}{RST}")
     click.echo(f"  Get keys at: {DIM}{next_spec.signup_url}{RST}")
     click.echo(f"  Free tier: {next_spec.free_tier}")
     if len(next_spec.all_env_vars) > 1:
@@ -104,7 +119,7 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
         managed = read_all_managed()
         slot = next_spec.next_available_slot(managed)
         if slot is None:
-            click.echo(f"{YELLOW}All {len(next_spec.all_env_vars)} slot(s) for {next_spec.name} are filled.{RST}")
+            click.echo(f"{YELLOW}All {_plural(len(next_spec.all_env_vars), 'slot')} for {next_spec.name} are filled.{RST}")
             break
         key_num = added + 1
         label = "primary key" if slot == next_spec.primary_env else f"key #{key_num} (rotation slot)"
@@ -135,6 +150,7 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
             account_id = questionary.text(f"Cloudflare Account ID for this key ({pair_var}):").ask()
             if account_id:
                 updates[pair_var] = account_id.strip()
+        _warn_if_duplicate_value(key_val, slot)
         write_keys(updates)
         click.echo(f"  {GREEN}✓ Saved → {slot}{RST}")
         _ping_and_report(next_spec, key_val, updates)
@@ -142,7 +158,7 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
         managed = read_all_managed()
         next_slot = next_spec.next_available_slot(managed)
         if next_slot is None:
-            click.echo(f"  All {len(next_spec.all_env_vars)} slot(s) for {next_spec.name} filled.")
+            click.echo(f"  All {_plural(len(next_spec.all_env_vars), 'slot')} for {next_spec.name} filled.")
             break
         add_another = questionary.confirm(
             f"  Add another key for {next_spec.name}? ({next_slot} is next open slot)",
@@ -152,11 +168,11 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
             break
 
     if added > 0:
-        click.echo(f"\n  {GREEN}✓ {added} key(s) saved → {next_spec.name}{RST}")
+        click.echo(f"\n  {GREEN}✓ {_plural(added, 'key')} saved → {next_spec.name}{RST}")
         new_managed = read_all_managed()
         total, pcount = _count_keys(new_managed)
         score = resilience_score(total, pcount)
-        click.echo(f"  Cascade resilience: {total} key(s) across {pcount} provider(s) — {score}")
+        click.echo(f"  Cascade resilience: {_plural(total, 'key')} across {_plural(pcount, 'provider')} — {score}")
         click.echo("")
 
     # Offer yet another provider (tail call — avoids deep recursion on user spree)
@@ -291,7 +307,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         click.echo(f"{RED}Unknown provider: {provider!r}{RST}. Valid: {valid}")
         sys.exit(1)
 
-    click.echo(f"\n  Adding key(s) for {BOLD}{spec.name}{RST}")
+    click.echo(f"\n  Adding keys for {BOLD}{spec.name}{RST}")
     click.echo(f"  Get keys at: {DIM}{spec.signup_url}{RST}")
     click.echo(f"  Free tier: {spec.free_tier}")
     if len(spec.all_env_vars) > 1:
@@ -309,6 +325,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         ok, msg = _validate_key_format(spec, key_value)
         if not ok:
             click.echo(f"  {YELLOW}Format warning: {msg}{RST}")
+        _warn_if_duplicate_value(key_value, slot)
         write_keys({slot: key_value})
         click.echo(f"  {GREEN}✓ Saved {slot} → ~/.linkright/.env{RST}")
         new_managed = read_all_managed()
@@ -344,11 +361,12 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
             managed = read_all_managed()
             slot = spec.next_available_slot(managed)
             if slot is None:
-                click.echo(f"  {YELLOW}All slots filled — stopping at {added} key(s).{RST}")
+                click.echo(f"  {YELLOW}All slots filled — stopping at {_plural(added, 'key')}.{RST}")
                 break
             ok, msg = _validate_key_format(spec, raw_key)
             if not ok:
                 click.echo(f"  {YELLOW}⚠ {raw_key[:12]}…  format warning: {msg} — saved anyway{RST}")
+            _warn_if_duplicate_value(raw_key, slot)
             write_keys({slot: raw_key})
             click.echo(f"  {GREEN}✓{RST} {slot}")
             added += 1
@@ -369,12 +387,12 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
     stored_vals = set(v for v in managed.values() if v)
     fresh_env_keys = [k for k in env_keys if k not in stored_vals]
     if fresh_env_keys:
-        click.echo(f"  {GREEN}Found {len(fresh_env_keys)} key(s) for {spec.name} in your shell environment.{RST}")
+        click.echo(f"  {GREEN}Found {_plural(len(fresh_env_keys), 'key')} for {spec.name} in your shell environment.{RST}")
         for k in fresh_env_keys:
             click.echo(f"    {DIM}{k[:8]}…{k[-4:]}{RST}")
         click.echo("")
         do_import = questionary.confirm(
-            f"  Import all {len(fresh_env_keys)} key(s) now?", default=True
+            f"  Import all {_plural(len(fresh_env_keys), 'key')} now?", default=True
         ).ask()
         if do_import:
             imported = 0
@@ -382,8 +400,9 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
                 managed = read_all_managed()
                 slot = spec.next_available_slot(managed)
                 if slot is None:
-                    click.echo(f"  {YELLOW}All slots filled — stopping at {imported} key(s).{RST}")
+                    click.echo(f"  {YELLOW}All slots filled — stopping at {_plural(imported, 'key')}.{RST}")
                     break
+                _warn_if_duplicate_value(raw_key, slot)
                 write_keys({slot: raw_key})
                 click.echo(f"  {GREEN}✓{RST} {slot}")
                 imported += 1
@@ -401,7 +420,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         managed = read_all_managed()
         slot = spec.next_available_slot(managed)
         if slot is None:
-            click.echo(f"{YELLOW}All {len(spec.all_env_vars)} slot(s) for {spec.name} are filled.{RST}")
+            click.echo(f"{YELLOW}All {_plural(len(spec.all_env_vars), 'slot')} for {spec.name} are filled.{RST}")
             break
 
         key_num = added + 1
@@ -438,6 +457,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
             if account_id:
                 updates[pair_var] = account_id.strip()
 
+        _warn_if_duplicate_value(key_val, slot)
         write_keys(updates)
         click.echo(f"  {GREEN}✓ Saved → {slot}{RST}")
         # K-7: live ping to verify key actually works
@@ -448,7 +468,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         managed = read_all_managed()
         next_slot = spec.next_available_slot(managed)
         if next_slot is None:
-            click.echo(f"  All {len(spec.all_env_vars)} slot(s) for {spec.name} filled.")
+            click.echo(f"  All {_plural(len(spec.all_env_vars), 'slot')} for {spec.name} filled.")
             break
         add_another = questionary.confirm(
             f"  Add another key for {spec.name}? ({next_slot} is next open slot)",
@@ -520,13 +540,16 @@ def keys_import(dry_run: bool) -> None:
         return
 
     proceed = questionary.confirm(
-        f"  Import {len(found_rows)} key(s) into ~/.linkright/.env?", default=True
+        f"  Import {_plural(len(found_rows), 'key')} into ~/.linkright/.env?", default=True
     ).ask()
     if not proceed:
         click.echo("  Aborted — no keys saved.")
         return
 
-    updates: dict[str, str] = {slot: key_val for _, slot, key_val in found_rows}
+    updates: dict[str, str] = {}
+    for _, slot, key_val in found_rows:
+        _warn_if_duplicate_value(key_val, slot)
+        updates[slot] = key_val
     write_keys(updates)
 
     click.echo(f"\n  {GREEN}✓ {_plural(len(updates), 'key')} imported → ~/.linkright/.env{RST}")
@@ -591,7 +614,7 @@ def keys_test() -> None:
     click.echo("")
     click.echo(f"{BOLD}LinkRight Keys — Live Test{RST}")
     click.echo("─" * 48)
-    click.echo(f"  {DIM}Testing {total} key(s) with 1-token completions…{RST}")
+    click.echo(f"  {DIM}Testing {_plural(total, 'key')} with 1-token completions…{RST}")
     click.echo("")
 
     alive = rate_limited = invalid = error = 0
