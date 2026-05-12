@@ -1,4 +1,0 @@
-# Project-specific truss configuration
-# Overrides global ~/.truss/core/config.yaml values
-domain: bmad-dev
-# output_folder: .truss/_progress/outputs
