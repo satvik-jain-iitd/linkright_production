@@ -78,23 +78,25 @@ def _sanitize_path_input(raw: str) -> str:
       - macOS Finder drag-drop: `/Users/x/My\\ Resume.pdf` → `/Users/x/My Resume.pdf`
       - Quoted-paste: `"/path with spaces/file.pdf"` or `'/tmp/file'` → unquoted
       - Tilde expansion: `~/Downloads/file.pdf` → `/Users/x/Downloads/file.pdf`
+      - Bare unquoted path with spaces: `/path/My Resume.pdf` → kept verbatim
 
-    Uses shlex.split as the single source of truth for shell-escape
-    decoding — it handles BOTH surrounding quotes (preserving internal
-    spaces) AND backslash escapes natively. Manual outer-quote stripping
-    is wrong: it strips the protective quoting context and then
-    shlex re-tokenizes by whitespace, breaking paths with spaces.
+    shlex.split is applied only when the input uses shell quoting or backslash
+    escapes. For bare unquoted paths (the common case), shlex.split would
+    tokenize on spaces and silently discard everything after the first token.
     """
     s = raw.strip()
     if not s:
         return ""
-    try:
-        parts = shlex.split(s)
-        if parts:
-            s = parts[0]
-    except ValueError:
-        # Mismatched quotes — fall through with the raw stripped string
-        pass
+    # Only decode via shlex when the user actually used quoting or backslash
+    # escapes. A leading quote or a backslash anywhere signals shell syntax.
+    if s[0] in ('"', "'") or "\\" in s:
+        try:
+            parts = shlex.split(s)
+            if parts:
+                s = parts[0]
+        except ValueError:
+            # Mismatched quotes — fall through with the raw stripped string
+            pass
     s = os.path.expanduser(s)
     return s
 
