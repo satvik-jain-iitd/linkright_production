@@ -30,8 +30,8 @@ AUTHOR="satvik-jain-iitd <satvik.jain@iitdalumni.com>"
 
 # ── 1. Safety checks ────────────────────────────────────────────────────────
 echo "→ Checking working tree..."
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "ERROR: Working tree is dirty. Commit or stash changes first." >&2
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "ERROR: Staged or modified tracked files present. Commit or stash changes first." >&2
   exit 1
 fi
 
