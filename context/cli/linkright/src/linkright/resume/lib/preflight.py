@@ -13,15 +13,13 @@ from pathlib import Path
 
 import click
 
-# Env-var prefixes that direct.py's _collect_keys() reads. A user who has
-# ANY of these set — whether via linkright-managed .env or their shell profile
-# — has a working key for the cascade. Kept in sync with direct.py providers.
-_PROVIDER_ENV_PREFIXES = (
+# Single-key providers: a user with ANY of these set (primary or _1.._4 slot)
+# has a working key for the direct-mode cascade. Kept in sync with direct.py.
+_SINGLE_KEY_PREFIXES = (
     "GROQ_API_KEY",
     "GEMINI_API_KEY",
     "CEREBRAS_API_KEY",
     "SAMBANOVA_API_KEY",
-    "CLOUDFLARE_API_TOKEN",
     "OPENROUTER_API_KEY",
     "ZHIPU_API_KEY",
     "Z_AI_API_KEY",
@@ -60,10 +58,20 @@ def require_llm_key(llm_mode: str = "direct") -> None:
     except Exception:
         pass
 
-    # 2. Check raw env vars set outside linkright (includes primary + rotation slots)
+    # 2. Check raw env vars set outside linkright.
+    # Single-key providers: primary or any rotation slot (_1.._4) is sufficient.
     if any(
         os.environ.get(k) or any(os.environ.get(f"{k}_{i}") for i in range(1, 5))
-        for k in _PROVIDER_ENV_PREFIXES
+        for k in _SINGLE_KEY_PREFIXES
+    ):
+        return
+    # Cloudflare requires paired token + account_id (direct.py builds pairs only
+    # when both are present). Token alone contributes nothing to the cascade.
+    if os.environ.get("CLOUDFLARE_API_TOKEN") and os.environ.get("CLOUDFLARE_ACCOUNT_ID"):
+        return
+    if any(
+        os.environ.get(f"CLOUDFLARE_API_TOKEN_{i}") and os.environ.get(f"CLOUDFLARE_ACCOUNT_ID_{i}")
+        for i in range(1, 5)
     ):
         return
 

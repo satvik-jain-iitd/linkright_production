@@ -71,9 +71,8 @@ def coverletter_group(
         return
 
     from linkright.resume.lib.preflight import require_profile, require_llm_key
-    from linkright.config import Config as _Config
     require_profile()
-    require_llm_key(_Config.load().default_llm_mode)
+    require_llm_key("direct")  # pipeline always calls groq_chat/gemini_chat_best directly
 
     # Bare-command UX: if neither -j nor --from-discovery, prompt
     # interactively (file path first, paste fallback).
