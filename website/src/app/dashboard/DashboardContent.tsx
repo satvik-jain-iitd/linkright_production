@@ -26,7 +26,6 @@ interface ResumeJob {
   target_company: string | null;
   error_message: string | null;
   jd_text: string | null;
-  output_html: string | null;
   stats?: { quality_grade?: string } | null;
 }
 
@@ -191,10 +190,13 @@ export function DashboardContent({
     }
   };
 
-  const handleDownload = (job: ResumeJob, e: React.MouseEvent) => {
+  const handleDownload = async (job: ResumeJob, e: React.MouseEvent) => {
     e.preventDefault();
-    if (!job.output_html) return;
-    const blob = new Blob([job.output_html], { type: "text/html" });
+    const res = await fetch(`/api/resume/${job.id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.output_html) return;
+    const blob = new Blob([data.output_html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -657,9 +659,7 @@ export function DashboardContent({
                           {job.status === "completed" && (
                             <button
                               onClick={(e) => handleDownload(job, e)}
-                              disabled={!job.output_html}
-                              title={!job.output_html ? "Resume is still being prepared" : undefined}
-                              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent"
                             >
                               Download
                             </button>
