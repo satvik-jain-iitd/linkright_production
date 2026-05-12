@@ -1,1 +1,0 @@
-Startup Inc — Software Developer (2023–present). Built REST API handling 1000 requests/second using Python and FastAPI. Reduced average response time by 35% through async refactoring.
