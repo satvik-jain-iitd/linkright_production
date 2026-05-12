@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.2] - 2026-05-12
+
+### Added
+- **S6.1 (interactive strategy checkpoint):** Pipeline now pauses after JD analysis to show the strategy (company list, bullet budget, top keywords) and asks for confirmation before the 60-LLM-call bullet generation phase. Press Enter to proceed or N to abort cleanly. Skipped in non-interactive mode (LR_NO_PAUSE=1).
+
+### Fixed
+- **S6.2 (CLI polish omnibus):** `tailor --help` groups advanced flags (`--llm-mode`, `--run-id`, `--no-cache`, `--deterministic`, `--seed`, `--no-pause`) with `[Advanced]` prefix and clarifies that `agent` mode requires an external CLI tool (claude, opencode, or gemini). `profile show` replaces literal `none` values with `(untitled)` in the nugget tree. `profile status` shows PDF filename + modified date instead of raw SHA256 (SHA256 moved to `--debug` output); contact fields show `(not set)` instead of literal `none`. Help text jargon removed (`16-step pipeline` comment → plain language). Bullet dedup pass after ranking removes near-duplicate bullets (cosine >0.88 on `_emb` vectors) before condensing; skips silently when embeddings are absent.
+
+
 ## [0.9.1] - 2026-05-12
 
 ### Added
