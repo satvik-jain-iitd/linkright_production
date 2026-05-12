@@ -70,6 +70,10 @@ def coverletter_group(
     if ctx.invoked_subcommand:
         return
 
+    from linkright.resume.lib.preflight import require_profile, require_llm_key
+    require_profile()
+    require_llm_key("direct")  # pipeline always calls groq_chat/gemini_chat_best directly
+
     # Bare-command UX: if neither -j nor --from-discovery, prompt
     # interactively (file path first, paste fallback).
     pasted_jd_text: str = ""
