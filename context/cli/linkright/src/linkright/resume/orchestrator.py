@@ -3184,9 +3184,10 @@ def step_11_rank(
 def _dedup_ranked_bullets(ranked: dict, similarity_threshold: float = 0.88) -> dict:
     """Remove near-duplicate bullets within each company using cosine similarity.
 
-    Requires bullets to carry an ``_emb`` field (list[float]) — set by the
-    S5.1 per-bullet Oracle embed path in step_11_rank. If no bullets carry
-    embeddings, the function logs the skip and returns *ranked* unchanged.
+    STUB — pending S5.1 wire-up: requires bullets to carry an ``_emb`` field
+    (list[float]) set by the S5.1 per-bullet embed path in step_11_rank.
+    Until that wire-up ships, ``_emb`` is never present and this function
+    always returns *ranked* unchanged.
 
     Decision rule (per company):
       • Compute pairwise cosine for all bullets that have ``_emb``.
@@ -3232,7 +3233,9 @@ def _dedup_ranked_bullets(ranked: dict, similarity_threshold: float = 0.88) -> d
                         embedded[j]["_deduped"] = True
                     else:
                         embedded[i]["_deduped"] = True
-                        break  # i is deduped; skip remaining j comparisons
+                        # No break: outer loop's continue handles the deduped-i case;
+                        # breaking here would leave bullets that lost to i incorrectly
+                        # deduped without being compared to j.
 
         kept = [p for p in embedded if not p.get("_deduped")]
         n_removed = len(embedded) - len(kept)

@@ -316,6 +316,8 @@ def status_cmd(debug: bool) -> None:
     if resume_input.exists():
         mtime = _dt.fromtimestamp(resume_input.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
         click.echo(f"Resume:       {resume_input.name} (modified {mtime})")
+    else:
+        click.echo("Resume:       (not set — markdown-only profile)")
     if debug and meta.get("source_pdf_sha256"):
         click.echo(f"  sha256:     {meta.get('source_pdf_sha256')}")
 
