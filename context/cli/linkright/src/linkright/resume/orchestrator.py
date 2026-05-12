@@ -6150,6 +6150,23 @@ def main():
             "strategies_tried": [e.get("strategy_chosen") for e in _fit_log if e.get("strategy_chosen")],
             "per_iter": _fit_log,
         }
+    # S5.2 Phase 0: log input hash to measure cache hit rate passively.
+    # sha256(resume_pdf_bytes + jd_text_bytes + version_bytes) — unique per
+    # (content, version) tuple.  After 1 week of runs, check what % share a
+    # hash with a prior run → gates whether Phase 1 (actual cache) is worth
+    # building (threshold: >25% hit rate required to proceed).
+    try:
+        import hashlib as _hashlib
+        from linkright import __version__ as _lr_version
+        _resume_bytes = (INPUTS / "resume.pdf").read_bytes()
+        _jd_bytes = (INPUTS / "jd.md").read_text(encoding="utf-8", errors="replace").encode()
+        _tel["input_hash"] = _hashlib.sha256(
+            _resume_bytes + _jd_bytes + _lr_version.encode()
+        ).hexdigest()
+        _tel["pipeline_version"] = _lr_version
+    except Exception:
+        pass  # instrumentation failure must never block the pipeline
+
     _tel_path.write_text(_json_tel.dumps(_tel, indent=2), encoding="utf-8")
     if poc_results:
         # Also write a dedicated human-readable report
