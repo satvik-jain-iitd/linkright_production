@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   }
 
   if (!stateObj.uid) {
-    return redirectTo(request.url, returnUrl, "bad_state");
+    return redirectTo(request.url, stateObj.rt ?? "/dashboard/broadcast/connect", "bad_state");
   }
 
   // Exchange code for tokens
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     },
   );
   if (!tokenRes.ok) {
-    return redirectTo(request.url, returnUrl, "token_exchange_failed");
+    return redirectTo(request.url, stateObj.rt ?? "/dashboard/broadcast/connect", "token_exchange_failed");
   }
   const tokens = (await tokenRes.json()) as {
     access_token?: string;
@@ -91,7 +91,7 @@ export async function GET(request: Request) {
     token_type?: string;
   };
   if (!tokens.access_token) {
-    return redirectTo(request.url, returnUrl, "no_access_token");
+    return redirectTo(request.url, stateObj.rt ?? "/dashboard/broadcast/connect", "no_access_token");
   }
 
   // Fetch /userinfo for handle + avatar
