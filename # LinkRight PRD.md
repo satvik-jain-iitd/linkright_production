@@ -238,16 +238,16 @@ Weighted prioritisation matrix run 2026-05-11 across 12 hypotheses. Scoring: Qua
 
 | Hypothesis | Score | Status | Sprint | Reason |
 |---|---|---|---|---|
-| H1 — Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | 78/100 | 🟡 PLANNED | S5.1 | Zero fine-tune; Oracle embed already exists; solves run-variance + semantic mismatch |
+| H1 — Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | 78/100 | 🟢 IMPLEMENTED | S5.1 | Zero fine-tune; Oracle embed already exists; solves run-variance + semantic mismatch |
 | H2 — RAG for step_10 (few-shot from history) | 66/100 | 🔵 DEFERRED | Post 500 runs | Cold-start kills early value. Revisit when >500 tailor-run history available. |
-| H3 — Fine-tuned fabrication guard (gemma3:1b, asymmetric loss) | 83/100 | 🟡 PLANNED | S5.7 | Highest quality score; addresses catastrophic risk (P1). Data collection must start NOW (parallel with Sprints 1-4). |
+| H3 — Fine-tuned fabrication guard (gemma3:1b, asymmetric loss) | 83/100 | 🟡 PLANNED | S5.7 | Phase 0 (instrumentation) ✅ PR #141. Phase 1+2 (fine-tune) pending gate: FNR must be >3% to proceed. |
 | H4 — Adaptive bullet reranking (generate 3, pick best, async) | 61/100 | 🔵 DEFERRED | After H3 ships | Cost-negative. H3 already gives weak bullets a second attempt via fabrication-guard retry. Overlap. Revisit post-S5.7. |
 | H5 — Fine-tuned resume extraction India-specific (step_02) | 49/100 | 🔴 REJECTED | — | Data collection dependency too long (need 200+ Indian resumes; have 5). Prompt improvement achieves 80% of gain with zero training effort. Re-evaluate if extraction accuracy measured below 90%. |
-| H6 — JD keyword contamination prompt fix | 60/100 | 🟡 PLANNED | S5.3 | Bug-fix scope only (0.5 day prompt change). Fine-tune rejected; prompt fix handles 100% of contamination structurally. |
-| H7 — Progressive validation gate (early regen on BRS-weak bullets) | 68/100 | 🟡 PLANNED | S5.5 | 1-2 day orchestration change; prevents distortion of weak bullets; quality + speed both improve |
-| H8 — Career level classification → pure deterministic | 59/100 | 🟡 PLANNED | S5.4 | 0.5 day cleanup; removes LLM call from deterministic-by-rules task; eliminates run variance |
+| H6 — JD keyword contamination prompt fix | 60/100 | 🟢 IMPLEMENTED | S5.3 | Bug-fix scope only (0.5 day prompt change). Fine-tune rejected; prompt fix handles 100% of contamination structurally. |
+| H7 — Progressive validation gate (early regen on BRS-weak bullets) | 68/100 | 🟢 IMPLEMENTED | S5.5 | 1-2 day orchestration change; prevents distortion of weak bullets; quality + speed both improve |
+| H8 — Career level classification → pure deterministic | 59/100 | 🟢 IMPLEMENTED | S5.4 | 0.5 day cleanup; removes LLM call from deterministic-by-rules task; eliminates run variance |
 | H9 — Background JD pre-processing pipeline | 48/100 | 🔴 REJECTED | — | Zero quality benefit. Speed gain real but S5.2 caching solves the same runtime problem without async infra overhead. Reject. |
-| H10 — Cross-bullet verb coherence enforcer (Oracle local) | 68/100 | 🟡 PLANNED | S5.6 | Local Oracle gemma3:1b (no API); 2-3 days; recruiter-visible quality signal; no fine-tuning needed |
+| H10 — Cross-bullet verb coherence enforcer (Oracle local) | 68/100 | 🟢 IMPLEMENTED | S5.6 | Local Oracle gemma3:1b (no API); 2-3 days; recruiter-visible quality signal; no fine-tuning needed |
 | H11 — Prompt compression / context pruning for step_10 | 62/100 | 🔵 DEFERRED | When billing matters | Quality risk if context stripped incorrectly. Revisit when token cost is real constraint (user-base growth, API billing pressure). |
 | H12 — Request-level output caching | 72/100 | 🟡 PLANNED | S5.2 | 3-4 days; most underrated win; 0 quality tradeoff; 100% token savings for iterative runs; cache hit rate must be verified ≥25% (Phase 0 instrumentation first) |
 
@@ -354,14 +354,14 @@ For freshers, the "0+ years" phrasing is harmful — better to omit the years cl
 
 | ID | Title | Priority | Score | Effort | Source | Subagent |
 |---|---|---|---|---|---|---|
-| ✅ S5.0 | CLI pre-flight dependency guards (profile + LLM key + tailor-run + PDF readability) | P0 | —/100 | S | PRs #146 + #147 v0.9.x | caveman:cavecrew-builder |
-| S5.1 | Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | P1 | 78/100 | S | H1 — local-model analysis 2026-05-11 | caveman:cavecrew-builder |
-| S5.2 | Request-level output caching | P1 | 72/100 | M | H12 — local-model analysis 2026-05-11 | product-owner-qa |
-| S5.3 | JD keyword contamination prompt fix | P1 | 60/100 | S | H6 — `feedback_step07_jd_keyword_contamination.md` | caveman:cavecrew-builder |
-| S5.4 | Career level classification → pure deterministic | P2 | 59/100 | S | H8 — local-model analysis 2026-05-11 | caveman:cavecrew-builder |
-| S5.5 | Progressive validation gate (early regen on BRS-weak bullets) | P1 | 68/100 | S | H7 — local-model analysis 2026-05-11 | designer-developer |
-| S5.6 | Cross-bullet verb coherence enforcer (Oracle local gemma3:1b) | P1 | 68/100 | M | H10 — local-model analysis 2026-05-11 | designer-developer |
-| S5.7 | Fine-tuned fabrication guard (asymmetric loss, gemma3:1b) | P0 | 83/100 | L+ | H3 — local-model analysis 2026-05-11 | product-owner-qa |
+| ✅ S5.0 | CLI pre-flight dependency guards (profile + LLM key + tailor-run + PDF readability) | P0 | —/100 | S | PRs #146 #147 #148 v0.9.x | caveman:cavecrew-builder |
+| ✅ S5.1 | Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | P1 | 78/100 | S | PR #139 v0.9.0 | caveman:cavecrew-builder |
+| S5.2 | Request-level output caching | P1 | 72/100 | M | Phase 0 pending — hash logging not yet added to step_16 telemetry | product-owner-qa |
+| ✅ S5.3 | JD keyword contamination prompt fix | P1 | 60/100 | S | PR #137 v0.9.0 | caveman:cavecrew-builder |
+| ✅ S5.4 | Career level classification → pure deterministic | P2 | 59/100 | S | PR #140 v0.9.0 | caveman:cavecrew-builder |
+| ✅ S5.5 | Progressive validation gate (early regen on BRS-weak bullets) | P1 | 68/100 | S | PR #138 v0.9.0 | designer-developer |
+| ✅ S5.6 | Cross-bullet verb coherence enforcer (Oracle local gemma3:1b) | P1 | 68/100 | M | PR #142 v0.9.0 | designer-developer |
+| 🔵 S5.7 | Fine-tuned fabrication guard (asymmetric loss, gemma3:1b) | P0 | 83/100 | L+ | Phase 0 ✅ PR #141 v0.9.0 — Phase 1+2 gated on FNR > 3% measurement | product-owner-qa |
 
 ---
 
@@ -1665,4 +1665,4 @@ Refresh THIS PRD when:
 
 ---
 
-*Document version 1.1 · Created 2026-05-11 · Updated 2026-05-11 (Session 2) · LinkRight CLI v0.5.16 · Sprint 1-4: 2026-05-11 → 2026-06-08 · Sprint 5 (extended roadmap): 2026-06-08 → 2026-06-22*
+*Document version 1.2 · Created 2026-05-11 · Updated 2026-05-12 (Session 3) · LinkRight CLI v0.9.0 · Sprint 1-4: complete · Sprint 5 (extended roadmap): in progress — S5.0–S5.6 ✅, S5.2 Phase 0 pending, S5.7 Phase 1+2 gated*
