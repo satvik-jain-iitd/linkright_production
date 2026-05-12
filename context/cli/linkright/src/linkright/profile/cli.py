@@ -297,8 +297,10 @@ def show_cmd(show_full: bool) -> None:
 # ── status (cheap non-render check) ─────────────────────────────────────────
 
 @profile_group.command("status")
-def status_cmd() -> None:
+@click.option("--debug", is_flag=True, help="Show raw metadata including SHA256 checksums.")
+def status_cmd(debug: bool) -> None:
     """Print metadata.yaml + counts. Fast, no rich rendering."""
+    from datetime import datetime as _dt
     profile_dir = _profile_dir()
     meta = load_metadata(profile_dir)
     if not meta:
@@ -306,6 +308,19 @@ def status_cmd() -> None:
         sys.exit(1)
     click.echo(f"Profile dir:  {profile_dir}")
     click.echo(f"Created:      {meta.get('created_at')}")
+
+    # Show resume source as filename + modified date instead of raw SHA256.
+    resume_input = profile_dir / "inputs" / "resume.pdf"
+    if not resume_input.exists():
+        resume_input = profile_dir / "inputs" / "resume.md"
+    if resume_input.exists():
+        mtime = _dt.fromtimestamp(resume_input.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        click.echo(f"Resume:       {resume_input.name} (modified {mtime})")
+    else:
+        click.echo("Resume:       (not set — markdown-only profile)")
+    if debug and meta.get("source_pdf_sha256"):
+        click.echo(f"  sha256:     {meta.get('source_pdf_sha256')}")
+
     click.echo(f"Embedder:     {meta.get('embedder_tier')} ({meta.get('embedder_model')}, dim={meta.get('dim')})")
     click.echo(f"Nuggets:      {meta.get('n_nuggets')}")
     click.echo(f"  embedded:   {meta.get('n_embedded')}")
@@ -314,13 +329,16 @@ def status_cmd() -> None:
     # Surface confirmed contact summary if present
     contact = load_contact(profile_dir)
     if contact:
+        _NONE_STRINGS = {"none", "null", "n/a", ""}
         click.echo(f"Contact:")
         for k in ("name", "phone", "email", "linkedin", "portfolio"):
-            v = contact.get(k) or "(blank)"
-            line = f"  {k:<10}: {v}"
+            raw = contact.get(k)
+            v = raw if raw and str(raw).strip().lower() not in _NONE_STRINGS else None
+            display = v if v else "(not set)"
+            line = f"  {k:<10}: {display}"
             # AR walkthrough A.6 fix: surface the action when a field is blank
             # so the user knows the next move (don't make them search docs).
-            if v == "(blank)" and k == "portfolio":
+            if not v and k == "portfolio":
                 line += "  (set with: linkright contact)"
             click.echo(line)
 

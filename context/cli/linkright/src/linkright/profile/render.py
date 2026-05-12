@@ -231,7 +231,7 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         imp = (n.get("importance") or "").upper()
         badge = {"P0": "[bold red]P0[/]", "P1": "[bold yellow]P1[/]",
                  "P2": "[dim]P2[/]", "P3": "[dim]P3[/]"}.get(imp, "")
-        raw_title = n.get("nugget_text") or n.get("answer", "") or "(untitled)"
+        raw_title = _normalize(n.get("nugget_text")) or _normalize(n.get("answer", "")) or "(untitled)"
         parent_node.add(f"{badge} {_truncate_title(raw_title)}")
 
     tree = Tree("[bold cyan]Career outline[/]")

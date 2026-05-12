@@ -190,14 +190,14 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
               help="(optional) Job description markdown file — prompted if omitted")
 @click.option("--mode", default=None, help="Skill mode: product_manager | swe | ds | designer | generic")
 @click.option("--llm-mode", type=click.Choice(["agent", "direct", "mcp"]), default=None,
-              help="LLM routing: agent (MCP, default) | direct (user's key) | mcp (alias)")
+              help="[Advanced] LLM routing: agent (default, requires claude/opencode/gemini CLI installed) | direct (use your own API key) | mcp (alias for agent). Use `direct` if you have an API key but no external CLI.")
 @click.option("--yes", is_flag=True, help="Skip interactive confirmations")
-@click.option("--run-id", default=None, help="Override run id (defaults to timestamp)")
-@click.option("--no-cache", is_flag=True, help="Skip the ~/.linkright/profile/ cache; force fresh parse+extract+embed.")
+@click.option("--run-id", default=None, help="[Advanced] Override run id (defaults to timestamp)")
+@click.option("--no-cache", is_flag=True, help="[Advanced] Skip the ~/.linkright/profile/ cache; force fresh parse+extract+embed.")
 @click.option("--deterministic", is_flag=True,
-              help="Pin temperature=0 + seed across all LLM calls. Pairs with hypothesis-test for variance reduction.")
-@click.option("--seed", default=42, type=int, help="Seed for deterministic mode (default 42). Honoured by Groq/Cerebras/OpenRouter; Gemini ignores.")
-@click.option("--no-pause", "no_pause", is_flag=True, help="Skip phase-boundary review checkpoints (CI / non-interactive mode).")
+              help="[Advanced] Pin temperature=0 + seed across all LLM calls. Pairs with hypothesis-test for variance reduction.")
+@click.option("--seed", default=42, type=int, help="[Advanced] Seed for deterministic mode (default 42). Honoured by Groq/Cerebras/OpenRouter; Gemini ignores.")
+@click.option("--no-pause", "no_pause", is_flag=True, help="[Advanced] Skip phase-boundary review checkpoints (CI / non-interactive mode).")
 def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm_mode: str | None, yes: bool, run_id: str | None, no_cache: bool, deterministic: bool, seed: int, no_pause: bool) -> None:
     """Tailor your resume for a job description (typically 2-4 minutes).
 
@@ -377,7 +377,7 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
                 os.environ["LR_AGENT_BACKEND"] = cfg.agent_backend
             backend = os.environ.get("LR_AGENT_BACKEND", "claude")
             click.echo(f"Agent mode active — '{backend}' CLI subprocess handles LLM calls (no API keys needed).")
-        # Delegate to the 16-step pipeline
+        # Delegate to the resume pipeline
         from . import orchestrator
         orchestrator.RUN_DIR = run_dir
         orchestrator.ARTIFACTS = run_dir / "artifacts"
