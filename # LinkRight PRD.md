@@ -348,12 +348,13 @@ For freshers, the "0+ years" phrasing is harmful — better to omit the years cl
 | ✅ S4.4 | Surface JD coverage % + width-hit-rate in success box | P2 | S | PR #134 v0.8.0 |
 | ✅ S4.5 | Fix success box path wrap | P2 | S | PR #133 v0.8.0 |
 
-### Sprint 5 — Local-model quality + pipeline optimization (Week of 2026-06-08, 7 items)
+### Sprint 5 — Local-model quality + pipeline optimization (Week of 2026-06-08, 8 items)
 
 > **Extended roadmap.** Sprint 5 items are lower-urgency than Sprints 1-4 but deliver compounding quality + efficiency gains. S5.7 has the highest quality score (83/100) but longest lead time — data collection must begin in Sprint 1.
 
 | ID | Title | Priority | Score | Effort | Source | Subagent |
 |---|---|---|---|---|---|---|
+| ✅ S5.0 | CLI pre-flight dependency guards (profile + LLM key + tailor-run + PDF readability) | P0 | —/100 | S | PRs #146 + #147 v0.9.x | caveman:cavecrew-builder |
 | S5.1 | Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | P1 | 78/100 | S | H1 — local-model analysis 2026-05-11 | caveman:cavecrew-builder |
 | S5.2 | Request-level output caching | P1 | 72/100 | M | H12 — local-model analysis 2026-05-11 | product-owner-qa |
 | S5.3 | JD keyword contamination prompt fix | P1 | 60/100 | S | H6 — `feedback_step07_jd_keyword_contamination.md` | caveman:cavecrew-builder |
@@ -1351,6 +1352,42 @@ Phase 2 — Evaluation + deployment (Sprint 5 week 2):
 - S1.2 (fix fabrication guard verb-stripping bug) **must ship first** — Phase 0 training data must not include false positives from the existing bug. Contaminated training data → contaminated model.
 - Phase 0 instrumentation must start in Sprint 1 (parallel, passive) — data collection is the long lead time.
 - Oracle VPS + M1 16GB for QLoRA training (infrastructure already available per `reference_oracle_ollama.md`).
+
+---
+
+### 7.S5.0 — CLI pre-flight dependency guards
+
+**Feature description:** Commands currently dispatch their full pipeline before checking whether required prerequisites exist. `linkright resume tailor` crashes with a Python traceback ("Cannot read an empty file") when profile has never been created. Same pattern affects all harness commands and `profile create` on corrupt PDFs. Add lightweight pre-flight guards that run at the CLI boundary, print an actionable "run X first" message, and exit cleanly before any pipeline work starts.
+
+**Dependency chain enforced:**
+
+```
+linkright setup / keys add          → creates config + LLM key
+linkright profile create <pdf>      → creates ~/.linkright/profile/metadata.yaml
+        ↓
+linkright resume tailor             → requires: profile + LLM key + JD
+linkright cover-letter              → requires: profile + LLM key + JD
+        ↓
+linkright resume improve / critique / practice / fill-metrics / score / strategy-review
+                                    → requires: profile + prior tailor run
+```
+
+**Acceptance criteria:**
+- AC1: `linkright resume tailor` with no profile → prints "✗ No profile found. Run: linkright profile create..." + exits 1 (no traceback)
+- AC2: `linkright resume tailor` in direct mode with no key → prints "✗ No LLM API key configured. Run: linkright keys add groq..." + exits 1
+- AC3: `linkright resume improve` with no prior tailor run → prints "✗ No tailor run found. Run: linkright resume tailor..." + exits 1
+- AC4: `linkright profile create` with corrupt/empty PDF → prints "✗ Cannot read PDF..." + exits 1 (no pypdf traceback)
+- AC5: All guards are no-ops when prerequisites are satisfied — normal pipeline execution unaffected
+
+**User story:**
+> As a first-time user who installs linkright and immediately runs `linkright resume tailor`, I want to see "No profile found — run profile create first" instead of a Python traceback, so I know exactly what to do next.
+
+**Files touched:**
+- `resume/lib/preflight.py` (NEW — `require_profile()`, `require_llm_key()`, `require_tailor_run()`)
+- `resume/cli.py` — add guards to `tailor`, `improve`, `fill-metrics`, `practice`, `strategy-review`, `critique`
+- `profile/cli.py` — add PDF readability guard in `create_cmd`
+
+**Dependencies:** none. Standalone pre-check — no pipeline code touched.
 
 ---
 
