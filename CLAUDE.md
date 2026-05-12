@@ -63,6 +63,18 @@ git worktree add ~/Documents/linkright-wt/<slug> -b feat|fix/<slug> origin/main
 
 ---
 
+## Sister repo — website
+
+```
+~/Documents/sync-resume-engine/    ← website, worker, extension, db
+```
+
+Remote: `satvik-jain-iitd/sync-resume-engine`  
+Vercel: `.vercel/project.json` present in `website/`  
+Worktrees: `~/Documents/sync-resume-engine-wt/<slug>` (create as needed)
+
+---
+
 ## Sub-project rules
 
 Full CLI architecture, commands, LLM dispatch, embedder tiers, profile persistence, hard rules:  
