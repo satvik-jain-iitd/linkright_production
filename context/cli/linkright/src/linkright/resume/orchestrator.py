@@ -3178,6 +3178,82 @@ def step_11_rank(
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# S6.2 — Near-duplicate bullet dedup (post step_11, pre step_12)
+# ────────────────────────────────────────────────────────────────────────────
+
+def _dedup_ranked_bullets(ranked: dict, similarity_threshold: float = 0.88) -> dict:
+    """Remove near-duplicate bullets within each company using cosine similarity.
+
+    Requires bullets to carry an ``_emb`` field (list[float]) — set by the
+    S5.1 per-bullet Oracle embed path in step_11_rank. If no bullets carry
+    embeddings, the function logs the skip and returns *ranked* unchanged.
+
+    Decision rule (per company):
+      • Compute pairwise cosine for all bullets that have ``_emb``.
+      • When similarity > *similarity_threshold*, keep the bullet with the
+        higher ``_weighted_brs``; mark the other ``_deduped=True``.
+      • Filter out ``_deduped=True`` bullets before returning.
+
+    Uses ``cosine.cosine()`` from ``linkright.resume.lib.cosine`` — no new
+    LLM/embedding calls. Graceful skip when embeddings are absent.
+    """
+    total_deduped = 0
+    any_emb = any(
+        p.get("_emb")
+        for paras in ranked.values()
+        for p in paras
+    )
+    if not any_emb:
+        logbook.append(
+            "dedup_bullets", "skip",
+            "S6.2 near-duplicate dedup: no _emb fields on bullets — skipping dedup pass "
+            "(Oracle embed unavailable during step_11 S5.1 path)",
+        )
+        return ranked
+
+    deduped: dict = {}
+    for co, paras in ranked.items():
+        embedded = [p for p in paras if p.get("_emb")]
+        no_emb = [p for p in paras if not p.get("_emb")]
+
+        # Pairwise comparison — O(n²) but bullet count is small (≤20 per company)
+        for i in range(len(embedded)):
+            if embedded[i].get("_deduped"):
+                continue
+            for j in range(i + 1, len(embedded)):
+                if embedded[j].get("_deduped"):
+                    continue
+                sim = cosine.cosine(embedded[i]["_emb"], embedded[j]["_emb"])
+                if sim > similarity_threshold:
+                    # Keep higher _weighted_brs; mark the other as deduped
+                    score_i = embedded[i].get("_weighted_brs", 0.0)
+                    score_j = embedded[j].get("_weighted_brs", 0.0)
+                    if score_i >= score_j:
+                        embedded[j]["_deduped"] = True
+                    else:
+                        embedded[i]["_deduped"] = True
+                        break  # i is deduped; skip remaining j comparisons
+
+        kept = [p for p in embedded if not p.get("_deduped")]
+        n_removed = len(embedded) - len(kept)
+        total_deduped += n_removed
+        deduped[co] = kept + no_emb
+
+    if total_deduped:
+        log(f"[S6.2 dedup] {total_deduped} near-duplicate bullet(s) removed (cosine > {similarity_threshold})")
+        logbook.append(
+            "dedup_bullets", "result",
+            f"S6.2 near-duplicate dedup: removed {total_deduped} bullet(s) with cosine > {similarity_threshold}",
+        )
+    else:
+        logbook.append(
+            "dedup_bullets", "result",
+            f"S6.2 near-duplicate dedup: 0 near-duplicates found (threshold={similarity_threshold})",
+        )
+    return deduped
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Step 12 — Condense (Phase 4c)
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -5919,6 +5995,13 @@ def main():
         # derives them from canonical_labels if not provided but clusters are present.
         jd_req_texts=None,  # let step_11_rank derive from jd_requirement_clusters
     )
+
+    # S6.2 — Near-duplicate bullet dedup (cosine >0.88 on bullet embeddings).
+    # Runs silently if no _emb fields are present (graceful no-op).
+    try:
+        ranked = _dedup_ranked_bullets(ranked)
+    except Exception as _e:
+        log(f"[S6.2 dedup] failed ({_e}) — continuing with undeduped ranked bullets")
 
     # S5.5 — Progressive validation gate: flag bullets below BRS threshold.
     # Runs between step_11 (rank) and step_12 (condense / width expansion).
