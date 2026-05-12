@@ -32,6 +32,19 @@ from typing import Optional
 
 ROOT = Path(__file__).resolve().parent
 
+
+def _path_repr(p) -> str:
+    """Render a path relative to ROOT when possible (for compact log lines), else absolute.
+
+    Used for log/report messages only — never gates pipeline behaviour. Avoids
+    ValueError when cli.py:tailor pre-points RUN_DIR at ~/.linkright/runs/<id>/
+    (cache-aware path) which lives OUTSIDE ROOT.
+    """
+    try:
+        return str(Path(p).relative_to(ROOT))
+    except ValueError:
+        return str(p)
+
 try:
     from dotenv import load_dotenv
     _envfile = ROOT / ".env"
@@ -537,10 +550,24 @@ LOG_PATH: Path = ROOT / "logs" / "pipeline.log"
 
 
 def _setup_run_dir(run_id: str) -> Path:
-    """Resolve runs/<run_id>/ and set module-level paths."""
+    """Resolve runs/<run_id>/ and set module-level paths.
+
+    Honors a pre-set module-level RUN_DIR if cli.py:tailor already pointed
+    it at a non-legacy path with valid inputs/. Otherwise falls back to
+    the legacy ROOT / runs / <id> location.
+    """
     global RUN_DIR, ARTIFACTS, INPUTS, LOG_PATH
-    RUN_DIR = ROOT / "runs" / run_id
-    if not RUN_DIR.exists():
+    legacy_run_dir = ROOT / "runs" / run_id
+    # If cli.py:tailor pre-pointed RUN_DIR somewhere with valid inputs/, honor it.
+    # Use globals().get() so we don't NameError when run as `python orchestrator.py`.
+    existing = globals().get("RUN_DIR")
+    pre_set = (
+        existing
+        if existing and Path(existing).name == run_id and (Path(existing) / "inputs" / "jd.md").exists()
+        else None
+    )
+    RUN_DIR = pre_set or legacy_run_dir
+    if not Path(RUN_DIR).exists():
         raise SystemExit(
             f"Run directory not found: {RUN_DIR}\n"
             f"Create it and copy inputs first:\n"
@@ -576,6 +603,12 @@ def log(msg: str) -> None:
 
 def step_00_ingest_pdf() -> str:
     step = "step_00_ingest_pdf"
+    out_path = ARTIFACTS / "00_resume_raw_text.txt"
+    # Profile-cache guard: if artifact already exists (pre-populated from
+    # ~/.linkright/profile/ by resume/cli.py:tailor), skip the PDF parse.
+    if out_path.exists():
+        logbook.append(step, "cache_hit", f"reusing {out_path.name} ({out_path.stat().st_size} bytes)")
+        return out_path.read_text(encoding="utf-8")
     logbook.append(
         step, "starting",
         "extracting plain text from inputs/resume.pdf via pypdf; "
@@ -584,7 +617,6 @@ def step_00_ingest_pdf() -> str:
 
     pdf_path = INPUTS / "resume.pdf"
     raw_text = extract_text(pdf_path)
-    out_path = ARTIFACTS / "00_resume_raw_text.txt"
     out_path.write_text(raw_text, encoding="utf-8")
 
     # Evaluate (case-insensitive name check)
@@ -658,6 +690,11 @@ a P0 upstream finding that corrupts every downstream phase (nuggets extracted as
 
 def step_01_parse_resume(raw_text: str) -> dict:
     step = "step_01_parse_resume"
+    out_path = ARTIFACTS / "01_resume_parsed.json"
+    # Profile-cache guard: pre-populated artifact short-circuits the LLM call.
+    if out_path.exists():
+        logbook.append(step, "cache_hit", f"reusing {out_path.name}")
+        return json.loads(out_path.read_text(encoding="utf-8"))["parsed"]
     logbook.append(
         step, "starting",
         "calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt "
@@ -666,14 +703,16 @@ def step_01_parse_resume(raw_text: str) -> dict:
         "markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections",
     )
     try:
-        md_text, usage = llm.chat_with_fallback(
+        md_text, usage = llm.tier_chat(
             system=P.RESUME_PARSE_FALLBACK,
             user=raw_text,
+            klass="A",
+            intent="step_01_parse_resume",
             temperature=0.2,
             max_tokens=4000,
         )
     except llm.LLMError as e:
-        logbook.append(step, "error", "LLM call failed (both Groq and Gemini)", body=f"```\n{e}\n```")
+        logbook.append(step, "error", "LLM call failed across all tier-A providers", body=f"```\n{e}\n```")
         raise
 
     log(f"=== step_01 {usage.get('provider')} raw output ===\n{md_text}\n=== end ===\n")
@@ -744,6 +783,11 @@ def step_01_parse_resume(raw_text: str) -> dict:
 
 def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
     step = "step_02_extract_nuggets"
+    out_path = ARTIFACTS / "02_nuggets_extracted.json"
+    # Profile-cache guard.
+    if out_path.exists():
+        logbook.append(step, "cache_hit", f"reusing {out_path.name}")
+        return json.loads(out_path.read_text(encoding="utf-8"))["nuggets"]
     logbook.append(
         step, "starting",
         "calling Groq 70B with vendored NUGGET_EXTRACT_MD prompt (same as "
@@ -754,14 +798,16 @@ def step_02_extract_nuggets(raw_text: str, parsed: dict) -> list[dict]:
 
     # Use the raw career text as input (production batches at 3000 chars; Satvik's is 3009 — single batch)
     try:
-        md_text, usage = llm.chat_with_fallback(
+        md_text, usage = llm.tier_chat(
             system=P.NUGGET_EXTRACT_MD,
             user=raw_text,
+            klass="A",
+            intent="step_02_extract_nuggets",
             temperature=0.3,
             max_tokens=4000,
         )
     except llm.LLMError as e:
-        logbook.append(step, "error", "LLM nugget extraction failed", body=f"```\n{e}\n```")
+        logbook.append(step, "error", "LLM nugget extraction failed across all tier-A providers", body=f"```\n{e}\n```")
         raise
 
     log(f"=== step_02 {usage.get('provider')} raw output ===\n{md_text}\n=== end ===\n")
@@ -869,14 +915,17 @@ id: {sample.get('id', 'N/A')}
 
 def step_03_embed_nuggets(nuggets: list[dict]) -> list[dict]:
     step = "step_03_embed_nuggets"
+    out_path = ARTIFACTS / "03_nuggets_embedded.jsonl"
+    # Profile-cache guard. JSONL = one nugget per line.
+    if out_path.exists():
+        logbook.append(step, "cache_hit", f"reusing {out_path.name}")
+        return [json.loads(line) for line in out_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     logbook.append(
         step, "starting",
         f"embedding {len(nuggets)} nuggets via POST oracle.linkright.in/lifeos/embed "
         "(nomic-embed-text, 768-dim); one request per nugget, sequential; "
         "expecting all to return 768-dim vectors",
     )
-
-    out_path = ARTIFACTS / "03_nuggets_embedded.jsonl"
     success = 0
     failures: list[dict] = []
     sample_scores: list[dict] = []
@@ -893,14 +942,17 @@ def step_03_embed_nuggets(nuggets: list[dict]) -> list[dict]:
                 success += 1
             else:
                 failures.append({"id": n["id"], "reason": meta.get("error", "unknown")})
-            f.write(json.dumps({
-                "id": n["id"],
-                "company": n.get("company"),
-                "answer": ans,
-                "embedding_len": len(emb) if emb else 0,
-                "meta": meta,
-                "embedding_preview": emb[:5] if emb else None,
-            }) + "\n")
+            # 2026-05-01: persist FULL nugget dict (including importance, role,
+            # tags, type, leadership, nugget_index, raw) so cache-aware reload
+            # via step_03 cache-guard preserves the structure step_02 produced.
+            # Earlier version stripped non-emb fields → nuggets.jsonl ended up
+            # with only id/company/answer → 0 highlights detected. This regression
+            # was introduced by the 2026-05-01 "persist FULL embedding" edit;
+            # this fix preserves both the full embedding AND the structure.
+            row = dict(n)
+            row["embedding_len"] = len(emb) if emb else 0
+            row["meta"] = meta
+            f.write(json.dumps(row, default=str) + "\n")
 
     # Pairwise cosine on 5 sampled nuggets (if ≥ 5)
     embedded = [n for n in nuggets if n.get("emb")]
@@ -1247,7 +1299,11 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
 
     def _call_phase_1_2(extra_retry_note: str = "") -> tuple[dict, dict]:
         user_msg = user + (f"\n\n{extra_retry_note}" if extra_retry_note else "")
-        text, usage = llm.chat_with_fallback(system=system, user=user_msg, temperature=0.3, max_tokens=4000)
+        text, usage = llm.tier_chat(
+            system=system, user=user_msg,
+            klass="D", intent="step_07_phase_1_2",
+            temperature=0.3, max_tokens=4000,
+        )
         log(f"=== step_07 {usage.get('provider')} raw ===\n{text}\n=== end ===\n")
         # Iter-04 (2026-04-23): strip LLM commentary BEFORE JSON extraction.
         text = _strip_commentary(text)
@@ -1651,7 +1707,11 @@ def step_09_summary(parsed_p12: dict, retrieved: dict, raw_text: str) -> str:
     user = _build_user_msg()
     step09_llm_failed = False
     try:
-        text, usage = llm.chat_with_fallback(system=system, user=user, temperature=0.3, max_tokens=500)
+        text, usage = llm.tier_chat(
+            system=system, user=user,
+            klass="B", intent="step_09_summary",
+            temperature=0.3, max_tokens=500,
+        )
     except llm.LLMError as e:
         logbook.append(step, "error", "Summary LLM failed — using synthesis fallback", body=f"```\n{e}\n```")
         _note_retry("step_09_synthesis_fallback")
@@ -1716,7 +1776,11 @@ def step_09_summary(parsed_p12: dict, retrieved: dict, raw_text: str) -> str:
             f"candidate's actual {user_total_years:.1f} years. Remove/correct this claim."
         )
         try:
-            text2, usage2 = llm.chat_with_fallback(system=system, user=user_retry, temperature=0.3, max_tokens=500)
+            text2, usage2 = llm.tier_chat(
+                system=system, user=user_retry,
+                klass="B", intent="step_09_summary_retry",
+                temperature=0.3, max_tokens=500,
+            )
             try:
                 parsed2 = json.loads(llm.extract_json(text2))
                 retry_summary = parsed2.get("summary_text", "").strip()
@@ -1882,6 +1946,12 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
             _note_retry("step_10_synthesis_llm_fail")
             continue
 
+        # Tag for tier-routed telemetry (Phase 1 — 2026-05-01). Routing is left
+        # as-is (cerebras_8b → cascade) since current ordering balances speed/cost
+        # for this Class D site; flipping is a Phase 3 hypothesis-test decision.
+        usage["klass"] = "D"
+        usage["intent"] = "step_10_verbose_per_co"
+
         log(f"=== step_10 {co_name} {usage.get('provider')} ===\n{raw}\n=== end ===\n")
         # Iter-04 (2026-04-23): strip LLM commentary BEFORE JSON extraction.
         # Models sometimes preface JSON with reasoning ("I can only generate one
@@ -1909,6 +1979,10 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
         if fab_rate >= 0.5 and raw_paras:
             log(f"[step_10 F3 retry] {co_name}: {fab_count}/{len(raw_paras)} fabricated; retrying with whitelist")
             _note_retry("step_10_fab_retry")
+            logbook.announce_loop(
+                "Bullet retry (fabrication)", 1, 1,
+                detail=f"{co_name}: re-prompting LLM with explicit atom whitelist",
+            )
             valid_list = ", ".join(sorted(valid_atom_ids))
             retry_sys = (
                 sys + "\n\nCRITICAL: Your previous response fabricated atom IDs. "
@@ -1917,7 +1991,11 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
                 "If you cannot cite a valid ID for a paragraph, DO NOT emit that paragraph."
             )
             try:
-                raw2, usage2 = llm.chat_with_fallback(system=retry_sys, user=usr, temperature=0.2, max_tokens=3000)
+                raw2, usage2 = llm.tier_chat(
+                    system=retry_sys, user=usr,
+                    klass="D", intent="step_10_verbose_f3_retry",
+                    temperature=0.2, max_tokens=3000,
+                )
                 raw2 = _strip_commentary(raw2)
                 data2 = json.loads(llm.extract_json(raw2))
                 raw_paras2 = data2.get("paragraphs", [])
@@ -1990,6 +2068,10 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
         if xyz_incomplete and len(xyz_incomplete) >= max(2, len(accepted) // 3):
             _note_retry("step_10_xyz_retry")
             log(f"[step_10 P6 XYZ retry] {co_name}: {len(xyz_incomplete)}/{len(accepted)} bullets incomplete XYZ; retrying")
+            logbook.announce_loop(
+                "Bullet retry (XYZ format)", 1, 1,
+                detail=f"{co_name}: {len(xyz_incomplete)}/{len(accepted)} bullets need stronger metric/action",
+            )
             # Build per-bullet diagnostic
             diag_lines = []
             for idx, p in enumerate(accepted):
@@ -2016,7 +2098,11 @@ def step_10_verbose_bullets(parsed_p12: dict, retrieved: dict, reqs: list[dict])
                 "\n\nRe-emit ALL paragraphs with all three xyz fields populated and concrete."
             )
             try:
-                text3, usage3 = llm.chat_with_fallback(system=retry_sys, user=usr, temperature=0.3, max_tokens=3500)
+                text3, usage3 = llm.tier_chat(
+                    system=retry_sys, user=usr,
+                    klass="D", intent="step_10_verbose_p6_retry",
+                    temperature=0.3, max_tokens=3500,
+                )
                 text3 = _strip_commentary(text3)
                 data3 = json.loads(llm.extract_json(text3))
                 raw_paras3 = data3.get("paragraphs", [])
@@ -2398,6 +2484,12 @@ def step_10_verbose_bullets_batched(parsed_p12: dict, retrieved: dict, reqs: lis
         log(f"[step_10_batched] Gemini failed ({str(e)[:150]}); returning None for per-company fallback")
         return None
 
+    # Tag for tier-routed telemetry (Phase 1 — 2026-05-01). Special-case:
+    # this site uses gemini_chat_json structured output directly; routing
+    # via tier_chat would lose the response_schema guarantee.
+    usage["klass"] = "D"
+    usage["intent"] = "step_10_verbose_batched"
+
     dt = time.time() - t0
     log(f"[step_10_batched] Gemini Flash Lite: {dt:.1f}s, tokens={usage.get('total_tokens')}")
 
@@ -2570,10 +2662,16 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
     try:
         text, usage = llm.cerebras_chat(system=sys, user=usr, temperature=0.2, max_tokens=3000)
         usage["provider"] = "cerebras"
+        # Tag for tier-routed telemetry (Phase 1 — 2026-05-01). Routing left
+        # as-is (cerebras-first) per per-site benchmark from 2026-04-22.
+        usage["klass"] = "B"
+        usage["intent"] = "step_12_condense"
     except Exception as e_cer:
         log(f"[step_12] cerebras failed ({e_cer}); falling back to default chain")
         try:
             text, usage = llm.chat_with_fallback(system=sys, user=usr, temperature=0.2, max_tokens=3000)
+            usage["klass"] = "B"
+            usage["intent"] = "step_12_condense_fallback"
         except llm.LLMError as e:
             log(f"[step_12] ALL LLMs failed — using pass-through synthesis fallback: {str(e)[:120]}")
             logbook.append(step, "error", "Condense LLM failed — synthesis fallback", body=f"```\n{e}\n```")
@@ -2591,6 +2689,9 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
                 "orig_brs": p.get("brs", 0.5),
                 "project_group": p.get("project_group", idx),
                 "source": "step12_synthesis_fallback",
+                # NEW-6 v3: pass through LLM-emitted signal metadata (if present)
+                "signal": p.get("signal", ""),
+                "signal_rationale": p.get("signal_rationale", ""),
             })
         _note_retry("step_12_synthesis_fallback")
         out_path = ARTIFACTS / "12_condensed_bullets.json"
@@ -2885,6 +2986,12 @@ def step_12_condense(ranked: dict, parsed_p12: dict) -> dict:
             "verb": b.get("verb"),
             "orig_brs": orig.get("_brs"),
             "project_group": orig.get("project_group", 0),
+            # NEW-6 v3: prefer LLM-emitted signal from step_12 if present;
+            # else inherit from step_10's verbose paragraph (passed through).
+            # If neither present, step_14's hybrid (regex → LLM fallback) fills.
+            "signal": (b.get("signal") or orig.get("signal") or ""),
+            "signal_rationale": (b.get("signal_rationale")
+                                 or orig.get("signal_rationale") or ""),
         })
 
     # v0.1.3 Fix A — defensive post-condense prefix scrubber.
@@ -2984,6 +3091,649 @@ def step_13_width_skip(condensed: dict) -> dict:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Step 14 helpers — bolding rule + header shrink-to-fit
+# Per Satvik 2026-05-02 milestone validation:
+#   1. Bold ONLY metric tokens (numbers + adjacent symbols). Strip verbs/phrases
+#      from <b>...</b> regardless of what step_10/12 LLM produced.
+#   2. Header role can be long (e.g. "Product Manager — Workflows Team
+#      (Integrations & Framework Enablement)"); name + role fit side-by-side
+#      via lockstep font shrink, min 14pt floor — never wrap, never truncate.
+# ────────────────────────────────────────────────────────────────────────────
+
+# Metric-token regex. Preceded by NOT-letter (so "Q4", "S3", "v2" do not trigger
+# false bold on the digit), captures: optional $, digit-run with commas/dots,
+# optional unit (K/M/B/%/:N/x/time-unit), optional trailing +.
+_METRIC_REBOLD_RE = re.compile(
+    r"""
+    (?<![A-Za-z])                       # not preceded by letter (avoids Q4, S3, v2)
+    \$?                                 # optional dollar
+    \d+(?:[,.]\d+)*                     # digit run; comma/dot must be followed by more digits
+    (?:                                 # optional unit
+      [KkMmBb](?!\w)                    # K, M, B (not part of word)
+      | \s*%                            # %
+      | :\d+                            # ratio :N
+      | x(?!\w)                         # x multiplier
+      | \s*(?:hrs?|hours?|mins?|minutes?|days?|weeks?|months?|years?|wks?|yrs?)(?!\w)
+    )?
+    \+?                                 # trailing +
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+
+def _metric_only_rebold(html: str) -> str:
+    """Strip every existing <b>...</b> then re-bold ONLY metric tokens.
+
+    Per Satvik 2026-05-02: "I want only the numbers to be in bold. Numbers and
+    supporting characters like 100M+, 70%, 20+." Verbs, action phrases, JD
+    keywords, and named entities must stay PLAIN regardless of upstream LLM
+    output.
+
+    Algorithm:
+      1. Strip every <b>...</b> tag (keep inner text) — clean slate.
+      2. Re-apply <b> only on metric-regex matches.
+
+    Deterministic, zero-fabrication, safe to re-run idempotently.
+    """
+    if not html:
+        return html
+    plain = re.sub(r"</?b\b[^>]*>", "", html, flags=re.IGNORECASE)
+    return _METRIC_REBOLD_RE.sub(lambda m: f"<b>{m.group(0)}</b>", plain)
+
+
+def _trim_skills_to_target_lines(
+    flat_skills: list[str],
+    jd_keywords: list[str],
+    source_skills: list[str],
+    requirements: list[dict] | None = None,
+    max_chars: int = 480,
+    min_keep: int = 10,
+) -> tuple[list[str], list[str]]:
+    """Trim Skills section to a target char-budget + render in TIER order.
+
+    Per Satvik 2026-05-02 (memory `feedback_skills_trim_before_width_fill`):
+    Skills max 3-5 lines (≤120c per line); drop generics FIRST.
+    Per 2026-05-02 update: "ordering of skills should also be must have >
+    nice to have > just inferred skills based on the job".
+
+    Tier scoring (DESC importance):
+      +10 — JD must-have (in `requirements` with importance=='required')
+      +7  — JD nice-to-have (other requirements: 'preferred', 'nice_to_have')
+      +5  — JD generic keyword (in `jd_keywords` flat list)
+      +3  — user's original skill (in `source_skills` from step_01)
+      +1  — has uppercase / acronym shape
+      +0  — generic phrase, fillter-tier — drop FIRST when over budget
+
+    Render order: tier DESC, then alphabetical within tier (deterministic).
+    Recruiter scanning left-to-right hits highest-value keywords first.
+
+    MECE: case-insensitive dedupe + substring superset (keep "REST APIs",
+    drop bare "REST" if both present).
+
+    Args:
+      flat_skills:    current Skills list
+      jd_keywords:    parsed_p12.jd_keywords (broad keyword list)
+      source_skills:  user's original parsed.skills (step_01)
+      requirements:   parsed_p12.requirements list with `importance` field;
+                      None = degrade to old jd_keywords-only scoring
+      max_chars:      target budget (default 480 = 4 lines × 120c)
+      min_keep:       floor (don't drop below this count)
+
+    Returns: (kept_skills, dropped_skills) — kept in render order, dropped
+    for telemetry.
+    """
+    # 2026-05-02: stoplist for generic single-word "skills" that are JD-text
+    # fragments not real skills. User flagged "quality" specifically — these
+    # are too vague to belong in a Skills section. Multi-word forms okay
+    # ("quality assurance" passes; "quality" alone doesn't).
+    GENERIC_SINGLE_WORDS = {
+        "quality", "marketing", "documentation", "email", "forms",
+        "reliability", "support", "insight", "fixes", "content",
+        "tracking", "enablement", "communication", "writing", "design",
+        "engineering", "strategy", "management", "leadership", "operations",
+        "ai-powered", "all-in-one", "white-label", "ai-driven assistance",
+        "help content", "support insight", "product fixes",
+        "time-to-ship", "triggers/actions", "workflow usage",
+    }
+
+    # Step 1: MECE dedupe (case-insensitive + plural) + stoplist filter
+    seen: dict[str, str] = {}
+    deduped: list[str] = []
+    for s in flat_skills:
+        if not isinstance(s, str):
+            continue
+        sk = s.strip().rstrip(",.")
+        if not sk:
+            continue
+        # Drop generic single-word fragments unless the term is multi-word
+        # AND not in the stoplist.
+        if sk.lower() in GENERIC_SINGLE_WORDS:
+            continue
+        key = sk.lower().rstrip("s")
+        if key in seen:
+            if len(sk) > len(seen[key]):
+                idx = next((i for i, d in enumerate(deduped)
+                           if d.lower().rstrip("s") == key), None)
+                if idx is not None:
+                    deduped[idx] = sk
+                seen[key] = sk
+            continue
+        seen[key] = sk
+        deduped.append(sk)
+
+    # Step 2: substring superset (drop bare "REST" if "REST APIs" present)
+    final_dedup: list[str] = []
+    deduped_lower = [d.lower() for d in deduped]
+    for i, s in enumerate(deduped):
+        s_low = s.lower()
+        is_subset = False
+        for j, t in enumerate(deduped_lower):
+            if i == j:
+                continue
+            if (s_low != t and s_low in t and len(s_low) < len(t)
+                    and (f" {s_low} " in f" {t} "
+                         or t.startswith(s_low + " ")
+                         or t.endswith(" " + s_low))):
+                is_subset = True
+                break
+        if not is_subset:
+            final_dedup.append(s)
+
+    # Step 3: build tier-membership sets from requirements + JD keywords + source
+    must_text = " ".join(
+        (r.get("text") or "").lower()
+        for r in (requirements or [])
+        if isinstance(r, dict) and (r.get("importance") or "").lower() == "required"
+    )
+    nice_text = " ".join(
+        (r.get("text") or "").lower()
+        for r in (requirements or [])
+        if isinstance(r, dict)
+           and (r.get("importance") or "").lower() in ("preferred", "nice_to_have", "nice-to-have")
+    )
+    jd_lower = {k.lower().strip() for k in (jd_keywords or []) if isinstance(k, str)}
+    src_lower = {s.lower().strip().rstrip("s") for s in (source_skills or [])
+                 if isinstance(s, str)}
+
+    def _in_text(skill: str, text: str) -> bool:
+        if not text:
+            return False
+        sl = skill.lower().strip()
+        # whole-word match (allow comma/punct boundaries)
+        return bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(sl)}(?![A-Za-z0-9])", text))
+
+    def _tier_score(s: str) -> int:
+        sl = s.lower().strip()
+        if _in_text(s, must_text):
+            return 10
+        if _in_text(s, nice_text):
+            return 7
+        if sl in jd_lower or any(sl == k or sl.rstrip("s") == k.rstrip("s")
+                                  for k in jd_lower):
+            return 5
+        if sl.rstrip("s") in src_lower:
+            return 3
+        if any(c.isupper() for c in s):
+            return 1
+        return 0
+
+    scored = [(s, _tier_score(s)) for s in final_dedup]
+    # Sort: tier DESC, then alphabetical
+    scored.sort(key=lambda x: (-x[1], x[0].lower()))
+
+    # Step 4: greedy take until char budget hit (but always keep min_keep)
+    kept: list[str] = []
+    dropped: list[str] = []
+    chars_used = 0
+    for s, sc in scored:
+        proj_chars = chars_used + len(s) + (2 if kept else 0)
+        if len(kept) < min_keep or proj_chars <= max_chars:
+            kept.append(s)
+            chars_used = proj_chars
+        else:
+            dropped.append(s)
+
+    return kept, dropped
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# NEW-6 v1: deterministic per-bullet signal derivation + interview-prep
+# Per Satvik 2026-05-02 (memory feedback_bullets_sell_fit_and_seed_stories):
+# every bullet must (1) signal "right fit" in 6-second top-1/3 scan,
+# (2) seed a Round 1 interview story. v1 derives signal heuristically from
+# bullet content + maps to common interview questions. v2 (deferred) replaces
+# heuristic with LLM-emitted signal/story_seed via step_10/12 prompt update.
+# ────────────────────────────────────────────────────────────────────────────
+
+# Each signal maps to the recruiter-screening questions it best answers.
+_SIGNAL_TO_QUESTIONS: dict[str, list[str]] = {
+    "leadership": [
+        "Tell me about a time you led a team",
+        "Describe how you handle managing direct reports",
+        "How do you build team alignment under pressure?",
+    ],
+    "revenue-impact": [
+        "Tell me about your biggest revenue / business-outcome achievement",
+        "How do you tie product decisions to business metrics?",
+    ],
+    "scale": [
+        "Walk me through a time you operated at scale",
+        "How do you handle complexity at high transaction/user volumes?",
+    ],
+    "growth": [
+        "Describe a growth lever you owned and the impact",
+        "Tell me about a time you moved a key adoption / activation metric",
+    ],
+    "cost-reduction": [
+        "Tell me about a time you cut cost or cycle time meaningfully",
+        "How do you identify efficiency wins?",
+    ],
+    "build-execution": [
+        "Walk me through your most technically complex shipping project",
+        "Tell me about a 0→1 product / feature you built",
+    ],
+    "executive-influence": [
+        "Describe a time you influenced senior leadership without authority",
+        "Tell me about a hard stakeholder you brought along",
+    ],
+    "user-empathy": [
+        "Tell me about a customer insight that changed your product direction",
+        "How do you triangulate conflicting customer signals?",
+    ],
+    "ambiguity-resolution": [
+        "Describe a time you had to make a decision with incomplete data",
+        "Tell me about a time you set direction in a vague problem space",
+    ],
+    "regulatory-tech": [
+        "Tell me about how you balance compliance and product velocity",
+        "Walk me through a regulatory product decision you owned",
+    ],
+    "execution": [
+        "Tell me about a time you shipped under deadline pressure",
+        "Walk me through a project's lifecycle you owned end-to-end",
+    ],
+    "data-driven": [
+        "Walk me through a decision you made primarily from data analysis",
+        "How do you set up measurement for a new feature/initiative?",
+    ],
+    "automation": [
+        "Tell me about a manual process you systematized or automated",
+        "How do you decide what's worth automating vs leaving manual?",
+    ],
+}
+
+
+def _derive_bullet_signal(bullet_text_html: str, jd_keywords: set) -> tuple[str, str]:
+    """Heuristic: derive 1-2 word competency signal from bullet content.
+
+    Per memory feedback_bullets_sell_fit_and_seed_stories: signal = the
+    "hidden message" that conveys WHY this candidate fits THIS role. Order
+    of regex tests matters — more-specific signals tested first.
+
+    Per memory feedback_no_hardcoded_jd_specifics: regex MUST generalize
+    across ALL job domains (tech, finance, healthcare, marketing, design,
+    HR, ops, sales, legal, etc.) — not just the current sample. Each
+    pattern below is calibrated for breadth.
+
+    Returns (signal, signal_rationale).
+    """
+    plain = re.sub(r"<[^>]+>", "", bullet_text_html or "").lower()
+
+    # ── Leadership ──────────────────────────────────────────────────────
+    # Direct people-management: explicit team/headcount references. Works
+    # across every domain (engineering, sales, ops, design, marketing).
+    if re.search(
+            r"\bled\s+\d+|leading\s+\d+|managed\s+\d+(?:-|\s)?member|"
+            r"directed\s+\d+|spearheaded\s+\d+|\d+[\-\s]member\s+team|"
+            r"\d+\s*(?:direct\s+)?reports?\b|"
+            r"hired\s+\d+|recruited\s+\d+|onboarded\s+\d+|"
+            r"mentored\s+\d+|coached\s+\d+|trained\s+\d+",
+            plain):
+        return "leadership", ("Demonstrates direct people-management at scale "
+                              "— leadership signal recruiters scan for")
+
+    # ── Regulatory / compliance ─────────────────────────────────────────
+    # Cross-domain: finance, healthcare, privacy, security, defense, pharma,
+    # energy, gov. ANY of these triggers — domain-agnostic regulatory tag.
+    if re.search(
+            r"\b("
+            # Finance / banking
+            r"aml|cft|kyc|cdd|fatca|ofac|bsa|glba|sox|psd2|mifid|dodd[-\s]?frank|finra|sec\s+filings|"
+            # Healthcare
+            r"hipaa|fda|emr|ehr|hl7|fhir|clia|pdufa|de\s+novo|510\s*\(?k\)?|"
+            # Privacy
+            r"gdpr|ccpa|lgpd|pipl|coppa|pipeda|"
+            # Security / SaaS-trust
+            r"soc[\s-]?2|iso[\s-]?27001|nist|fedramp|hitrust|cmmc|fisma|"
+            # Pharma / life sciences
+            r"gxp|gmp|gcp(?:\s+pharma)?|glp|gdp|good\s+(?:manufacturing|clinical|distribution)\s+practice|"
+            # Defense / export
+            r"itar|ear\b|"
+            # Energy
+            r"nerc|ferc|"
+            # Auditing / compliance umbrella
+            r"compliance\s+audit|audit\s+trail|regulatory\s+(?:approval|filing|review)"
+            r")\b",
+            plain):
+        return "regulatory-tech", ("Compliance/regulatory product context "
+                                    "— direct fit for regulated-industry JDs")
+
+    # ── Revenue / financial impact ──────────────────────────────────────
+    # Generic across sales / GTM / product / ops / finance roles. Drop
+    # bare "pipeline" (data-pipeline ambiguity); require $ context.
+    if re.search(
+            r"\$\d|"
+            r"\b(revenue|tcv|acv|arr|mrr|gmv|aov|ltv|cac|"
+            r"sales\s+pipeline|deal\s+size|booking[s]?|quota|win[-\s]?rate|"
+            r"profit|margin|p&l|ebitda|p[-\s]&[-\s]l|"
+            r"contract\s+value|annual\s+contract)\b",
+            plain):
+        return "revenue-impact", ("Quantified business / revenue impact "
+                                   "— recruiters scan for $-numbers first")
+
+    # ── Data-driven / analytics ─────────────────────────────────────────
+    # NEW signal — broadly applicable to PM/data/marketing/research roles.
+    # Bullet uses data/SQL/dashboards/metrics to drive a decision or insight.
+    if (re.search(r"\b(sql|tableau|looker|powerbi|power\s*bi|superset|"
+                  r"pendo|amplitude|mixpanel|heap|segment|dashboard|"
+                  r"a/b\s+test|hypothesis|cohort|funnel|"
+                  r"machine\s+learning|\bml\b|nlp|ai\s+model)\b", plain)
+            or (re.search(r"\b(data|analytics|metric|insight)\b", plain)
+                and re.search(r"\b(driven|drove|inform|guide|decision|model|forecast)\b", plain))):
+        return "data-driven", ("Data/analytics-led decision making "
+                                "— quantitative-rigor signal")
+
+    # ── Cost reduction / efficiency ─────────────────────────────────────
+    # Cross-domain: finance, ops, engineering, ops-management, supply-chain.
+    if re.search(r"\d+\s*%", plain) and re.search(
+            r"\b(reduce|cut|lower|trim|compress|slash|curtail|shrink|"
+            r"eliminate|minimize|streamline|optimize)\w*\b",
+            plain):
+        return "cost-reduction", ("Quantified cost/time/effort reduction "
+                                   "— efficiency signal")
+
+    # ── Growth / lift ───────────────────────────────────────────────────
+    # Cross-domain: PM, marketing, growth, sales, BD.
+    if re.search(r"\d+\s*%|\d+x\b", plain) and re.search(
+            r"\b(increase|grew|grow|lift|boost|improve|expand|"
+            r"scale|amplif|accelerate|drive|elevate|raise)\w*\b",
+            plain):
+        return "growth", ("Quantified growth/adoption/lift metric "
+                          "— direct fit for growth-oriented JDs")
+
+    # ── Scale ───────────────────────────────────────────────────────────
+    # Magnitude-based: K/M/B suffix or 6+ digits (avoids year-pattern FPs).
+    # Cross-domain: any role at large company / large dataset / large user base.
+    if re.search(r"\b\d+(?:\.\d+)?\s*[kmb]\+?(?!\w)|\b\d{6,}\b", plain):
+        return "scale", ("Operates at significant user/transaction/dataset scale "
+                         "— senior IC capability signal")
+
+    # ── Stakeholder / executive influence ───────────────────────────────
+    # Cross-domain: any role requiring buy-in across functions / leadership.
+    if re.search(
+            r"\b(secured|sign[-\s]?off|approval|pitched|persuaded|"
+            r"influenced|negotiated|brokered|aligned\s+\w+\s+(?:stakeholders?|leadership)|"
+            r"executive[-\s]?(?:level|sponsor)|c[-\s]?(?:level|suite)|"
+            r"board[-\s]?(?:level|approval|presented))\b",
+            plain):
+        return "executive-influence", ("Stakeholder/executive-management signal "
+                                        "— scarce + valued in mid-senior roles")
+
+    # ── Build / ship / architect ────────────────────────────────────────
+    # Cross-domain: PM/eng/design/research/marketing all "build" things.
+    if re.search(
+            r"\b(designed|built|architected|engineered|shipped|launched|"
+            r"developed|created|crafted|prototype|prototyped|invented|"
+            r"pioneered|introduced|debuted|released|rolled\s+out|deployed)\b",
+            plain):
+        return "build-execution", ("Hands-on shipping / 0→1 build "
+                                    "— IC build-execution signal")
+
+    # ── User / customer empathy ─────────────────────────────────────────
+    # Cross-domain: PM, design, research, sales, support, success.
+    if re.search(r"\b(customer|user|client|patient|stakeholder|consumer|"
+                 r"audience|reader|viewer|subscriber|member|guest|tenant)s?\b",
+                 plain) and re.search(
+            r"\b(research|insight|interview|session|empathy|feedback|"
+            r"discovery|usability|persona|journey|jtbd|survey|focus\s+group)\b",
+            plain):
+        return "user-empathy", "Customer/user-centric research / insight signal"
+
+    # ── Ambiguity / discovery ───────────────────────────────────────────
+    if re.search(
+            r"\b(discover\w*|explor\w+|ambigu\w+|unclear|undefined|"
+            r"greenfield|new\s+market|nascent|0\s*[\-→to]+\s*1|"
+            r"emerging|uncharted|first[-\s]of[-\s]a[-\s]kind)\b",
+            plain):
+        return "ambiguity-resolution", ("Setting direction in unclear problem "
+                                         "space — rare + valued at senior IC")
+
+    # ── Process / automation ────────────────────────────────────────────
+    # NEW signal — broadly applicable to ops, eng, PM. Bullet describes
+    # automating or systematizing a previously-manual process.
+    if re.search(
+            r"\b(automate|automated|automation|workflow|orchestrat|"
+            r"streamlin|operationaliz|standardiz|systematiz|"
+            r"repeatable\s+process|self[-\s]?serve|self[-\s]?service)\w*\b",
+            plain):
+        return "automation", ("Automation / process-systematization signal "
+                               "— ops-excellence + scalability")
+
+    # ── Default ─────────────────────────────────────────────────────────
+    return "execution", "Execution-tier bullet — generic shipping/delivery signal"
+
+
+_VALID_SIGNALS = [
+    "leadership", "regulatory-tech", "revenue-impact", "data-driven",
+    "cost-reduction", "growth", "scale", "executive-influence",
+    "build-execution", "user-empathy", "ambiguity-resolution",
+    "automation", "execution",
+]
+
+
+def _llm_classify_signal(bullet_text: str, jd_text: str) -> tuple[str, str]:
+    """LLM-based signal classification — fallback for bullets where regex
+    returned generic 'execution' (i.e., regex couldn't find a discriminating
+    pattern).
+
+    Per Satvik 2026-05-02 (memory feedback_no_hardcoded_jd_specifics):
+    regex is closed-vocabulary; LLM is needed for semantic understanding
+    that extrapolates to novel domains/phrasings. Constrained output
+    (must pick from _VALID_SIGNALS enum) prevents hallucination.
+
+    Class A small model (Groq llama-3.1-8b-instant typical) — extraction
+    tier, low temp, fast (~150ms). Free providers cascade. Best-effort —
+    on LLM failure returns ("execution", "<llm_error>") so caller stays
+    intact.
+
+    Returns (signal, rationale).
+    """
+    from linkright.llm.direct import tier_chat
+
+    signals_block = "\n".join(f"  - {s}" for s in _VALID_SIGNALS)
+    system = (
+        "You are a resume bullet classifier. Given one resume bullet + the "
+        "target JD, pick exactly ONE competency signal from the enum list. "
+        "Output JSON only — no preamble, no markdown."
+    )
+    user = (
+        f"BULLET: {bullet_text}\n\n"
+        f"JD CONTEXT (truncated):\n{jd_text[:1200]}\n\n"
+        f"VALID SIGNALS (pick one):\n{signals_block}\n\n"
+        f"Output JSON only:\n"
+        f'{{"signal": "<one of the enum values>", "rationale": "<1 sentence: '
+        f'why this bullet conveys this signal for THIS JD>"}}\n\n'
+        f"Pick the MOST DISCRIMINATING signal. If multiple apply, pick the "
+        f"one most aligned with the JD's stated requirements."
+    )
+    try:
+        text, _usage = tier_chat(
+            system=system, user=user, klass="A",
+            intent="step_14_signal_classify", max_tokens=200,
+        )
+    except Exception:
+        return "execution", "<llm_unavailable>"
+
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.S)
+    # Robust extraction: find first {...}
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return "execution", "<llm_malformed>"
+    try:
+        parsed = json.loads(m.group(0))
+    except Exception:
+        return "execution", "<llm_parse_fail>"
+    sig = (parsed.get("signal") or "").strip().lower()
+    rationale = (parsed.get("rationale") or "").strip()
+    # Constrain to valid enum (LLM might emit close-but-not-exact like "leadership-influence")
+    if sig not in _VALID_SIGNALS:
+        # Fuzzy-map: pick closest match by substring
+        for valid in _VALID_SIGNALS:
+            if valid in sig or sig in valid:
+                sig = valid
+                break
+        else:
+            return "execution", f"<llm_invalid_signal:{sig[:30]}>"
+    if not rationale:
+        rationale = f"LLM classified as {sig} (no rationale supplied)"
+    return sig, rationale
+
+
+def _build_interview_prep_payload(
+    parsed_p12: dict,
+    bullets_per_co: dict,
+    jd_keywords: list,
+    jd_text: str = "",
+) -> dict:
+    """Compose interview-prep artifact: per-bullet signal + recruiter-question
+    map. Persisted as `<run>/artifacts/15b_interview_prep.json`. Future
+    `linkright interview prep` (Pillar 3) reads this for practice flashcards.
+    """
+    jd_kw_set = {k.lower() for k in (jd_keywords or []) if isinstance(k, str)}
+    payload: dict = {
+        "schema_version": 2,
+        "generated_by": "hybrid_regex_llm_v2",
+        "note": ("v2 uses regex first (fast, free, 90% of cases). When regex "
+                 "returns generic 'execution', falls back to LLM (Class A) "
+                 "for semantic classification. Constrained-output prompt "
+                 "prevents hallucination — signal must be one of "
+                 f"{len(_VALID_SIGNALS)} valid enum values."),
+        "bullets_by_company": {},
+        "summary": {
+            "total_bullets": 0,
+            "signal_distribution": {},
+            "regex_resolved": 0,
+            "llm_resolved": 0,
+        },
+    }
+    for co_name, bullets in (bullets_per_co or {}).items():
+        if not isinstance(bullets, list):
+            continue
+        rows = []
+        for i, b in enumerate(bullets):
+            text_html = b.get("text_html", "") if isinstance(b, dict) else ""
+            if not text_html:
+                continue
+            plain = re.sub(r"<[^>]+>", "", text_html).strip()
+
+            # NEW-6 v3 (2026-05-02): prefer LLM-emitted signal at step_10
+            # generation time. LLM there has FULL context (JD + nuggets +
+            # bullet) — most informed classification possible. Falls through
+            # to regex → LLM-fallback hybrid only when step_10 didn't emit.
+            _src_signal = (b.get("signal") or "").strip().lower() if isinstance(b, dict) else ""
+            _src_rationale = (b.get("signal_rationale") or "").strip() if isinstance(b, dict) else ""
+            if _src_signal and _src_signal in _VALID_SIGNALS:
+                signal, rationale = _src_signal, (_src_rationale or
+                                                    f"Signal '{_src_signal}' emitted by step_10 LLM with full JD context")
+                resolved_via = "llm_at_generation"
+            else:
+                # Hybrid fallback: regex first (fast path)
+                signal, rationale = _derive_bullet_signal(text_html, jd_kw_set)
+                resolved_via = "regex"
+                # If regex couldn't discriminate (fell to default), call LLM
+                # post-hoc for semantic classification.
+                if signal == "execution" and jd_text:
+                    _llm_sig, _llm_rat = _llm_classify_signal(plain, jd_text)
+                    if _llm_sig != "execution":
+                        signal = _llm_sig
+                        rationale = _llm_rat
+                        resolved_via = "llm_post_hoc"
+            questions = _SIGNAL_TO_QUESTIONS.get(signal, [])[:2]
+            rows.append({
+                "idx": i,
+                "text": plain,
+                "signal": signal,
+                "signal_rationale": rationale,
+                "resolved_via": resolved_via,
+                "common_screening_questions": questions,
+                "star_seed_template": (
+                    "Situation: ____ (set the context — when/where/why)\n"
+                    "Task: ____ (the specific challenge you owned)\n"
+                    f"Action: {plain[:120].rstrip('.')} (your action — see bullet for the metric/scale)\n"
+                    "Result: ____ (the measurable outcome + downstream impact)"
+                ),
+            })
+            payload["summary"]["signal_distribution"][signal] = (
+                payload["summary"]["signal_distribution"].get(signal, 0) + 1
+            )
+            payload["summary"]["total_bullets"] += 1
+            payload["summary"].setdefault("by_resolution", {})
+            payload["summary"]["by_resolution"][resolved_via] = (
+                payload["summary"]["by_resolution"].get(resolved_via, 0) + 1
+            )
+            if resolved_via == "regex":
+                payload["summary"]["regex_resolved"] += 1
+            else:
+                payload["summary"]["llm_resolved"] += 1
+        if rows:
+            payload["bullets_by_company"][co_name] = rows
+    return payload
+
+
+def _compute_header_font_size(name: str, role: str, max_width_mm: float = 175.0) -> tuple[str, bool]:
+    """Compute font-size that fits name + role on one header line.
+
+    A4 inner width 210mm − margins ≈ 180mm; reserve 5mm gap = 175mm usable.
+    Roboto Medium baseline: ~0.51mm char-width per 1pt font-size (matches
+    bullet-width.ts CHAR_WIDTH_PER_PT empirical ratio).
+
+    Per Satvik 2026-05-02: shrink BOTH name + role in lockstep (they share
+    --font-size-name CSS variable). Floor at 14pt — header must remain
+    visually larger than 12pt section-headings. NEVER wrap, NEVER truncate.
+
+    Returns (font_size_str, fits_within_floor):
+      - font_size_str: "20pt" / "16.5pt" / "14pt" — to inject as
+        --font-size-name CSS variable
+      - fits_within_floor: True if computed size ≥14pt; False if even 14pt
+        overflows (caller logs warning, accepts slight clip — better than
+        wrap/truncate per user direction)
+    """
+    # Empirical calibration: at 16pt the prior screenshot showed ~50 chars
+    # rendering across ~150mm (name + visible role), giving ~0.19mm per char per pt.
+    # Role uses uppercase + letter-spacing 1.5px which inflates role width vs name —
+    # use a slightly higher coefficient (0.22) to be conservative.
+    CHAR_WIDTH_PER_PT = 0.22   # mm per char per pt (Roboto, mixed name+uppercase role)
+    GAP_BUDGET = 8             # spacer + separator chars between name and role
+    DEFAULT_PT = 20.0
+    MIN_PT = 14.0
+    chars = len(name) + len(role) + GAP_BUDGET
+    if chars <= 0:
+        return f"{DEFAULT_PT:.0f}pt", True
+    width_at_default = chars * CHAR_WIDTH_PER_PT * DEFAULT_PT
+    if width_at_default <= max_width_mm:
+        return f"{DEFAULT_PT:.0f}pt", True
+    fit_pt = max_width_mm / (chars * CHAR_WIDTH_PER_PT)
+    fit_pt = round(fit_pt * 2) / 2  # snap to 0.5pt
+    if fit_pt < MIN_PT:
+        # Slight overflow at floor is preferable to wrap/truncate per Satvik
+        # 2026-05-02. Caller logs warning; PDF still renders.
+        return f"{MIN_PT:.0f}pt", False
+    return f"{fit_pt:.1f}pt", True
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # Step 14 — HTML assembly
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -3002,7 +3752,25 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         "brand_tertiary": "#6B7280",
         "brand_quaternary": "#FFFFFF",
     }
-    contact = parsed_p12.get("contact_info", {})
+    contact = parsed_p12.get("contact_info", {}) or {}
+    # 2026-05-02 — NEW-7: prefer user-confirmed contact (Truth Engine Layer 1)
+    # over LLM-extracted one. User verifies at `profile create` time. Per
+    # memory feedback_personal_details_verify_at_start: wrong contact = silent
+    # failure (recruiter can't reach candidate). Confirmed values OVERRIDE
+    # LLM extraction; missing-confirmed fields fall back to extraction.
+    try:
+        from linkright.profile.pipeline import load_contact as _load_confirmed_contact
+        _confirmed = _load_confirmed_contact()
+        if _confirmed:
+            for _k in ("name", "phone", "email", "linkedin", "portfolio"):
+                _v = (_confirmed.get(_k) or "").strip()
+                if _v:
+                    contact[_k] = _v
+                elif _k in _confirmed:
+                    # Explicitly cleared by user → respect blank (don't fall back)
+                    contact[_k] = ""
+    except Exception as _e:
+        log(f"[step_14 contact] confirmed-contact load failed: {_e}; using LLM extraction")
 
     # Build company sections HTML — v0.1.2 contract (3-layer fallback):
     # NEVER drop a role the user actually worked at. Layers (decreasing preference):
@@ -3185,6 +3953,32 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             ans = ans[:277] + "…"
         return {"text_html": ans, "project_group": 0, "_fallback": True}
 
+    # 2026-05-02 — NEW-2: re-classify side gigs out of Experience into Projects.
+    # Per memory project_satvik_resume_classification.md: roles with title
+    # markers like "(Freelance)", "(Pro Bono)", "(Contract)", "(Consultant)",
+    # "(Volunteer)" are NOT full-time work — they belong in Projects section.
+    # Render-time fix (no upstream pipeline change): split _p12_companies into
+    # main vs side; main entries render as Experience; side gigs deferred to
+    # Projects section append (see below at projects_items build).
+    _SIDE_GIG_RE = re.compile(
+        r"\((?:freelance|pro\s*bono|contract|consult|consultant|volunteer|"
+        r"side\s*project|advisor|advisory|fellowship|internship)\b[^)]*\)",
+        re.IGNORECASE,
+    )
+    _main_companies: list[dict] = []
+    _side_gigs_for_projects: list[dict] = []
+    for _c in _p12_companies:
+        _title = (_c.get("title") or "")
+        if _SIDE_GIG_RE.search(_title):
+            _side_gigs_for_projects.append(_c)
+        else:
+            _main_companies.append(_c)
+    if _side_gigs_for_projects:
+        log(f"[step_14 reclassify] {len(_side_gigs_for_projects)} side-gig(s) "
+            f"moved to Projects section: "
+            f"{[c.get('name') + ' — ' + c.get('title','') for c in _side_gigs_for_projects]}")
+    _p12_companies = _main_companies
+
     for co in _p12_companies[:ROLE_CAP]:
         co_name = co.get("name", "")
         bullets = list(bullets_per_co.get(co_name, []))
@@ -3256,12 +4050,66 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         for b in bullets:
             groups.setdefault(b.get("project_group", 0), []).append(b)
 
+        # 2026-05-02 — NEW-1: within each project_group, sort bullets by
+        # combined (BRS × 0.3 + JD-token-overlap × 0.7) DESC. Token-level
+        # match (not full-keyword substring) catches "REST APIs", "ML",
+        # "webhooks", "OAuth" individually inside bullets. Per memories
+        # `feedback_bullet_reorder_by_jd_alignment` +
+        # `feedback_bullets_sell_fit_and_seed_stories`: top 1/3 of resume
+        # decides shortlist — strongest opener within each role wins.
+        # JD-fit weighted 0.7 > BRS 0.3 because user emphasized "fit" over
+        # generic impact (recruiter scanning a JD-tailored resume cares
+        # FIRST about matching their JD).
+        #
+        # 2026-05-02 contamination guard: step_07 sometimes leaks resume
+        # terms (e.g. "AML", "NICE Actimize") into jd_keywords via LLM
+        # confusion between JD + resume context. Filter to ONLY keywords
+        # that actually appear in the JD text — prevents bullet-reorder
+        # from being misled by resume-injected pseudo-JD-keywords.
+        try:
+            _jd_text_for_filter = (INPUTS / "jd.md").read_text(
+                encoding="utf-8", errors="ignore"
+            ).lower()
+        except Exception:
+            _jd_text_for_filter = ""
+        _jd_tokens: set[str] = set()
+        for k in (parsed_p12.get("jd_keywords") or []):
+            if not isinstance(k, str):
+                continue
+            # Validate keyword is actually in JD text (filter out resume-leaked terms)
+            if _jd_text_for_filter and k.lower() not in _jd_text_for_filter:
+                continue
+            for t in re.findall(r"[a-z0-9]+", k.lower()):
+                if len(t) > 2:
+                    _jd_tokens.add(t)
+
+        def _bullet_sort_key(b: dict) -> float:
+            brs = float(b.get("orig_brs") or 0.0)
+            plain = re.sub(r"<[^>]+>", "", b.get("text_html", "")).lower()
+            bullet_tokens = {t for t in re.findall(r"[a-z0-9]+", plain) if len(t) > 2}
+            if not bullet_tokens or not _jd_tokens:
+                jd_overlap = 0.0
+            else:
+                # Density = (overlap tokens) / (bullet token count) — what
+                # fraction of THIS bullet's content is JD-relevant.
+                overlap = bullet_tokens & _jd_tokens
+                jd_overlap = len(overlap) / len(bullet_tokens)
+            return -(0.3 * brs + 0.7 * jd_overlap)
+
+        for grp_idx in groups:
+            groups[grp_idx].sort(key=_bullet_sort_key)
+
         bullet_html = ""
         for grp_idx in sorted(groups.keys()):
             grp_bullets = groups[grp_idx]
             bullet_html += "<ul>\n"
             for b in grp_bullets:
-                bullet_html += f"  <li><span class='li-content'>{b['text_html']}</span></li>\n"
+                # 2026-05-02: enforce metrics-only bolding rule deterministically.
+                # LLM step_10/12 prompts have the rule but free-tier 8B models
+                # don't always respect it; this post-processor strips every
+                # incorrect bold and re-bolds only metric tokens.
+                _safe_html = _metric_only_rebold(b['text_html'])
+                bullet_html += f"  <li><span class='li-content'>{_safe_html}</span></li>\n"
             bullet_html += "</ul>\n"
 
         # S6-3: conditional team span — only render if non-empty (team slot is for
@@ -3319,7 +4167,34 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             if _it and _it not in _seen_skills:
                 _flat_skills.append(_it)
                 _seen_skills.add(_it)
-    skills_html = f'<span class="text-line">{", ".join(_flat_skills)}</span>' if _flat_skills else ""
+
+    # 2026-05-02: trim Skills to ≤4 lines (480c) max, MECE no dupes, and render
+    # in TIER order (must-have JD reqs > nice-to-have > generic JD keywords >
+    # source skills > acronyms > generic phrases). Per memories
+    # feedback_skills_trim_before_width_fill + feedback_skills_trim_before_width_fill
+    # 2026-05-02 update. Easiest space-saving lever — fires BEFORE width fill.
+    # Override budget via parsed_p12.skills_max_chars (fit_loop can lower it).
+    _skills_max_chars = int(parsed_p12.get("skills_max_chars") or 480)
+    _jd_kws_for_trim = parsed_p12.get("jd_keywords") or []
+    _requirements_for_trim = parsed_p12.get("requirements") or []
+    _source_skills_for_trim = parsed_resume.get("skills") or []
+    if isinstance(_source_skills_for_trim, dict):
+        _source_skills_for_trim = [
+            s for items in _source_skills_for_trim.values()
+            for s in (items or []) if isinstance(s, str)
+        ]
+    _kept_skills, _dropped_skills = _trim_skills_to_target_lines(
+        _flat_skills, _jd_kws_for_trim, _source_skills_for_trim,
+        requirements=_requirements_for_trim,
+        max_chars=_skills_max_chars,
+    )
+    if _dropped_skills:
+        log(f"[step_14 skills] trimmed {len(_dropped_skills)} low-importance "
+            f"keywords to fit ≤{_skills_max_chars}c budget: "
+            f"{_dropped_skills[:8]}{'...' if len(_dropped_skills) > 8 else ''}")
+    log(f"[step_14 skills] kept {len(_kept_skills)} of "
+        f"{len(_flat_skills)} ({sum(len(s) for s in _kept_skills) + 2*max(0, len(_kept_skills)-1)}c)")
+    skills_html = f'<span class="text-line">{", ".join(_kept_skills)}</span>' if _kept_skills else ""
 
     # Build education HTML
     edu_html_parts = []
@@ -3348,16 +4223,30 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
         title = (p.get("title") or p.get("name") or "").strip()
         one = (p.get("one_liner") or p.get("description") or "").strip()
         year = (p.get("year") or "").strip()
-        # Format: "<b>Title</b> (year) — one-liner" (hyphen instead of em-dash for ATS)
+        # 2026-05-02: surface key_achievements when present. Earlier renderer
+        # silently dropped this field, hollowing the Projects section to title-
+        # only — leaving 200+ chars of real content unrendered + tanking page
+        # utilization. Combine: title + year + (one_liner OR achievements digest).
+        achievements = [a for a in (p.get("key_achievements") or []) if isinstance(a, str) and a.strip()]
         parts = []
         if title:
             parts.append(f"<b>{title}</b>")
         if year:
             parts.append(f"({year})")
         head = " ".join(parts)
-        if head and one:
-            return f"{head} — {one}"
-        return head or one
+        # Pick body: explicit one_liner wins; else digest first 1-2 achievements.
+        body = one
+        if not body and achievements:
+            body = "; ".join(a.strip() for a in achievements[:2])
+        # Total cap ≤195 chars (`_is_meaningful` rejects >200). Reserve head + " — ".
+        if body:
+            head_len = len(re.sub(r"<[^>]+>", "", head)) + 3  # " — "
+            budget = max(20, 195 - head_len)
+            if len(body) > budget:
+                body = body[: budget - 1].rstrip() + "…"
+        if head and body:
+            return f"{head} — {body}"
+        return head or body
 
     def _cert_line(c) -> str:
         if isinstance(c, dict):
@@ -3376,8 +4265,38 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     _projects_raw = (parsed_p12.get("projects") or []) or (parsed_resume.get("projects") or [])
     _certs_raw = (parsed_p12.get("certifications") or []) or (parsed_resume.get("certifications") or [])
 
+    # 2026-05-02 — NEW-2: append re-classified side gigs (from above) as
+    # additional project items. Title format: "Company — Role (year)";
+    # body = condensed bullet (if present) OR raw nugget answer (fallback for
+    # side gigs that step_10 skipped). _raw_nuggets_by_co already loaded above
+    # for sparse-rescue path; reuse here.
+    for _sg in _side_gigs_for_projects:
+        _sg_name = _sg.get("name") or "?"
+        _sg_role = _sg.get("title") or ""
+        _sg_year = _sg.get("date_range") or ""
+        _sg_achievements: list[str] = []
+        # Tier 1: condensed bullets (if step_10/12 produced any for this co)
+        _sg_bullets = bullets_per_co.get(_sg_name) or []
+        for _b in _sg_bullets:
+            _txt = _b.get("text_html") if isinstance(_b, dict) else ""
+            _plain = re.sub(r"<[^>]+>", "", _txt or "").strip()
+            if _plain:
+                _sg_achievements.append(_plain)
+        # Tier 2 fallback: raw nuggets (sorted by importance)
+        if not _sg_achievements:
+            for _n in (_raw_nuggets_by_co.get(_sg_name) or [])[:2]:
+                _ans = (_n.get("answer") or "").strip()
+                if _ans:
+                    _sg_achievements.append(_ans)
+        _projects_raw.append({
+            "title": _sg_name + (f" — {_sg_role}" if _sg_role else ""),
+            "year": _sg_year,
+            "one_liner": "",
+            "key_achievements": _sg_achievements,
+        })
+
     projects_items: list[str] = []
-    for p in _projects_raw[:4]:  # cap 4
+    for p in _projects_raw[:6]:  # cap 6 (was 4; raised to fit 2 side gigs + 2 real projects)
         if not isinstance(p, dict):
             continue
         line = _project_line(p)
@@ -3591,7 +4510,13 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             pass
 
     def _expand_acronyms_in_text(text: str, already_seen: set, learned: dict) -> str:
-        """For each LEARNED acronym, expand first occurrence in text."""
+        """For each LEARNED acronym, expand first occurrence in text.
+
+        2026-05-02: width-aware skip — if expanding would push the containing
+        bullet `<li>` over 120c plain-text, skip that expansion. Per Satvik
+        2026-05-02: bullets must fit one line each; acronym-expansion adding
+        20+ chars to an already-near-band bullet causes 2-line spill.
+        """
         if not text or not learned:
             return text
         out = text
@@ -3607,6 +4532,18 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             if expansion.lower() in preceding.lower():
                 already_seen.add(ac)
                 continue
+            # Width-aware skip: find the containing `<li>...</li>` block; if
+            # expansion pushes plain-text length over 120c, skip this bullet's
+            # expansion (try later occurrence in another bullet instead).
+            li_start = out.rfind("<li", 0, m.start())
+            li_end = out.find("</li>", m.end())
+            if li_start != -1 and li_end != -1:
+                li_block = out[li_start:li_end + len("</li>")]
+                li_plain = re.sub(r"<[^>]+>", "", li_block)
+                # Simulate the expansion delta in this bullet only
+                delta = len(f"{expansion} ({ac})") - len(ac)
+                if len(li_plain) + delta > 120:
+                    continue  # leave the acronym as-is in this bullet
             out = out[:m.start()] + f"{expansion} ({ac})" + out[m.end():]
             already_seen.add(ac)
         return out
@@ -3629,12 +4566,52 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
     # Summary
     summary_html = f'<div class="summary-line">{summary}</div>'
 
+    # 2026-05-02: Header shrink-to-fit MUST run BEFORE placeholder substitution
+    # so the (possibly shortened) target_role is what gets injected. Per Satvik
+    # 2026-05-02: NO wrap, NO truncate, side-by-side preserved. Both name + role
+    # shrink in lockstep via --font-size-name CSS var. Min floor 14pt. If still
+    # overflows at 14pt, drop team-name suffix after em-dash so recruiter sees
+    # clean "Product Manager" instead of clipped "PRODUCT MANAGER — WORKFLOWS...".
+    _name_text = contact.get("name") or parsed_p12.get("contact_info", {}).get("name", "")
+    _role_text_full = parsed_p12.get("target_role", "")
+    _role_text = _role_text_full
+    _role_dropped_suffix = ""
+    _header_size_pt_str, _header_fits = _compute_header_font_size(_name_text, _role_text)
+    if not _header_fits:
+        for _sep in [" — ", " – ", " - "]:
+            if _sep in _role_text_full:
+                _short_role = _role_text_full.split(_sep, 1)[0].strip()
+                _short_size, _short_fits = _compute_header_font_size(_name_text, _short_role)
+                _role_dropped_suffix = _role_text_full[len(_short_role):].strip()
+                _role_text = _short_role
+                _header_size_pt_str = _short_size
+                _header_fits = _short_fits
+                break
+        if not _header_fits:
+            _stripped = re.sub(r"\s*\([^)]*\)\s*$", "", _role_text).strip()
+            if _stripped and _stripped != _role_text:
+                _ps_size, _ps_fits = _compute_header_font_size(_name_text, _stripped)
+                if _ps_fits:
+                    _role_dropped_suffix = (_role_dropped_suffix + " " +
+                                            _role_text[len(_stripped):]).strip()
+                    _role_text = _stripped
+                    _header_size_pt_str = _ps_size
+                    _header_fits = True
+    log(f"[step_14 header] name={len(_name_text)}ch role={len(_role_text)}ch → "
+        f"{_header_size_pt_str} (fits={_header_fits})")
+    if _role_dropped_suffix:
+        log(f"[step_14 header] dropped team/suffix to fit: {_role_dropped_suffix!r}")
+    if not _header_fits:
+        log(f"[step_14 header] WARNING: even after team-drop + 14pt floor, "
+            f"name+role={len(_name_text)+len(_role_text)+8}ch overflows 175mm. "
+            f"Accepting slight clip per 2026-05-02 user direction.")
+
     # Now do placeholder substitution on the template.
     # The template has placeholders like <!-- PLACEHOLDER: X --> — we'll do targeted replacements.
     out = template
-    # Header
-    out = out.replace("<!-- PLACEHOLDER: Full Name -->", contact.get("name") or parsed_p12.get("contact_info", {}).get("name", "Satvik Jain"))
-    out = out.replace("<!-- PLACEHOLDER: Target Role Title -->", parsed_p12.get("target_role", ""))
+    # Header — uses the (possibly shortened) _role_text computed above.
+    out = out.replace("<!-- PLACEHOLDER: Full Name -->", _name_text or "Satvik Jain")
+    out = out.replace("<!-- PLACEHOLDER: Target Role Title -->", _role_text)
     # Contact — don't fabricate fallbacks; let empty fields disappear (S6-2).
     phone = (contact.get("phone") or "").strip()
     email = (contact.get("email") or "").strip()
@@ -3719,24 +4696,9 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
             flags=re.DOTALL,
         )
 
-    # S6-1: Header layout — flex split (name left, role right, equal space) + font
-    # shrink based on combined length. Role text is uppercase + letter-spaced, so
-    # its effective width is ~1.3x its char count. Floor: 16pt (locked decision).
-    _name_text = contact.get("name") or parsed_p12.get("contact_info", {}).get("name", "")
-    _role_text = parsed_p12.get("target_role", "")
-    _role_effective_chars = len(_role_text) * 1.3
-    _name_chars = len(_name_text)
-    _max_side = max(_name_chars, _role_effective_chars)
-    # Empirical thresholds: at 20pt each half fits ~24 chars; at 18pt ~27; at 16pt ~30.
-    if _max_side <= 24:
-        _header_size_pt = 20
-    elif _max_side <= 27:
-        _header_size_pt = 18
-    else:
-        _header_size_pt = 16
-    log(f"[step_14 S6-1] header font: name={_name_chars}ch role={len(_role_text)}ch effective={_max_side:.1f} → {_header_size_pt}pt")
-
     # Apply brand colors + header layout CSS via :root + class overrides
+    # (header shrink-to-fit + role shortening already computed above before
+    # placeholder substitution; _header_size_pt_str + _role_text now bound).
     color_override = f"""
 <style>
 :root {{
@@ -3744,8 +4706,11 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
   --brand-secondary-color: {colors.get('brand_secondary', '#2563EB')};
   --brand-tertiary-color: {colors.get('brand_tertiary', '#6B7280')};
   --brand-quaternary-color: {colors.get('brand_quaternary', '#FFFFFF')};
+  /* 2026-05-02: dynamic header font size from _compute_header_font_size().
+     Both .name and .role inherit via --font-size-role: var(--font-size-name). */
+  --font-size-name: {_header_size_pt_str} !important;
 }}
-/* S6-1: header flex + font shrink */
+/* Header flex (name left, role right, side-by-side, no wrap, no truncate). */
 .header-top {{
   display: flex;
   justify-content: space-between;
@@ -3756,13 +4721,13 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
 .name {{
   flex: 0 1 auto;
   white-space: nowrap;
-  font-size: {_header_size_pt}pt !important;
+  font-size: var(--font-size-name) !important;
 }}
 .role {{
   flex: 0 1 auto;
   white-space: nowrap;
   text-align: right;
-  font-size: {_header_size_pt}pt !important;
+  font-size: var(--font-size-name) !important;
 }}
 </style>
 """
@@ -3857,6 +4822,32 @@ def step_14_assemble_html(parsed_p12: dict, parsed_resume: dict, summary: str, b
 
     out_path = ARTIFACTS / "14_final_resume.html"
     out_path.write_text(out, encoding="utf-8")
+
+    # 2026-05-02 — NEW-6 v1: emit interview-prep artifact for Pillar 3 bridge.
+    # Deterministic per-bullet signal + recruiter-question map. Future
+    # `linkright interview prep` reads this for practice flashcards. Best-
+    # effort — failure here doesn't break the resume render.
+    try:
+        # Pass JD text so LLM-fallback signal classifier has context for
+        # semantic discrimination (per memory feedback_no_hardcoded_jd_specifics).
+        try:
+            _jd_text_for_signals = (INPUTS / "jd.md").read_text(
+                encoding="utf-8", errors="ignore"
+            )
+        except Exception:
+            _jd_text_for_signals = ""
+        _ip_payload = _build_interview_prep_payload(
+            parsed_p12, bullets_per_co,
+            parsed_p12.get("jd_keywords", []),
+            jd_text=_jd_text_for_signals,
+        )
+        _ip_path = ARTIFACTS / "15b_interview_prep.json"
+        _ip_path.write_text(json.dumps(_ip_payload, indent=2), encoding="utf-8")
+        log(f"[step_14 NEW-6] interview-prep artifact written: "
+            f"{_ip_payload['summary']['total_bullets']} bullets, "
+            f"signals={list(_ip_payload['summary']['signal_distribution'].keys())}")
+    except Exception as _e:
+        log(f"[step_14 NEW-6] interview-prep generation failed (non-fatal): {_e}")
 
     # Eval
     leftover = len(re.findall(r"<!--\s*PLACEHOLDER[^>]*?-->", out, re.IGNORECASE))
@@ -3955,7 +4946,7 @@ def main():
 
     logbook.append(
         "run_start", "starting",
-        f"run_pipeline.py entry; run_id={args.run_id}; writing to {run_dir.relative_to(ROOT)}",
+        f"run_pipeline.py entry; run_id={args.run_id}; writing to {_path_repr(run_dir)}",
     )
 
     probes: list[str] = []
@@ -4122,6 +5113,27 @@ def main():
 
     retrieved = step_08_retrieve_per_company(parsed_p12, nuggets_with_emb)
 
+    # 2026-05-02 — NEW-3: if user has confirmed a strategy plan via
+    # `linkright resume strategy-review`, override auto-retrieval with the
+    # user-curated nugget set per company. Per memory
+    # feedback_strategy_human_in_the_loop: user knows their career better than
+    # auto-retrieval. Confirmed plan = ground truth.
+    _strategy_path = ARTIFACTS / "07b_strategy_confirmed.json"
+    if _strategy_path.exists():
+        try:
+            _strategy_doc = json.loads(_strategy_path.read_text())
+            _confirmed_companies = _strategy_doc.get("companies") or {}
+            if _confirmed_companies:
+                # Override only the companies the user reviewed; leave others as-is
+                for _co, _nuggets in _confirmed_companies.items():
+                    if _nuggets:  # don't override with empty (user may have explicitly emptied)
+                        retrieved[_co] = _nuggets
+                log(f"[step_07b override] strategy_review confirmed plan applied "
+                    f"for {len(_confirmed_companies)} company/companies")
+        except Exception as _e:
+            log(f"[step_07b override] failed to load confirmed strategy ({_e}); "
+                f"using auto-retrieval")
+
     summary = step_09_summary(parsed_p12, retrieved, raw_text)
 
     # Iter-06 (2026-04-23): try batched step_10 first (1 call for all companies),
@@ -4156,6 +5168,11 @@ def main():
     for fit_iter in range(fit_loop.MAX_FIT_ITERATIONS):
         fit_t0 = time.time()
         log(f"\n========== FIT ITERATION {fit_iter} ==========")
+        # 2026-05-01: announce loop entry for terminal progress
+        logbook.announce_loop(
+            "Page-fit", fit_iter + 1, fit_loop.MAX_FIT_ITERATIONS,
+            detail="checking 1-page layout (95-100% utilization target)",
+        )
 
         # Re-run step 12 (condense reads latest bullet_budget from parsed_p12)
         condensed = step_12_condense(ranked, parsed_p12)
@@ -4233,7 +5250,9 @@ def main():
         pdf_path = step_15_pdf(html_path)
 
         # ─── Evaluate fit ───────────────────────────────────────────────────
-        fit_result = fit_loop.evaluate_fit(pdf_path, poc_results)
+        # 2026-05-02: pass html_path so util-overflow heuristic catches silent
+        # clip behind .page { overflow: hidden } (pypdf page_count alone misses it).
+        fit_result = fit_loop.evaluate_fit(pdf_path, poc_results, html_path=html_path)
         iter_log = {
             "iter": fit_iter,
             "duration_s": round(time.time() - fit_t0, 1),
@@ -4390,8 +5409,8 @@ See `reports/telemetry.md` for per-step + per-provider breakdown and capacity si
         "run_end", "result",
         "run_pipeline.py finished — all 15 steps complete.",
         body=f"""**Final outputs:**
-- HTML: `{html_path.relative_to(ROOT)}`
-- PDF:  `{pdf_path.relative_to(ROOT)}`
+- HTML: `{_path_repr(html_path)}`
+- PDF:  `{_path_repr(pdf_path)}`
 
 **Coverage:** {role_result['coverage_pct']}% ({len(role_result['covered_reqs'])}/{len(canonical_reqs)} reqs)
 **Primary role:** {role_result['role_scores'][0]['company'] if role_result['role_scores'] else 'n/a'}
