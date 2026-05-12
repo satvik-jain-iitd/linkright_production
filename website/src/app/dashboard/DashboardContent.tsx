@@ -102,6 +102,7 @@ export function DashboardContent({
   const [loadError, setLoadError] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelledId, setCancelledId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [pulse, setPulse] = useState<{
     funnel: { inProgress: number; sent: number; interview: number; offer: number };
     broadcast: { postsThisMonth: number; reactions: number; profileViews: number };
@@ -192,17 +193,23 @@ export function DashboardContent({
 
   const handleDownload = async (job: ResumeJob, e: React.MouseEvent) => {
     e.preventDefault();
-    const res = await fetch(`/api/resume/${job.id}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data.output_html) return;
-    const blob = new Blob([data.output_html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `resume-${job.target_company || job.id}.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (downloadingId === job.id) return;
+    setDownloadingId(job.id);
+    try {
+      const res = await fetch(`/api/resume/${job.id}/download`);
+      if (!res.ok) { alert("Download failed — please try again."); return; }
+      const data = await res.json();
+      if (!data.output_html) { alert("Resume file not ready yet — please try again in a moment."); return; }
+      const blob = new Blob([data.output_html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `resume-${job.target_company || job.id}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const inFlightJob = jobs.find(
@@ -659,9 +666,10 @@ export function DashboardContent({
                           {job.status === "completed" && (
                             <button
                               onClick={(e) => handleDownload(job, e)}
-                              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent"
+                              disabled={downloadingId === job.id}
+                              className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-foreground transition hover:border-accent hover:text-accent disabled:opacity-40 disabled:cursor-wait"
                             >
-                              Download
+                              {downloadingId === job.id ? "Downloading…" : "Download"}
                             </button>
                           )}
                         </div>

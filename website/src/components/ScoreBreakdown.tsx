@@ -14,7 +14,7 @@ interface Dimension {
 interface JobScoreData {
   overall_grade: string;
   overall_score: number;
-  dimensions: Record<string, Dimension>;
+  dimensions?: Record<string, Dimension>;
   role_archetype: string;
   recommended_action: string;
   skill_gaps: string[];
@@ -117,7 +117,7 @@ export function ScoreBreakdown({ score }: { score: JobScoreData }) {
           10-Dimension Breakdown
         </p>
         {DIMENSION_ORDER.map((key) => {
-          const dim = score.dimensions[key];
+          const dim = score.dimensions?.[key];
           if (!dim) return null;
           const meta = DIMENSION_LABELS[key] ?? { label: key, emoji: "" };
 
