@@ -101,6 +101,24 @@ def test_prompt_for_existing_path_quoted_path_with_spaces(monkeypatch, tmp_path)
     )
 
 
+def test_prompt_for_existing_path_bare_unquoted_path_with_spaces(monkeypatch, tmp_path):
+    """Regression: bare unquoted paths with spaces were truncated at first space.
+
+    shlex.split('/path/Ruch_ Dubey_Resume.pdf') → ['Ruch_', 'Dubey_Resume.pdf']
+    and [0] silently dropped the rest. The fix applies shlex only when the
+    input uses shell quoting or backslash escapes.
+    """
+    real_file = tmp_path / "Ruch_ Dubey_Resume.pdf"
+    real_file.write_text("PDF")
+    bare = str(real_file)  # no quotes, no backslashes — plain path with spaces
+    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(bare))
+
+    p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
+    assert p == real_file.resolve(), (
+        f"Bare unquoted path with spaces was truncated. Expected {real_file.resolve()}, got {p}"
+    )
+
+
 def test_prompt_for_existing_path_expands_tilde(monkeypatch, tmp_path):
     # Set HOME so ~ expands to tmp_path
     monkeypatch.setenv("HOME", str(tmp_path))
