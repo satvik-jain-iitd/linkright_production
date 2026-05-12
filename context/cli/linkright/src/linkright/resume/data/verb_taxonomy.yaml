@@ -1,0 +1,844 @@
+# verb_taxonomy.yaml — S2.3: 2D impact-category × industry verb matrix
+# 9 impact categories × 8 industries × ≥8 verbs each = ~640 entries
+# All verbs in past tense.
+# S2.3 — 2026-05-11
+
+Achievement:
+  tech:
+    - Shipped
+    - Engineered
+    - Deployed
+    - Built
+    - Delivered
+    - Automated
+    - Scaled
+    - Optimized
+    - Launched
+    - Implemented
+  pm:
+    - Launched
+    - Delivered
+    - Shipped
+    - Drove
+    - Roadmapped
+    - Championed
+    - Defined
+    - Prioritized
+    - Executed
+    - Secured
+  sales:
+    - Closed
+    - Generated
+    - Exceeded
+    - Grew
+    - Won
+    - Activated
+    - Expanded
+    - Achieved
+    - Converted
+    - Penetrated
+  finance:
+    - Modeled
+    - Forecasted
+    - Structured
+    - Evaluated
+    - Optimized
+    - Valued
+    - Delivered
+    - Reconciled
+    - Budgeted
+    - Consolidated
+  marketing:
+    - Launched
+    - Grew
+    - Executed
+    - Produced
+    - Delivered
+    - Amplified
+    - Generated
+    - Converted
+    - Expanded
+    - Activated
+  legal:
+    - Drafted
+    - Executed
+    - Resolved
+    - Structured
+    - Authored
+    - Complied
+    - Closed
+    - Finalized
+    - Secured
+    - Delivered
+  operations:
+    - Implemented
+    - Scaled
+    - Streamlined
+    - Standardized
+    - Reduced
+    - Improved
+    - Delivered
+    - Operationalized
+    - Transformed
+    - Established
+  data:
+    - Modeled
+    - Built
+    - Deployed
+    - Validated
+    - Benchmarked
+    - Extracted
+    - Pipelined
+    - Delivered
+    - Engineered
+    - Optimized
+
+Communication:
+  tech:
+    - Presented
+    - Documented
+    - Authored
+    - Published
+    - Evangelized
+    - Wrote
+    - Briefed
+    - Communicated
+    - Articulated
+    - Reported
+  pm:
+    - Presented
+    - Communicated
+    - Aligned
+    - Briefed
+    - Evangelized
+    - Authored
+    - Reported
+    - Synthesized
+    - Distilled
+    - Published
+  sales:
+    - Pitched
+    - Presented
+    - Communicated
+    - Articulated
+    - Evangelized
+    - Briefed
+    - Demonstrated
+    - Persuaded
+    - Conveyed
+    - Reported
+  finance:
+    - Reported
+    - Presented
+    - Communicated
+    - Authored
+    - Briefed
+    - Published
+    - Documented
+    - Disclosed
+    - Summarized
+    - Articulated
+  marketing:
+    - Published
+    - Authored
+    - Communicated
+    - Presented
+    - Wrote
+    - Articulated
+    - Evangelized
+    - Briefed
+    - Produced
+    - Reported
+  legal:
+    - Authored
+    - Drafted
+    - Communicated
+    - Briefed
+    - Published
+    - Advised
+    - Presented
+    - Articulated
+    - Documented
+    - Disclosed
+  operations:
+    - Communicated
+    - Reported
+    - Documented
+    - Presented
+    - Briefed
+    - Articulated
+    - Published
+    - Trained
+    - Conveyed
+    - Authored
+  data:
+    - Presented
+    - Authored
+    - Visualized
+    - Reported
+    - Published
+    - Documented
+    - Communicated
+    - Briefed
+    - Illustrated
+    - Articulated
+
+Initiative:
+  tech:
+    - Pioneered
+    - Proposed
+    - Initiated
+    - Introduced
+    - Founded
+    - Started
+    - Established
+    - Bootstrapped
+    - Prototyped
+    - Championed
+  pm:
+    - Pioneered
+    - Initiated
+    - Championed
+    - Proposed
+    - Founded
+    - Introduced
+    - Established
+    - Incubated
+    - Conceived
+    - Spearheaded
+  sales:
+    - Pioneered
+    - Initiated
+    - Launched
+    - Founded
+    - Proposed
+    - Introduced
+    - Established
+    - Started
+    - Originated
+    - Created
+  finance:
+    - Initiated
+    - Proposed
+    - Introduced
+    - Pioneered
+    - Established
+    - Founded
+    - Created
+    - Originated
+    - Spearheaded
+    - Launched
+  marketing:
+    - Pioneered
+    - Launched
+    - Initiated
+    - Introduced
+    - Proposed
+    - Founded
+    - Created
+    - Started
+    - Conceived
+    - Originated
+  legal:
+    - Initiated
+    - Proposed
+    - Introduced
+    - Pioneered
+    - Established
+    - Created
+    - Founded
+    - Launched
+    - Originated
+    - Spearheaded
+  operations:
+    - Initiated
+    - Established
+    - Introduced
+    - Pioneered
+    - Founded
+    - Proposed
+    - Created
+    - Launched
+    - Standardized
+    - Spearheaded
+  data:
+    - Pioneered
+    - Introduced
+    - Initiated
+    - Proposed
+    - Built
+    - Founded
+    - Established
+    - Created
+    - Bootstrapped
+    - Launched
+
+Research:
+  tech:
+    - Analyzed
+    - Investigated
+    - Benchmarked
+    - Profiled
+    - Evaluated
+    - Studied
+    - Examined
+    - Assessed
+    - Diagnosed
+    - Audited
+  pm:
+    - Analyzed
+    - Researched
+    - Investigated
+    - Evaluated
+    - Assessed
+    - Benchmarked
+    - Studied
+    - Audited
+    - Mapped
+    - Identified
+  sales:
+    - Researched
+    - Analyzed
+    - Investigated
+    - Prospected
+    - Mapped
+    - Identified
+    - Evaluated
+    - Assessed
+    - Studied
+    - Profiled
+  finance:
+    - Analyzed
+    - Modeled
+    - Evaluated
+    - Assessed
+    - Audited
+    - Investigated
+    - Studied
+    - Benchmarked
+    - Researched
+    - Stress-tested
+  marketing:
+    - Researched
+    - Analyzed
+    - Evaluated
+    - Assessed
+    - Benchmarked
+    - Mapped
+    - Studied
+    - Investigated
+    - Profiled
+    - Identified
+  legal:
+    - Researched
+    - Analyzed
+    - Investigated
+    - Evaluated
+    - Reviewed
+    - Assessed
+    - Examined
+    - Studied
+    - Interpreted
+    - Audited
+  operations:
+    - Analyzed
+    - Evaluated
+    - Assessed
+    - Audited
+    - Investigated
+    - Benchmarked
+    - Researched
+    - Studied
+    - Mapped
+    - Identified
+  data:
+    - Analyzed
+    - Investigated
+    - Benchmarked
+    - Evaluated
+    - Profiled
+    - Studied
+    - Examined
+    - Assessed
+    - Researched
+    - Validated
+
+OrgPlanning:
+  tech:
+    - Architected
+    - Designed
+    - Structured
+    - Planned
+    - Scoped
+    - Organized
+    - Sequenced
+    - Roadmapped
+    - Modeled
+    - Blueprinted
+  pm:
+    - Prioritized
+    - Roadmapped
+    - Scoped
+    - Structured
+    - Planned
+    - Organized
+    - Sequenced
+    - Scheduled
+    - Designed
+    - Defined
+  sales:
+    - Planned
+    - Structured
+    - Organized
+    - Scheduled
+    - Scoped
+    - Mapped
+    - Segmented
+    - Prioritized
+    - Sequenced
+    - Designed
+  finance:
+    - Structured
+    - Planned
+    - Organized
+    - Scoped
+    - Budgeted
+    - Allocated
+    - Forecasted
+    - Designed
+    - Scheduled
+    - Sequenced
+  marketing:
+    - Planned
+    - Organized
+    - Structured
+    - Sequenced
+    - Scoped
+    - Scheduled
+    - Designed
+    - Roadmapped
+    - Mapped
+    - Prioritized
+  legal:
+    - Structured
+    - Planned
+    - Organized
+    - Designed
+    - Scoped
+    - Scheduled
+    - Mapped
+    - Sequenced
+    - Outlined
+    - Drafted
+  operations:
+    - Planned
+    - Organized
+    - Structured
+    - Scoped
+    - Scheduled
+    - Sequenced
+    - Designed
+    - Mapped
+    - Standardized
+    - Coordinated
+  data:
+    - Structured
+    - Designed
+    - Planned
+    - Architected
+    - Organized
+    - Scoped
+    - Blueprinted
+    - Modeled
+    - Scheduled
+    - Mapped
+
+Leadership:
+  tech:
+    - Architected
+    - Led
+    - Spearheaded
+    - Guided
+    - Mentored
+    - Established
+    - Founded
+    - Defined
+    - Directed
+    - Owned
+  pm:
+    - Championed
+    - Spearheaded
+    - Drove
+    - Defined
+    - Aligned
+    - Directed
+    - Owned
+    - Established
+    - Influenced
+    - Inspired
+  sales:
+    - Led
+    - Directed
+    - Spearheaded
+    - Championed
+    - Drove
+    - Owned
+    - Guided
+    - Inspired
+    - Mentored
+    - Mobilized
+  finance:
+    - Led
+    - Directed
+    - Spearheaded
+    - Owned
+    - Championed
+    - Guided
+    - Established
+    - Drove
+    - Inspired
+    - Mentored
+  marketing:
+    - Led
+    - Championed
+    - Directed
+    - Drove
+    - Spearheaded
+    - Owned
+    - Guided
+    - Inspired
+    - Established
+    - Defined
+  legal:
+    - Led
+    - Directed
+    - Championed
+    - Spearheaded
+    - Guided
+    - Owned
+    - Established
+    - Drove
+    - Mentored
+    - Defined
+  operations:
+    - Led
+    - Directed
+    - Spearheaded
+    - Drove
+    - Championed
+    - Established
+    - Owned
+    - Guided
+    - Inspired
+    - Mentored
+  data:
+    - Led
+    - Architected
+    - Spearheaded
+    - Directed
+    - Championed
+    - Defined
+    - Guided
+    - Mentored
+    - Owned
+    - Established
+
+Managing:
+  tech:
+    - Managed
+    - Coordinated
+    - Oversaw
+    - Supervised
+    - Owned
+    - Ran
+    - Directed
+    - Administered
+    - Orchestrated
+    - Steered
+  pm:
+    - Managed
+    - Owned
+    - Coordinated
+    - Oversaw
+    - Orchestrated
+    - Directed
+    - Ran
+    - Steered
+    - Supervised
+    - Governed
+  sales:
+    - Managed
+    - Oversaw
+    - Coordinated
+    - Directed
+    - Ran
+    - Supervised
+    - Owned
+    - Administered
+    - Steered
+    - Governed
+  finance:
+    - Managed
+    - Oversaw
+    - Administered
+    - Coordinated
+    - Supervised
+    - Directed
+    - Ran
+    - Owned
+    - Governed
+    - Steered
+  marketing:
+    - Managed
+    - Oversaw
+    - Coordinated
+    - Directed
+    - Ran
+    - Supervised
+    - Owned
+    - Administered
+    - Steered
+    - Orchestrated
+  legal:
+    - Managed
+    - Oversaw
+    - Administered
+    - Supervised
+    - Coordinated
+    - Directed
+    - Governed
+    - Ran
+    - Owned
+    - Steered
+  operations:
+    - Managed
+    - Oversaw
+    - Coordinated
+    - Supervised
+    - Administered
+    - Directed
+    - Ran
+    - Owned
+    - Governed
+    - Orchestrated
+  data:
+    - Managed
+    - Oversaw
+    - Coordinated
+    - Directed
+    - Administered
+    - Supervised
+    - Ran
+    - Owned
+    - Orchestrated
+    - Steered
+
+ProblemSolving:
+  tech:
+    - Debugged
+    - Resolved
+    - Optimized
+    - Fixed
+    - Diagnosed
+    - Eliminated
+    - Reduced
+    - Improved
+    - Remediated
+    - Patched
+  pm:
+    - Resolved
+    - Improved
+    - Optimized
+    - Fixed
+    - Addressed
+    - Eliminated
+    - Reduced
+    - Diagnosed
+    - Unblocked
+    - Remediated
+  sales:
+    - Resolved
+    - Recovered
+    - Unblocked
+    - Fixed
+    - Improved
+    - Addressed
+    - Overcame
+    - Reduced
+    - Remediated
+    - Rescued
+  finance:
+    - Resolved
+    - Reduced
+    - Optimized
+    - Fixed
+    - Remediated
+    - Corrected
+    - Improved
+    - Diagnosed
+    - Reconciled
+    - Mitigated
+  marketing:
+    - Resolved
+    - Improved
+    - Optimized
+    - Fixed
+    - Addressed
+    - Reduced
+    - Remediated
+    - Revamped
+    - Unblocked
+    - Recovered
+  legal:
+    - Resolved
+    - Mitigated
+    - Remediated
+    - Defended
+    - Fixed
+    - Addressed
+    - Eliminated
+    - Reduced
+    - Corrected
+    - Recovered
+  operations:
+    - Resolved
+    - Reduced
+    - Improved
+    - Fixed
+    - Optimized
+    - Eliminated
+    - Remediated
+    - Addressed
+    - Corrected
+    - Streamlined
+  data:
+    - Debugged
+    - Resolved
+    - Optimized
+    - Fixed
+    - Diagnosed
+    - Eliminated
+    - Reduced
+    - Improved
+    - Remediated
+    - Corrected
+
+Interpersonal:
+  tech:
+    - Collaborated
+    - Partnered
+    - Aligned
+    - Mentored
+    - Supported
+    - Enabled
+    - Coached
+    - Facilitated
+    - Bridged
+    - Unified
+  pm:
+    - Aligned
+    - Collaborated
+    - Partnered
+    - Enabled
+    - Facilitated
+    - Supported
+    - Coached
+    - Mentored
+    - Bridged
+    - Unified
+  sales:
+    - Partnered
+    - Collaborated
+    - Engaged
+    - Aligned
+    - Supported
+    - Enabled
+    - Built
+    - Cultivated
+    - Nurtured
+    - Facilitated
+  finance:
+    - Collaborated
+    - Partnered
+    - Aligned
+    - Supported
+    - Enabled
+    - Facilitated
+    - Coordinated
+    - Advised
+    - Mentored
+    - Bridged
+  marketing:
+    - Collaborated
+    - Partnered
+    - Aligned
+    - Enabled
+    - Supported
+    - Facilitated
+    - Engaged
+    - Cultivated
+    - Bridged
+    - Unified
+  legal:
+    - Collaborated
+    - Partnered
+    - Advised
+    - Supported
+    - Enabled
+    - Counseled
+    - Aligned
+    - Facilitated
+    - Bridged
+    - Guided
+  operations:
+    - Collaborated
+    - Coordinated
+    - Aligned
+    - Partnered
+    - Supported
+    - Enabled
+    - Facilitated
+    - Bridged
+    - Unified
+    - Mentored
+  data:
+    - Collaborated
+    - Partnered
+    - Aligned
+    - Enabled
+    - Supported
+    - Facilitated
+    - Mentored
+    - Bridged
+    - Coached
+    - Unified
+
+# ── Career-level vocabulary profile — S4.2 ────────────────────────────────────
+# Three buckets per level:
+#   authority   — verbs that signal scope / governance / executive presence
+#   credibility — verbs that signal proven impact and measurable delivery
+#   energy      — verbs that signal hustle, execution, and hands-on building
+# Empty list = "do not use" at this level.
+# Verb case follows resume convention (Title Case, past tense).
+
+career_level_preferences:
+  fresher:
+    authority:   []
+    energy:      [Built, Shipped, Launched, Developed, Created, Implemented, Deployed, Coded]
+    credibility: [Assisted, Supported, Contributed, Collaborated]
+  early_career:
+    authority:   []
+    energy:      [Built, Shipped, Launched, Delivered, Implemented, Deployed, Automated]
+    credibility: [Drove, Owned, Led, Managed, Executed]
+  mid:
+    authority:   [Led, Defined, Established, Aligned, Directed]
+    energy:      [Shipped, Deployed, Launched]
+    credibility: [Drove, Optimized, Scaled, Improved, Reduced, Increased]
+  senior:
+    authority:   [Oversaw, Governed, Established, Directed, Shaped, Championed]
+    energy:      [Launched, Scaled]
+    credibility: [Drove, Optimized, Transformed, Accelerated, Spearheaded]
+  executive:
+    authority:   [Oversaw, Governed, Established, Directed, Shaped, Stewarded, Evangelized, Chartered]
+    energy:      []
+    credibility: [Transformed, Accelerated, Championed, Orchestrated]

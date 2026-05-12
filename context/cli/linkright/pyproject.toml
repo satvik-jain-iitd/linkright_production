@@ -1,0 +1,120 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linkright"
+version = "0.9.0"
+description = "Local-first, agent-native career OS — resume tailoring, interview prep, job search, content planning. Runs $0 with free-tier LLM keys."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Satvik Jain", email = "satvik.jain@iitdalumni.com"},
+]
+keywords = [
+    "resume", "ats", "career", "cli", "agent", "mcp",
+    "tailoring", "interview-prep", "job-search", "linkedin",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+    "Topic :: Text Processing",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "anthropic>=0.40.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "pymongo>=4.6",
+    "mcp>=1.0",
+    "python-frontmatter>=1.0",
+    "pypdf>=4.0",
+    "numpy>=1.24",
+    "rich>=13.0",
+    "questionary>=2.0",
+    "websockets>=12.0",  # Sprint D: `linkright watch` CDP WebSocket client
+]
+
+[project.urls]
+Homepage = "https://github.com/satvik-jain-iitd/linkright_production"
+Repository = "https://github.com/satvik-jain-iitd/linkright_production"
+Issues = "https://github.com/satvik-jain-iitd/linkright_production/issues"
+
+[project.scripts]
+linkright = "linkright.cli:main"
+
+[project.optional-dependencies]
+# Default embedder — local, free, ~50ms per embed (~80MB model on first use)
+embed = ["fastembed>=0.3.0"]
+
+# PDF rendering — chromium-backed via playwright (PDF binary fetched separately
+# via `playwright install chromium` post-install, ~200MB)
+pdf = ["playwright>=1.40"]
+
+# Alternate PDF renderer — pure Python, no chromium binary, slower but smaller
+weasy = ["weasyprint>=60"]
+
+# Recommended: everything most users need (embed + pdf). Single command bootstrap.
+#   pip install linkright[full]
+#   playwright install chromium     # download chromium binary (~200MB) once
+full = [
+    "fastembed>=0.3.0",
+    "playwright>=1.40",
+]
+
+# Kitchen sink — full + weasyprint (PDF redundancy)
+all = [
+    "fastembed>=0.3.0",
+    "playwright>=1.40",
+    "weasyprint>=60",
+]
+
+# Admin / backend tooling — Oracle Postgres driver (C-extension; requires gcc on Alpine).
+# End-users (job seekers) do NOT need this.
+#   pip install linkright[admin]
+admin = [
+    "asyncpg>=0.29.0",
+]
+
+# Development — tests + build/publish toolchain
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "build>=1.0",
+    "twine>=4.0",
+]
+
+[tool.setuptools.package-data]
+linkright = ["resume/lib/*.mjs", "resume/templates/**", "resume/data/**", "templates/**"]
+
+[tool.setuptools.packages.find]
+# Industry pattern: src-layout for the main package + companion top-level
+# `harness/` directory (iteration / scorecard utilities). Both are required
+# at runtime — `linkright.jobsearch.evaluator` does `from harness.scorecard
+# import ...` at module load time.
+#
+# Long-term plan (v0.2.0): move harness/ to src/linkright/harness/ to avoid
+# top-level-name pollution. For now (v0.1.x) ship as a sibling package.
+where = ["src", "."]
+include = ["linkright*", "harness*"]
+exclude = ["harness.runs*", "harness.test*", "tests*"]
+
+[tool.pytest.ini_options]
+# Ensure pytest collection imports the worktree's src/linkright/ before any
+# stale editable install in the active Python env. Without this, tests
+# silently load a different worktree's package and miss new code.
+pythonpath = ["src"]

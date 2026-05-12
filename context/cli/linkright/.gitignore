@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.env
+.linkright/
+.venv/
+.pytest_cache/
+*.pem
+*.key
+
+# Pillar 2 — local auth session (contains JWT — never commit)
+session.json
+
+# Generated resume artifacts (PII)
+output/*.html
+output/*.pdf
+output/*.json

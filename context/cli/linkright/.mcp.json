@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "linkright": {
+      "command": "linkright",
+      "args": ["mcp", "serve"],
+      "description": "LinkRight resume pipeline tools (Pillar 1). Pillars 2-4 register additional tools as they ship."
+    }
+  }
+}

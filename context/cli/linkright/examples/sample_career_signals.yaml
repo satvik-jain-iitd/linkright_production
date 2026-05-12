@@ -1,0 +1,115 @@
+metadata:
+  user: "Jane Doe"
+  email: "jane.doe@example.com"
+  phone: "+1-555-0123"
+  linkedin_url: "https://linkedin.com/in/janedoe-example"
+  tagline: "Product Manager"
+  summary: "Product Manager with 3.5+ years owning business outcomes at enterprise SaaS scale. Led segment-level delivery across 100M+ accounts & 40+ markets (Acme Bank) & 1,500+ SaaS clients (TechCo SaaS). Builds & mentors product teams. B.Tech Civil Engineering, leading engineering institute."
+  profession: "product-manager"
+  region: "Global"
+  yoe_override: 4
+
+static:
+  role_title: "Product Manager"
+  skills:
+    - "Product Strategy"
+    - "Roadmapping"
+    - "PRDs"
+    - "OKR & KPI Definition"
+    - "Feature Prioritization"
+    - "SQL"
+    - "BigQuery"
+    - "Tableau"
+    - "Mixpanel"
+    - "A/B Testing"
+    - "Figma"
+    - "UI/UX"
+    - "UX Research"
+    - "SAFe"
+    - "Agile"
+    - "JIRA"
+    - "Python"
+    - "APIs"
+    - "System Design"
+    - "AI/ML"
+    - "GTM Strategy"
+    - "Market Research"
+    - "Competitive Analysis"
+    - "Business Case & Financial Modeling"
+    - "Stakeholder Management"
+    - "Cross-Functional Collaboration"
+    - "PLM"
+  education:
+    degree: "B.Tech"
+    field: "Civil Engineering"
+    institution: "Leading Engineering Institute"
+    year: "2017 – 2021"
+  achievements:
+    - "Secured Top 0.002% with rank 2446 in national engineering entrance exam, outperforming 1.2M+ candidates"
+    - "Secured Top 1.5% with rank 1463 in graduate engineering aptitude exam, competing with 100K+ candidates"
+    - "Secured Rank 1 in district with 94.2% marks in high-school board exam"
+  voluntary_work:
+    - org: "Sample Education NGO"
+      role: "Strategy Consulting"
+      tenure: "01/2025 – 04/2025"
+      description: "Designed digital transformation strategy for an education NGO, saving $720 annually across 50+ volunteers"
+  interests:
+    - "AI-Music Creation & Singing"
+    - "Co-creating with AI"
+    - "Building AI Systems"
+    - "Product Strategy AI"
+
+signals:
+  - id: "acme_bank"
+    company: "Acme Bank"
+    role: "Senior Associate Product Manager"
+    tenure: "07/2024 – Present"
+    signal_type: "job"
+    narrative: "Modernized AML Risk scoring engine for real-time fraud alerts across 40+ markets"
+    achievements:
+      - raw: "Led 18-member team to deliver AML risk engine MVP-1 across 100M+ accounts in 1 year, winning Leadership Award"
+        fit_tags: ["leadership", "ML", "risk", "delivery"]
+        signal_strength: 10
+      - raw: "Drove 20+ UX research sessions with compliance analysts across 6 regions, designing 3 AML capability UIs end-to-end"
+        fit_tags: ["UX-research", "user-interviews", "compliance"]
+        signal_strength: 9
+      - raw: "Shipped Asset Manager, rule builder, and sandbox versioning across 40+ markets, cutting score errors from 18% to 2%"
+        fit_tags: ["feature-shipping", "quality", "global-scale"]
+        signal_strength: 9
+      - raw: "Mentored 2 POs on zero-to-one execution; hired and now manage UX designer through 12-round competitive selection"
+        fit_tags: ["mentoring", "hiring", "team-building"]
+        signal_strength: 8
+      - raw: "Captained 8-member team to rank 21 of 400+ teams in internal Growth Hack, building meeting-intelligence bot"
+        fit_tags: ["AI", "hackathon", "leadership", "innovation"]
+        signal_strength: 8
+    context:
+      team_size: 18
+      scope: "global"
+      tech_stack: ["SAFe", "JIRA", "SQL", "Figma", "Python"]
+
+  - id: "techco_saas"
+    company: "TechCo SaaS"
+    role: "Senior Product Analyst"
+    tenure: "04/2022 – 07/2024"
+    signal_type: "job"
+    narrative: "Built products across 1500+ SaaS clients and government verticals"
+    achievements:
+      - raw: "Grew Use Case Hub adoption from 35% to 85% across 1,500+ SaaS clients, enabling self-serve setup for 15 industries"
+        fit_tags: ["adoption", "SaaS", "self-serve", "metrics"]
+        signal_strength: 10
+      - raw: "Built GenAI root-cause product for major retailer, analyzing 100K+ contacts to cut time-to-insight from 7 days to same-day"
+        fit_tags: ["GenAI", "ML", "analytics", "enterprise"]
+        signal_strength: 9
+      - raw: "Deployed Insights for a national government office via NLP across 40 ministries; redesigned a citizen-services app, boosting retention to 55%"
+        fit_tags: ["NLP", "government", "retention", "mobile"]
+        signal_strength: 9
+      - raw: "Scaled team from 6 to 14 in 3 months with structured reverse-KT onboarding, maintaining delivery across 15 industries"
+        fit_tags: ["scaling", "onboarding", "delivery"]
+        signal_strength: 8
+      - raw: "Designed 2-step user journey for AI reporting automation product, delivering dashboards in <10 seconds, driving 15% revenue increase in first 3 months"
+        fit_tags: ["AI", "revenue", "UX", "automation"]
+        signal_strength: 8
+    context:
+      team_size: 14
+      scope: "global"
+      tech_stack: ["SQL", "BigQuery", "Tableau", "Mixpanel", "Python", "NLP"]

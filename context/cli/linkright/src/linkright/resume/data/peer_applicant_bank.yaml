@@ -1,0 +1,110 @@
+# peer_applicant_bank.yaml — S4.1
+# 3 seniority bands × ≥80 phrase entries total
+#
+# Purpose: calibrate verb tone in step_10 bullets based on candidate seniority.
+#   junior  → strong-contributor tone (entry + early_career)
+#   mid     → driver/owner tone (mid-level, individual contributor leading work)
+#   senior  → peer-to-panel tone (senior + executive, sounds like an equal to the hiring panel)
+#
+# FABRICATION RULE: These lists instruct the LLM to use these verbs *where natural*.
+# They do NOT authorise inventing peer relationships or attributing unearned scope.
+# The guidance is: "use these verbs where your evidence supports it."
+
+bands:
+  junior:
+    prefer:
+      - drove
+      - built
+      - shipped
+      - delivered
+      - launched
+      - owned
+      - executed
+      - implemented
+      - created
+      - developed
+      - designed
+      - automated
+      - contributed
+      - resolved
+      - improved
+      - accelerated
+      - deployed
+      - completed
+      - established
+    avoid:
+      - oversaw
+      - governed
+      - evangelized
+      - stewarded
+      - co-led
+      - aligned executives
+      - set strategic direction
+      - chaired
+
+  mid:
+    prefer:
+      - drove
+      - led
+      - scaled
+      - defined
+      - spearheaded
+      - owned
+      - launched
+      - delivered
+      - built
+      - shipped
+      - designed
+      - architected
+      - optimized
+      - streamlined
+      - introduced
+      - revamped
+      - pioneered
+      - coordinated
+      - managed
+      - consolidated
+    avoid:
+      - assisted
+      - helped
+      - supported
+      - shadowed
+      - participated
+
+  senior:
+    prefer:
+      - co-led
+      - partnered with
+      - evangelized
+      - aligned
+      - influenced
+      - shaped
+      - championed
+      - stewarded
+      - orchestrated
+      - sponsored
+      - set strategic direction for
+      - collaborated with C-suite
+      - partnered with VP
+      - partnered with CPO
+      - partnered with CTO
+      - partnered with CEO
+      - advised
+      - forged
+      - galvanized
+      - unified
+      - chaired
+      - arbitrated
+      - anchored
+      - convened
+      - negotiated alignment
+      - drove organizational
+      - set the vision for
+      - cultivated
+    avoid:
+      - assisted
+      - helped
+      - supported
+      - shadowed
+      - participated in
+      - contributed to
