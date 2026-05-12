@@ -115,6 +115,19 @@ def _note_retry(step_name: str) -> None:
     RETRY_COUNTS[step_name] = RETRY_COUNTS.get(step_name, 0) + 1
 
 
+def compute_input_hash(resume_bytes: bytes, jd_bytes: bytes, version: str) -> str:
+    """S5.2 Phase 0: deterministic cache key for (resume, JD, version) triple.
+
+    Uses a length prefix on resume_bytes to prevent boundary-collision false
+    matches (sha256(b'ABC'+b'DEF') == sha256(b'AB'+b'CDEF') without prefix).
+    JD passed as raw bytes to avoid encoding-dependent hash divergence.
+    """
+    import hashlib
+    return hashlib.sha256(
+        len(resume_bytes).to_bytes(8, "big") + resume_bytes + jd_bytes + version.encode()
+    ).hexdigest()
+
+
 def _log_guard_decision(
     bullet_text: str,
     source_excerpt: str,
@@ -6151,21 +6164,18 @@ def main():
             "per_iter": _fit_log,
         }
     # S5.2 Phase 0: log input hash to measure cache hit rate passively.
-    # sha256(resume_pdf_bytes + jd_text_bytes + version_bytes) — unique per
-    # (content, version) tuple.  After 1 week of runs, check what % share a
-    # hash with a prior run → gates whether Phase 1 (actual cache) is worth
-    # building (threshold: >25% hit rate required to proceed).
+    # After 1 week of runs, check what % share a hash with a prior run →
+    # gates Phase 1 (>25% hit rate required to proceed, <10% deprioritise).
     try:
-        import hashlib as _hashlib
         from linkright import __version__ as _lr_version
         _resume_bytes = (INPUTS / "resume.pdf").read_bytes()
-        _jd_bytes = (INPUTS / "jd.md").read_text(encoding="utf-8", errors="replace").encode()
-        _tel["input_hash"] = _hashlib.sha256(
-            _resume_bytes + _jd_bytes + _lr_version.encode()
-        ).hexdigest()
-        _tel["pipeline_version"] = _lr_version
-    except Exception:
-        pass  # instrumentation failure must never block the pipeline
+        _jd_bytes = (INPUTS / "jd.md").read_bytes()  # raw bytes — no encoding ambiguity
+        _tel["input_hash"] = compute_input_hash(_resume_bytes, _jd_bytes, _lr_version)
+    except Exception as _hash_exc:
+        # Surface failure as null + error string so the analyst can audit
+        # how many runs were unobservable instead of silently skipping them.
+        _tel["input_hash"] = None
+        _tel["input_hash_error"] = str(_hash_exc)
 
     _tel_path.write_text(_json_tel.dumps(_tel, indent=2), encoding="utf-8")
     if poc_results:
