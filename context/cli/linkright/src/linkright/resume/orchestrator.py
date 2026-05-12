@@ -93,9 +93,7 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
             company = c.get("company") or "?"
             role = c.get("role") or ""
             bullets = c.get("bullets", "?")
-            years = c.get("years") or ""
-            role_str = f"{role}, {years}".strip(", ") if years else role
-            label = f"{company}" + (f" ({role_str})" if role_str else "")
+            label = f"{company}" + (f" ({role})" if role else "")
             body.append(f"    ", style="")
             body.append("✓ ", style="metric.positive")
             body.append(f"{label:<50}", style="")
