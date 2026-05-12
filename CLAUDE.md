@@ -28,6 +28,43 @@ docs/                     ← architecture docs
 
 ---
 
+## Three-Agent Autonomous Workflow (MANDATORY)
+
+**CLI feature / bugfix → ONE entry point:**
+```
+Agent(subagent_type="product-owner-qa", prompt=<task + context>)
+```
+
+**PO-QA loop (autonomous — Satvik not involved until SHIP):**
+1. Define acceptance metrics (functional, correctness, side-effect, performance)
+2. Dispatch `designer-developer` → implement
+3. Dispatch `adversarial-reviewer` → attack diff
+4. Loop 2↔3 until sign-off
+5. E2E QA: install from worktree (`pip install -e .`) → run `linkright` CLI commands → verify output
+6. QA fail → back to step 2 with bug report
+7. All metrics PASS → SHIP report with SHA. Budget: 3 cycles, then ESCALATE.
+
+**Hard rules:**
+- Roles sealed: DD never reviews, reviewer never QAs, PO drives all three
+- PO escalates ONLY for: unrecoverable credentials · scope ambiguity needing product decision · destructive action · 3-cycle exhaustion
+- State tracked in `.claude/state/po-task.json` — stop hook blocks idle while status=OPEN
+
+---
+
+## PR Merge Gate (MANDATORY)
+
+1. PO returns SHIP → dispatch `adversarial-reviewer` against the PR
+2. Verdict: ✅ **SIGN OFF** or ❌ **BLOCK** (numbered failures with file:line)
+3. BLOCK → re-dispatch PO with blockers → repeat until SIGN OFF
+4. SIGN OFF → tell Satvik "Reviewer signed off, you can merge." He merges via GitHub UI.
+
+**Rules:**
+- Never ask Satvik to "review the PR" — he can't. Tell him the verdict.
+- No fixed outer loop cap — keep iterating until cleared
+- Escalate only with 2-3 concrete options + trade-offs
+
+---
+
 ## CLI Release Rule (MANDATORY — fragment-based)
 
 ### Every code PR touching context/cli/linkright/
