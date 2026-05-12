@@ -22,38 +22,6 @@ Full commands, architecture, LLM dispatch → `context/cli/linkright/CLAUDE.md`
 
 ---
 
-## Three-Agent Workflow (MANDATORY)
-
-Feature / bugfix → single entry point:
-```
-Agent(subagent_type="product-owner-qa", prompt=<task + context>)
-```
-
-PO-QA loop (Satvik not involved until SHIP):
-1. Define acceptance metrics (functional, correctness, side-effect, performance)
-2. Dispatch `designer-developer` → implement
-3. Dispatch `adversarial-reviewer` → attack diff
-4. Loop 2↔3 until sign-off
-5. E2E QA: `pip install -e .` → run `linkright` CLI commands → verify output
-6. QA fail → back to step 2 with bug report
-7. All metrics PASS → SHIP report with SHA. Budget: 3 cycles, then ESCALATE.
-
-Roles sealed. PO escalates only for: missing credentials · scope ambiguity · destructive op · 3-cycle exhaustion.
-State tracked in `.claude/state/po-task.json`. Stop hook blocks idle while `status=OPEN`.
-
----
-
-## PR Merge Gate (MANDATORY)
-
-1. PO ships → dispatch `adversarial-reviewer` against the PR diff
-2. Verdict: ✅ **SIGN OFF** or ❌ **BLOCK** (numbered failures, file:line)
-3. BLOCK → re-dispatch PO with blockers → repeat until SIGN OFF
-4. SIGN OFF → tell Satvik "Reviewer signed off, merge when ready" — he merges via GitHub UI
-
-Never ask Satvik to review code. Give him the verdict.
-
----
-
 ## Release (MANDATORY — fragment-based)
 
 Every PR touching `context/cli/linkright/` → write exactly one changelog fragment:
