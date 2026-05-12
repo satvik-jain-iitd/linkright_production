@@ -21,6 +21,7 @@ import click
 from ..config import Config
 from ..cli_aliases import AliasedGroup
 from .brand import brand_cmd
+from .lib.preflight import require_profile, require_llm_key, require_tailor_run
 
 
 @click.group(cls=AliasedGroup, name="resume")
@@ -210,6 +211,8 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     The command parses your resume + JD, retrieves matching career nuggets,
     drafts bullets via LLM, scores + ranks, and renders a final PDF.
     """
+    require_profile()
+    require_llm_key(llm_mode or Config.load().default_llm_mode)
     # Bare-command UX: auto-use profile resume when available; prompt only as fallback.
     if resume_path is None:
         from linkright.profile.pipeline import _profile_dir as _pdir_fn
@@ -544,6 +547,8 @@ def improve_cmd(run_id: str | None, target_dim: str | None, dry_run: bool) -> No
     Currently supports `width_hit_rate` (bullets outside [108, 118]
     char band get trimmed/expanded). Other dims coming.
     """
+    require_profile()
+    require_tailor_run()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:
@@ -580,6 +585,8 @@ def fill_metrics_cmd(run_id: str | None, dry_run: bool) -> None:
     tool coaches WHAT metrics matter; YOU supply the actual numbers.
     Tool never invents values.
     """
+    require_profile()
+    require_tailor_run()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:
@@ -610,6 +617,8 @@ def practice_cmd(run_id: str | None, non_interactive: bool) -> None:
     bullet becomes a baseline narrative for HR-screening / Round 1
     questions that almost-always come up.
     """
+    require_profile()
+    require_tailor_run()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:
@@ -641,6 +650,8 @@ def strategy_review_cmd(run_id: str | None) -> None:
       3. Future tailor runs read your confirmed plan and override the
          auto-retrieval
     """
+    require_profile()
+    require_tailor_run()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:
@@ -669,6 +680,8 @@ def critique_cmd(run_id: str | None) -> None:
     you ship. Pairs naturally with `linkright fill` (metric gaps) and
     `linkright practice` (interview prep cards).
     """
+    require_profile()
+    require_tailor_run()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:

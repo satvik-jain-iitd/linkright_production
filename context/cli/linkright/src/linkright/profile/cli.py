@@ -150,6 +150,22 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
         click.echo("Need --resume PATH or --paste or --from-folder DIR.", err=True)
         sys.exit(2)
 
+    # PDF readability guard — catch corrupt/empty/password-protected files
+    # before running the 30-90 sec pipeline. pypdf raises on empty files.
+    if resume_path and not _markdown_only:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(str(resume_path))
+            if len(reader.pages) == 0:
+                raise ValueError("empty PDF")
+        except Exception:
+            click.echo(f"✗ Cannot read PDF: {resume_path.name}", err=True)
+            click.echo(
+                "  Check the file is not password-protected, corrupt, or empty.",
+                err=True,
+            )
+            sys.exit(1)
+
     # Existing profile guard — check metadata.yaml specifically (same signal
     # as `profile show`/`status`). Avoids false-positive on empty scaffold dirs
     # (artifacts/ inputs/ logs/ from a prior failed run with no actual data).
