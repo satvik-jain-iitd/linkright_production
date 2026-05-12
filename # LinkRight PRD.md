@@ -354,9 +354,9 @@ For freshers, the "0+ years" phrasing is harmful — better to omit the years cl
 
 | ID | Title | Priority | Score | Effort | Source | Subagent |
 |---|---|---|---|---|---|---|
-| ✅ S5.0 | CLI pre-flight dependency guards (profile + LLM key + tailor-run + PDF readability) | P0 | —/100 | S | PRs #146 #147 #148 v0.9.x | caveman:cavecrew-builder |
+| ✅ S5.0 | CLI pre-flight dependency guards + keys polish (pluralization, duplicate detection K-2/K-4/K-6) | P0 | —/100 | S | PRs #146 #147 #148 #150 v0.9.x | caveman:cavecrew-builder |
 | ✅ S5.1 | Embedding-based JD-bullet alignment (step_11, nomic-embed-text) | P1 | 78/100 | S | PR #139 v0.9.0 | caveman:cavecrew-builder |
-| S5.2 | Request-level output caching | P1 | 72/100 | M | Phase 0 pending — hash logging not yet added to step_16 telemetry | product-owner-qa |
+| 🔵 S5.2 | Request-level output caching | P1 | 72/100 | M | Phase 0 ✅ PR #149 — `input_hash` in 16_telemetry.json. Phase 1 gated on hit rate ≥25% (~1 week data) | product-owner-qa |
 | ✅ S5.3 | JD keyword contamination prompt fix | P1 | 60/100 | S | PR #137 v0.9.0 | caveman:cavecrew-builder |
 | ✅ S5.4 | Career level classification → pure deterministic | P2 | 59/100 | S | PR #140 v0.9.0 | caveman:cavecrew-builder |
 | ✅ S5.5 | Progressive validation gate (early regen on BRS-weak bullets) | P1 | 68/100 | S | PR #138 v0.9.0 | designer-developer |
@@ -1665,4 +1665,4 @@ Refresh THIS PRD when:
 
 ---
 
-*Document version 1.2 · Created 2026-05-11 · Updated 2026-05-12 (Session 3) · LinkRight CLI v0.9.0 · Sprint 1-4: complete · Sprint 5 (extended roadmap): in progress — S5.0–S5.6 ✅, S5.2 Phase 0 pending, S5.7 Phase 1+2 gated*
+*Document version 1.3 · Created 2026-05-11 · Updated 2026-05-12 (Session 4) · LinkRight CLI v0.9.0 · Sprint 1-4: complete · Sprint 5 (extended roadmap): in progress — S5.0–S5.6 ✅, S5.2 Phase 0 ✅ PR #149 (Phase 1 gated ≥25% hit rate), S5.7 Phase 1+2 gated*
