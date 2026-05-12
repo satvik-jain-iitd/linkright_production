@@ -23,7 +23,7 @@ export interface JobScoreData {
   application_id: string;
   overall_grade: string;
   overall_score: number;
-  dimensions: Record<string, {
+  dimensions?: Record<string, {
     score: number;
     weight: number;
     reasoning: string;

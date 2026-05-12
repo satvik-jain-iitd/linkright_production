@@ -95,10 +95,10 @@ export async function GET(request: Request) {
   const application_id = searchParams.get("application_id");
 
   if (!application_id) {
-    // Return all scores for this user
+    // Return all scores for this user — omit dimensions JSONB (large) from list view
     const { data, error } = await supabase
       .from("job_scores")
-      .select("*")
+      .select("id, application_id, overall_grade, overall_score, role_archetype, recommended_action, skill_gaps, hard_blockers, keywords_matched, legitimacy_tier, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
