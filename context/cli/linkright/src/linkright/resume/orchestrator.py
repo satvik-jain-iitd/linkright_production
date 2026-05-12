@@ -53,6 +53,87 @@ def _see_and_continue(label: str, summary: str = "") -> None:
     click.confirm("Continue to next phase?", default=True, abort=True)
 
 
+def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
+    """S6.1 — Interactive strategy gate shown after JD analysis.
+
+    Renders a Rich Panel summarising the plan (target role, strategy type,
+    company inclusion list with bullet counts, excluded companies, top JD
+    keywords) then asks for confirmation before the expensive bullet-generation
+    phase (~60 LLM calls).
+
+    Skipped when LR_NO_PAUSE=1 (CI / non-interactive runs), matching the
+    behaviour of _see_and_continue().
+    """
+    if os.environ.get("LR_NO_PAUSE") == "1":
+        return
+
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+    from linkright.ui.theme import LR_THEME
+
+    console = Console(theme=LR_THEME)
+
+    target_role = parsed_p12.get("target_role") or parsed_p12.get("strategy_role") or "?"
+    strategy = (parsed_p12.get("strategy") or "?").upper()
+    included = distribution.get("included_companies") or []
+    excluded = distribution.get("excluded_companies") or []
+    cutoff = distribution.get("relevance_cutoff")
+    jd_keywords = parsed_p12.get("jd_keywords") or []
+
+    body = Text(overflow="fold", no_wrap=False)
+    body.append(f"  Target:    ", style="step.gold")
+    body.append(f"{target_role}\n", style="bold")
+    body.append(f"  Strategy:  ", style="step.gold")
+    body.append(f"{strategy}\n", style="bold")
+
+    if included:
+        body.append("\n  Companies to include:\n", style="step.gold")
+        for c in included:
+            company = c.get("company") or "?"
+            role = c.get("role") or ""
+            bullets = c.get("bullets", "?")
+            label = f"{company}" + (f" ({role})" if role else "")
+            body.append(f"    ", style="")
+            body.append("✓ ", style="metric.positive")
+            body.append(f"{label:<50}", style="")
+            body.append(f"{bullets} bullets\n", style="text.secondary")
+
+    if excluded:
+        body.append("\n  Excluded (below relevance cutoff", style="error")
+        if cutoff is not None:
+            body.append(f" {cutoff}", style="error")
+        body.append("):\n", style="error")
+        for c in excluded:
+            company = c.get("company") or "?"
+            role = c.get("role") or ""
+            rel = c.get("relevance", "?")
+            label = f"{company}" + (f" ({role})" if role else "")
+            body.append(f"    ", style="")
+            body.append("✗ ", style="error")
+            body.append(f"{label}", style="dim")
+            body.append(f"  relevance {rel}\n", style="text.secondary")
+
+    if jd_keywords:
+        kw_preview = ", ".join(str(k) for k in jd_keywords[:8])
+        if len(jd_keywords) > 8:
+            kw_preview += f"  (+{len(jd_keywords) - 8} more)"
+        body.append("\n  Top JD keywords:  ", style="step.gold")
+        body.append(kw_preview, style="step.accent")
+
+    console.print()
+    console.print(Panel(
+        body,
+        title="[step.accent bold]Strategy Review[/]",
+        border_style="step.accent",
+        expand=False,
+        padding=(1, 2),
+    ))
+    console.print()
+
+    click.confirm("Generate resume with this strategy?", default=True, abort=True)
+
+
 def _path_repr(p) -> str:
     """Render a path relative to ROOT when possible (for compact log lines), else absolute.
 
@@ -5857,6 +5938,11 @@ def main():
         f"Strategy: {parsed_p12.get('strategy', '?')}; bullet budget across "
         f"{len(distribution.get('included_companies', []))} companies.",
     )
+
+    # S6.1 — interactive strategy gate: show the plan and ask for confirmation
+    # before committing to the expensive bullet-generation phase (~60 LLM calls).
+    # Skipped when LR_NO_PAUSE=1 (CI / non-interactive).
+    _strategy_review_gate(parsed_p12, distribution)
 
     step_start("Retrieving relevant nuggets per company", index=8, total=9)
     retrieved = step_08_retrieve_per_company(parsed_p12, nuggets_with_emb)
