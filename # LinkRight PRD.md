@@ -371,8 +371,18 @@ For freshers, the "0+ years" phrasing is harmful — better to omit the years cl
 
 | ID | Title | Priority | Effort | Notes | Subagent |
 |---|---|---|---|---|---|
-| 🟡 S6.1 | step_07b interactive strategy review checkpoint | P1 | S | Mid-run pause after JD analyze; user approves outline before 60 LLM calls | designer-developer |
-| 🟡 S6.2 | CLI polish omnibus: tiered help + profile polish + jargon + bullet dedup | P1 | M | PR1 `--advanced-help` + PR3 profile show/status + PR6 jargon + QA-F8 dedup | caveman:cavecrew-builder |
+| ✅ S6.1 | step_07b interactive strategy review checkpoint | P1 | S | PR #151 v0.9.2 — mid-run pause before 60 LLM calls, user approves outline | designer-developer |
+| ✅ S6.2 | CLI polish omnibus: tiered help + profile polish + jargon + bullet dedup | P1 | M | PR #152 v0.9.2 — `[Advanced]` flags, profile status fixes, dedup stub | caveman:cavecrew-builder |
+
+---
+
+### Sprint 7 — LaTeX output + tectonic compile (planned 2026-05-12)
+
+> **Single workstream.** Adds `--format latex` output path alongside existing HTML. HTML stays default; LaTeX is opt-in.
+
+| ID | Title | Priority | Effort | Notes | Subagent |
+|---|---|---|---|---|---|
+| 🟡 S7.1 | LaTeX resume output — Jake's template + tectonic compile | P1 | M | `--format html\|latex`; new `assemble_latex()` + `jake_resume.tex.j2`; tectonic waterfall; 1-page via pdfinfo loop | designer-developer |
 
 ---
 
@@ -1676,4 +1686,157 @@ Refresh THIS PRD when:
 
 ---
 
-*Document version 1.4 · Created 2026-05-11 · Updated 2026-05-12 (Session 5) · LinkRight CLI v0.9.1 · Sprint 1-5: complete · S5.2 Phase 1 deferred to v2 · S5.7 Phase 1+2 gated · Sprint 6 planned: S6.1 (step_07b) + S6.2 (CLI polish omnibus)*
+## 14. LaTeX Resume Output — S7.1 (Sprint 7)
+
+### 14.1 What is this, in plain terms?
+
+Right now, LinkRight builds your resume as an HTML file and converts it to PDF using a browser rendering engine. This works, but HTML is messy — styling, layout, and content are all mixed together, and the PDF quality depends on how the browser handles fonts and spacing.
+
+**LaTeX** is a document-formatting language used in academia, publishing, and professional resume writing. Instead of HTML tags, you write text with clean formatting commands. Overleaf is the most popular online editor for LaTeX (like Google Docs, but for LaTeX). When you compile a LaTeX file, you always get a pixel-perfect, print-quality PDF — no browser quirks.
+
+**This feature adds `--format latex` to `linkright resume tailor`.** When you use it, the pipeline generates a `.tex` file (Jake's Resume template, the most popular Overleaf resume template) and automatically compiles it to PDF using `tectonic` — a lightweight LaTeX engine (30MB download, no 4GB texlive install needed).
+
+---
+
+### 14.2 Why are we building this?
+
+| Reason | Detail |
+|---|---|
+| **Better PDF quality** | LaTeX handles typography, line-breaking, and spacing natively. No CSS hacks, no wkhtmltopdf quirks |
+| **Cleaner separation** | In `.tex`, content (your bullets, dates, company names) and style (font size, spacing, columns) are in clearly separate places. Easier to debug and audit |
+| **Overleaf compatible** | The generated `.tex` file can be opened directly in Overleaf. Users can hand-edit and recompile without touching Python |
+| **ATS safe** | Jake's Resume template is widely tested with ATS systems. Single-column, no tables, no images |
+| **Personal use + automation** | A Claude skill and n8n workflow let Satvik use this without the CLI (useful for demos, automation, client-specific tweaks) |
+
+---
+
+### 14.3 How it works — step by step
+
+The pipeline stays the same up to step 12. The only thing that changes is the **assembly + compile** step at the end.
+
+```
+Step 1–12: Extract nuggets → Score JD → Generate bullets  ← UNCHANGED
+                                    ↓
+Step 13A (--format html):   assemble_html() → .html → wkhtmltopdf → resume.pdf   ← EXISTING
+Step 13B (--format latex):  assemble_latex() → .tex → tectonic → resume.pdf      ← NEW
+```
+
+**Step 13B in detail:**
+
+1. `assemble_latex(header_data, sections)` — takes the same structured data (name, email, bullets, roles, dates) that `assemble_html` already receives. Renders it into Jake's Resume `.tex.j2` Jinja2 template.
+2. **LaTeX escaping** — any special characters in your bullet text (`&`, `%`, `$`, `_`, `#`) are automatically escaped before rendering. One un-escaped `&` crashes the compiler.
+3. `tectonic resume.tex` — compiles the `.tex` to PDF. Waterfall: `tectonic` (preferred, 30MB) → `pdflatex` (if texlive installed) → skip compile, output `.tex` only with instructions.
+4. **1-page enforcement** — after compile, `pdfinfo resume.pdf | grep Pages` checks page count. If > 1 page: reduce bullet count by 1 per company, recompile. Max 5 iterations (same cap as existing `fit_loop`).
+5. Output: `resume.pdf` (same path as HTML mode), plus `resume.tex` saved alongside it.
+
+---
+
+### 14.4 New files
+
+| File | What it does |
+|---|---|
+| `resume/lib/latex_render.py` | `assemble_latex()` + `_escape_latex()` helper |
+| `resume/lib/jake_resume.tex.j2` | Jake's Resume Jinja2 template |
+| `resume/lib/tectonic.py` | Tectonic/pdflatex detection + compile + 1-page loop |
+
+**Modified files:**
+
+| File | Change |
+|---|---|
+| `resume/cli.py` | `--format` option (`html` default, `latex` opt-in) |
+| `resume/orchestrator.py` | Step 13 branches on `output_format` |
+| `setup_wizard.py` | Optional: detect tectonic in PATH, offer install hint |
+| `changelogs/unreleased/s7-1-latex-output.md` | Fragment (created in PR) |
+
+---
+
+### 14.5 Rules that apply unchanged
+
+All existing pipeline rules carry over without modification:
+
+| Rule | Status in LaTeX mode |
+|---|---|
+| v8/v9 fabrication guards | ✅ Unchanged — runs on bullets before assembly |
+| Profile cache reuse | ✅ Unchanged — same cache key, same nuggets |
+| Telemetry mandate | ✅ Unchanged — `16_telemetry.json` still written |
+| XYZ bullet format | ✅ Unchanged — bullets generated same way |
+| BRS scoring | ✅ Unchanged — scorecard runs on same bullet text |
+| Strategy gate (S6.1) | ✅ Unchanged — fires before step 13 regardless of format |
+
+**Two rules that adapt:**
+
+| Rule | Adaptation |
+|---|---|
+| Width check (95-100% column) | **Dropped for LaTeX** — LaTeX engine handles line-breaking natively. Character-width measurement is HTML-specific. |
+| 1-page fit_loop | **Adapted** — HTML mode uses pixel height; LaTeX mode uses `pdfinfo` page count. Same 5-iteration cap, different measurement. |
+
+---
+
+### 14.6 Three delivery modes
+
+This feature ships in three forms for different use cases:
+
+#### A. LinkRight CLI (S7.1 — Sprint 7)
+```bash
+linkright resume tailor -r resume.pdf -j jd.md --format latex
+# → generates resume.tex + resume.pdf in run directory
+```
+Goes through normal PR process: worktree → DD → adversarial reviewer → merge → fragment → release.
+
+#### B. Claude skill (personal use)
+A skill file (`~/.claude/skills/latex-resume.md`) that:
+- Reads the profile from `~/.linkright/profile/`
+- Renders Jake's template directly (no full pipeline needed)
+- Runs `tectonic` to compile
+- Returns path to `.tex` + `.pdf`
+
+Use case: quick one-off resume without running the full 16-step pipeline. Good for demos or when you already have a profile and just want a clean LaTeX output.
+
+#### C. n8n workflow (automation)
+```
+Webhook trigger (or HTTP Request from any source)
+  → Code node: load profile JSON, render .tex via Jinja2
+  → Execute Command: tectonic /tmp/resume_{{ timestamp }}.tex
+  → Read Binary File: /tmp/resume_{{ timestamp }}.pdf
+  → Route: Google Drive / Gmail attachment / Slack message
+```
+Use case: automated resume generation on trigger (e.g. when a new JD is added to a Notion database, auto-generate a tailored LaTeX PDF).
+
+---
+
+### 14.7 Acceptance criteria
+
+- AC1: `linkright resume tailor --format latex` generates both `resume.tex` and `resume.pdf` in the run directory.
+- AC2: Generated PDF is exactly 1 page (pdfinfo confirms `Pages: 1`).
+- AC3: `resume.tex` opens and compiles in Overleaf without errors.
+- AC4: All special characters in bullet text (`&`, `%`, `$`, `_`, `#`) are correctly escaped — no compile crash on real resume data.
+- AC5: `--format html` (default) behaviour is completely unchanged — no regression.
+- AC6: When `tectonic` is not installed, pipeline outputs `.tex` only and prints an actionable install message. No crash.
+- AC7: Fabrication guards (v8/v9) still run on LaTeX-format runs — confirmed by telemetry log.
+- AC8: `linkright resume tailor --format latex --help` shows `--format` option as an advanced flag.
+
+---
+
+### 14.8 Open questions (resolve before S7.1 kickoff)
+
+| # | Question | Owner | Status |
+|---|---|---|---|
+| OQ1 | Should `--format latex` also save the `.tex` as a permanent artifact in `~/.linkright/runs/<id>/`? Or temp only? | Satvik | Open |
+| OQ2 | Brand colors in LaTeX — Jake's template is black-only. Add optional color for section dividers (matching `feedback_brand_design_spec_2026_05_03.md`)? | Satvik | Open |
+| OQ3 | Should `tectonic` be added to `linkright setup` as an optional dependency check? | Engineering | Lean yes |
+| OQ4 | n8n workflow — trigger from Notion database (new JD row) vs manual webhook? | Satvik | Open |
+
+---
+
+### 13.4 Refresh policy
+
+Refresh THIS PRD when:
+1. A sprint completes — move 🟡 PLANNED items to 🟢 IMPLEMENTED in §4
+2. A new audit/QA finds a new gap — add to §4 with status
+3. A planned item gets DEFERRED or REJECTED — update status + reason
+4. Code refactor changes a file:line in §13.3 — refresh table
+5. Success metrics in §2 hit or miss target — update Baseline / Target
+
+---
+
+*Document version 1.5 · Created 2026-05-11 · Updated 2026-05-12 (Session 6) · LinkRight CLI v0.9.2 · Sprint 1-6: complete · S5.2 Phase 1 deferred to v2 · S5.7 Phase 1+2 gated · Sprint 7 planned: S7.1 (LaTeX output + tectonic)*
