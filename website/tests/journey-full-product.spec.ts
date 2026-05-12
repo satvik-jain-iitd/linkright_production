@@ -5,15 +5,13 @@
  * → /onboarding/preferences → /dashboard via the actual production routes.
  *
  * Self-contained (no `tests/lib/` deps) so it doesn't bitrot during refactors.
- * Validates the cache fix landed in /api/onboarding/parse-resume +
- * /api/onboarding/enrich-chunk (migration 043 — llm_cache_resume_parse +
- * llm_cache_chunk_enrich tables).
+ * End-to-end product journey spec — covers onboarding through resume creation.
  *
  * Cost expectation:
  *   First run after cache deploy: ~$0.30-0.50 (cold cache, full LLM calls)
  *   Subsequent runs same fixture:  ~$0.05    (cache hits, no LLM calls)
  *
- * Before running: apply migration 043 in Supabase SQL editor.
+ * Before running: apply any pending Supabase migrations.
  */
 
 import { test, expect } from "@playwright/test";
