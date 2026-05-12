@@ -69,3 +69,12 @@ class TestBoundaryCollisionPrevention:
         h1 = compute_input_hash(b"", b"hello world", "0.9.0")
         h2 = compute_input_hash(b"hello", b" world", "0.9.0")
         assert h1 != h2
+
+    def test_no_false_match_on_jd_version_boundary_split(self):
+        # JD ending in version-prefix bytes must not collide with a different version.
+        # e.g. JD="...Python 3.9." + version="0" vs JD="...Python 3.9.0" + version=""
+        h1 = compute_input_hash(b"resume", b"text0", "9.0")
+        h2 = compute_input_hash(b"resume", b"text", "09.0")
+        assert h1 != h2, (
+            "JD/version boundary collision: different (jd, version) pairs produced same hash"
+        )

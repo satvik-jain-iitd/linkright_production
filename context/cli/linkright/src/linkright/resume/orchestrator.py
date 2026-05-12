@@ -124,7 +124,9 @@ def compute_input_hash(resume_bytes: bytes, jd_bytes: bytes, version: str) -> st
     """
     import hashlib
     return hashlib.sha256(
-        len(resume_bytes).to_bytes(8, "big") + resume_bytes + jd_bytes + version.encode()
+        len(resume_bytes).to_bytes(8, "big") + resume_bytes
+        + len(jd_bytes).to_bytes(8, "big") + jd_bytes
+        + version.encode()
     ).hexdigest()
 
 
