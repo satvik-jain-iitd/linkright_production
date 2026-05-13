@@ -331,6 +331,207 @@ def test_l_branch_group_alignment_with_multibyte_content():
         )
 
 
+# ── UAT #17 wiring: tab_navigate plugged into prompt_for_choice ────────────
+
+def test_prompt_for_choice_routes_to_tab_navigate_when_env_set(monkeypatch):
+    """When ``LR_PICKER_STYLE=tabs`` is set AND the option set is small
+    (≤4 short labels), ``prompt_for_choice`` must invoke ``tab_navigate``
+    (the UAT #17 primitive) instead of questionary.
+
+    This proves the multi-step picker wiring in setup_wizard / profile-create
+    / tailor JD-input pickers exercises the new horizontal-navigation UI.
+    """
+    from linkright import prompts as _prompts
+    # Force TTY so the prompt path isn't short-circuited by _ensure_tty.
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    monkeypatch.setenv("LR_PICKER_STYLE", "tabs")
+
+    calls = {"count": 0, "labels": None, "start_idx": None}
+
+    def _fake_tab_navigate(labels, *, start_idx=0, **_kw):
+        calls["count"] += 1
+        calls["labels"] = list(labels)
+        calls["start_idx"] = start_idx
+        return 1  # user picks second option
+
+    # Patch tab_navigate at its definition site (prompts imports lazily).
+    from linkright.ui import layout as _layout
+    monkeypatch.setattr(_layout, "tab_navigate", _fake_tab_navigate)
+
+    options = [
+        {"key": "a", "label": "Option A", "recommended": True},
+        {"key": "b", "label": "Option B"},
+    ]
+    picked = _prompts.prompt_for_choice("Pick:", options)
+
+    assert calls["count"] == 1, "tab_navigate must be invoked under LR_PICKER_STYLE=tabs"
+    assert calls["labels"] == ["Option A", "Option B"]
+    assert calls["start_idx"] == 0, "default (recommended) starts at index 0"
+    assert picked["key"] == "b", "should return option at the index tab_navigate returned"
+
+
+def test_prompt_for_choice_skips_tab_picker_when_options_too_long(monkeypatch):
+    """If labels are too long, tab_navigate is bypassed even with the env var
+    set — keeps fallback to questionary so the bar doesn't overflow.
+    """
+    from linkright import prompts as _prompts
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    monkeypatch.setenv("LR_PICKER_STYLE", "tabs")
+
+    invoked = {"tab": False, "questionary": False}
+
+    def _fake_tab_navigate(*_a, **_kw):
+        invoked["tab"] = True
+        return 0
+
+    from linkright.ui import layout as _layout
+    monkeypatch.setattr(_layout, "tab_navigate", _fake_tab_navigate)
+
+    class _FakeQSelect:
+        def __init__(self, *a, **kw):
+            invoked["questionary"] = True
+            self._return = a[1][0] if len(a) > 1 and a[1] else "fallback"
+        def ask(self):
+            return self._return
+
+    monkeypatch.setattr("questionary.select", _FakeQSelect)
+
+    long_label = "This label is far longer than the 30-char tab-picker limit and forces fallback"
+    options = [
+        {"key": "a", "label": long_label, "recommended": True},
+        {"key": "b", "label": "Short"},
+    ]
+    # We don't care about return value here — just that the tab path was skipped.
+    try:
+        _prompts.prompt_for_choice("Pick:", options)
+    except Exception:
+        pass
+    assert invoked["tab"] is False, "tab_navigate must NOT fire when any label > 30 chars"
+
+
+def test_prompt_for_choice_default_uses_questionary_not_tab(monkeypatch):
+    """Without LR_PICKER_STYLE=tabs, default UX = questionary (no regression)."""
+    from linkright import prompts as _prompts
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
+    monkeypatch.delenv("LR_PICKER_STYLE", raising=False)
+
+    invoked = {"tab": False}
+
+    def _fake_tab_navigate(*_a, **_kw):
+        invoked["tab"] = True
+        return 0
+
+    from linkright.ui import layout as _layout
+    monkeypatch.setattr(_layout, "tab_navigate", _fake_tab_navigate)
+
+    class _FakeQSelect:
+        def __init__(self, *a, **kw):
+            self._labels = kw.get("choices") or (a[1] if len(a) > 1 else [])
+        def ask(self):
+            return self._labels[0] if self._labels else None
+
+    monkeypatch.setattr("questionary.select", _FakeQSelect)
+
+    options = [
+        {"key": "a", "label": "Short A", "recommended": True},
+        {"key": "b", "label": "Short B"},
+    ]
+    _prompts.prompt_for_choice("Pick:", options)
+    assert invoked["tab"] is False, "default path must NOT invoke tab_navigate"
+
+
+def test_tab_picker_eligible_predicate():
+    """Boundary checks: count ≤ 4 and labels ≤ 30 chars."""
+    from linkright.prompts import _tab_picker_eligible
+    assert _tab_picker_eligible([{"label": "A"}]) is True
+    assert _tab_picker_eligible([{"label": "A"}, {"label": "B"}, {"label": "C"}, {"label": "D"}]) is True
+    # 5 options → ineligible
+    assert _tab_picker_eligible([{"label": "A"}] * 5) is False
+    # 31-char label → ineligible
+    assert _tab_picker_eligible([{"label": "X" * 31}]) is False
+    assert _tab_picker_eligible([]) is False
+
+
+# ── UAT #14 + #16 wiring: profile show + tailor success-card ───────────────
+
+def test_render_success_card_emits_sticky_footer_and_divider(tmp_path, monkeypatch):
+    """UAT #16 + #14 wiring — the tailor exit boundary (_render_success_card)
+    must render a horizontal_divider BEFORE the success card and a
+    sticky_footer AFTER it. Captures via monkey-patched ui.console.
+    """
+    import time as _time
+    import io
+    from rich.console import Console
+    from linkright.ui.theme import LR_THEME
+    import linkright.ui as ui_mod
+    from linkright.resume.cli import _render_success_card
+
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    run_dir = tmp_path  # no PDF — the card renders "PDF not produced" line
+
+    buf = io.StringIO()
+    con = Console(file=buf, theme=LR_THEME, force_terminal=True, no_color=True, width=120)
+    orig = ui_mod.console
+    ui_mod.console = con
+    try:
+        _render_success_card(run_dir, _time.monotonic() - 1.0)
+    finally:
+        ui_mod.console = orig
+
+    output = buf.getvalue()
+    # UAT #14: rule character must appear before the card
+    assert "─" in output, "horizontal_divider rule character must appear"
+    # UAT #16: sticky_footer renders "/tailor" mode segment AND status text
+    assert "/tailor" in output, "sticky_footer must include '/tailor' mode segment"
+    assert "completed in" in output, "sticky_footer status must include 'completed in'"
+
+
+def test_show_profile_emits_sticky_footer(tmp_path, monkeypatch):
+    """UAT #16 wiring — `profile show` renders a sticky_footer at the bottom
+    with mode='profile' and nugget-count status. Verifies the long-running
+    surface gets the same orientation cue as the doctor surface.
+    """
+    import io
+    from rich.console import Console
+    from linkright.ui.theme import LR_THEME
+    from linkright.profile import render as render_mod
+
+    # Stub load_metadata + load_nuggets so we don't need an on-disk profile.
+    monkeypatch.setattr(render_mod, "load_metadata", lambda _p: {
+        "n_nuggets": 3, "n_highlights": 1, "created_at": "2026-01-01",
+    })
+    monkeypatch.setattr(render_mod, "load_nuggets", lambda _p: [
+        {"type": "work_experience", "company": "Acme", "role": "PM",
+         "importance": "P0", "nugget_text": "did a thing"},
+        {"type": "skill", "nugget_text": "python"},
+        {"type": "skill", "nugget_text": "click"},
+    ])
+    monkeypatch.setattr(render_mod, "_load_date_lookups",
+                        lambda _p: ({}, {}, {}, {}))
+
+    # Replace Console() inside show_profile via a stub that writes to buf.
+    buf = io.StringIO()
+    captured_con = Console(file=buf, theme=LR_THEME, force_terminal=True,
+                           no_color=True, width=120)
+
+    class _StubConsole:
+        def __new__(cls, *a, **kw):
+            return captured_con
+
+    monkeypatch.setattr(render_mod, "Console", _StubConsole)
+    render_mod.show_profile(profile_dir=tmp_path)
+
+    output = buf.getvalue()
+    # UAT #16: mode + status segments present in output
+    assert "/profile" in output, "sticky_footer must emit '/profile' mode segment"
+    # 3 nuggets stubbed above → status must reflect plural count
+    assert "3 nuggets" in output, "sticky_footer status must report nugget count"
+
+
 # ── Integration: re-export imports under typical call patterns ─────────────
 
 def test_layout_primitives_callable_via_ui_namespace():

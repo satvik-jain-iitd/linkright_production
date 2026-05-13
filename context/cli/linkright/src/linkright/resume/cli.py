@@ -121,6 +121,15 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
     duration = time.monotonic() - started_at
     mins, secs = divmod(int(duration), 60)
     duration_str = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
+    # UAT #14: horizontal divider rendered BEFORE the success card so the
+    # pipeline-output / success-card boundary is structurally visible. Safe
+    # to call here — runs after all `rich.live` progress UIs have stopped
+    # (orchestrator finished by this point), so no overlap with live updates.
+    try:
+        from linkright.ui import horizontal_divider
+        horizontal_divider()
+    except Exception:
+        pass
 
     pdf_path = run_dir / "artifacts" / "15_final_resume.pdf"
     if pdf_path.exists():
@@ -181,6 +190,20 @@ def _render_success_card(run_dir: Path, started_at: float) -> None:
         next_steps=next_steps,
         accent=TEAL,
     )
+    # UAT #16: sticky footer at the tailor exit boundary — tier = CLI version
+    # (gold), mode = "tailor" (mint/teal), status = duration (muted). Rendered
+    # AFTER success_card so it sits at the visual bottom of the surface. Safe
+    # placement: no Rich Live updates remain active at this point.
+    try:
+        from linkright.ui import sticky_footer
+        from linkright import __version__ as _lr_ver
+        sticky_footer(
+            tier=f"v{_lr_ver}" if _lr_ver else None,
+            mode="tailor",
+            status=f"completed in {duration_str}",
+        )
+    except Exception:
+        pass
 
 
 @resume_group.command("tailor")
