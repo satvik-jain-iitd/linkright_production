@@ -376,41 +376,31 @@ def prompt_for_jd_input(
 
 def prompt_for_resume_source(
     *,
-    flag_hint: str = "-r/--resume / --from-folder",
+    flag_hint: str = "-r/--resume",
 ) -> tuple[str, Any]:
-    """Ask how the user wants to provide their resume — for `profile create`.
+    """Ask the user for the resume file path — for `profile create`.
 
-    Surfaces only the wired branches (file + folder). The legacy
-    `--paste` flag still exists but stubs to a 'Day 2 — coming soon'
-    error; surfacing it as an interactive choice would dead-end
-    interactive users (worse UX than an undiscoverable flag). When the
-    text-only resume parser is wired downstream, add the paste branch
-    back to this prompt.
+    UAT bug #10: previously the picker offered two options — "file" and
+    "folder (auto-detect first PDF)". The folder option added unnecessary
+    complexity for the typical user (one resume file, one path). Power users
+    who genuinely want folder mode can still pass `--from-folder` on the
+    command line; it stays available as a flag, just no longer surfaces as
+    an interactive choice.
+
+    The legacy `--paste` flag continues to stub to a 'Day 2 — coming soon'
+    error; the text-only resume parser will wire interactive paste-mode
+    back into this prompt as a third option once that work lands.
 
     Returns:
-        ("file", Path)   — single PDF/MD path
-        ("folder", Path) — directory; tool picks first PDF inside
+        ("file", Path) — single PDF / .md / .markdown path
     """
     _ensure_tty(flag_hint)
-    options = [
-        {"key": "file", "label": "Path to my resume PDF (or .md) — recommended", "recommended": True},
-        {"key": "folder", "label": "Folder containing my resume (auto-detect first PDF)"},
-    ]
-    pick = prompt_for_choice("How do you want to provide your resume?", options, flag_hint=flag_hint)
-    if pick["key"] == "file":
-        path = prompt_for_existing_path(
-            "Path to your resume:",
-            must_be_file=True,
-            flag_hint=flag_hint,
-        )
-        return ("file", path)
-    # folder
-    folder = prompt_for_existing_path(
-        "Path to folder containing your resume:",
-        must_be_dir=True,
+    path = prompt_for_existing_path(
+        "Path to your resume (PDF or .md):",
+        must_be_file=True,
         flag_hint=flag_hint,
     )
-    return ("folder", folder)
+    return ("file", path)
 
 
 # ─────────────────────────────────────────────────────────────────────────

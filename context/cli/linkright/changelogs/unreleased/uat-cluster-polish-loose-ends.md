@@ -1,0 +1,7 @@
+## [type: Fixed]
+
+- **UAT #5 hardening — Indian + regional greeting prefixes:** Cluster B-small (PR #159) added `dear / mr. / mrs. / sir / respected / shri / smt.` prefix stripping to the name-extraction heuristic. This polish extends the prefix list to cover regional + religious + relationship honorifics commonly found on Indian-market certificate-style PDFs: `thiru`, `thiruvalar` (Tamil Mr.), `rev. / fr. / sis.` (religious), `hon. / honorable / honourable`, `late` (deceased), and `s/o / d/o / w/o` (son/daughter/wife of). Strengthens defense against bug #5 root cause for the broader user base. Fix in `profile/pipeline.py:292-305`.
+
+- **UAT #10 — `profile create` interactive picker simplified:** Removed the "Folder containing my resume (auto-detect first PDF)" option from `prompt_for_resume_source` — the secondary option added complexity without serving the typical user. Power users who want folder mode can still pass `--from-folder` on the command line; the flag stays available, just no longer surfaces as an interactive choice. Default `flag_hint` updated from `"-r/--resume / --from-folder"` to `"-r/--resume"`. Fix in `prompts/__init__.py:377-401`.
+
+- **UAT bug-log status sync:** Marked Fixed in `harness/UAT_BUG_LOG.md` for all bugs landed in PRs #157 (A: #4, #37, #40), #158 (E1: #18, #23, #24), #159 (B-small: #1, #5, #7, #8), and this PR (#5 hardening, #10). Added Progress section showing 11/40 fixed, 28 pending, 1 deferred. Updated Cluster Tracker section with current sub-PR breakdown (B-small/B-medium/B-truth-engine/E1/E2/E3/E4).

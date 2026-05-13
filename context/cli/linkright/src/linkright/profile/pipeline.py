@@ -289,12 +289,21 @@ def _extract_contact_from_text(raw_text: str) -> dict:
     # name heuristic (capitalized, 2-4 words, no digits/@) and got stored as
     # the candidate's name. Strip common greeting/honorific prefixes before
     # the heuristic check.
+    # Polish PR: extended with Indian relationship prefixes (S/o, D/o, W/o),
+    # Late prefix, regional honorifics (Thiru — Tamil Mr.), and religious titles
+    # (Rev., Fr., Sis.) often found on certificate-style PDFs that get
+    # erroneously fed into profile create.
     _GREETING_PREFIXES = (
         "dear ", "hi ", "hello ", "greetings ",
         "mr. ", "mr ", "mrs. ", "mrs ", "ms. ", "ms ",
         "dr. ", "dr ", "prof. ", "prof ",
         "sir ", "madam ", "to: ", "to ", "respected ",
         "shri ", "shrimati ", "smt. ", "smt ",
+        "thiru ", "thiruvalar ",
+        "rev. ", "rev ", "fr. ", "fr ", "sis. ", "sis ",
+        "hon. ", "hon ", "honorable ", "honourable ",
+        "late ",
+        "s/o ", "d/o ", "w/o ",
     )
 
     def _strip_greeting(s: str) -> str:

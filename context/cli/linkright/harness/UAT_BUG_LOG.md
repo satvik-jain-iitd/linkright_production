@@ -6,16 +6,16 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 
 | ID | Command | Component | Issue Description | Status |
 |----|---------|-----------|-------------------|--------|
-| 1 | `linkright doctor` | CLI / UX | `linkright doctor --auto-fix` is suggested even when no auto-fixable issues exist. | Open |
+| 1 | `linkright doctor` | CLI / UX | `linkright doctor --auto-fix` is suggested even when no auto-fixable issues exist. | **Fixed (Cluster B-small, PR #159)** |
 | 2 | Systemic | CLI / UX | Terminal output is cluttered with technical "noise" (stack traces, library reports, `[tokens]` labels). | Open |
 | 3 | Systemic | CLI / UX | CLI output suggests flag-based commands (e.g. `--auto-fix`, `-j`, `--force`) to non-technical users. | Open |
 | 4 | `linkright profile create` | Profile / Ingest | CLI claims to support `.md` files but fails with "invalid pdf header" error. | **Fixed (Cluster A)** |
-| 5 | `linkright profile create` | Truth Engine | Name extraction includes greetings (e.g., "Dear Satvik Jain"). | Open |
+| 5 | `linkright profile create` | Truth Engine | Name extraction includes greetings (e.g., "Dear Satvik Jain"). | **Fixed (Cluster B-small + Polish hardening, PR #159 + Polish PR)** |
 | 6 | `linkright profile create` | Profile / Ingest | No validation to ensure the file is a resume (e.g., certificates create garbage profiles). | Open |
-| 7 | `linkright profile show` | CLI / UX | Displays internal metadata (dir paths, embedder dimensions) in the header. | Open |
-| 8 | `linkright profile show` | CLI / UX | Nuggets are truncated at 120 chars by default, hiding user's own data. | Open |
+| 7 | `linkright profile show` | CLI / UX | Displays internal metadata (dir paths, embedder dimensions) in the header. | **Fixed (Cluster B-small, PR #159)** |
+| 8 | `linkright profile show` | CLI / UX | Nuggets are truncated at 120 chars by default, hiding user's own data. | **Fixed (Cluster B-small, PR #159)** |
 | 9 | `linkright profile create` | CLI / UX | Error messages suggest complex flags (`--force`) instead of interactive overwrite prompts. | Open |
-| 10 | `linkright profile create` | CLI / UX | "Auto-detect folder" option adds unnecessary complexity to the ingestion menu. | Open |
+| 10 | `linkright profile create` | CLI / UX | "Auto-detect folder" option adds unnecessary complexity to the ingestion menu. | **Fixed (Cluster Polish)** |
 | 11 | `linkright profile create` | CLI / UX | Missing "Paste Text" option for direct profile ingestion. | Open |
 | 12 | Systemic | Profile / Ingest | No mechanism to chunk/partition long documents, risking context limit failures. | Open |
 | 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | Open |
@@ -23,13 +23,13 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 15 | Systemic | CLI / UI | Missing a brand character/icon (e.g., octopus/robot style) to anchor the prompt area. | Open |
 | 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | Open |
 | 17 | Systemic | CLI / UI | Menus don't support Tab/Shift-Tab for horizontal navigation between question categories. | Open |
-| 18 | Systemic | CLI / UI | "Recommended" solutions use inconsistent emojis instead of parenthetical text labels. | Open |
+| 18 | Systemic | CLI / UI | "Recommended" solutions use inconsistent emojis instead of parenthetical text labels. | **Fixed (Cluster E1, PR #158)** |
 | 19 | Systemic | CLI / UI | Missing "Type something" custom input entry in selection lists. | Open |
 | 20 | Systemic | CLI / UI | Previous user inputs are not rendered with the high-contrast white bullet (`●`) pattern. | Open |
 | 21 | Systemic | CLI / UI | Progress verbs (e.g. `Smooshing...`) lack the distinct coral/salmon color and subtle grayish telemetry. | Open |
 | 22 | Systemic | CLI / UI | Secondary information (Tips) does not follow the L-shaped (`└`) muted-text branch pattern. | Open |
-| 23 | Systemic | CLI / UI | Standardized Iconography: Must adopt BMAD Standard (◇ for input, ● for info, 🌟 for highlights, ✓ for success). | Open |
-| 24 | Systemic | CLI / UI | Prompt character is inconsistent. Should use a bold, clean `❯` marker. | Open |
+| 23 | Systemic | CLI / UI | Standardized Iconography: Must adopt BMAD Standard (◇ for input, ● for info, 🌟 for highlights, ✓ for success). | **Fixed (Cluster E1, PR #158)** |
+| 24 | Systemic | CLI / UI | Prompt character is inconsistent. Should use a bold, clean `❯` marker. | **Fixed (Cluster E1, PR #158)** |
 | 25 | Systemic | Profile / Logic | Nugget pool pollution: Static facts (Education, Degree) are stored as generic nuggets, risking retrieval noise. | Open |
 | 26 | `linkright profile enrich` | Profile / Logic | Improper nugget ordering: New P0 nuggets appear at the bottom; list is not sorted by Priority (P0->P3). | Open |
 | 27 | Systemic | Truth Engine | Entity extraction failure: Nuggets tagged as "unknown" or "none" even when the company/school is in the text. | Open |
@@ -51,12 +51,25 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 
 ## Cluster Tracker
 
-- **Cluster A (Critical Blockers)** — #4, #37, #40 — **FIXED** in `fix/uat-cluster-a-critical-blockers` branch. Minimal non-destructive fixes; full edit-and-retry menu deferred to Cluster C.
-- **Cluster B (Profile/UX Quick Wins)** — #1, #2, #5, #6, #7, #8, #9, #11, #13 — Pending
+- **Cluster A (Critical Blockers)** — #4, #37, #40 — **✅ MERGED** (PR #157). Minimal non-destructive fixes; full edit-and-retry menu deferred to Cluster C.
+- **Cluster E1 (TUI Tokens + Iconography)** — #18, #23, #24 — **✅ MERGED** (PR #158). Foundation for E2 + E3; pure additive.
+- **Cluster B-small (Profile/UX Quick Wins)** — #1, #5, #7, #8 — **✅ MERGED** (PR #159).
+- **Cluster Polish (Loose Ends)** — #5 hardening + #10 — **✅ THIS PR**.
+- **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — Pending
+- **Cluster B-truth-engine** — #13 — Pending
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — Pending (includes inline edit menu replacing Cluster A restart hint)
 - **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
-- **Cluster E (UI Design System)** — #14, #15, #16, #17, #18, #19, #20, #21, #22, #23, #24, #29, #30 — Pending (separate sprint; design pass first)
-- **Cluster F (Misc Systemic)** — #3, #10, #12 — Pending
+- **Cluster E2 (Layout primitives)** — #14, #16, #17, #22 — Pending (depends on E1 merged ✅)
+- **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — Pending (depends on E1 merged ✅)
+- **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
+- **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
+
+## Progress
+
+- **Total bugs:** 40
+- **Fixed:** 11 (#1, #4, #5 [+ hardening], #7, #8, #10, #18, #23, #24, #37, #40)
+- **Pending:** 28
+- **Deferred (Q3):** 1 (#15 mascot)
 
 ---
 
