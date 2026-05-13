@@ -355,36 +355,74 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
     # into run_dir so orchestrator's step_00..03 cache guards short-circuit
     # (saves 30-60 sec of LLM + embed work per run).
     cache_used = False
+    cache_details: list[tuple[str, str]] = []  # (filename, human-readable description)
+    profile_dir_for_msg: Path | None = None
     if not no_cache:
         from linkright.profile.pipeline import _profile_dir, load_metadata
         from linkright.resume.lib.embedder import _detect_tier
         profile_dir = _profile_dir()
+        profile_dir_for_msg = profile_dir
         meta = load_metadata(profile_dir)
         if meta:
             active_tier = _detect_tier()
             if meta.get("embedder_tier") == active_tier:
                 profile_artifacts = profile_dir / "artifacts"
-                cached_files = ["00_resume_raw_text.txt", "01_resume_parsed.json",
-                                "02_nuggets_extracted.json", "03_nuggets_embedded.jsonl"]
+                # UAT bug #34 — Opaque Cache Info.
+                # Previously the user saw "Profile cache hit" with no detail.
+                # Now we list WHAT was reused (per artifact, in plain English) +
+                # WHERE it lives (~/.linkright/profile/) so the user can inspect.
+                cached_files = [
+                    ("00_resume_raw_text.txt",     "raw resume text"),
+                    ("01_resume_parsed.json",      "parsed structure (experiences, education, skills)"),
+                    ("02_nuggets_extracted.json",  "extracted career nuggets"),
+                    ("03_nuggets_embedded.jsonl",  "nugget embeddings"),
+                ]
                 copied = []
-                for fname in cached_files:
+                for fname, desc in cached_files:
                     src = profile_artifacts / fname
                     if src.exists():
                         shutil.copy(src, run_dir / "artifacts" / fname)
                         copied.append(fname)
+                        cache_details.append((fname, desc))
                 if copied:
                     cache_used = True
-                    click.echo(f"✓ Profile cache hit — reusing {len(copied)} artifacts from ~/.linkright/profile/ "
-                               f"(saves ~30-60s of parse + extract + embed work).")
             else:
-                click.echo(f"⚠ Profile embedder tier ({meta.get('embedder_tier')}) ≠ active tier "
-                           f"({active_tier}); skipping cache (rebuild profile to align).")
+                # Tier mismatch — leave a single dim warning line; details below in muted block
+                click.echo(f"\033[2m  Profile embedder tier ({meta.get('embedder_tier')}) ≠ active tier "
+                           f"({active_tier}); skipping cache (rebuild profile to align).\033[0m")
 
-    click.echo(f"Run ID: {run_id}")
-    click.echo(f"Output: {run_dir}")
-    click.echo(f"LLM mode: {llm_mode}  •  Skill mode: {mode}")
+    # UAT bug #36 — Pipeline Execution screen visual hierarchy.
+    # Telemetry lines (Run ID, Output path, LLM mode, cache notes) were rendered
+    # at the same prominence as user-facing prompts. Re-cast them as a muted
+    # "Run details" block using ANSI dim (\033[2m) so the eye lands on the
+    # next prompt/step heading instead of run plumbing.
+    click.echo()
+    click.echo("\033[2m  Run details\033[0m")
+    click.echo(f"\033[2m    Run ID    {run_id}\033[0m")
+    click.echo(f"\033[2m    Output    {run_dir}\033[0m")
+    click.echo(f"\033[2m    LLM mode  {llm_mode}  •  Skill mode: {mode}\033[0m")
     if no_cache:
-        click.echo("Cache: --no-cache flag set, fresh extraction.")
+        click.echo("\033[2m    Cache     --no-cache flag set, fresh extraction.\033[0m")
+    elif cache_used:
+        # UAT bug #34 — expanded cache info, also rendered in the muted block.
+        # MED #1 (Cluster C cycle 2): use the actual resolved profile_dir_for_msg
+        # path so users with custom $LINKRIGHT_HOME see their real path, not a
+        # hardcoded ~/.linkright/profile/ literal.
+        n = len(cache_details)
+        if profile_dir_for_msg:
+            # Render the path with ~ for HOME when applicable for compactness.
+            try:
+                _pd_disp = "~/" + str(profile_dir_for_msg.relative_to(Path.home()))
+            except ValueError:
+                _pd_disp = str(profile_dir_for_msg)
+            profile_hint = f" ({_pd_disp}, inspect with `linkright profile show`)"
+        else:
+            profile_hint = ""
+        click.echo(f"\033[2m    Cache     ✓ Profile cache hit — reusing {n} artifact"
+                   f"{'s' if n != 1 else ''} from prior `linkright profile create`{profile_hint}\033[0m")
+        click.echo("\033[2m              Saves ~30-60s of parse + extract + embed work.\033[0m")
+        click.echo("\033[2m              Reused: " + ", ".join(d for _, d in cache_details) + "\033[0m")
+    click.echo()
 
     if llm_mode in ("direct", "agent", "mcp"):
         # 2026-05-01: agent/mcp modes share the same orchestrator path as direct.

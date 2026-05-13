@@ -61,13 +61,263 @@ def _see_and_continue(label: str, summary: str = "") -> None:
         sys.exit(0)
 
 
-def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
+def _render_jd_requirements_panel(parsed_p12: dict) -> None:
+    """UAT bug #33 — Render JD interpretation (P0/P1/P2 requirements) right after step_07.
+
+    Previously the JD-analysis step ran silently — the user saw only "5 requirements
+    identified" with no visibility into WHAT requirements the system extracted. This
+    panel surfaces:
+    - Target role + strategy type (from parsed_p12)
+    - Requirements bucketed by importance: P0 (required/must-have), P1 (preferred /
+      nice-to-have), P2 (other / optional)
+    - Top JD keywords (first 8)
+
+    Read-only display — does NOT block the pipeline. Skipped when LR_NO_PAUSE=1.
+    """
+    if os.environ.get("LR_NO_PAUSE") == "1":
+        return
+
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+    from linkright.ui.theme import LR_THEME
+
+    console = Console(theme=LR_THEME)
+
+    target_role = parsed_p12.get("target_role") or parsed_p12.get("strategy_role") or "?"
+    strategy = (parsed_p12.get("strategy") or "?").upper()
+    reqs = parsed_p12.get("requirements") or []
+    jd_keywords = parsed_p12.get("jd_keywords") or []
+
+    # Bucket reqs by importance — map various LLM-emitted importance labels to
+    # P0/P1/P2. Conservative mapping; unknown values default to P2.
+    p0, p1, p2 = [], [], []
+    for r in reqs:
+        if not isinstance(r, dict):
+            continue
+        imp = (r.get("importance") or "").strip().lower()
+        text = (r.get("text") or "").strip()
+        if not text:
+            continue
+        if imp in ("required", "must", "must-have", "must_have", "core", "p0"):
+            p0.append(text)
+        elif imp in ("preferred", "nice-to-have", "nice_to_have", "desired", "p1"):
+            p1.append(text)
+        else:
+            p2.append(text)
+
+    body = Text(overflow="fold", no_wrap=False)
+    body.append("  Target:    ", style="step.gold")
+    body.append(f"{target_role}\n", style="bold")
+    body.append("  Strategy:  ", style="step.gold")
+    body.append(f"{strategy}\n", style="bold")
+
+    def _bucket(label: str, items: list, accent: str, max_show: int = 5) -> None:
+        if not items:
+            return
+        body.append(f"\n  {label} ({len(items)}):\n", style=accent)
+        for t in items[:max_show]:
+            short = t if len(t) <= 100 else t[:97] + "…"
+            body.append("    • ", style=accent)
+            body.append(f"{short}\n", style="")
+        if len(items) > max_show:
+            body.append(f"    … +{len(items) - max_show} more\n", style="text.secondary")
+
+    _bucket("P0  Must-have", p0, "metric.positive")
+    _bucket("P1  Preferred",  p1, "step.gold")
+    _bucket("P2  Optional",   p2, "text.secondary")
+
+    if jd_keywords:
+        kw_preview = ", ".join(str(k) for k in jd_keywords[:8])
+        if len(jd_keywords) > 8:
+            kw_preview += f"  (+{len(jd_keywords) - 8} more)"
+        body.append("\n  Top JD keywords:  ", style="step.gold")
+        body.append(kw_preview, style="step.accent")
+
+    console.print()
+    console.print(Panel(
+        body,
+        title="[step.accent bold]JD Analysis — what we read from the JD[/]",
+        border_style="step.accent",
+        expand=False,
+        padding=(1, 2),
+    ))
+    console.print()
+
+
+def _estimate_section_heights(
+    parsed_p12: dict,
+    parsed_resume: dict,
+    distribution: dict,
+) -> dict:
+    """UAT bug #39 — Estimate per-section vertical space + 1-page fit probability.
+
+    Returns a dict with shape:
+        {
+            "sections": [
+                {"name": "Header",     "mm": 21.34, "pct_height": 7.9},
+                {"name": "Summary",    "mm": 8.04,  "pct_height": 3.0},
+                {"name": "Experience", "mm": 263.8, "pct_height": 97.1},
+                ...
+            ],
+            "total_mm": 332.7,
+            "page_capacity_mm": 271.6,    # A4 usable height per fit_loop.py
+            "fit_probability": "HIGH",    # HIGH | MEDIUM | LOW
+            "fit_pct": 122.5,             # ratio of capacity used (clipped to 200)
+            "headroom_mm": -61.1,
+            # Legacy keys for backward-compat with tests/UI built before
+            # mm-based math landed. "lines" treats 1 line ≈ 4.52mm (bullet_line).
+            "total_lines": 73,
+            "page_capacity_lines": 60,
+            "headroom_lines": -13,
+        }
+
+    Estimates are HEURISTIC — not pixel-accurate. They give the user a feel for
+    whether the plan likely fits 1 page BEFORE the expensive generation phase.
+
+    2026-05-14 CRITICAL FIX (Cluster C cycle 2): the previous 47-line capacity
+    heuristic was miscalibrated by ~22% versus the prod renderer's actual capacity
+    (fit_loop.py:88 uses 271.6mm ÷ 4.52mm/bullet ≈ 60 bullet-equivalents/page).
+    A 45-bullet plan inside the 85-92% IDEAL band was reporting LOW @ 144.7%, and
+    sparse 25-bullet plans were reporting HIGH @ 102%. This inverts the Truth-Engine
+    intent. We now mirror fit_loop's `_estimate_util_from_html` math element-for-
+    element — same ELEM (mm) constants, same CHARS_PER_LINE=120, same PAGE_HEIGHT=
+    271.6mm — so the strategy-review % aligns with the post-render util the user
+    sees later. HIGH/MEDIUM/LOW bands also match the IDEAL band (85-92%).
+    """
+    # Mirror fit_loop.py ELEM dict (single source of truth for resume geometry).
+    # Note: cannot directly call fit_loop._estimate_util_from_html() — that operates
+    # on rendered HTML, which doesn't exist yet at strategy-review time. Instead we
+    # replicate the same per-element constants and operate on the structured plan.
+    ELEM = {
+        "header_block":   21.34,
+        "summary_line":    4.02,
+        "section_title":   7.68,
+        "section_spacing": 4.0,
+        "entry_header":    4.44,
+        "entry_subhead":   5.24,
+        "entry_spacing":   2.5,
+        "bullet_line":     4.52,
+        "skills_line":     4.0,
+    }
+    PAGE_HEIGHT_MM = 271.6
+    CHARS_PER_LINE = 120  # MED #2: was 75; corrected per fit_loop.py:62 +
+                          #          memory feedback_width_band_one_line_per_bullet.
+    SUMMARY_CHARS_EST = 220  # target summary length (PRD)
+
+    included = distribution.get("included_companies") or []
+    bullets_total = sum(int(c.get("bullets") or 0) for c in included)
+    n_roles = len(included)
+    n_edu = len(parsed_resume.get("education") or [])
+    n_proj = len(parsed_resume.get("projects") or [])
+
+    included_sections = set(distribution.get("included_sections") or [])
+    if not included_sections:
+        included_sections = {"experience", "education", "skills"}
+        if n_proj > 0:
+            included_sections.add("projects")
+
+    # Per-section mm — mirrors what fit_loop will measure once rendered.
+    sections: list[dict] = []
+
+    # Header: always one block (name + contact rows) — height fixed at 21.34mm.
+    sections.append({"name": "Header", "mm": ELEM["header_block"]})
+
+    # Summary: NO section_title in template (raw .summary-line spans). Use
+    # the same line-count formula as fit_loop: ceil(chars / 120) * 4.02mm.
+    sum_lines = max(1, SUMMARY_CHARS_EST // CHARS_PER_LINE
+                       + (1 if SUMMARY_CHARS_EST % CHARS_PER_LINE else 0))
+    sections.append({"name": "Summary", "mm": sum_lines * ELEM["summary_line"]})
+
+    # Experience: section_title + spacing, plus per-entry (header+subhead+spacing),
+    # plus bullet_line per bullet.
+    if "experience" in included_sections and n_roles > 0:
+        exp_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                  + n_roles * (ELEM["entry_header"] + ELEM["entry_subhead"]
+                               + ELEM["entry_spacing"])
+                  + bullets_total * ELEM["bullet_line"])
+        sections.append({"name": "Experience", "mm": exp_mm})
+
+    # Education: section_title + spacing, plus per-entry header lines.
+    if "education" in included_sections and n_edu > 0:
+        edu_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                  + n_edu * (ELEM["entry_header"] + ELEM["entry_spacing"]))
+        sections.append({"name": "Education", "mm": edu_mm})
+
+    # Skills: section_title + spacing, plus 1 line per category. Pre-strategy we
+    # assume 3 categories (Skills section is capped at 3-5 lines per memory
+    # feedback_skills_trim_before_width_fill).
+    if "skills" in included_sections:
+        skills_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                     + 3 * ELEM["skills_line"])
+        sections.append({"name": "Skills", "mm": skills_mm})
+
+    # Projects: section_title + spacing, plus per-project bullet line. Cap at 3
+    # rows (matches fit_loop's E2_surface_projects bullet_budget cap).
+    if "projects" in included_sections and n_proj > 0:
+        proj_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                   + min(3, n_proj) * ELEM["bullet_line"])
+        sections.append({"name": "Projects", "mm": proj_mm})
+
+    total_mm = sum(s["mm"] for s in sections)
+    fit_pct = round(100.0 * total_mm / PAGE_HEIGHT_MM, 1)
+    fit_pct_clipped = min(fit_pct, 200.0)
+
+    # pct_height per section relative to page capacity (not total) so
+    # under-filled plans surface as "75% used" instead of summing to 100%.
+    for s in sections:
+        s["pct_height"] = round(100.0 * s["mm"] / PAGE_HEIGHT_MM, 1)
+        # Legacy "lines" key: divide mm by bullet_line (4.52mm) so UI can still
+        # render an integer line-count next to each section. Floor of 1 row.
+        s["lines"] = max(1, int(round(s["mm"] / ELEM["bullet_line"])))
+
+    # HIGH/MEDIUM/LOW bands — aligned with fit_loop.py:36-38 IDEAL band (85-92%).
+    # HIGH = inside IDEAL band (strategy will land 1-page without escalation).
+    # MEDIUM = under-utilized (75-85%) OR slight overflow (92-105%) — strategy
+    #          might trigger an expand/trim retry but should converge.
+    # LOW = sparse (<75%) OR strong overflow (>105%) — strategy needs review.
+    if 85.0 <= fit_pct <= 92.0:
+        fit_prob = "HIGH"
+    elif 75.0 <= fit_pct < 85.0 or 92.0 < fit_pct <= 105.0:
+        fit_prob = "MEDIUM"
+    else:
+        fit_prob = "LOW"
+
+    # Legacy line-count keys (kept for backward-compat with existing test
+    # signatures + UI bar widths that scale to capacity).
+    page_capacity_lines = int(round(PAGE_HEIGHT_MM / ELEM["bullet_line"]))  # ≈ 60
+    total_lines = sum(s["lines"] for s in sections)
+
+    return {
+        "sections": sections,
+        "total_mm": round(total_mm, 2),
+        "page_capacity_mm": PAGE_HEIGHT_MM,
+        "fit_probability": fit_prob,
+        "fit_pct": fit_pct_clipped,
+        "headroom_mm": round(PAGE_HEIGHT_MM - total_mm, 2),
+        # Backward-compat:
+        "total_lines": total_lines,
+        "page_capacity_lines": page_capacity_lines,
+        "headroom_lines": page_capacity_lines - total_lines,
+    }
+
+
+def _strategy_review_gate(parsed_p12: dict, distribution: dict, parsed_resume: Optional[dict] = None) -> None:
     """S6.1 — Interactive strategy gate shown after JD analysis.
 
-    Renders a Rich Panel summarising the plan (target role, strategy type,
-    company inclusion list with bullet counts, excluded companies, top JD
-    keywords) then asks for confirmation before the expensive bullet-generation
-    phase (~60 LLM calls).
+    Renders a Rich Panel summarising the plan: target role + company inclusion
+    list with bullet counts + excluded companies (below relevance cutoff) +
+    layout-fit estimate (see UAT #39 below). Asks for confirmation before the
+    expensive bullet-generation phase (~60 LLM calls).
+
+    UAT bug #39: ALSO renders vertical space distribution, per-section
+    economics, and 1-page fit probability so the user can spot likely-overflow
+    plans BEFORE the LLM burns tokens.
+
+    Cluster C cycle 2 (MED #3): Strategy / Top JD keywords rows were trimmed —
+    `_render_jd_requirements_panel()` already shows them ~30s earlier, so the
+    duplicate scan is noise. Only company inclusion + layout fit remain here
+    (the unique-info rows).
 
     Skipped when LR_NO_PAUSE=1 (CI / non-interactive runs), matching the
     behaviour of _see_and_continue().
@@ -82,18 +332,20 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
 
     console = Console(theme=LR_THEME)
 
+    # MED #3 (Cluster C cycle 2): Target / Strategy / Top JD keywords are now
+    # shown by _render_jd_requirements_panel() ~30s earlier — repeating them here
+    # is noise. Keep the Companies-included + Excluded rows (new info) and the
+    # Layout fit block (the *real* purpose of the gate).
     target_role = parsed_p12.get("target_role") or parsed_p12.get("strategy_role") or "?"
-    strategy = (parsed_p12.get("strategy") or "?").upper()
     included = distribution.get("included_companies") or []
     excluded = distribution.get("excluded_companies") or []
     cutoff = distribution.get("relevance_cutoff")
-    jd_keywords = parsed_p12.get("jd_keywords") or []
 
     body = Text(overflow="fold", no_wrap=False)
-    body.append(f"  Target:    ", style="step.gold")
+    # One-line context recap (target role only) — orients the user without
+    # duplicating the JD panel.
+    body.append("  For:  ", style="step.gold")
     body.append(f"{target_role}\n", style="bold")
-    body.append(f"  Strategy:  ", style="step.gold")
-    body.append(f"{strategy}\n", style="bold")
 
     if included:
         body.append("\n  Companies to include:\n", style="step.gold")
@@ -122,12 +374,39 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
             body.append(f"{label}", style="dim")
             body.append(f"  relevance {rel}\n", style="text.secondary")
 
-    if jd_keywords:
-        kw_preview = ", ".join(str(k) for k in jd_keywords[:8])
-        if len(jd_keywords) > 8:
-            kw_preview += f"  (+{len(jd_keywords) - 8} more)"
-        body.append("\n  Top JD keywords:  ", style="step.gold")
-        body.append(kw_preview, style="step.accent")
+    # UAT bug #39 — vertical-space distribution + fit probability + section economics
+    if parsed_resume is not None:
+        try:
+            heights = _estimate_section_heights(parsed_p12, parsed_resume, distribution)
+            body.append("\n\n  Layout fit (estimated):\n", style="step.gold")
+            for s in heights["sections"]:
+                bar_width = max(1, int(round(s["pct_height"] / 4)))   # 4% per block (~25 max)
+                bar = "█" * min(bar_width, 25)
+                body.append(f"    {s['name']:<11s}", style="")
+                body.append(f"{bar} ", style="step.accent")
+                body.append(f"{s['pct_height']:5.1f}%  ", style="text.secondary")
+                body.append(f"~{s['lines']} lines\n", style="text.secondary")
+            body.append(f"\n  Page utilization:  ", style="step.gold")
+            fit_style = {
+                "HIGH":   "metric.positive",
+                "MEDIUM": "step.gold",
+                "LOW":    "error",
+            }.get(heights["fit_probability"], "text.secondary")
+            body.append(f"{heights['fit_pct']:.1f}% of single page  ", style="bold")
+            body.append(f"[{heights['fit_probability']} 1-page fit]\n", style=fit_style)
+            if heights["fit_probability"] == "LOW":
+                # 2026-05-14 cycle 2: thresholds aligned with fit_loop IDEAL band
+                # (85-92%). >105% = page WILL overflow per fit_loop. <75% = page
+                # WILL look sparse (fit_loop will trigger EXPAND strategies).
+                if heights["fit_pct"] > 105:
+                    body.append("    ", style="")
+                    body.append("⚠ Likely overflow — consider reducing bullets / dropping a section\n", style="error")
+                else:
+                    body.append("    ", style="")
+                    body.append("⚠ Page may look sparse — consider adding a project or skill row\n", style="error")
+        except Exception as _e:
+            # Never crash strategy review for telemetry — log + carry on
+            log(f"[strategy_review #39 heights] estimate failed: {_e}")
 
     console.print()
     console.print(Panel(
@@ -1012,6 +1291,27 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
     from linkright.resume.lib.contact_quality import check_email_quality, check_linkedin_quality
 
     contact = dict(parsed.get("contact_info", {}) or {})
+
+    # UAT bug #35 — Contact Info Desync.
+    # `linkright contact` (and profile/pipeline.contact_verify_loop) writes to
+    # ~/.linkright/profile/contact.yaml. step_14 reads contact.yaml via
+    # load_contact(), but step_01b previously only read from
+    # profile_overrides.json — so users who updated contact via the dedicated
+    # `linkright contact` command saw STALE parse-time data in the tailor
+    # verify panel (looked like edits never landed).
+    # Fix: merge contact.yaml ON TOP OF the parsed contact BEFORE applying
+    # profile_overrides.json. Precedence (highest wins):
+    #   profile_overrides.json  >  contact.yaml  >  parsed step_01 extract
+    try:
+        from linkright.profile.pipeline import load_contact as _load_contact
+        _yaml_contact = _load_contact() or {}
+        for _k in ("name", "phone", "email", "linkedin", "portfolio"):
+            _v = (_yaml_contact.get(_k) or "")
+            if isinstance(_v, str) and _v.strip():
+                contact[_k] = _v.strip()
+    except Exception:
+        # Best-effort merge — never crash the pipeline if contact.yaml is malformed
+        pass
 
     # Load any previously saved overrides (persisted from prior runs)
     _overrides_path = _Path.home() / ".linkright" / "profile_overrides.json"
@@ -5876,29 +6176,24 @@ def main():
     # Skipped when LR_NO_PAUSE=1 (CI mode) — step_01b reads env var internally.
     step_01b_verify_contact_details(parsed)
 
-    step_start("Extracting career nuggets", index=3, total=9)
-    # UAT bug #21: coral in-flight verb so the user knows we're not stuck.
-    step_progress("Smooshing resume into atomic nuggets", telemetry="LLM call · 1 batch")
-    nuggets = step_02_extract_nuggets(raw_text, parsed)
-    step_done(detail=f"{len(nuggets)} nuggets extracted")
-
-    step_start("Embedding nuggets", index=4, total=9)
-    step_progress("Vectorising bullets", telemetry=f"{len(nuggets)} nuggets · fastembed")
-    nuggets_with_emb = step_03_embed_nuggets(nuggets)
-    step_done(detail=f"{sum(1 for n in nuggets_with_emb if n.get('emb'))} embedded")
-
+    # UAT bug #38: JD analysis was previously step 5 of 9 (after nuggets + embed).
+    # Users wanted to see the JD interpretation immediately after providing input —
+    # the system felt unresponsive while nuggets crunched silently.
+    # New order: read JD → analyze JD → show P0/P1/P2 panel (#33) → THEN nuggets.
+    # step_07_phase_1_2 only needs jd_text + raw_text (no nuggets), so the move
+    # is safe; step_06 (role scoring) still runs after step_03 (embed nuggets).
     jd_text = (INPUTS / "jd.md").read_text(encoding="utf-8")
 
-    # C1/F-NEW-1: Phase 1+2 (step_07) runs BEFORE role scoring so the canonical
-    # requirement set used by Step 6 is the JD-aware Credo-specific one — this
-    # mirrors prod worker, which uses Phase 1+2's `requirements` field for
-    # covers_requirements mapping in Phase 4a verbose bullets.
-    step_start("Analyzing job description", index=5, total=9)
-    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb so the user knows
-    # we're still working through the slowest LLM call in the pipeline.
+    step_start("Analyzing job description", index=3, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb on the slowest LLM call.
     step_progress("Analyzing", telemetry=f"LLM call · {len(jd_text)} chars in")
     parsed_p12 = step_07_phase_1_2(jd_text, raw_text)
     step_done(detail=f"{len(parsed_p12.get('requirements', []))} requirements identified")
+
+    # UAT bug #33: surface the JD interpretation right after step_07 so the user
+    # can sanity-check P0/P1/P2 requirements + keywords BEFORE the expensive
+    # embed/score phase. Read-only — does NOT block.
+    _render_jd_requirements_panel(parsed_p12)
 
     # v0.1.6 Entity-fidelity guard (Layer 1, post-step_07).
     # The JD-parser LLM occasionally hallucinates a company that doesn't exist in
@@ -5989,6 +6284,22 @@ def main():
             "category": r.get("category", "other"),
             "importance": r.get("importance", "required"),
         })
+
+    # UAT bug #38 — nuggets + embed run AFTER JD analysis (was before).
+    # No dependency on jd_text inside step_02/step_03; safe to defer until here.
+    # Reasoning: showing JD interpretation immediately gives the user instant
+    # feedback (~3-5s) while these steps (~30-60s of LLM + embed work) crunch.
+    step_start("Extracting career nuggets", index=4, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb on slow LLM step.
+    step_progress("Smooshing resume into atomic nuggets", telemetry="LLM call · 1 batch")
+    nuggets = step_02_extract_nuggets(raw_text, parsed)
+    step_done(detail=f"{len(nuggets)} nuggets extracted")
+
+    step_start("Embedding nuggets", index=5, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb on embed step.
+    step_progress("Vectorising bullets", telemetry=f"{len(nuggets)} nuggets · fastembed")
+    nuggets_with_emb = step_03_embed_nuggets(nuggets)
+    step_done(detail=f"{sum(1 for n in nuggets_with_emb if n.get('emb'))} embedded")
 
     step_start("Embedding JD requirements", index=6, total=9)
     # UAT cluster-E3 cycle 2 (MED #5): coral progress verb.
@@ -6112,7 +6423,9 @@ def main():
     # S6.1 — interactive strategy gate: show the plan and ask for confirmation
     # before committing to the expensive bullet-generation phase (~60 LLM calls).
     # Skipped when LR_NO_PAUSE=1 (CI / non-interactive).
-    _strategy_review_gate(parsed_p12, distribution)
+    # UAT bug #39: `parsed` (resume structure) passed so the gate can render
+    # per-section line counts + 1-page fit probability + space economics.
+    _strategy_review_gate(parsed_p12, distribution, parsed_resume=parsed)
 
     step_start("Retrieving relevant nuggets per company", index=8, total=9)
     # UAT cluster-E3 cycle 2 (MED #5): coral progress verb.
