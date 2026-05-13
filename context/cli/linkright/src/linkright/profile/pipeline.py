@@ -289,10 +289,9 @@ def _extract_contact_from_text(raw_text: str) -> dict:
     # name heuristic (capitalized, 2-4 words, no digits/@) and got stored as
     # the candidate's name. Strip common greeting/honorific prefixes before
     # the heuristic check.
-    # Polish PR: extended with Indian relationship prefixes (S/o, D/o, W/o),
-    # Late prefix, regional honorifics (Thiru — Tamil Mr.), and religious titles
-    # (Rev., Fr., Sis.) often found on certificate-style PDFs that get
-    # erroneously fed into profile create.
+    # Polish PR: extended with regional honorifics (Thiru — Tamil Mr.) and
+    # religious / honour titles (Rev., Fr., Sis., Hon., Late). These all
+    # modify the SAME PERSON named on the line, so stripping is safe.
     _GREETING_PREFIXES = (
         "dear ", "hi ", "hello ", "greetings ",
         "mr. ", "mr ", "mrs. ", "mrs ", "ms. ", "ms ",
@@ -303,8 +302,26 @@ def _extract_contact_from_text(raw_text: str) -> dict:
         "rev. ", "rev ", "fr. ", "fr ", "sis. ", "sis ",
         "hon. ", "hon ", "honorable ", "honourable ",
         "late ",
-        "s/o ", "d/o ", "w/o ",
     )
+
+    # Polish PR adversarial review (AR-1, blocker fix): relationship-marker
+    # lines name a DIFFERENT person (father/mother/husband of the candidate),
+    # not the candidate themselves. Stripping the prefix and storing the
+    # remainder would store the wrong person's name (data integrity bug).
+    # These lines must be SKIPPED entirely during candidate-name extraction.
+    _REJECT_LINE_PREFIXES = (
+        "s/o ", "s/o.", "son of ",
+        "d/o ", "d/o.", "daughter of ",
+        "w/o ", "w/o.", "wife of ",
+        "h/o ", "h/o.", "husband of ",
+        "father's name", "father name",
+        "mother's name", "mother name",
+        "spouse's name", "spouse name",
+    )
+
+    def _is_relationship_line(s: str) -> bool:
+        low = s.lower()
+        return any(low.startswith(p) for p in _REJECT_LINE_PREFIXES)
 
     def _strip_greeting(s: str) -> str:
         low = s.lower()
@@ -316,6 +333,10 @@ def _extract_contact_from_text(raw_text: str) -> dict:
     for line in text.splitlines():
         line = line.strip()
         if not line:
+            continue
+        # Skip relationship-marker lines (S/o, D/o, W/o, etc.) — these name
+        # a relative of the candidate, not the candidate themselves.
+        if _is_relationship_line(line):
             continue
         candidate = _strip_greeting(line)
         # Heuristic: looks like a name if 2-4 words, capitalized, no @ or digits
