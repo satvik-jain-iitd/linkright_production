@@ -74,7 +74,7 @@ def main(ctx: click.Context) -> None:
     # the alphabetical command list stays one keystroke away as
     # `linkright --help` for users who want the full surface.
     if ctx.invoked_subcommand is None:
-        from linkright.ui import lr_banner
+        from linkright.ui import lr_banner, sticky_footer
         lr_banner(version=__version__)
         click.echo(_TLDR)
         # Silent version-check: hits PyPI (cached 24h) + appends a small
@@ -87,6 +87,17 @@ def main(ctx: click.Context) -> None:
                 click.echo(notice)
         except Exception:
             pass  # never let version-check block CLI usage
+        # UAT #16: sticky footer — semantic tier/mode/status badges.
+        # Tier (gold/orange) = release channel; Mode (mint/teal) = active
+        # pillar context; Status (muted) = current command surface.
+        try:
+            sticky_footer(
+                tier=f"v{__version__}",
+                mode="resume",
+                status="linkright --help · linkright doctor",
+            )
+        except Exception:
+            pass  # footer is decorative — never block the surface
         ctx.exit(0)
 
 
@@ -570,18 +581,27 @@ def doctor_cmd(auto_fix: bool) -> None:
         pass  # version-check is fully optional; no crash if helper fails
 
     # 11. Render the table
-    from linkright.ui import console as _con
+    from linkright.ui import console as _con, horizontal_divider, l_branch_tip, sticky_footer
     from linkright.ui.patterns import status_event
     label_width = max(len(label) for label, _, _ in rows)
-    _con.print("\nLinkRight doctor — environment & deps check\n")
+    # UAT #14: structural horizontal divider wraps the role-based output
+    # (user invoked `doctor` → assistant responds with health table below).
+    _con.print()
+    horizontal_divider(console=_con)
+    _con.print("LinkRight doctor — environment & deps check\n")
     failures = 0
     for label, ok, detail in rows:
         status_event(label, ok, detail, label_width=label_width, console=_con)
         if not ok:
             failures += 1
     _con.print()
+    horizontal_divider(console=_con)
     if failures == 0:
         _con.print("[metric.positive]All checks passed.[/] You're good to run `linkright tailor`.")
+        # UAT #22: secondary info / tip uses the L-shaped muted branch.
+        l_branch_tip("re-run `linkright doctor` anytime to revalidate.", console=_con)
+        # UAT #16: sticky footer summarising the doctor surface.
+        sticky_footer(tier=f"v{__version__}", mode="doctor", status="all systems green", console=_con)
         return
 
     # AR walkthrough F-PRE-2 fix: pluralization
@@ -604,6 +624,15 @@ def doctor_cmd(auto_fix: bool) -> None:
             f"[error]{failures} {issue_word} above.[/] "
             f"No auto-fix available; see the manual hints above or run `linkright setup`."
         )
+    # UAT #22: muted tip line below the failure summary.
+    l_branch_tip("inspect ~/.linkright/config.yaml for current settings.", console=_con)
+    # UAT #16: sticky footer carries the failure status downstream.
+    sticky_footer(
+        tier=f"v{__version__}",
+        mode="doctor",
+        status=f"{failures} {issue_word} need attention",
+        console=_con,
+    )
 
     if auto_fix:
         _run_doctor_auto_fix(rows)

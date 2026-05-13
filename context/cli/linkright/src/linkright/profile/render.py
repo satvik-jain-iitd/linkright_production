@@ -361,7 +361,16 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         console.print(
             f"[dim italic]Not yet populated:[/] [dim]{', '.join(missing_all)}.[/]"
         )
-        console.print(
-            "[dim italic]Tip:[/] [dim]add these sections to your resume PDF + run "
-            "`linkright profile rebuild -r resume.pdf` to refresh.[/]"
-        )
+        # UAT #22: secondary info follows the L-shaped muted-gray branch pattern.
+        try:
+            from linkright.ui import l_branch_tip
+            l_branch_tip(
+                "add these sections to your resume PDF + run "
+                "`linkright profile rebuild -r resume.pdf` to refresh.",
+                console=console,
+            )
+        except Exception:
+            console.print(
+                "[dim italic]Tip:[/] [dim]add these sections to your resume PDF + run "
+                "`linkright profile rebuild -r resume.pdf` to refresh.[/]"
+            )

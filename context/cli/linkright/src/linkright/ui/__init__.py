@@ -25,6 +25,15 @@ from linkright.ui.patterns import (  # noqa: F401 — re-exported for callers
     muted_detail,
     claude_metadata,
 )
+from linkright.ui.layout import (  # noqa: F401 — Cluster E2 layout primitives
+    horizontal_divider,
+    turn_divider,
+    sticky_footer,
+    tab_bar,
+    tab_navigate,
+    l_branch_tip,
+    l_branch_group,
+)
 
 console = Console(theme=LR_THEME)
 
