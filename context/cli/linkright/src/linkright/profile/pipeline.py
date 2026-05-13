@@ -285,17 +285,37 @@ def _extract_contact_from_text(raw_text: str) -> dict:
         break
 
     # Name: first non-empty line of resume head, often "FirstName LastName"
+    # UAT bug #5: lines like "Dear Satvik Jain" or "Mr. John Doe" passed the
+    # name heuristic (capitalized, 2-4 words, no digits/@) and got stored as
+    # the candidate's name. Strip common greeting/honorific prefixes before
+    # the heuristic check.
+    _GREETING_PREFIXES = (
+        "dear ", "hi ", "hello ", "greetings ",
+        "mr. ", "mr ", "mrs. ", "mrs ", "ms. ", "ms ",
+        "dr. ", "dr ", "prof. ", "prof ",
+        "sir ", "madam ", "to: ", "to ", "respected ",
+        "shri ", "shrimati ", "smt. ", "smt ",
+    )
+
+    def _strip_greeting(s: str) -> str:
+        low = s.lower()
+        for pref in _GREETING_PREFIXES:
+            if low.startswith(pref):
+                return s[len(pref):].strip()
+        return s
+
     for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
+        candidate = _strip_greeting(line)
         # Heuristic: looks like a name if 2-4 words, capitalized, no @ or digits
-        words = line.split()
+        words = candidate.split()
         if (2 <= len(words) <= 4
-                and not any(ch.isdigit() for ch in line)
-                and "@" not in line
+                and not any(ch.isdigit() for ch in candidate)
+                and "@" not in candidate
                 and all(w[0].isupper() for w in words if w)):
-            contact["name"] = line
+            contact["name"] = candidate
             break
 
     return contact
