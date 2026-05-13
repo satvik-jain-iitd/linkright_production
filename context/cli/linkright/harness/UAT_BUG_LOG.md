@@ -22,7 +22,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 14 | Systemic | CLI / UI | Missing structural horizontal dividers to wrap role-based interactions (input vs response). | **Fixed (Cluster E2, THIS PR)** |
 | 15 | Systemic | CLI / UI | Missing a brand character/icon (e.g., octopus/robot style) to anchor the prompt area. | Open |
 | 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | **Fixed (Cluster E2, THIS PR)** |
-| 17 | Systemic | CLI / UI | Menus don't support Tab/Shift-Tab for horizontal navigation between question categories. | **Fixed (Cluster E2, THIS PR)** |
+| 17 | Systemic | CLI / UI | Menus don't support Tab/Shift-Tab for horizontal navigation between question categories. | **Partial (Cluster E2, THIS PR)** — `tab_navigate()` primitive shipped + opt-in via `LR_PICKER_STYLE=tabs`; full wiring across long-label v1 pickers deferred to follow-up cluster (gate currently ≤30-char labels). |
 | 18 | Systemic | CLI / UI | "Recommended" solutions use inconsistent emojis instead of parenthetical text labels. | **Fixed (Cluster E1, PR #158)** |
 | 19 | Systemic | CLI / UI | Missing "Type something" custom input entry in selection lists. | **Fixed (Cluster E3 — ✅ THIS PR)** |
 | 20 | Systemic | CLI / UI | Previous user inputs are not rendered with the high-contrast white bullet (`●`) pattern. | **Fixed (Cluster E3 — ✅ THIS PR)** |
