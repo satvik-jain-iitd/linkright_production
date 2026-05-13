@@ -139,11 +139,12 @@ class TestResumeHeuristic:
         candidate's contact info in the header) used to pass the heuristic
         because email + phone + length gave it 3/4 signals.
 
-        The cover-letter giveaway short-circuit ("Dear Hiring Manager",
-        "Sincerely,", "I am writing to", "Please find attached", etc.) now
-        flips the verdict to "not a resume" regardless of signal count.
-        Without that short-circuit, the user pastes a 600-char cover
-        letter and waits 30-90s for the pipeline to do nothing useful.
+        Cycle 3 update: cover-letter detection is now a SOFT missing
+        signal (not a hard veto — that false-rejected resumes with
+        testimonial quotes). The realistic cover-letter case still fails:
+        2+ giveaway phrases (opener + closer) subtract one from the pass
+        count, and a real cover letter has low resume-keyword density,
+        so it drops below the ≥3-of-4 threshold.
         """
         from linkright.profile.cli import _looks_like_resume
         md = tmp_path / "cover_with_contact.md"
@@ -225,6 +226,47 @@ class TestResumeHeuristic:
         ok, _ = _looks_like_resume(empty)
         # No extracted text → "treat as resume to avoid false-blocking".
         assert ok is True
+
+    def test_resume_with_testimonial_quote_passes(self, tmp_path):
+        """Cycle 3 / MED false-reject fix: a realistic resume with a single
+        cover-letter-flavoured phrase (an inline testimonial quote or a
+        Summary line that mentions "my qualifications") MUST NOT be
+        rejected — under cycle 2's hard-veto rule it was.
+
+        Specifically:
+          - Full keyword density (experience, education, skills, …)
+          - Email + phone in header
+          - ≥400 chars
+          - ONE cover-letter phrase ("Best regards, John" in a quoted
+            testimonial)
+        Should land at 4/4 positive signals, no soft penalty (only 1
+        cover-letter hit, threshold is ≥2), and pass.
+        """
+        from linkright.profile.cli import _looks_like_resume
+        md = tmp_path / "resume_with_quote.md"
+        md.write_text(
+            "# Jane Smith\n"
+            "jane@example.com  •  +1-555-555-0123\n"
+            "linkedin.com/in/jane-smith\n\n"
+            "## Professional Experience\n"
+            "### Senior Engineer — Acme Corp (2021-Present)\n"
+            "- Led platform engineering of 12 engineers across two zones.\n"
+            "- Managed cross-functional initiatives across teams.\n"
+            "- Designed multi-region failover, reduced p99 latency by 35%.\n\n"
+            "## Education\n"
+            "- BS Computer Science, MIT, 2018 (GPA 3.9).\n\n"
+            "## Technical Skills\n"
+            "- Python, Go, AWS, Kubernetes, Postgres, Terraform.\n\n"
+            "## Achievements\n"
+            '- Recommended by VP Engineering: "Best regards, John — '
+            'one of the strongest engineers I have worked with."\n'
+            "- Speaker at SREcon 2024.\n"
+        )
+        ok, missing = _looks_like_resume(md)
+        assert ok is True, (
+            f"Resume with a single embedded cover-letter phrase "
+            f"(testimonial quote) must NOT be rejected. missing={missing}"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -603,3 +645,118 @@ class TestOverwritePicker:
         )
         result = profile_cli._prompt_overwrite_existing(tmp_path / "profile")
         assert result == "overwrite"
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cycle 3 / Fix 1 — augment-of-existing-profile metadata preservation
+# ─────────────────────────────────────────────────────────────────────────
+
+class TestAugmentMetadataPreservation:
+    def test_augment_existing_pdf_profile_preserves_metadata(self, tmp_path):
+        """Cycle 3 / Fix 1 (HIGH regression): when `--from-markdown` augments
+        an existing PDF-created profile, `_write_markdown_only_metadata`
+        MUST NOT clobber the original `embedder_tier` / `embedder_model` /
+        `dim` / `created_at` with live-detected values.
+
+        Concrete failure mode (the bug this test guards):
+          - Profile originally created on Oracle (tier=oracle,
+            model=nomic-embed-text, dim=768)
+          - User runs augment (--from-markdown notes.md) in an env without
+            Oracle env vars — live detection returns fastembed (dim=384)
+          - Old code: metadata flips to fastembed / 384, but embeddings.npz
+            still holds 768-dim vectors → `resume tailor`'s cache-tier
+            check trusts the wrong label and fails / re-embeds wrongly.
+
+        Expected: metadata still reads tier=oracle, model=nomic-embed-text,
+        dim=768, created_at unchanged. Only n_nuggets bumps and
+        last_updated stamps.
+        """
+        import yaml as _yaml
+        from linkright.profile.cli import _write_markdown_only_metadata
+        from linkright.profile.markdown_ingest import IngestResult
+
+        profile_dir = tmp_path / "profile"
+        profile_dir.mkdir()
+        # Simulate a profile created on Oracle: dim=768, tier=oracle.
+        original_created_at = "2026-04-01T10:00:00+00:00"
+        original_meta = {
+            "created_at": original_created_at,
+            "embedder_tier": "oracle",
+            "embedder_model": "nomic-embed-text",
+            "dim": 768,
+            "n_nuggets": 12,
+            "n_embedded": 12,
+            "n_highlights": 4,
+            "profile_version": 1,
+            "source_pdf_sha256": "abc123",
+        }
+        meta_path = profile_dir / "metadata.yaml"
+        meta_path.write_text(_yaml.safe_dump(original_meta, sort_keys=False))
+
+        # Run the augment. The env may or may not have Oracle vars; we
+        # don't care — the function must not consult live detection on
+        # the augment path.
+        ingest = IngestResult(chunks_total=3, nuggets_added=5)
+        _write_markdown_only_metadata(
+            profile_dir, ingest, source_hint="markdown-file"
+        )
+
+        # Read back. Critical fields preserved exactly.
+        final_meta = _yaml.safe_load(meta_path.read_text())
+        assert final_meta["embedder_tier"] == "oracle", (
+            f"embedder_tier MUST be preserved on augment. Got "
+            f"{final_meta.get('embedder_tier')!r}"
+        )
+        assert final_meta["embedder_model"] == "nomic-embed-text", (
+            f"embedder_model MUST be preserved on augment. Got "
+            f"{final_meta.get('embedder_model')!r}"
+        )
+        assert final_meta["dim"] == 768, (
+            f"dim MUST be preserved on augment (embeddings.npz is on disk "
+            f"with this dim). Got {final_meta.get('dim')!r}"
+        )
+        assert final_meta["created_at"] == original_created_at, (
+            "created_at MUST be preserved across augments."
+        )
+        assert final_meta["profile_version"] == 1
+        # PDF-side provenance preserved.
+        assert final_meta.get("source_pdf_sha256") == "abc123"
+        # Bumped counts.
+        assert final_meta["n_nuggets"] == 12 + 5, (
+            f"n_nuggets must be additive on augment. Got "
+            f"{final_meta.get('n_nuggets')!r}"
+        )
+        # last_updated stamped.
+        assert final_meta.get("last_updated"), (
+            "last_updated must be stamped on augment."
+        )
+
+    def test_new_markdown_only_profile_writes_full_metadata(self, tmp_path):
+        """Companion to the above: on the NEW-profile path (no prior
+        metadata.yaml), the function MUST write the full set of fields
+        from live detection. This is the legitimate cycle-2 behaviour that
+        Fix 1 narrows — make sure we didn't accidentally regress it.
+        """
+        import yaml as _yaml
+        from linkright.profile.cli import _write_markdown_only_metadata
+        from linkright.profile.markdown_ingest import IngestResult
+
+        profile_dir = tmp_path / "profile"
+        profile_dir.mkdir()
+        # No prior metadata.yaml — this is the fresh-paste / fresh-md case.
+        assert not (profile_dir / "metadata.yaml").exists()
+
+        ingest = IngestResult(chunks_total=2, nuggets_added=3)
+        _write_markdown_only_metadata(profile_dir, ingest, source_hint="paste")
+
+        final_meta = _yaml.safe_load(
+            (profile_dir / "metadata.yaml").read_text()
+        )
+        # Must have all the fields downstream commands need.
+        assert final_meta.get("created_at"), "new profile needs created_at"
+        assert final_meta.get("embedder_tier"), "new profile needs embedder_tier"
+        assert final_meta.get("embedder_model"), "new profile needs embedder_model"
+        assert final_meta.get("dim"), "new profile needs dim"
+        assert final_meta["n_nuggets"] == 3
+        assert final_meta["profile_version"] == 1
+        assert final_meta["source"] == "paste"

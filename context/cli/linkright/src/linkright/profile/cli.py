@@ -126,9 +126,28 @@ def _keyword_hits(low: str) -> int:
     return n
 
 
+def _cover_letter_signal_count(low: str) -> int:
+    """Count distinct cover-letter giveaway phrases present in the text.
+
+    Cycle 3 / MED false-reject fix: cycle 2 treated ANY single hit as a
+    hard veto. Realistic false-rejects observed:
+      - Resumes with a quoted testimonial: "Best regards, John — VP at X"
+      - Summary sections that say "my qualifications include …"
+      - Recommendation-letter excerpts pasted inline
+    Returning a count (not a boolean) lets the caller distinguish a stray
+    quote from a real cover letter (which always has 2+ distinct
+    giveaways — opener + closer at minimum).
+    """
+    return sum(1 for sig in _COVER_LETTER_SIGNALS if sig in low)
+
+
 def _looks_like_cover_letter(low: str) -> bool:
-    """True if any cover-letter giveaway phrase appears in the text."""
-    return any(sig in low for sig in _COVER_LETTER_SIGNALS)
+    """Backwards-compat shim: kept for any caller that imported the old name.
+
+    Cycle 3: cover-letter detection is no longer a binary veto inside
+    `_looks_like_resume`; new callers should use `_cover_letter_signal_count`.
+    """
+    return _cover_letter_signal_count(low) >= 2
 
 
 def _read_text_for_sanity(path: Path) -> str:
@@ -166,19 +185,32 @@ def _read_text_for_sanity(path: Path) -> str:
 def _looks_like_resume(path: Path) -> tuple[bool, list[str]]:
     """Return (is_resume_like, missing_signals).
 
-    Heuristic — scores 4 signals: keyword presence (≥3 distinct hits,
-    word-boundary), email regex, phone regex, minimum length (≥400 chars).
-    If 3+ pass we trust it. If <3 pass we surface the missing signals so
-    the user can decide informedly (this is an interactive warning, not a
-    hard block — see _prompt_resume_lookalike_override).
+    Heuristic — scores 4 positive signals: keyword presence (≥3 distinct
+    hits, word-boundary), email regex, phone regex, minimum length
+    (≥400 chars). Cover-letter giveaway phrases ("Dear Hiring Manager",
+    "Sincerely,", "I am writing to", "please find attached", etc.) are
+    tracked as a *soft* missing-signal (subtracts one from the pass
+    count). A real resume must pass ≥3 of 4 signals after the
+    cover-letter penalty.
 
-    Cover-letter short-circuit (cycle 2 / B3): a real cover letter often
-    has contact info in the header AND uses verbs like "managed" /
-    "designed", so it can pass 3/4 signals on the raw counts. We override
-    to "not a resume" the moment we see any of the universal cover-letter
-    giveaways ("Dear Hiring Manager", "Sincerely,", "I am writing to",
-    "please find attached", etc.) — these are essentially absent from
-    real resumes.
+    Cycle 3 / MED false-reject fix: cycle 2 treated ANY single
+    cover-letter phrase as a hard veto. Realistic false-rejects:
+      - Resumes with quoted testimonials ("Best regards, John — VP at X")
+      - Summary sections that say "my qualifications include …"
+      - Recommendation-letter excerpts pasted inline
+    The hard veto is gone; instead:
+
+      - 1 cover-letter phrase  → no penalty (likely a stray quote)
+      - 2+ distinct phrases    → counts as ONE missing signal (the
+                                 ≥3-of-4 threshold then catches the
+                                 realistic cover-letter case via low
+                                 keyword density)
+
+    A real cover letter typically has BOTH an opener ("Dear …" / "To
+    whom it may concern") AND a closer ("Sincerely," / "Yours truly,"),
+    so the ≥2 threshold catches the realistic case while leaving room
+    for an embedded quote on a resume. The override prompt remains the
+    escape hatch when users disagree.
     """
     text = _read_text_for_sanity(path)
     if not text:
@@ -191,14 +223,22 @@ def _looks_like_resume(path: Path) -> tuple[bool, list[str]]:
     has_email = bool(_EMAIL_RE_UAT6.search(text))
     has_phone = bool(_PHONE_RE_UAT6.search(text))
     long_enough = len(text) >= 400
-    has_cover_signal = _looks_like_cover_letter(low)
+    cover_hits = _cover_letter_signal_count(low)
+    cover_letter_like = cover_hits >= 2
 
-    signals_pass = sum([
+    positive_signals = sum([
         keyword_hits >= 3,
         has_email,
         has_phone,
         long_enough,
     ])
+    # Cover-letter detection is now a SOFT missing-signal — subtract one
+    # from the pass count when 2+ giveaway phrases are present. Realistic
+    # cover letters: header contact (+email +phone +length) → 3/4 raw,
+    # minus 1 for cover-letter signal → 2/4 → fails ≥3 threshold. Real
+    # resume with one embedded "Best regards, John" testimonial quote:
+    # cover_hits == 1 → no penalty, full 4/4 pass.
+    effective_signals = max(0, positive_signals - (1 if cover_letter_like else 0))
 
     missing: list[str] = []
     if keyword_hits < 3:
@@ -212,20 +252,17 @@ def _looks_like_resume(path: Path) -> tuple[bool, list[str]]:
         missing.append("no phone number detected")
     if not long_enough:
         missing.append(f"very short ({len(text)} chars — most resumes are ≥400)")
-    if has_cover_signal:
+    if cover_letter_like:
+        # Surface the actual hits so the override prompt is informative
+        # ("missing: looks like a cover letter (sincerely + dear hiring)").
+        _hit_phrases = [sig for sig in _COVER_LETTER_SIGNALS if sig in low]
         missing.append(
-            "contains cover-letter phrases ('Dear …', 'I am writing to', "
-            "'Sincerely,', etc.) — looks like a cover letter, not a resume"
+            "looks like a cover letter — multiple cover-letter phrases "
+            f"present ({', '.join(_hit_phrases[:4])}"
+            f"{', …' if len(_hit_phrases) > 4 else ''})"
         )
 
-    # Cover-letter giveaways short-circuit to "not a resume" regardless of
-    # other signal counts. Without this, a 600-char cover letter with the
-    # candidate's contact details in the header passes 3/4 (email + phone +
-    # length) and silently runs the 30-90 sec pipeline on the wrong file.
-    if has_cover_signal:
-        return (False, missing)
-
-    return (signals_pass >= 3, missing)
+    return (effective_signals >= 3, missing)
 
 
 def _prompt_resume_lookalike_override(path: Path, reasons: list[str]) -> bool:
@@ -262,17 +299,19 @@ def _prompt_resume_lookalike_override(path: Path, reasons: list[str]) -> bool:
 
 # ── UAT bug #9 — interactive overwrite picker ──────────────────────────────
 
-def _prompt_overwrite_existing(profile_dir: Path, *, paste_mode: bool = False) -> str:
+def _prompt_overwrite_existing(profile_dir: Path) -> str:
     """Show an overwrite picker when a profile already exists.
 
-    Returns one of: "keep" | "overwrite" | "view" | "append" (paste_mode only).
+    Returns one of: "keep" | "overwrite" | "view".
     Power users still have `--force` for non-interactive overwrite.
 
-    Cycle 2 / MED-7: when the user lands here via `--from-paste` AND already
-    has a profile, surfacing an "Append paste to existing profile" option
-    lets them grow their nugget store without destroying prior data — a
-    much more common intent than "wipe everything I have for this fresh
-    paste". Non-paste callers see the original 3-option picker.
+    Paste-to-existing-profile routes through this same picker (keep /
+    overwrite / view). Appending paste content to an existing profile
+    is deferred to a future cluster — adding a 4th picker option here
+    was a cycle-2 scope creep that introduced regressions; the UX
+    surprise risk of an additive option that silently mutates an
+    otherwise-trusted profile is non-trivial and needs its own design
+    pass.
     """
     try:
         from linkright.ui import lr_select, console as _con, TEAL
@@ -299,23 +338,13 @@ def _prompt_overwrite_existing(profile_dir: Path, *, paste_mode: bool = False) -
                 value="view",
             ),
         ]
-        if paste_mode:
-            # Insert "append" as the second-recommended option: less
-            # destructive than overwrite, preserves existing nuggets.
-            choices.insert(
-                2,
-                questionary.Choice(
-                    "Append paste to existing profile — add new nuggets, keep old ones",
-                    value="append",
-                ),
-            )
         picked = lr_select(
             "What would you like to do?",
             choices=choices,
             accent=TEAL,
             hint="Enter to select  ·  ↑↓ to navigate  ·  Esc to cancel",
         )
-        valid = {"keep", "overwrite", "view"} | ({"append"} if paste_mode else set())
+        valid = {"keep", "overwrite", "view"}
         # Esc / Ctrl+C / cancellation defaults to the safe option (keep).
         return picked if picked in valid else "keep"
     except Exception:
@@ -324,14 +353,6 @@ def _prompt_overwrite_existing(profile_dir: Path, *, paste_mode: bool = False) -
         click.echo("  [1] Keep existing (cancel)")
         click.echo("  [2] Overwrite (wipe + re-ingest)")
         click.echo("  [3] View existing first")
-        if paste_mode:
-            click.echo("  [4] Append paste to existing profile")
-            choice = click.prompt(
-                "Choose [1/2/3/4]",
-                type=click.Choice(["1", "2", "3", "4"]),
-                default="1",
-            )
-            return {"1": "keep", "2": "overwrite", "3": "view", "4": "append"}[choice]
         choice = click.prompt(
             "Choose [1/2/3]", type=click.Choice(["1", "2", "3"]), default="1"
         )
@@ -339,7 +360,7 @@ def _prompt_overwrite_existing(profile_dir: Path, *, paste_mode: bool = False) -
 
 
 def _write_markdown_only_metadata(profile_dir: Path, ingest_result, *, source_hint: str) -> None:
-    """Write a minimal metadata.yaml for the markdown-only / paste create paths.
+    """Write / update metadata.yaml for the markdown-only / paste / augment paths.
 
     Cycle 2 / B1: prior to this commit, the `--from-paste` (and picker-paste)
     branches called `ingest_from_markdown` to append nuggets but NEVER wrote
@@ -349,16 +370,63 @@ def _write_markdown_only_metadata(profile_dir: Path, ingest_result, *, source_hi
     "No profile found." Result: user pastes resume → ingestion runs 30-90s
     → user is stuck with an unusable half-built profile.
 
-    Fields mirror what `pipeline.persist()` writes for the PDF path so the
-    downstream `status` command renders sensibly:
-        created_at, embedder_tier, embedder_model, dim, n_nuggets,
-        n_embedded, n_highlights, profile_version, source
-    The `source` field is markdown-only-specific (paste vs markdown-file)
-    so we can distinguish later — the PDF path writes `source_pdf_sha256`
-    instead.
+    Cycle 3 / HIGH regression fix: the augment-of-existing-PDF-profile path
+    (`--from-markdown` against an existing profile) was clobbering the
+    existing profile's `embedder_tier`, `embedder_model`, `dim`, and
+    `created_at` with live-detected values. Concrete failure mode: a
+    profile created on Oracle (`tier=oracle, model=nomic-embed-text,
+    dim=768`) gets augmented in an env without Oracle env vars — live
+    detection returns fastembed (`dim=384`) — metadata flips to fastembed
+    BUT the existing `embeddings.npz` still holds 768-dim vectors. The
+    next `resume tailor` reads the (wrong) tier label and either fails
+    the cache-tier check or silently runs the wrong embedder.
+
+    Branching is mandatory:
+
+    - **New profile** (`metadata.yaml` does not exist): write all fields
+      fresh, including live-detected `embedder_tier` / `embedder_model`
+      / `dim`. `created_at = now`, `n_nuggets = n_added`,
+      `source = source_hint`.
+
+    - **Augment / append** (`metadata.yaml` exists): only ever bump
+      `n_nuggets` (additive) and stamp `last_updated`. `source` is left
+      alone if already set; only filled in if absent (preserves PDF-side
+      `source_pdf_sha256` semantics). NEVER touch `embedder_tier`,
+      `embedder_model`, `dim`, `created_at`, or `profile_version` —
+      those describe the underlying vector store, not the augment event.
     """
     from datetime import datetime, timezone
     import yaml as _yaml
+
+    n_added = int(getattr(ingest_result, "nuggets_added", 0) or 0)
+    meta_path = profile_dir / "metadata.yaml"
+
+    if meta_path.exists():
+        # ── Augment / append on existing profile ────────────────────────
+        # Preserve everything the original `persist()` / first-create
+        # wrote. Only bump counts + stamp last_updated.
+        try:
+            existing = _yaml.safe_load(meta_path.read_text()) or {}
+        except Exception:
+            existing = {}
+
+        meta = dict(existing)
+        meta["n_nuggets"] = int(existing.get("n_nuggets", 0) or 0) + n_added
+        meta["last_updated"] = datetime.now(timezone.utc).isoformat()
+        # Backfill `source` ONLY if missing (don't overwrite PDF-created
+        # profiles' `source_pdf_sha256`-equivalent provenance).
+        if "source" not in existing or not existing.get("source"):
+            meta["source"] = source_hint
+        # NEVER mutate: embedder_tier, embedder_model, dim, created_at,
+        # profile_version. They describe the vector store on disk.
+
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        with open(meta_path, "w", encoding="utf-8") as f:
+            _yaml.safe_dump(meta, f, sort_keys=False)
+        return
+
+    # ── New profile (no prior metadata.yaml) ────────────────────────────
+    # Safe to live-detect everything; nothing on disk to contradict.
     from .pipeline import _embedder_model_for_tier
     try:
         from ..resume.lib.embedder import _detect_tier
@@ -370,39 +438,23 @@ def _write_markdown_only_metadata(profile_dir: Path, ingest_result, *, source_hi
     except Exception:
         _model = "unknown"
 
-    n_added = int(getattr(ingest_result, "nuggets_added", 0) or 0)
-
-    # If a prior metadata.yaml already exists (append path on existing
-    # profile), merge counts rather than clobber the original `created_at`.
-    existing = {}
-    meta_path = profile_dir / "metadata.yaml"
-    if meta_path.exists():
-        try:
-            existing = _yaml.safe_load(meta_path.read_text()) or {}
-        except Exception:
-            existing = {}
-
-    base_n = int(existing.get("n_nuggets", 0) or 0)
-    base_emb = int(existing.get("n_embedded", 0) or 0)
-    base_high = int(existing.get("n_highlights", 0) or 0)
-
-    meta = dict(existing)
-    meta.update({
-        "created_at": existing.get("created_at") or datetime.now(timezone.utc).isoformat(),
+    now = datetime.now(timezone.utc).isoformat()
+    meta = {
+        "created_at": now,
         "embedder_tier": _tier,
         "embedder_model": _model,
         # Markdown ingest skips embeddings — embedder_tier is captured for
-        # downstream "tailor" code that resolves which model to compare
-        # against, but `dim` defaults to the conventional 384 when no vector
-        # exists.
-        "dim": int(existing.get("dim", 384) or 384),
-        "n_nuggets": base_n + n_added,
-        "n_embedded": base_emb,           # markdown_ingest doesn't embed
-        "n_highlights": base_high,
+        # downstream `tailor` code that resolves which model to compare
+        # against, but `dim` defaults to the conventional 384 when no
+        # vector exists.
+        "dim": 384,
+        "n_nuggets": n_added,
+        "n_embedded": 0,           # markdown_ingest doesn't embed
+        "n_highlights": 0,
         "profile_version": 1,
-        "source": source_hint,            # "paste" | "markdown-file"
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-    })
+        "source": source_hint,     # "paste" | "markdown-file"
+        "last_updated": now,
+    }
     profile_dir.mkdir(parents=True, exist_ok=True)
     with open(meta_path, "w", encoding="utf-8") as f:
         _yaml.safe_dump(meta, f, sort_keys=False)
@@ -662,7 +714,11 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
             _looks_p, _reasons_p = _looks_like_resume(_check_path)
             if not _looks_p:
                 if yes:
-                    _warn_yes(_check_path, _reasons_p)
+                    # Use the human-readable label ("pasted-text") in the
+                    # warning instead of the throwaway tempfile path
+                    # (avoids "'resume.md' did not pass …" referring to a
+                    # filename the user never named).
+                    _warn_yes(Path("pasted-text"), _reasons_p)
                 else:
                     _proceed_p = _prompt_resume_lookalike_override(
                         Path("pasted-text"), _reasons_p
@@ -681,13 +737,12 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
     # (no PDF source), the user is ADDING to an existing profile, not replacing it.
     # The guard must not block in this case — markdown ingest appends to nuggets.jsonl.
     #
-    # Cycle 2 / MED-7: paste-to-existing — `--from-paste` against an existing
-    # profile no longer silently destroys it. We surface a 4th picker option
-    # ("Append paste to existing profile") so the user can grow their nugget
-    # store without losing data. `_paste_append` tracks the choice for the
-    # ingest step below.
+    # Paste-to-existing-profile deliberately routes through the standard
+    # 3-option picker (keep / overwrite / view). Appending paste content to
+    # an existing profile is a future-cluster feature — the UX surprise of
+    # an additive option that silently mutates a trusted profile needs its
+    # own design pass, and cycle-2's attempt at it introduced regressions.
     _augment_only = bool(from_markdown and _markdown_only and not from_paste)
-    _paste_append = False
     if (profile_dir / "metadata.yaml").exists() and not _augment_only:
         if not force:
             # UAT bug #9 — interactive overwrite. Non-technical users do not
@@ -695,7 +750,6 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
             # flag suggestion. Show a 3-option picker: keep (cancel),
             # overwrite (wipe + re-ingest), or view first. Power users
             # can still pass --force on the CLI for scripted runs.
-            # Cycle 2: paste flow gets a 4th option, "append".
             #
             # Non-TTY (CI / piped) sticks with the original error so
             # automation behavior is unchanged — `--force` remains the
@@ -711,7 +765,7 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
                     "(existing data backed up to .backup-<timestamp>)."
                 )
                 sys.exit(1)
-            choice = _prompt_overwrite_existing(profile_dir, paste_mode=bool(from_paste))
+            choice = _prompt_overwrite_existing(profile_dir)
             if choice == "keep":
                 click.echo("Kept existing profile. Nothing changed.")
                 sys.exit(0)
@@ -725,14 +779,9 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
                     "and pick Overwrite, or `linkright profile rebuild` to replace with a new resume."
                 )
                 sys.exit(0)
-            if choice == "append":
-                # Paste-append path: skip the wipe, route ingest into the
-                # existing profile dir (markdown_ingest appends nuggets).
-                _paste_append = True
             # choice == "overwrite" — fall through to wipe + re-ingest.
-        if not _paste_append:
-            _wipe(profile_dir)
-            profile_dir.mkdir(parents=True, exist_ok=True)
+        _wipe(profile_dir)
+        profile_dir.mkdir(parents=True, exist_ok=True)
 
     if _markdown_only:
         # Markdown-only mode: skip PDF pipeline, just ensure profile dir exists.
