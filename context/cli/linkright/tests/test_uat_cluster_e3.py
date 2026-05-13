@@ -169,18 +169,47 @@ def test_user_input_echo_with_label():
 def test_user_input_echo_uses_high_contrast_white_style():
     """The bullet should be rendered with the tui.hi_white style.
 
-    We assert on the styled-segment metadata by exporting HTML and grepping
-    for the colour hex. Using export_html keeps the assertion stable across
-    Rich versions vs raw ANSI matching.
+    Cycle 2 MED #4 fix: tui.hi_white changed from #F5F5F7 (invisible on light
+    terminals — ΔE ≈ 3.5% vs #FFFFFF) to ``bold bright_white``. Rich expands
+    ``bright_white`` to ANSI/inline HTML that the terminal inverts against
+    its actual background, so the bullet pops on BOTH light and dark themes.
+    Assert via the resolved style object on LR_THEME — both ``bright_white``
+    and ``bold`` must be present.
     """
+    from linkright.ui.theme import LR_THEME
+    style = LR_THEME.styles["tui.hi_white"]
+    # Rich Style.parse('bold bright_white') yields a Style whose .color.name
+    # is 'bright_white' and .bold is True. Cover both attrs defensively in case
+    # of Rich-version differences.
+    style_str = str(style).lower()
+    assert "bright_white" in style_str or "bright white" in style_str, (
+        "tui.hi_white must resolve to bright_white so terminals can invert "
+        "against background — got style: " + style_str
+    )
+    assert "bold" in style_str, (
+        "tui.hi_white must include `bold` for extra-weight contrast — got: "
+        + style_str
+    )
+    # And smoke-test that the primitive still renders without exception.
     from linkright.ui.patterns import user_input_echo
     con = _recording_console()
     user_input_echo("verifying", console=con)
-    html = con.export_html(inline_styles=True, clear=False)
-    # tui.hi_white = #F5F5F7
-    assert "f5f5f7" in html.lower(), (
-        "Echo bullet should be coloured with tui.hi_white (#F5F5F7) — "
-        "got HTML without the hex: " + html[:300]
+    text = con.export_text()
+    assert "●" in text and "verifying" in text
+
+
+def test_hi_white_not_invisible_hex():
+    """Regression guard for MED #4: tui.hi_white MUST NOT be `#F5F5F7` again.
+
+    That literal hex blends with the white background of Apple Terminal,
+    iTerm light, and GNOME Tango Light. If somebody re-introduces the hex
+    in a future palette tweak this test fires before they ship.
+    """
+    from linkright.ui.theme import LR_THEME
+    style = LR_THEME.styles["tui.hi_white"]
+    assert "#f5f5f7" not in str(style).lower(), (
+        "tui.hi_white re-introduced the invisible-on-light-bg hex #F5F5F7. "
+        "Use `bold bright_white` (or any theme-aware style) instead."
     )
 
 
@@ -483,3 +512,215 @@ def test_priority_badge_dark_theme_contrast_p2_p3():
     text = con.export_text()
     assert "P2" in text
     assert "P3" in text
+
+
+# ─── Cycle 2 BLOCK regression tests ────────────────────────────────────────────
+
+
+def test_high1_lr_select_with_custom_has_real_callers():
+    """HIGH #1 regression: `lr_select_with_custom` must be wired into at
+    least 2 non-test call sites. Cycle 1 shipped the primitive but no caller
+    imported it (dead code).
+    """
+    from pathlib import Path
+    src_root = Path(__file__).resolve().parent.parent / "src" / "linkright"
+    callers: list[str] = []
+    for path in src_root.rglob("*.py"):
+        if path.name == "patterns.py":
+            continue  # definition site, not a caller
+        if path.name == "__init__.py" and path.parent.name == "ui":
+            continue  # re-export only
+        body = path.read_text(encoding="utf-8")
+        if "lr_select_with_custom" in body:
+            callers.append(str(path.relative_to(src_root)))
+    assert len(callers) >= 2, (
+        "Expected ≥2 non-test callers of `lr_select_with_custom` but found "
+        f"{len(callers)}: {callers}. The picker primitive must be wired into "
+        "real surfaces (enrich-nugget, delete-nugget, …) — shipping it as "
+        "dead code defeats UAT bug #19."
+    )
+
+
+def test_high2_no_hardcoded_p_tier_definitions_in_prompts():
+    """HIGH #2 regression: `resume/lib/prompts.py` + `profile/enrich.py`
+    must NOT contain hardcoded importance-tier definitions. The single
+    source of truth is `priority_legend.llm_prompt_instructions()`.
+    """
+    from pathlib import Path
+    base = Path(__file__).resolve().parent.parent / "src" / "linkright"
+    targets = [
+        base / "resume" / "lib" / "prompts.py",
+        base / "profile" / "enrich.py",
+    ]
+    # These are the hardcoded patterns from the legacy text. If any of them
+    # reappear, the SSoT has been broken.
+    forbidden_patterns = (
+        "P0=career-defining",
+        "P1=strong, P2=supporting",
+        '"P0" if a numeric metric',
+        '"P1" if a method or proof',
+        'P0=career-defining (top 3 ever)',
+    )
+    for path in targets:
+        body = path.read_text(encoding="utf-8")
+        for pat in forbidden_patterns:
+            assert pat not in body, (
+                f"{path.name} still inlines legacy P-tier definition "
+                f"{pat!r}. Replace with `llm_prompt_instructions()` from "
+                "`linkright.profile.priority_legend`."
+            )
+
+
+def test_high2_priority_legend_imported_in_both_prompts():
+    """HIGH #2 regression: BOTH prompt files must import the SSoT helper."""
+    from pathlib import Path
+    base = Path(__file__).resolve().parent.parent / "src" / "linkright"
+    for rel in ("resume/lib/prompts.py", "profile/enrich.py"):
+        body = (base / rel).read_text(encoding="utf-8")
+        assert "llm_prompt_instructions" in body, (
+            f"{rel} does not import `llm_prompt_instructions` — SSoT broken."
+        )
+
+
+def test_high2_extract_user_prompt_contains_p0_through_p3():
+    """HIGH #2 + #3 regression: rendered EXTRACT_USER prompt must enumerate
+    all four tiers (P0|P1|P2|P3) so the LLM has the option to assign P3 to
+    ambiguous nuggets instead of collapsing them to P2.
+    """
+    from linkright.profile.enrich import EXTRACT_USER
+    for tier in ("P0", "P1", "P2", "P3"):
+        assert tier in EXTRACT_USER, (
+            f"EXTRACT_USER prompt missing tier {tier!r} — HIGH #3 not fixed."
+        )
+    # The JSON schema example must enumerate the full P0|P1|P2|P3 union
+    assert "P0|P1|P2|P3" in EXTRACT_USER, (
+        "EXTRACT_USER's JSON schema must enumerate 'P0|P1|P2|P3' so the LLM "
+        "knows P3 is a valid output value."
+    )
+
+
+def test_high2_nugget_extract_prompt_contains_full_p_taxonomy():
+    """HIGH #2 regression: NUGGET_EXTRACT_MD must enumerate all 4 tiers
+    sourced from priority_legend.
+    """
+    from linkright.resume.lib.prompts import NUGGET_EXTRACT_MD
+    from linkright.profile.priority_legend import llm_prompt_instructions
+    ssot_block = llm_prompt_instructions()
+    assert ssot_block in NUGGET_EXTRACT_MD, (
+        "NUGGET_EXTRACT_MD must embed `llm_prompt_instructions()` verbatim — "
+        "otherwise the SSoT can drift from the rendered prompt body."
+    )
+
+
+def test_high3_setdefault_collapses_to_p3_not_p2(monkeypatch):
+    """HIGH #3 regression: when the LLM omits `importance` from its JSON
+    response, `extract_from_answer` must default to P3 (catch-all for
+    ambiguous extractions), NOT P2 (which expects specific context).
+    """
+    import json as _json
+    from linkright.profile import enrich
+
+    # Stub tier_chat → return a nugget JSON WITHOUT an importance field so
+    # the setdefault path is exercised.
+    fake_response = _json.dumps({
+        "nugget_text": "Some generic activity statement",
+        # importance intentionally omitted
+        "type": "work_experience",
+    })
+
+    def _fake_tier_chat(**kwargs):
+        return (fake_response, {})
+
+    monkeypatch.setattr(
+        "linkright.llm.direct.tier_chat", _fake_tier_chat, raising=False
+    )
+
+    parent = {"company": "Acme", "role": "PM", "nugget_text": "parent nugget"}
+    result = enrich.extract_from_answer(parent, "How?", "Did some stuff.")
+    assert result is not None
+    assert result["importance"] == "P3", (
+        "Default importance for ambiguous LLM output must be P3 (catch-all), "
+        f"got {result.get('importance')!r}."
+    )
+
+
+def test_med4_hi_white_resolves_to_theme_aware_style():
+    """MED #4 regression: tui.hi_white MUST NOT be the original #F5F5F7 hex
+    (invisible on light terminals). It must resolve to a theme-aware style
+    (bright_white-based) that the terminal inverts against its background.
+    """
+    from linkright.ui.theme import LR_THEME
+    style = LR_THEME.styles["tui.hi_white"]
+    style_str = str(style).lower()
+    assert "#f5f5f7" not in style_str, (
+        "tui.hi_white re-introduced the invisible-on-light-bg #F5F5F7 hex. "
+        "Use `bold bright_white` (or any theme-aware style)."
+    )
+    # The new style must be either bright_white (preferred) or include an
+    # explicit inversion hint that Rich resolves at render time.
+    assert ("bright_white" in style_str
+            or "bright white" in style_str), (
+        f"tui.hi_white expected to use bright_white for theme-aware "
+        f"contrast — got: {style_str!r}"
+    )
+
+
+def test_med5_step_progress_covers_long_running_steps():
+    """MED #5 regression: orchestrator must emit `step_progress` for the
+    SLOW steps (5: JD analyze, 6: JD embed, 7: role scoring, 8: retrieval,
+    9: summary). Cycle 1 only wired it on the CHEAP steps (3, 4) defeating
+    the purpose of UAT bug #21.
+    """
+    from pathlib import Path
+    orch = Path(__file__).resolve().parent.parent / "src" / "linkright" / "resume" / "orchestrator.py"
+    body = orch.read_text(encoding="utf-8")
+    # Count `step_progress(` invocations in the main() function specifically —
+    # cheap regex check on the file is fine here because step_progress is
+    # only called from main() in this module.
+    count = body.count("step_progress(")
+    # Threshold = 5 steps minimum (we add 5,6,7,8,9 on top of existing 3,4)
+    # The original `from ... import` line also contains the literal but is
+    # accounted for: import (1) + 2 existing + 5 new = 8. Safety floor at 7.
+    assert count >= 7, (
+        f"Expected ≥7 `step_progress(` occurrences in orchestrator.py "
+        f"(import + steps 3-9), got {count}. MED #5 not fixed."
+    )
+    # Verbs the cycle-2 fix introduces — assert at least one of each.
+    for verb in ("Analyzing", "Embedding JD", "Scoring", "Retrieving", "Summarizing"):
+        assert f'"{verb}"' in body, (
+            f"orchestrator.py missing `step_progress(\"{verb}\", …)` — "
+            "MED #5 coverage gap on the slow steps."
+        )
+
+
+def test_high1_append_type_something_handles_questionary_choice():
+    """HIGH #1 fix surface bug: `append_type_something` must be safe to call
+    against a list of questionary.Choice objects (which the enrich + delete
+    pickers use). Pre-fix this would append a bare string onto a Choice list
+    and break questionary's homogeneous-type invariant.
+    """
+    import questionary
+    from linkright.ui.patterns import (
+        append_type_something, TYPE_SOMETHING, TYPE_SOMETHING_LABEL,
+    )
+    original = [
+        questionary.Choice(title="Alpha", value="a"),
+        questionary.Choice(title="Beta", value="b"),
+    ]
+    out = append_type_something(original)
+    assert len(out) == 3
+    # The new sentinel must be a Choice (not a bare string) so questionary
+    # doesn't choke on mixed types.
+    last = out[-1]
+    assert hasattr(last, "title") and hasattr(last, "value"), (
+        "append_type_something appended a bare string onto a Choice list — "
+        "questionary will reject the mixed-type list."
+    )
+    assert getattr(last, "value") == TYPE_SOMETHING
+    assert getattr(last, "title") == TYPE_SOMETHING_LABEL
+    # Idempotent against Choice lists
+    out2 = append_type_something(out)
+    assert len(out2) == 3, (
+        "append_type_something must be idempotent when the Choice-typed "
+        "sentinel is already present."
+    )

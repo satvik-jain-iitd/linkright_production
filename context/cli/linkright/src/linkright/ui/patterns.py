@@ -188,9 +188,38 @@ def append_type_something(choices: Sequence[Any]) -> list[Any]:
     # Defensive copy — never mutate caller's list. Also de-dupe if caller has
     # already appended the sentinel (idempotent).
     out = list(choices)
+
+    # Plain-string idempotency check.
     if TYPE_SOMETHING in out or TYPE_SOMETHING_LABEL in out:
         return out
-    out.append(TYPE_SOMETHING_LABEL)
+
+    # questionary.Choice idempotency check — Choice objects don't compare equal
+    # to plain strings, so the `in` check above misses them. Walk the list and
+    # detect by `.value` / `.title` attributes (duck-typed; safe for any object
+    # exposing those attrs). Without this, a caller that pre-composed a Choice
+    # with value=TYPE_SOMETHING would have a plain-string sentinel appended on
+    # top → questionary chokes on the mixed list.
+    for c in out:
+        title = getattr(c, "title", None)
+        value = getattr(c, "value", None)
+        if title == TYPE_SOMETHING_LABEL or value == TYPE_SOMETHING:
+            return out
+
+    # Detect whether the caller is using Choice objects so we append a matching
+    # Choice (not a bare string, which would break the homogeneous-type
+    # invariant questionary expects).
+    has_choice_objects = any(
+        hasattr(c, "title") and hasattr(c, "value") for c in out
+    )
+    if has_choice_objects:
+        try:
+            from questionary import Choice
+            out.append(Choice(title=TYPE_SOMETHING_LABEL, value=TYPE_SOMETHING))
+        except ImportError:
+            # Fallback — questionary unavailable in test contexts.
+            out.append(TYPE_SOMETHING_LABEL)
+    else:
+        out.append(TYPE_SOMETHING_LABEL)
     return out
 
 
@@ -245,9 +274,14 @@ def user_input_echo(
 
     Mirrors Claude Code's pattern of bubbling the user's last answer back to
     them before continuing — gives the user visual confirmation of what the
-    tool *thinks* they said. The bullet uses ``tui.hi_white`` (#F5F5F7) so it
-    pops on both light and dark terminal backgrounds; the body text is
-    rendered in default foreground for maximum readability.
+    tool *thinks* they said. The bullet uses ``tui.hi_white`` which is now
+    aliased to ``bold bright_white`` (was ``#F5F5F7`` before UAT cluster E3
+    cycle 2 — that hex had ΔE ≈ 3.5% vs #FFFFFF, effectively invisible on
+    Apple Terminal default, iTerm light, and GNOME Tango Light themes).
+    Rich auto-inverts ``bright_white`` against the detected terminal
+    background, so the bullet stays legible on BOTH light and dark themes
+    without us reading $COLORFGBG. The body text is rendered in default
+    foreground for maximum readability.
 
     Example output (with label):
 

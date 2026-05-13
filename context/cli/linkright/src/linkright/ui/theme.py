@@ -35,7 +35,13 @@ LR_THEME = Theme({
     "tui.cyan_bold":   "#0891B2",   # cyan bold — '❯' bold prompt variant
     "tui.muted":       "#8E8E93",   # muted gray — '└' branch lines + tips + telemetry
     "tui.muted_teal":  "#5EB3A8",   # muted teal — '→' result/answer markers
-    "tui.hi_white":    "#F5F5F7",   # high-contrast white — '●' user-input echo bullet
+    # tui.hi_white was originally #F5F5F7 — virtually invisible on light terminals
+    # (Apple Terminal default, iTerm light, GNOME Tango Light) where ΔE vs the
+    # background is only ~3.5%. We now use `bold bright_white`: Rich inverts
+    # `bright_white` automatically against detected terminal background, so the
+    # user-input echo bullet `●` stays high-contrast on BOTH light and dark
+    # themes without us reading $COLORFGBG ourselves.
+    "tui.hi_white":    "bold bright_white",
     "tui.tier_badge":  "#F4B400",   # gold/orange — sticky footer tier badge
     "tui.mode_badge":  "#34A853",   # mint/teal  — sticky footer mode badge
 

@@ -338,6 +338,13 @@ def _prompt_overwrite_existing(profile_dir: Path) -> str:
                 value="view",
             ),
         ]
+        # NOTE (UAT cluster-E3 cycle 2, HIGH #1): this 3-option picker
+        # (keep / overwrite / view) INTENTIONALLY keeps `lr_select`. Adding a
+        # "Type something…" row would be misleading — every legitimate
+        # response is one of the 3 well-known semantic actions; free-text
+        # entry has no useful semantics here and could cause silent data
+        # loss if interpreted as "overwrite". Established by UAT cluster-B
+        # medium review (PR #161).
         picked = lr_select(
             "What would you like to do?",
             choices=choices,

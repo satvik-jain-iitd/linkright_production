@@ -241,8 +241,11 @@ def load_embeddings(profile_dir: Optional[Path] = None) -> tuple[np.ndarray, np.
 # wrong contact info = silent failure (recruiter can't reach candidate).
 # Verify each field with user at profile creation; never hallucinate.
 
-_PHONE_RE = re.compile(r"(?:\+?\d[\d\s().\-]{8,16}\d)")
-_EMAIL_RE = re.compile(r"[\w.+\-]+@[\w\-]+\.[\w.\-]+")
+from .regex_extract import (
+    extract_email as _regex_extract_email,
+    extract_phone as _regex_extract_phone,
+)
+
 _LINKEDIN_RE = re.compile(r"(?:linkedin\.com/(?:in|pub)/[\w\-]+)", re.IGNORECASE)
 _PORTFOLIO_HINT_RE = re.compile(
     r"https?://(?!linkedin\.com)[\w\-]+(?:\.[\w\-]+)+(?:/[\w\-./?%&=#]*)?",
@@ -254,29 +257,24 @@ def _extract_contact_from_text(raw_text: str) -> dict:
     """Regex-extract contact fields from PDF raw text. Deterministic — no LLM,
     no fabrication. Returns best-guess dict; user verifies via
     contact_verify_loop. Empty fields ALWAYS empty (never invented).
+
+    Email / phone regex live in ``regex_extract.py`` (single source of truth,
+    shared with the orchestrator's truth-engine reconciliation step for
+    UAT bug #13). LinkedIn / portfolio / name heuristics remain local
+    because they are profile-create-specific.
     """
     text = raw_text or ""
     contact = {"phone": "", "email": "", "linkedin": "", "portfolio": "", "name": ""}
 
-    m = _EMAIL_RE.search(text)
-    if m:
-        contact["email"] = m.group(0).strip().rstrip(".,;")
+    contact["email"] = _regex_extract_email(text)
+    contact["phone"] = _regex_extract_phone(text)
 
     m = _LINKEDIN_RE.search(text)
     if m:
         contact["linkedin"] = m.group(0).strip().rstrip("/")
 
-    # Phone: prefer matches near top of resume (contact line typically header).
+    # Portfolio: any non-LinkedIn URL in the top of doc (header region).
     head = text[:1500]
-    m = _PHONE_RE.search(head) or _PHONE_RE.search(text)
-    if m:
-        # Strip trailing non-digit chars that the regex may have captured
-        ph = re.sub(r"[\s().\-]+$", "", m.group(0).strip())
-        # Avoid matching numbers like "100M+" or year ranges — require ≥9 digits
-        if sum(c.isdigit() for c in ph) >= 9:
-            contact["phone"] = ph
-
-    # Portfolio: any non-LinkedIn URL in the top of doc
     for pm in _PORTFOLIO_HINT_RE.finditer(head):
         url = pm.group(0).rstrip(".,;)")
         if "linkedin.com" in url.lower() or "@" in url:
@@ -464,6 +462,13 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
             choices.append(questionary.Choice(f"   Edit: {label}  [{val}]", value=key))
 
         try:
+            # NOTE (UAT cluster-E3 cycle 2, HIGH #1): this picker INTENTIONALLY
+            # keeps `lr_select` (not `lr_select_with_custom`). Every field
+            # (name / phone / email / linkedin / portfolio) is already
+            # addressable as its own "Edit: …" row — adding a "Type something…"
+            # row would be redundant and ambiguous (which field would the
+            # free-text apply to?). Fixed numbered list also preserves muscle
+            # memory across sessions.
             action = lr_select("Action:", choices=choices, accent=_TEAL)
         except KeyboardInterrupt:
             console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes saved.[/]")
@@ -591,7 +596,23 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
             expand=False,
         ))
 
-        action = lr_select("Action?", choices=["Lock", "Skip", "Edit"], accent=_TEAL)
+        # UAT cluster-E3 cycle 2 (HIGH #1): use lr_select_with_custom so the
+        # user can press "Type something…" to jump straight into the corrected
+        # text without first navigating to the Edit option. We distinguish
+        # picker-cancel (Esc on the menu — should abort the whole session) from
+        # a blank type-something (just re-prompt the same highlight) by using
+        # the lower-level lr_select first and only invoking the custom branch
+        # explicitly. This preserves the Esc-aborts-session contract.
+        from linkright.ui import (
+            lr_select as _lr_select,
+            TYPE_SOMETHING,
+            TYPE_SOMETHING_LABEL,
+        )
+        action = _lr_select(
+            "Action?",
+            choices=["Lock", "Skip", "Edit", TYPE_SOMETHING_LABEL],
+            accent=_TEAL,
+        )
 
         if action is None:
             console.print("[yellow]Aborted — partial state NOT saved.[/]")
@@ -606,7 +627,17 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
             n_skipped += 1
             continue
 
-        new_text = lr_text("Corrected version:", default=text, accent=_TEAL)
+        if action == TYPE_SOMETHING_LABEL:
+            # Type-something fast-path → user types correction immediately.
+            typed = lr_text("Type your correction:", default=text, accent=_TEAL)
+            if typed is None or not str(typed).strip():
+                # Blank → treat as Skip-and-keep-as-is rather than session abort
+                locked.append(h)
+                continue
+            new_text = str(typed).strip()
+        else:
+            # action == "Edit"
+            new_text = lr_text("Corrected version:", default=text, accent=_TEAL)
         if not new_text or not new_text.strip():
             console.print("[yellow]Empty — treating as skip.[/]")
             n_skipped += 1
@@ -684,28 +715,63 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
         console.print("[yellow]No nuggets in this profile.[/]")
         return False
 
-    choices = []
-    for i, n in enumerate(nuggets):
-        company = (n.get("company") or "").strip()[:22] or "(no co)"
-        role = (n.get("role") or "").strip()[:20]
-        text = (n.get("nugget_text") or n.get("answer", "")).strip()[:80]
-        importance = (n.get("importance") or "??").upper()
-        label = f"[{importance:>2s}] {company:<22} | {role:<20} | {text}"
-        choices.append(questionary.Choice(title=label, value=i))
-    choices.append(questionary.Choice(title="(cancel)", value=-1))
+    # UAT cluster-E3 cycle 2 (HIGH #1): wired through lr_select_with_custom
+    # so the user can type a free-text query to filter nuggets when the list
+    # is too long to scroll. Mirrors the enrich-nugget picker pattern.
+    from linkright.ui import lr_select_with_custom, lr_confirm, TEAL
+    _CANCEL_SENTINEL = "__delete_cancel__"
 
-    from linkright.ui import lr_select, lr_confirm, TEAL
-    pick = lr_select(
-        f"Select nugget to delete ({len(nuggets)} total):",
-        choices=choices,
-        accent=TEAL,
-    )
+    def _build_delete_choices(pool: list[dict]) -> list:
+        c = []
+        for i, n in enumerate(pool):
+            company = (n.get("company") or "").strip()[:22] or "(no co)"
+            role = (n.get("role") or "").strip()[:20]
+            text = (n.get("nugget_text") or n.get("answer", "")).strip()[:80]
+            importance = (n.get("importance") or "??").upper()
+            label = f"[{importance:>2s}] {company:<22} | {role:<20} | {text}"
+            c.append(questionary.Choice(title=label, value=f"idx:{i}"))
+        c.append(questionary.Choice(title="(cancel)", value=_CANCEL_SENTINEL))
+        return c
 
-    if pick is None or pick == -1:
-        console.print("Cancelled.")
-        return False
-
-    target = nuggets[pick]
+    pool = list(nuggets)
+    target = None
+    while target is None:
+        pick = lr_select_with_custom(
+            f"Select nugget to delete ({len(pool)} total):",
+            choices=_build_delete_choices(pool),
+            accent=TEAL,
+            custom_prompt="Search nuggets by company / role / text:",
+        )
+        if pick is None or pick == _CANCEL_SENTINEL:
+            console.print("Cancelled.")
+            return False
+        if isinstance(pick, str) and pick.startswith("idx:"):
+            try:
+                idx = int(pick[4:])
+            except ValueError:
+                idx = -1
+            if 0 <= idx < len(pool):
+                target = pool[idx]
+                break
+            pool = list(nuggets)
+            continue
+        # Free-text search → filter and re-prompt
+        q = pick.strip().lower()
+        filtered = [
+            n for n in nuggets
+            if q in (n.get("company") or "").lower()
+            or q in (n.get("role") or "").lower()
+            or q in (n.get("nugget_text") or n.get("answer") or "").lower()
+        ]
+        if not filtered:
+            console.print(f"[yellow]No nuggets match '{pick.strip()}'. Showing full list.[/]")
+            pool = list(nuggets)
+        else:
+            pool = filtered
+    # The legacy `pick` variable downstream expected an int index into the
+    # original `nuggets` list — recover it from `target` so the slice ops
+    # below stay correct without further refactoring.
+    pick = nuggets.index(target)
     target_key = nugget_key(target)
     target_preview = (
         target.get("nugget_text") or target.get("answer") or "(empty)"
