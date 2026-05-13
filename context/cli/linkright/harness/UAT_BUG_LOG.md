@@ -38,13 +38,13 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 30 | Systemic | CLI / UI | Use "Claude Code" pattern for sub-context: render secondary details (e.g., metadata, timestamps) in muted gray text. | **Fixed (Cluster E3 — ✅ THIS PR)** |
 | 31 | Systemic | Profile / Enrichment | Generation of vague/fluff metrics: System suggests meaningless phrases like "Increased business value by 100%". | Open |
 | 32 | Systemic | Profile / Logic | Missing Nugget Audit/Cleanup Phase: No automated loop to re-analyze all nuggets for metric sharpness and reprioritize. | Open |
-| 33 | `linkright tailor` | Tailor / UX | Silent JD Analysis: The system skips showing the JD interpretation (P0/P1/P2 requirements) to the user. | Open |
-| 34 | `linkright tailor` | CLI / UX | Opaque Cache Info: "Profile cache hit" message provides no detail on what is being reused or how to inspect it. | Open |
-| 35 | `linkright tailor` | Tailor / Logic | Contact Info Desync: `tailor` shows "blank" contact details even if the profile was recently updated via `linkright contact`. | Open |
-| 36 | `linkright tailor` | CLI / UI | Pipeline Execution screen lacks visual hierarchy; telemetry (Run ID, Output) is cluttered and lacks muted styling. | Open |
+| 33 | `linkright tailor` | Tailor / UX | Silent JD Analysis: The system skips showing the JD interpretation (P0/P1/P2 requirements) to the user. | **Fixed (Cluster C)** |
+| 34 | `linkright tailor` | CLI / UX | Opaque Cache Info: "Profile cache hit" message provides no detail on what is being reused or how to inspect it. | **Fixed (Cluster C)** |
+| 35 | `linkright tailor` | Tailor / Logic | Contact Info Desync: `tailor` shows "blank" contact details even if the profile was recently updated via `linkright contact`. | **Fixed (Cluster C)** |
+| 36 | `linkright tailor` | CLI / UI | Pipeline Execution screen lacks visual hierarchy; telemetry (Run ID, Output) is cluttered and lacks muted styling. | **Fixed (Cluster C)** |
 | 37 | `linkright tailor` | Tailor / UX | Blocker: Verification step has no "Done/Continue" option after editing fields, trapping the user in an infinite loop. | **Fixed (Cluster A)** |
-| 38 | `linkright tailor` | Tailor / UX | JD analysis happens too late in the pipeline (step 5); should happen immediately after JD input. | Open |
-| 39 | `linkright tailor` | Tailor / UX | "Strategy Review" lacks layout insights: doesn't show height distribution, section utilization, or page-fit probability. | Open |
+| 38 | `linkright tailor` | Tailor / UX | JD analysis happens too late in the pipeline (step 5); should happen immediately after JD input. | **Fixed (Cluster C)** |
+| 39 | `linkright tailor` | Tailor / UX | "Strategy Review" lacks layout insights: doesn't show height distribution, section utilization, or page-fit probability. | **Fixed (Cluster C)** |
 | 40 | Systemic | CLI / UX | Abort behavior is destructive: pressing "No" on a continue prompt kills the pipeline with an error instead of offering an edit/back path. | **Fixed (Cluster A)** |
 
 ---
@@ -59,7 +59,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — **✅ MERGED** (PR #162).
 - **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ THIS PR**. Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
 - **Cluster B-truth-engine** — #13 — Pending
-- **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — Pending (includes inline edit menu replacing Cluster A restart hint)
+- **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — **✅ THIS PR** (changelog fragment `uat-cluster-c-tailor.md`)
 - **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
 - **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
@@ -67,8 +67,8 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 23 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #14, #16, #18, #19, #20, #21, #22, #23, #24, #29, #30, #37, #40)
-- **Pending:** 16
+- **Fixed:** 29 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #14, #16, #18, #19, #20, #21, #22, #23, #24, #29, #30, #33, #34, #35, #36, #37, #38, #39, #40)
+- **Pending:** 10
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---
