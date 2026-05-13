@@ -2247,10 +2247,30 @@ def step_08_retrieve_per_company(parsed_p12: dict, nuggets: list[dict]) -> dict:
         s = re.sub(r"[\s,]+(inc\.?|ltd\.?|llc\.?|corp\.?|corporation|limited|co\.?)\s*$", "", s)
         return s
 
+    # UAT #25 (cycle-2 wiring) — only 'experience'-class nuggets enter the
+    # JD-aligned retrieval pool. Facts (education / certs / awards) and
+    # skills (Python / SQL) have their own render tiers and should not
+    # compete with achievement bullets for company-aligned cosine slots.
+    # Defensive: legacy nuggets without `nugget_class` default to
+    # 'experience' via class_of(), so this filter is a strict no-op on
+    # pre-PR profiles (zero backward-compat risk for callers that haven't
+    # backfilled the field yet).
+    try:
+        from linkright.profile.nugget_utils import class_of as _class_of
+    except Exception:
+        _class_of = None  # type: ignore[assignment]
+
     by_co: dict[str, list[dict]] = {}
+    _excluded_by_class = 0
     for n in nuggets:
-        if n.get("emb"):
-            by_co.setdefault(norm(n.get("company", "")), []).append(n)
+        if not n.get("emb"):
+            continue
+        if _class_of is not None and _class_of(n) != "experience":
+            _excluded_by_class += 1
+            continue
+        by_co.setdefault(norm(n.get("company", "")), []).append(n)
+    if _excluded_by_class:
+        log(f"[step_08] excluded {_excluded_by_class} non-experience nuggets (facts/skills) from retrieval pool")
     # Iter-04 (2026-04-23): loud diagnostic when pool grouping runs. Helps RCA
     # cases where step_08 returns 0 despite step_03 reporting N/N embedding success.
     log(f"[step_08] by_co grouping: {dict((k, len(v)) for k, v in by_co.items())}")

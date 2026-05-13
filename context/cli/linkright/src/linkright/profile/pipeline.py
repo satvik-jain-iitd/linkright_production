@@ -198,10 +198,15 @@ def persist(profile_dir: Path, source_pdf: Path, result: dict) -> None:
     classify_in_place(nuggets)
     nuggets = sort_by_priority(nuggets)
 
-    # 1. nuggets.jsonl — strip embeddings, keep all other fields.
+    # 1. nuggets.jsonl — strip embeddings + transient audit-trail fields.
+    # LOW fix (cycle-2): `_entity_resolved_by` is an in-memory debugging
+    # signal from #27 fallback resolution; persisting it bloats every
+    # nugget row with a permanent diagnostic flag. Keep it in-memory
+    # only — re-running audit will re-set it when needed.
+    _TRANSIENT_KEYS = {"emb", "_entity_resolved_by"}
     with open(profile_dir / "nuggets.jsonl", "w", encoding="utf-8") as f:
         for n in nuggets:
-            row = {k: v for k, v in n.items() if k != "emb"}
+            row = {k: v for k, v in n.items() if k not in _TRANSIENT_KEYS}
             row["has_embedding"] = bool(n.get("emb"))
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 

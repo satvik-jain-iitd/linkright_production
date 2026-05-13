@@ -34,11 +34,13 @@ deterministic fallback walks the parsed companies list and checks
 "answer" substring overlap; if exactly one company matches, fill it in.
 
 ## #28 — Gap-filling loop
-After extraction, work_experience nuggets missing role / company / dates
+After extraction, work_experience nuggets missing role / company
 should trigger an interactive follow-up rather than be silently dropped
 (current behaviour drops missing-company; missing-role keeps the row but
 renders as "(role unspecified)"). The helper flags gap targets; the CLI
 decides whether to prompt (TTY) or warn (--yes / non-TTY).
+Note: dates are NOT in the nugget-extract schema, so they are not
+checked here — that surface lives on `parsed.experiences[]`.
 
 ## #31 — Fluff metric detection
 Vague nuggets like "Increased business value by 100%" pass the current
@@ -233,8 +235,21 @@ def resolve_entity(
 # ─────────────────────────────────────────────────────────────────────
 
 # Fields that, when missing on a work_experience nugget, justify a
-# user follow-up. role/company/dates are the recruiter-critical trio.
-_GAP_FIELDS: tuple[str, ...] = ("company", "role", "dates")
+# user follow-up. role/company are the only LLM-emitted-per-nugget
+# fields recruiter-critical enough to surface.
+#
+# NOTE — "dates" deliberately NOT included:
+# The NUGGET_EXTRACT_MD prompt (resume/lib/prompts.py:80-87) emits a
+# fixed schema of {type, company, role, importance, answer, tags,
+# leadership} — there is NO per-nugget date field. Including "dates"
+# here produced spurious "missing dates" warnings on EVERY
+# work_experience nugget after `profile create` (round-1 BLOCK
+# CRITICAL #1: 5-gap cap was always saturated with date-flags,
+# turning the new gap-fill signal into noise). Dates live on the
+# parsed-resume experience entries (parsed.experiences[].start_date)
+# — verifying them is a different surface (role-level, not
+# nugget-level) and belongs in a future date-audit pass.
+_GAP_FIELDS: tuple[str, ...] = ("company", "role")
 
 
 def gap_filling_targets(nuggets: list[dict]) -> list[dict]:
@@ -245,6 +260,11 @@ def gap_filling_targets(nuggets: list[dict]) -> list[dict]:
     Caller decides whether to prompt the user (TTY) or just log
     (non-TTY / --yes). Bounded: max 5 gaps surfaced per pipeline run
     so the user never faces a 30-question inquisition.
+
+    Only checks `company` + `role` — the two fields the nugget-extract
+    LLM emits per nugget (see prompts.py:NUGGET_EXTRACT_MD). Dates are
+    NOT checked: they don't exist on the nugget schema, so a date
+    check here would false-positive on every row.
     """
     targets: list[dict] = []
     for nug in nuggets:
@@ -255,15 +275,8 @@ def gap_filling_targets(nuggets: list[dict]) -> list[dict]:
             continue
         missing: list[str] = []
         for field in _GAP_FIELDS:
-            if field == "dates":
-                # Dates live in the parsed-resume artifact, not the nugget
-                # itself — caller may inject via metadata. For the in-nugget
-                # surface, check 'start_date' or 'date_range'.
-                if _is_missing(nug.get("start_date")) and _is_missing(nug.get("date_range")):
-                    missing.append(field)
-            else:
-                if _is_missing(nug.get(field)):
-                    missing.append(field)
+            if _is_missing(nug.get(field)):
+                missing.append(field)
         if missing:
             targets.append({
                 "nugget_index": nug.get("nugget_index"),

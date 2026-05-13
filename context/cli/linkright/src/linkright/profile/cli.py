@@ -804,10 +804,13 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
         persist(profile_dir, resume_path, result)
 
         # UAT #28 — gap-filling notice. parse_and_extract attaches a
-        # list of work_experience nuggets missing role / company / dates.
-        # Under --yes / non-TTY we log a warning (scripted automation
-        # must not block); on a real TTY we display the list so the
-        # user knows to follow up via `profile enrich` after creation.
+        # list of work_experience nuggets missing role / company.
+        # (Dates aren't on the nugget schema — the extract prompt
+        # doesn't emit them per-nugget — so they're checked at a
+        # different layer.) Under --yes / non-TTY we log a warning
+        # (scripted automation must not block); on a real TTY we
+        # display the list so the user knows to follow up via
+        # `profile enrich` after creation.
         _gaps = (result or {}).get("gaps") or []
         if _gaps:
             click.echo("")

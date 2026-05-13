@@ -159,9 +159,18 @@ def extract_from_answer(parent: dict, question: str, answer: str) -> Optional[di
     # pass through unaffected. Rejecting at extract time avoids
     # persisting noise into nuggets.jsonl that the audit phase (#32)
     # would later have to clean up.
+    #
+    # Round-2 BLOCK fix (MED — silent fluff rejection): mark with a
+    # sentinel so the caller can distinguish "LLM failed" from "answer
+    # rejected as fluff" and show a specific, actionable error. We use
+    # an in-band sentinel dict (rather than a tuple return type) so all
+    # existing `if not result:` checks at every call site continue to
+    # work — sentinel dicts are truthy but lack a real `nugget_text`,
+    # and the caller does an explicit `_rejected` membership check.
     from .nugget_utils import is_fluff_metric
     if is_fluff_metric(data.get("nugget_text", "")):
-        return None
+        return {"_rejected": "fluff_metric",
+                "_preview": (data.get("nugget_text") or "")[:160]}
 
     data.setdefault("company", company)
     data.setdefault("role", role)
@@ -358,10 +367,22 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
         # '●' bullet so they can confirm what we'll feed to the extractor.
         step_echo_input(answer.strip(), label="You answered")
         new = extract_from_answer(target, q, answer.strip())
-        if new:
+        if new and not new.get("_rejected"):
             new["parent_nugget_text"] = target_text
             new_nuggets_to_add.append(new)
             step_detail(f"extracted: {new.get('nugget_text', '')[:120]}")
+        elif new and new.get("_rejected") == "fluff_metric":
+            # MED fix (cycle-2): give the user a specific reason +
+            # actionable repair so the warning is debuggable. Generic
+            # "extraction failed" used to be indistinguishable from an
+            # LLM-call failure, leaving users stuck.
+            preview = (new.get("_preview") or "").strip()
+            preview_clip = f" — '{preview[:80]}'" if preview else ""
+            step_warn(
+                "Answer rejected as fluff-metric"
+                f"{preview_clip}. "
+                "Try a concrete number (revenue, users, latency, hours saved)."
+            )
         else:
             step_warn("extraction failed — answer not added")
 

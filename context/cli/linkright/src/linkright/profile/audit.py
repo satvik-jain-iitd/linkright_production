@@ -97,10 +97,19 @@ def run_audit(profile_dir: Optional[Path] = None) -> dict:
         return counts
 
     # Re-sort and rewrite nuggets.jsonl.
+    # LOW fix (cycle-2): mirror persist()'s transient-key strip so
+    # `_entity_resolved_by` (in-memory audit-trail flag from #27) is
+    # never persisted. The flag re-appears on the next audit run if
+    # the resolver still fires.
+    _TRANSIENT_KEYS = {"_entity_resolved_by"}
+
+    def _strip(n: dict) -> dict:
+        return {k: v for k, v in n.items() if k not in _TRANSIENT_KEYS}
+
     sorted_nuggets = sort_by_priority(nuggets)
     with open(profile_dir / "nuggets.jsonl", "w", encoding="utf-8") as f:
         for n in sorted_nuggets:
-            f.write(json.dumps(n, ensure_ascii=False) + "\n")
+            f.write(json.dumps(_strip(n), ensure_ascii=False) + "\n")
 
     # Rewrite highlights.jsonl: subset = P0/P1 from the sorted set, in priority order.
     # Demoted-to-P3 fluff nuggets correctly drop out of highlights here.
@@ -111,7 +120,7 @@ def run_audit(profile_dir: Optional[Path] = None) -> dict:
     ]
     with open(highlights_path, "w", encoding="utf-8") as f:
         for n in highlights:
-            f.write(json.dumps(n, ensure_ascii=False) + "\n")
+            f.write(json.dumps(_strip(n), ensure_ascii=False) + "\n")
 
     _update_metadata(profile_dir, {"n_highlights": len(highlights)})
 

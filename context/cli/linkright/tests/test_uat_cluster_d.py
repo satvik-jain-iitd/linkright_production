@@ -273,14 +273,25 @@ class TestGapFilling:
         assert len(gaps) == 1
         assert "company" in gaps[0]["missing"]
 
-    def test_missing_dates_flagged(self):
+    def test_nugget_without_date_field_NOT_flagged(self):
+        """Round-2 BLOCK fix (CRITICAL #1): the NUGGET_EXTRACT_MD prompt
+        emits NO per-nugget date field, so checking for `start_date` /
+        `date_range` on every work_experience nugget produced spurious
+        "missing dates" warnings every run. The fix dropped 'dates' from
+        the gap-fields tuple. This test pins that behaviour: a nugget
+        with role + company set must NOT raise a date gap even when the
+        date fields are entirely absent (which is the LLM's normal
+        output shape).
+        """
         from linkright.profile.nugget_utils import gap_filling_targets
         nuggets = [
+            # Exact shape NUGGET_EXTRACT_MD emits — no date keys at all.
             {"type": "work_experience", "company": "Acme", "role": "PM",
-             "answer": "Did stuff"},  # no start_date / date_range
+             "importance": "P0", "answer": "Did stuff",
+             "tags": "pm, growth", "leadership": "individual"},
         ]
         gaps = gap_filling_targets(nuggets)
-        assert "dates" in gaps[0]["missing"]
+        assert gaps == []  # no false-positive on missing dates
 
     def test_complete_nugget_not_flagged(self):
         from linkright.profile.nugget_utils import gap_filling_targets
@@ -360,8 +371,11 @@ class TestFluffDetection:
         assert not is_fluff_metric("Drove engagement campaign across 6 markets")
 
     def test_extract_from_answer_rejects_fluff(self, monkeypatch):
-        """End-to-end: enrich.extract_from_answer drops a fluff response
-        before persisting (returns None)."""
+        """End-to-end: enrich.extract_from_answer rejects a fluff
+        response with a `_rejected: fluff_metric` sentinel so the caller
+        can render a specific, actionable error (distinguishable from
+        an LLM-call failure).
+        """
         from linkright.profile import enrich
 
         # Stub the LLM call to return a fluff nugget.
@@ -380,7 +394,12 @@ class TestFluffDetection:
                   "nugget_text": "Did some PM work"}
         result = enrich.extract_from_answer(parent, "What was the impact?",
                                             "I increased business value")
-        assert result is None  # fluff rejected at extraction time
+        # Round-2 BLOCK fix (MED): sentinel dict, NOT None — so caller
+        # can distinguish fluff-reject from LLM-call failure.
+        assert isinstance(result, dict)
+        assert result.get("_rejected") == "fluff_metric"
+        # No real nugget payload — caller must not persist this.
+        assert "nugget_text" not in result or result.get("nugget_text") is None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -506,3 +525,201 @@ class TestAuditPhase:
         assert not counts["wrote_files"]
         mtime_after = (profile_dir / "nuggets.jsonl").stat().st_mtime_ns
         assert mtime_before == mtime_after
+
+
+# ─────────────────────────────────────────────────────────────────────
+# CliRunner tests for `linkright profile audit` (Round-2 BLOCK — HIGH)
+# ─────────────────────────────────────────────────────────────────────
+
+class TestProfileAuditCliSurface:
+    """Round-2 BLOCK fix (HIGH): the audit CLI subcommand was never
+    invoked via CliRunner in the original PR, leaving exit-code,
+    success-message format, and the no-profile-found path unverified.
+    Per memory `feedback_clirunner_test_mock_assertions.md`, every
+    `runner.invoke()` test must assert BOTH `exit_code` AND a
+    post-condition.
+    """
+
+    def test_audit_cmd_demotes_fluff_on_disk(self, tmp_path, monkeypatch):
+        """`linkright profile audit` against a tmp profile dir containing
+        a fluff P0 nugget → exit 0, success message printed, and the
+        fluff nugget is now P3 on disk.
+        """
+        from click.testing import CliRunner
+        from linkright.profile.cli import audit_cmd
+
+        profile_dir = tmp_path / "profile"
+        profile_dir.mkdir()
+        (profile_dir / "metadata.yaml").write_text(
+            "n_nuggets: 1\nn_highlights: 1\n", encoding="utf-8"
+        )
+        # Fluff P0 nugget — should be demoted to P3 + flagged.
+        row = {
+            "type": "work_experience", "company": "Acme", "role": "PM",
+            "answer": "Increased business value by 100%",
+            "importance": "P0",
+        }
+        with open(profile_dir / "nuggets.jsonl", "w") as f:
+            f.write(json.dumps(row) + "\n")
+
+        # Stub _profile_dir so the CLI looks at our tmp dir.
+        monkeypatch.setattr(
+            "linkright.profile.cli._profile_dir", lambda: profile_dir
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(audit_cmd, [])
+
+        # exit_code MUST be asserted (CliRunner absorbs exceptions).
+        assert result.exit_code == 0, (
+            f"audit exit non-zero. output={result.output!r} exc={result.exception!r}"
+        )
+        assert "Profile audit complete." in result.output
+        # Post-condition: fluff nugget is now P3 on disk + flagged.
+        written = [
+            json.loads(l)
+            for l in (profile_dir / "nuggets.jsonl").read_text().splitlines()
+            if l.strip()
+        ]
+        assert len(written) == 1
+        assert written[0]["importance"] == "P3"
+        assert "fluff_metric" in (written[0].get("_audit_flags") or [])
+
+    def test_audit_cmd_no_profile_exits_1(self, tmp_path, monkeypatch):
+        """`linkright profile audit` with no profile (no metadata.yaml)
+        → exit 1, "No profile found" in output, no files touched.
+        """
+        from click.testing import CliRunner
+        from linkright.profile.cli import audit_cmd
+
+        # Empty tmp dir — no metadata.yaml present.
+        empty_profile = tmp_path / "profile"
+        empty_profile.mkdir()
+        monkeypatch.setattr(
+            "linkright.profile.cli._profile_dir", lambda: empty_profile
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(audit_cmd, [])
+
+        assert result.exit_code == 1, (
+            f"expected exit 1, got {result.exit_code}. "
+            f"output={result.output!r} exc={result.exception!r}"
+        )
+        # click `--err` routes to stderr in CliRunner output by default.
+        combined = (result.output or "") + (getattr(result, "stderr", "") or "")
+        assert "No profile found" in combined
+        # Sanity: no files written.
+        assert not (empty_profile / "nuggets.jsonl").exists()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# step_08 retrieval-pool filtering by nugget_class (Round-2 BLOCK — CRITICAL #2)
+# ─────────────────────────────────────────────────────────────────────
+
+class TestStep08RetrievalPoolFilter:
+    """Round-2 BLOCK fix (CRITICAL #2): wire `nugget_class` into
+    step_08_retrieve_per_company. Fact/skill class nuggets — even when
+    they carry a matching `company` field — must NEVER enter the
+    JD-aligned bullet retrieval pool. Without this filter, the #25
+    claim "static facts no longer pollute bullet retrieval pool" was
+    unsupported.
+    """
+
+    def test_skill_class_nugget_excluded_from_pool(self, monkeypatch, tmp_path):
+        """A skill-class nugget WITH matching company="Acme" must be
+        filtered out of step_08's `by_co` grouping. Only the
+        experience-class nugget should reach the cosine-ranking pool.
+        """
+        from linkright.resume import orchestrator
+
+        # Point orchestrator's module-level paths at a tmp dir so the
+        # artifact write at the end of step_08 doesn't pollute cwd.
+        artifacts = tmp_path / "artifacts"
+        artifacts.mkdir()
+        monkeypatch.setattr(orchestrator, "ARTIFACTS", artifacts)
+        monkeypatch.setattr(orchestrator, "logbook", _NullLogbook())
+        monkeypatch.setattr(orchestrator, "log", lambda *a, **kw: None)
+        # Stub the embedder to return a deterministic vector — we don't
+        # care about cosine scores, only which nuggets enter the pool.
+        monkeypatch.setattr(
+            orchestrator.embedder,
+            "embed",
+            lambda text: ([1.0, 0.0, 0.0], {"provider": "stub"}),
+        )
+        # Stub cosine so any nugget in the pool will score ≥ threshold
+        # — forces step_08 to ACTUALLY include any pool entry, which is
+        # what makes the exclusion observable.
+        monkeypatch.setattr(orchestrator.cosine, "cosine", lambda a, b: 0.9)
+
+        # Two nuggets, both with company="Acme" + an embedding. The
+        # skill nugget MUST be filtered out by class_of() == "skill".
+        nuggets = [
+            {
+                "id": "n1", "type": "work_experience", "company": "Acme",
+                "role": "PM", "answer": "Shipped onboarding",
+                "nugget_class": "experience",
+                "emb": [1.0, 0.0, 0.0],
+            },
+            {
+                "id": "n2", "type": "skill", "company": "Acme",
+                "answer": "Python", "nugget_class": "skill",
+                "emb": [1.0, 0.0, 0.0],
+            },
+        ]
+        parsed_p12 = {
+            "companies": [{"name": "Acme"}],
+            "jd_keywords": ["product", "growth", "users"],
+        }
+        result = orchestrator.step_08_retrieve_per_company(parsed_p12, nuggets)
+        retrieved_ids = [r["id"] for r in result.get("Acme", [])]
+        assert "n1" in retrieved_ids, (
+            f"experience-class nugget MUST be retrievable. got={retrieved_ids}"
+        )
+        assert "n2" not in retrieved_ids, (
+            f"skill-class nugget MUST be filtered out of pool. got={retrieved_ids}"
+        )
+
+    def test_legacy_nugget_without_class_still_pooled(
+        self, monkeypatch, tmp_path,
+    ):
+        """Backward-compat: pre-PR profiles whose nuggets have NO
+        `nugget_class` field default to 'experience' via class_of(),
+        so they MUST still appear in the retrieval pool. This guards
+        against breaking existing users on PR-update."""
+        from linkright.resume import orchestrator
+
+        artifacts = tmp_path / "artifacts"
+        artifacts.mkdir()
+        monkeypatch.setattr(orchestrator, "ARTIFACTS", artifacts)
+        monkeypatch.setattr(orchestrator, "logbook", _NullLogbook())
+        monkeypatch.setattr(orchestrator, "log", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            orchestrator.embedder,
+            "embed",
+            lambda text: ([1.0, 0.0, 0.0], {"provider": "stub"}),
+        )
+        monkeypatch.setattr(orchestrator.cosine, "cosine", lambda a, b: 0.9)
+
+        # Legacy nugget — no nugget_class field, no type field.
+        # class_of() should default to "experience".
+        nuggets = [
+            {
+                "id": "legacy1", "company": "Acme", "role": "PM",
+                "answer": "Did PM work", "emb": [1.0, 0.0, 0.0],
+            },
+        ]
+        parsed_p12 = {"companies": [{"name": "Acme"}], "jd_keywords": []}
+        result = orchestrator.step_08_retrieve_per_company(parsed_p12, nuggets)
+        retrieved_ids = [r["id"] for r in result.get("Acme", [])]
+        assert "legacy1" in retrieved_ids, (
+            f"legacy nugget without class field MUST default to experience. got={retrieved_ids}"
+        )
+
+
+class _NullLogbook:
+    """Minimal logbook stub for step_08 — accepts append() calls and
+    discards them. The real logbook writes to disk; tests don't need it.
+    """
+    def append(self, *args, **kwargs):
+        return None
