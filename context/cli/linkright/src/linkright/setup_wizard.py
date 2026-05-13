@@ -560,7 +560,12 @@ def run_wizard() -> int:
             print()
         else:
             print("  ✓ Keeping agent mode. Skipping Groq key step.")
-            print("  Tip: edit ~/.linkright/config.yaml to switch later.")
+            # UAT #22: muted L-branch tip line (replaces raw print).
+            try:
+                from linkright.ui import l_branch_tip
+                l_branch_tip("edit ~/.linkright/config.yaml to switch later.")
+            except Exception:
+                print("  Tip: edit ~/.linkright/config.yaml to switch later.")
             print()
 
     needs_groq = not (old_mode == "agent" and not migrate)

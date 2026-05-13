@@ -357,11 +357,47 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
     missing_future = [label for t, label in FUTURE_SECTION_LABELS if t not in rendered_section_types]
     missing_all = missing_known + missing_future
     if missing_all:
-        console.print()
+        # UAT #14: horizontal divider separates the tree (populated content)
+        # from the "not yet populated" advisory block — same role-boundary
+        # semantics as user-prompt → assistant-response in the chat surfaces.
+        try:
+            from linkright.ui import horizontal_divider
+            horizontal_divider(console=console)
+        except Exception:
+            pass
         console.print(
             f"[dim italic]Not yet populated:[/] [dim]{', '.join(missing_all)}.[/]"
         )
-        console.print(
-            "[dim italic]Tip:[/] [dim]add these sections to your resume PDF + run "
-            "`linkright profile rebuild -r resume.pdf` to refresh.[/]"
+        # UAT #22: secondary info follows the L-shaped muted-gray branch pattern.
+        try:
+            from linkright.ui import l_branch_tip
+            l_branch_tip(
+                "add these sections to your resume PDF + run "
+                "`linkright profile rebuild -r resume.pdf` to refresh.",
+                console=console,
+            )
+        except Exception:
+            console.print(
+                "[dim italic]Tip:[/] [dim]add these sections to your resume PDF + run "
+                "`linkright profile rebuild -r resume.pdf` to refresh.[/]"
+            )
+
+    # UAT #16: sticky footer summarising the `profile show` surface — tier =
+    # CLI version (gold), mode = "profile" (mint/teal), status = nugget count
+    # (muted). Rendered once at the bottom so the user always sees orientation
+    # info regardless of how long the tree is.
+    try:
+        from linkright.ui import sticky_footer
+        from linkright import __version__ as _lr_ver
+    except Exception:
+        _lr_ver = ""
+        sticky_footer = None  # type: ignore[assignment]
+    if sticky_footer is not None:
+        n_total = len(nuggets) if nuggets else 0
+        console.print()
+        sticky_footer(
+            tier=f"v{_lr_ver}" if _lr_ver else None,
+            mode="profile",
+            status=f"{n_total} nugget{'s' if n_total != 1 else ''}",
+            console=console,
         )

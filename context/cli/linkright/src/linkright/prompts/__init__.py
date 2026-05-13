@@ -222,6 +222,23 @@ def _format_choice_label(opt: dict) -> str:
     return f"   {opt['label']}"
 
 
+def _tab_picker_eligible(options: Sequence[dict]) -> bool:
+    """Return True iff a horizontal Tab-bar picker fits the option set.
+
+    UAT #17 wiring: `tab_navigate` from `linkright.ui.layout` is a horizontal
+    keyboard-navigated picker. It only renders well when the option count is
+    small AND the labels are short — otherwise the bar overflows the row.
+    Constraint: ≤ 4 options AND each label ≤ 30 chars (post-stripping markup).
+    """
+    if not options or len(options) > 4:
+        return False
+    for opt in options:
+        label = (opt.get("label") or opt.get("key") or "")
+        if len(label) > 30:
+            return False
+    return True
+
+
 def prompt_for_choice(
     message: str,
     options: Sequence[dict],
@@ -234,6 +251,16 @@ def prompt_for_choice(
     Mirrors setup_wizard._pick exactly — moved here as the canonical
     helper so setup_wizard can re-export and other commands can share.
     Each option dict shape: {"key": str, "label": str, "recommended": bool}.
+
+    UAT #17 — opt-in horizontal Tab picker
+    --------------------------------------
+    When the env var ``LR_PICKER_STYLE=tabs`` is set AND the option set is
+    small (≤4 short labels), the prompt switches to ``tab_navigate`` from
+    ``linkright.ui.layout`` — Tab / Shift-Tab / Left / Right / h / l keys.
+    This wires UAT #17's horizontal-navigation primitive into the canonical
+    multi-step picker call site (setup_wizard's 3 sequential picks +
+    `prompt_for_resume_source` + `prompt_for_jd_input`). Default UX (arrow
+    keys via questionary) is unchanged unless the env var is set.
     """
     _ensure_tty(flag_hint)
     if not options:
@@ -243,6 +270,24 @@ def prompt_for_choice(
         if default_recommended
         else options[0]
     )
+
+    # ── UAT #17 — opt-in horizontal Tab picker ──────────────────────────
+    if os.environ.get("LR_PICKER_STYLE") == "tabs" and _tab_picker_eligible(options):
+        from linkright.ui.layout import tab_navigate
+        default_idx = options.index(default)
+        labels = [(o.get("label") or o.get("key") or "") for o in options]
+        try:
+            picked = tab_navigate(
+                labels,
+                start_idx=default_idx,
+                hint=f"{message}  ·  Tab/Shift-Tab to switch · Enter to select",
+            )
+        except KeyboardInterrupt:
+            _ctrl_c_exit()
+        if picked is None:
+            _ctrl_c_exit()
+        return options[picked]
+
     try:
         choice_label = questionary.select(
             message,

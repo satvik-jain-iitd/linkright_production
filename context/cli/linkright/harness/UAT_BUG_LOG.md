@@ -19,15 +19,15 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 11 | `linkright profile create` | CLI / UX | Missing "Paste Text" option for direct profile ingestion. | **Fixed (Cluster B-medium)** — paste picker option + `--from-paste` flag (routes through markdown ingest). |
 | 12 | Systemic | Profile / Ingest | No mechanism to chunk/partition long documents, risking context limit failures. | Open |
 | 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | Open |
-| 14 | Systemic | CLI / UI | Missing structural horizontal dividers to wrap role-based interactions (input vs response). | Open |
+| 14 | Systemic | CLI / UI | Missing structural horizontal dividers to wrap role-based interactions (input vs response). | **Fixed (Cluster E2, THIS PR)** |
 | 15 | Systemic | CLI / UI | Missing a brand character/icon (e.g., octopus/robot style) to anchor the prompt area. | Open |
-| 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | Open |
-| 17 | Systemic | CLI / UI | Menus don't support Tab/Shift-Tab for horizontal navigation between question categories. | Open |
+| 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | **Fixed (Cluster E2, THIS PR)** |
+| 17 | Systemic | CLI / UI | Menus don't support Tab/Shift-Tab for horizontal navigation between question categories. | **Partial (Cluster E2, THIS PR)** — `tab_navigate()` primitive shipped + opt-in via `LR_PICKER_STYLE=tabs`; full wiring across long-label v1 pickers deferred to follow-up cluster (gate currently ≤30-char labels). |
 | 18 | Systemic | CLI / UI | "Recommended" solutions use inconsistent emojis instead of parenthetical text labels. | **Fixed (Cluster E1, PR #158)** |
 | 19 | Systemic | CLI / UI | Missing "Type something" custom input entry in selection lists. | **Fixed (Cluster E3 — ✅ THIS PR)** |
 | 20 | Systemic | CLI / UI | Previous user inputs are not rendered with the high-contrast white bullet (`●`) pattern. | **Fixed (Cluster E3 — ✅ THIS PR)** |
 | 21 | Systemic | CLI / UI | Progress verbs (e.g. `Smooshing...`) lack the distinct coral/salmon color and subtle grayish telemetry. | **Fixed (Cluster E3 — ✅ THIS PR)** |
-| 22 | Systemic | CLI / UI | Secondary information (Tips) does not follow the L-shaped (`└`) muted-text branch pattern. | Open |
+| 22 | Systemic | CLI / UI | Secondary information (Tips) does not follow the L-shaped (`└`) muted-text branch pattern. | **Fixed (Cluster E2, THIS PR)** |
 | 23 | Systemic | CLI / UI | Standardized Iconography: Must adopt BMAD Standard (◇ for input, ● for info, 🌟 for highlights, ✓ for success). | **Fixed (Cluster E1, PR #158)** |
 | 24 | Systemic | CLI / UI | Prompt character is inconsistent. Should use a bold, clean `❯` marker. | **Fixed (Cluster E1, PR #158)** |
 | 25 | Systemic | Profile / Logic | Nugget pool pollution: Static facts (Education, Degree) are stored as generic nuggets, risking retrieval noise. | Open |
@@ -56,19 +56,19 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster B-small (Profile/UX Quick Wins)** — #1, #5, #7, #8 — **✅ MERGED** (PR #159).
 - **Cluster Polish (Loose Ends)** — #5 hardening + #10 — **✅ MERGED** (PR #160).
 - **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — **✅ MERGED** (PR #161).
-- **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — **✅ THIS PR**.
+- **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — **✅ MERGED** (PR #162).
+- **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ THIS PR**. Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
 - **Cluster B-truth-engine** — #13 — Pending
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — Pending (includes inline edit menu replacing Cluster A restart hint)
 - **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
-- **Cluster E2 (Layout primitives)** — #14, #16, #17, #22 — Pending (depends on E1 merged ✅)
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
 - **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
 
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 20 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #18, #19, #20, #21, #23, #24, #29, #30, #37, #40)
-- **Pending:** 19
+- **Fixed:** 23 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #14, #16, #18, #19, #20, #21, #22, #23, #24, #29, #30, #37, #40)
+- **Pending:** 16
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---
