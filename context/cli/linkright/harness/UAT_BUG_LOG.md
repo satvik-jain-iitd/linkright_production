@@ -24,9 +24,9 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | Open |
 | 17 | Systemic | CLI / UI | Menus don't support Tab/Shift-Tab for horizontal navigation between question categories. | Open |
 | 18 | Systemic | CLI / UI | "Recommended" solutions use inconsistent emojis instead of parenthetical text labels. | **Fixed (Cluster E1, PR #158)** |
-| 19 | Systemic | CLI / UI | Missing "Type something" custom input entry in selection lists. | Open |
-| 20 | Systemic | CLI / UI | Previous user inputs are not rendered with the high-contrast white bullet (`●`) pattern. | Open |
-| 21 | Systemic | CLI / UI | Progress verbs (e.g. `Smooshing...`) lack the distinct coral/salmon color and subtle grayish telemetry. | Open |
+| 19 | Systemic | CLI / UI | Missing "Type something" custom input entry in selection lists. | **Fixed (Cluster E3 — ✅ THIS PR)** |
+| 20 | Systemic | CLI / UI | Previous user inputs are not rendered with the high-contrast white bullet (`●`) pattern. | **Fixed (Cluster E3 — ✅ THIS PR)** |
+| 21 | Systemic | CLI / UI | Progress verbs (e.g. `Smooshing...`) lack the distinct coral/salmon color and subtle grayish telemetry. | **Fixed (Cluster E3 — ✅ THIS PR)** |
 | 22 | Systemic | CLI / UI | Secondary information (Tips) does not follow the L-shaped (`└`) muted-text branch pattern. | Open |
 | 23 | Systemic | CLI / UI | Standardized Iconography: Must adopt BMAD Standard (◇ for input, ● for info, 🌟 for highlights, ✓ for success). | **Fixed (Cluster E1, PR #158)** |
 | 24 | Systemic | CLI / UI | Prompt character is inconsistent. Should use a bold, clean `❯` marker. | **Fixed (Cluster E1, PR #158)** |
@@ -34,8 +34,8 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 26 | `linkright profile enrich` | Profile / Logic | Improper nugget ordering: New P0 nuggets appear at the bottom; list is not sorted by Priority (P0->P3). | Open |
 | 27 | Systemic | Truth Engine | Entity extraction failure: Nuggets tagged as "unknown" or "none" even when the company/school is in the text. | Open |
 | 28 | `linkright profile create` | Profile / Logic | Missing "Gap-Filling" loop: System should ask immediate follow-ups if key details (Role, Company, Dates) are missing. | Open |
-| 29 | Systemic | CLI / UI | Vague Priority Legend: P0-P3 lack clear, quantified definitions based on metrics and impact depth. | Open |
-| 30 | Systemic | CLI / UI | Use "Claude Code" pattern for sub-context: render secondary details (e.g., metadata, timestamps) in muted gray text. | Open |
+| 29 | Systemic | CLI / UI | Vague Priority Legend: P0-P3 lack clear, quantified definitions based on metrics and impact depth. | **Fixed (Cluster E3 — ✅ THIS PR)** |
+| 30 | Systemic | CLI / UI | Use "Claude Code" pattern for sub-context: render secondary details (e.g., metadata, timestamps) in muted gray text. | **Fixed (Cluster E3 — ✅ THIS PR)** |
 | 31 | Systemic | Profile / Enrichment | Generation of vague/fluff metrics: System suggests meaningless phrases like "Increased business value by 100%". | Open |
 | 32 | Systemic | Profile / Logic | Missing Nugget Audit/Cleanup Phase: No automated loop to re-analyze all nuggets for metric sharpness and reprioritize. | Open |
 | 33 | `linkright tailor` | Tailor / UX | Silent JD Analysis: The system skips showing the JD interpretation (P0/P1/P2 requirements) to the user. | Open |
@@ -54,21 +54,21 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster A (Critical Blockers)** — #4, #37, #40 — **✅ MERGED** (PR #157). Minimal non-destructive fixes; full edit-and-retry menu deferred to Cluster C.
 - **Cluster E1 (TUI Tokens + Iconography)** — #18, #23, #24 — **✅ MERGED** (PR #158). Foundation for E2 + E3; pure additive.
 - **Cluster B-small (Profile/UX Quick Wins)** — #1, #5, #7, #8 — **✅ MERGED** (PR #159).
-- **Cluster Polish (Loose Ends)** — #5 hardening + #10 — **✅ THIS PR**.
-- **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — **✅ THIS PR** (changelog fragment `uat-cluster-b-medium.md`).
+- **Cluster Polish (Loose Ends)** — #5 hardening + #10 — **✅ MERGED** (PR #160).
+- **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — **✅ MERGED** (PR #161).
+- **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — **✅ THIS PR**.
 - **Cluster B-truth-engine** — #13 — Pending
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — Pending (includes inline edit menu replacing Cluster A restart hint)
 - **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
 - **Cluster E2 (Layout primitives)** — #14, #16, #17, #22 — Pending (depends on E1 merged ✅)
-- **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — Pending (depends on E1 merged ✅)
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
 - **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
 
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 15 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #18, #23, #24, #37, #40)
-- **Pending:** 24
+- **Fixed:** 20 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #18, #19, #20, #21, #23, #24, #29, #30, #37, #40)
+- **Pending:** 19
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---

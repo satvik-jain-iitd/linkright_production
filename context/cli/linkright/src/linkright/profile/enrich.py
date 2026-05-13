@@ -255,7 +255,10 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
     import questionary
     from rich.console import Console
     from rich.panel import Panel
-    from linkright.ui import step_start, step_done, step_error, step_warn, step_detail, section_header, lr_text, TEAL
+    from linkright.ui import (
+        step_start, step_done, step_error, step_warn, step_detail,
+        section_header, lr_text, step_echo_input, TEAL,
+    )
     from linkright.ui.theme import LR_THEME
 
     profile_dir = profile_dir or _profile_dir()
@@ -302,6 +305,9 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
         if not answer.strip():
             continue
         answered += 1
+        # UAT bug #20: echo the user's input back with a high-contrast white
+        # '●' bullet so they can confirm what we'll feed to the extractor.
+        step_echo_input(answer.strip(), label="You answered")
         new = extract_from_answer(target, q, answer.strip())
         if new:
             new["parent_nugget_text"] = target_text

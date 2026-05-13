@@ -5812,7 +5812,7 @@ def main():
     logbook.append("run_start", "result", "environment + health probe summary", body="\n".join(f"- {p}" for p in probes))
 
     # ── Steps ──────────────────────────────────────────────────────────
-    from linkright.ui import step_start, step_done, step_warn, step_error
+    from linkright.ui import step_start, step_done, step_warn, step_error, step_progress
 
     step_start("Reading resume PDF", index=1, total=9)
     raw_text = step_00_ingest_pdf()
@@ -5827,10 +5827,13 @@ def main():
     step_01b_verify_contact_details(parsed)
 
     step_start("Extracting career nuggets", index=3, total=9)
+    # UAT bug #21: coral in-flight verb so the user knows we're not stuck.
+    step_progress("Smooshing resume into atomic nuggets", telemetry="LLM call · 1 batch")
     nuggets = step_02_extract_nuggets(raw_text, parsed)
     step_done(detail=f"{len(nuggets)} nuggets extracted")
 
     step_start("Embedding nuggets", index=4, total=9)
+    step_progress("Vectorising bullets", telemetry=f"{len(nuggets)} nuggets · fastembed")
     nuggets_with_emb = step_03_embed_nuggets(nuggets)
     step_done(detail=f"{sum(1 for n in nuggets_with_emb if n.get('emb'))} embedded")
 

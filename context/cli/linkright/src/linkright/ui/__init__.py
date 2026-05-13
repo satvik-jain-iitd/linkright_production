@@ -15,6 +15,15 @@ from linkright.ui.patterns import (  # noqa: F401 — re-exported for callers
     code_block,
     progress_indicator,
     tree_branch,
+    # Cluster E3 additions:
+    TYPE_SOMETHING,
+    TYPE_SOMETHING_LABEL,
+    append_type_something,
+    lr_select_with_custom,
+    user_input_echo,
+    progress_verb,
+    muted_detail,
+    claude_metadata,
 )
 
 console = Console(theme=LR_THEME)
@@ -179,6 +188,39 @@ def step_error(message: str) -> None:
 
 def step_detail(message: str) -> None:
     console.print(f"        [dim]→[/]  {message}")
+
+
+def step_progress(verb: str, telemetry: str = "", icon: str = "*") -> None:
+    """In-flight working line — coral verb + muted-grey telemetry (UAT bug #21).
+
+    Use between `step_start` and `step_done` for long-running operations:
+
+        step_start("Embedding nuggets", ...)
+        step_progress("Smooshing batches", telemetry="32/128 · 0.8s/batch")
+        step_done(detail=f"{n} embedded")
+
+    This is a thin facade over `linkright.ui.patterns.progress_verb` that
+    uses the module-level console so callers don't have to pass it in.
+    """
+    from linkright.ui.patterns import progress_verb
+    progress_verb(verb, telemetry=telemetry, icon=icon, console=console)
+
+
+def step_echo_input(text: str, label: str = "") -> None:
+    """Echo a previously-submitted user input (UAT bug #20).
+
+    Renders the user's earlier answer back with a high-contrast white '●'
+    bullet so they can confirm what the tool *thinks* they said before the
+    next step runs.
+    """
+    from linkright.ui.patterns import user_input_echo
+    user_input_echo(text, label=label, console=console)
+
+
+def step_meta(label: str, value: str) -> None:
+    """Render one secondary metadata line in muted grey (UAT bug #30)."""
+    from linkright.ui.patterns import muted_detail
+    muted_detail(value, label=label, console=console)
 
 
 def success_card(
