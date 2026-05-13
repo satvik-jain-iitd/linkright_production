@@ -150,6 +150,16 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
         click.echo("Need --resume PATH or --paste or --from-folder DIR.", err=True)
         sys.exit(2)
 
+    # Auto-route .md / .markdown files to the markdown-ingest path (UAT bug #4).
+    # Previously a .md file passed via `-r` fell through to the PDF readability
+    # guard below and errored with "invalid pdf header" — even though
+    # `--from-markdown` was a supported flag. Auto-detect by extension so
+    # users don't need to remember which flag matches which extension.
+    if resume_path and resume_path.suffix.lower() in (".md", ".markdown"):
+        from_markdown = resume_path
+        resume_path = None
+        _markdown_only = True
+
     # PDF readability guard — catch corrupt/empty/password-protected files
     # before running the 30-90 sec pipeline. pypdf raises on empty files.
     if resume_path and not _markdown_only:

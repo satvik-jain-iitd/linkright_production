@@ -50,7 +50,15 @@ def _see_and_continue(label: str, summary: str = "") -> None:
     click.echo(f"\n— Gate: {label} —")
     if summary:
         click.echo(summary)
-    click.confirm("Continue to next phase?", default=True, abort=True)
+    # UAT bug #40: pressing "No" on a continue prompt used `abort=True`, which
+    # killed the entire pipeline with a traceback. Now route "No" to a clean
+    # exit with restart hint — feels like pausing, not self-destructing.
+    proceed = click.confirm("Continue to next phase?", default=True, abort=False)
+    if not proceed:
+        click.echo()
+        click.echo("  ← Paused at gate. Re-run `linkright resume tailor` to start a fresh run.")
+        click.echo("    (Edit-and-continue menu is coming in the next UAT cluster.)")
+        sys.exit(0)
 
 
 def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
@@ -131,7 +139,15 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict) -> None:
     ))
     console.print()
 
-    click.confirm("Generate resume with this strategy?", default=True, abort=True)
+    # UAT bug #40: previously `abort=True` here killed the pipeline with a
+    # traceback when the user wanted to step back. Now clean-exit with a
+    # restart hint so the user can fix JD/profile and re-run.
+    proceed = click.confirm("Generate resume with this strategy?", default=True, abort=False)
+    if not proceed:
+        click.echo()
+        click.echo("  ← Strategy rejected. Re-run `linkright resume tailor` after editing your JD or profile.")
+        click.echo("    (Inline edit-and-retry menu is coming in the next UAT cluster.)")
+        sys.exit(0)
 
 
 def _path_repr(p) -> str:
@@ -1021,18 +1037,22 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
     try:
         import questionary as _q
 
+        # UAT bug #37: previously the exit option read "s — skip all (keep as-is)"
+        # which users mistook for "discard my edits". Result: trapped in the loop.
+        # Renamed to "All correct — save & continue" with a checkmark and
+        # placed at the top so it's the obvious terminal action.
         _choices = [
-            _q.Choice("s — skip all (keep as-is)", value="s"),
-            _q.Choice("e — edit email",             value="e"),
-            _q.Choice("l — edit LinkedIn",          value="l"),
-            _q.Choice("p — edit phone",             value="p"),
-            _q.Choice("w — edit portfolio/website", value="w"),
+            _q.Choice("✓  All correct — save & continue", value="s"),
+            _q.Choice("   Edit email",                    value="e"),
+            _q.Choice("   Edit LinkedIn",                 value="l"),
+            _q.Choice("   Edit phone",                    value="p"),
+            _q.Choice("   Edit portfolio / website",      value="w"),
         ]
 
         while True:
             try:
                 action = _q.select(
-                    "Edit? (e=email, l=linkedin, p=phone, w=portfolio, s=skip all):",
+                    "Pick a field to edit, or confirm details are correct:",
                     choices=_choices,
                 ).ask()
             except KeyboardInterrupt:
@@ -1055,10 +1075,12 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
 
     except (ImportError, EOFError):
         # Fallback: plain input() prompts
-        _CHOICES_HELP = "e=email / l=linkedin / p=phone / w=portfolio / s=skip all"
+        # UAT bug #37: same relabeling as questionary path — Enter or "s"
+        # means "details are correct, save & continue".
+        _CHOICES_HELP = "[Enter]=save & continue / e=email / l=linkedin / p=phone / w=portfolio"
         while True:
             try:
-                action = input(f"  Edit? ({_CHOICES_HELP}): ").strip().lower()
+                action = input(f"  Pick a field to edit (or Enter to save): ({_CHOICES_HELP}): ").strip().lower()
             except (KeyboardInterrupt, EOFError):
                 click.echo()
                 click.echo("  Skipping contact verification.")
