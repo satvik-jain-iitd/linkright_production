@@ -803,6 +803,22 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
         result = parse_and_extract(resume_path, profile_dir)
         persist(profile_dir, resume_path, result)
 
+        # UAT #28 — gap-filling notice. parse_and_extract attaches a
+        # list of work_experience nuggets missing role / company / dates.
+        # Under --yes / non-TTY we log a warning (scripted automation
+        # must not block); on a real TTY we display the list so the
+        # user knows to follow up via `profile enrich` after creation.
+        _gaps = (result or {}).get("gaps") or []
+        if _gaps:
+            click.echo("")
+            click.echo(f"⚠ {len(_gaps)} nugget(s) need follow-up details:")
+            for g in _gaps:
+                missing = ", ".join(g.get("missing") or [])
+                preview = g.get("answer_preview") or ""
+                click.echo(f"   • [missing: {missing}] {preview}")
+            click.echo("  Tip: run `linkright profile enrich` to add details, "
+                       "or `linkright profile audit` to clean up.")
+
     if not _markdown_only:
         meta = load_metadata(profile_dir) or {}
         click.echo("")
@@ -1111,6 +1127,37 @@ def delete_cmd(yes) -> None:
     click.echo(f"✓ Profile wiped (backup retained alongside).")
 
 
+# ── audit (UAT bug #32) ──────────────────────────────────────────────────────
+
+@profile_group.command("audit")
+def audit_cmd() -> None:
+    """Re-analyse existing nuggets — fluff demotion, entity resolution,
+    priority re-sort.
+
+    Useful after multiple `linkright profile enrich` sessions accumulate
+    noise. Idempotent: a clean profile produces a no-op summary.
+    Never deletes a nugget — fluff entries are demoted to P3 (drop out
+    of highlights) and tagged with `_audit_flags: ["fluff_metric"]` so
+    you can decide whether to keep or remove via `delete-nugget`.
+    """
+    profile_dir = _profile_dir()
+    if not (profile_dir / "metadata.yaml").exists():
+        click.echo("No profile found. Run `linkright profile create -r resume.pdf` first.", err=True)
+        sys.exit(1)
+    from .audit import run_audit
+    counts = run_audit(profile_dir)
+    click.echo("Profile audit complete.")
+    click.echo(f"  Total nuggets:        {counts['total']}")
+    click.echo(f"  Backfilled class:     {counts['classified']}")
+    click.echo(f"  Entity resolved:      {counts['entity_resolved']}")
+    click.echo(f"  Fluff metrics flagged: {counts['fluff_demoted']}")
+    click.echo(f"  Demoted priority:     {counts['reprioritised']}")
+    if counts["wrote_files"]:
+        click.echo("  → nuggets.jsonl + highlights.jsonl rewritten in priority order.")
+    else:
+        click.echo("  → No changes (profile already clean).")
+
+
 # ── Subcommand aliases (registered after all commands are defined) ──────────
 
 profile_group.add_aliases({
@@ -1130,6 +1177,8 @@ profile_group.add_aliases({
     "st":      "status",
     # graph / g
     "g":       "graph",
+    # audit / a
+    "a":       "audit",
 })
 
 

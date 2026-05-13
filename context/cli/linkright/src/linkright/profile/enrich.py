@@ -153,6 +153,16 @@ def extract_from_answer(parent: dict, question: str, answer: str) -> Optional[di
     if not data.get("nugget_text"):
         return None
 
+    # UAT #31 — reject vague/fluff metrics at extraction time. Detector
+    # is two-signal (fluff noun + suspicious round number / multiplier),
+    # so legitimate concrete metrics ("revenue +100%", "30M+ users")
+    # pass through unaffected. Rejecting at extract time avoids
+    # persisting noise into nuggets.jsonl that the audit phase (#32)
+    # would later have to clean up.
+    from .nugget_utils import is_fluff_metric
+    if is_fluff_metric(data.get("nugget_text", "")):
+        return None
+
     data.setdefault("company", company)
     data.setdefault("role", role)
     # UAT cluster-E3 cycle 2 — HIGH #3 fix: P3 is the catch-all for
@@ -206,10 +216,26 @@ def append_nuggets(profile_dir: Path, new_nuggets: list[dict]) -> int:
     if not rows_to_write:
         return 0
 
-    with open(profile_dir / "nuggets.jsonl", "a", encoding="utf-8") as f:
-        for rec in rows_to_write:
-            row = {k: v for k, v in rec.items() if k != "_emb"}
-            row["has_embedding"] = bool(rec.get("_emb"))
+    # UAT #25 / #26 — stamp class on newly-added rows and rewrite the
+    # entire nuggets.jsonl in priority order. Append-without-sort caused
+    # the bug where freshly-enriched P0 nuggets landed at the bottom of
+    # the file and rendered last under their company.
+    from .nugget_utils import sort_by_priority, classify_in_place
+    classify_in_place(rows_to_write)
+
+    # Read existing rows, merge with new ones, re-sort.
+    existing_rows = load_nuggets(profile_dir)
+    # Preserve the canonical jsonl shape — has_embedding is the on-disk
+    # field; we strip _emb from new rows but tag has_embedding from it.
+    new_jsonl_rows: list[dict] = []
+    for rec in rows_to_write:
+        row = {k: v for k, v in rec.items() if k != "_emb"}
+        row["has_embedding"] = bool(rec.get("_emb"))
+        new_jsonl_rows.append(row)
+
+    combined = sort_by_priority(existing_rows + new_jsonl_rows)
+    with open(profile_dir / "nuggets.jsonl", "w", encoding="utf-8") as f:
+        for row in combined:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     new_ids = [nugget_key(r) for r in rows_to_write if r.get("_emb")]
@@ -231,10 +257,21 @@ def append_nuggets(profile_dir: Path, new_nuggets: list[dict]) -> int:
         if str(r.get("importance", "")).upper() in ("P0", "P1")
     ]
     if new_highlights:
+        # UAT #26 — merge with existing highlights and re-write in priority
+        # order. Append-only path caused P0 enrichments to render below
+        # pre-existing P1s, contradicting the P0 → P3 mental model.
         highlights_path = profile_dir / "highlights.jsonl"
-        with open(highlights_path, "a", encoding="utf-8") as f:
-            for h in new_highlights:
-                row = {k: v for k, v in h.items() if k != "_emb"}
+        existing_h: list[dict] = []
+        if highlights_path.exists():
+            existing_h = [
+                json.loads(line) for line in highlights_path.read_text().splitlines()
+                if line.strip()
+            ]
+        merged_h = sort_by_priority(existing_h + [
+            {k: v for k, v in h.items() if k != "_emb"} for h in new_highlights
+        ])
+        with open(highlights_path, "w", encoding="utf-8") as f:
+            for row in merged_h:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     final_nuggets = load_nuggets(profile_dir)

@@ -211,7 +211,14 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
     )
     section_untagged: dict[str, list[dict]] = defaultdict(list)
 
-    for n in nuggets:
+    # UAT #26 — render in priority order (P0 → P1 → P2 → P3 → unknown).
+    # Stable sort means the LLM's extraction order is preserved within
+    # each priority bucket, but newly-enriched P0 nuggets no longer
+    # render below pre-existing P2s under the same company.
+    from .nugget_utils import sort_by_priority
+    nuggets_sorted = sort_by_priority(nuggets)
+
+    for n in nuggets_sorted:
         n_type = (n.get("type") or "").strip().lower() or "other"
         company = _normalize(n.get("company"))
         role = _normalize(n.get("role"))
