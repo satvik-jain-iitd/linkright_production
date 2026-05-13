@@ -139,9 +139,14 @@ def _debug_enabled() -> bool:
     Activated by either LR_DEBUG or LR_VERBOSE (alias) in the environment.
     Default-off — keeps `linkright tailor` / `linkright profile create`
     output clean for non-technical users. UAT bug #2.
+
+    Cycle 2 / LOW-9: accept the same truthy variants as common shell
+    conventions (`on`, `y`) in addition to `1` / `true` / `yes`. Users
+    setting `LR_DEBUG=on` or `LR_DEBUG=y` should not be silently ignored.
     """
-    return os.environ.get("LR_DEBUG", "").lower() in ("1", "true", "yes") \
-        or os.environ.get("LR_VERBOSE", "").lower() in ("1", "true", "yes")
+    _TRUTHY = {"1", "true", "yes", "on", "y"}
+    return os.environ.get("LR_DEBUG", "").lower() in _TRUTHY \
+        or os.environ.get("LR_VERBOSE", "").lower() in _TRUTHY
 
 
 # ── Deterministic mode (Phase 2 — 2026-05-01) ──────────────────────────────
