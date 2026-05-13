@@ -155,102 +155,169 @@ def _estimate_section_heights(
     Returns a dict with shape:
         {
             "sections": [
-                {"name": "Header",     "lines": 4, "pct_height": 8.5},
-                {"name": "Summary",    "lines": 3, "pct_height": 6.4},
-                {"name": "Experience", "lines": 32, "pct_height": 68.1},
+                {"name": "Header",     "mm": 21.34, "pct_height": 7.9},
+                {"name": "Summary",    "mm": 8.04,  "pct_height": 3.0},
+                {"name": "Experience", "mm": 263.8, "pct_height": 97.1},
                 ...
             ],
-            "total_lines": 47,
-            "page_capacity_lines": 47,    # nominal A4 single-page capacity
+            "total_mm": 332.7,
+            "page_capacity_mm": 271.6,    # A4 usable height per fit_loop.py
             "fit_probability": "HIGH",    # HIGH | MEDIUM | LOW
-            "fit_pct": 100.0,             # ratio of capacity used (clipped to 200)
-            "headroom_lines": 0,
+            "fit_pct": 122.5,             # ratio of capacity used (clipped to 200)
+            "headroom_mm": -61.1,
+            # Legacy keys for backward-compat with tests/UI built before
+            # mm-based math landed. "lines" treats 1 line ≈ 4.52mm (bullet_line).
+            "total_lines": 73,
+            "page_capacity_lines": 60,
+            "headroom_lines": -13,
         }
 
     Estimates are HEURISTIC — not pixel-accurate. They give the user a feel for
     whether the plan likely fits 1 page BEFORE the expensive generation phase.
 
-    Heuristic basis (single-line height ≈ 4.5mm at 10pt Roboto on A4 = ~257mm
-    usable height ÷ 5.5mm/row ≈ 47 visible rows including section spacing).
+    2026-05-14 CRITICAL FIX (Cluster C cycle 2): the previous 47-line capacity
+    heuristic was miscalibrated by ~22% versus the prod renderer's actual capacity
+    (fit_loop.py:88 uses 271.6mm ÷ 4.52mm/bullet ≈ 60 bullet-equivalents/page).
+    A 45-bullet plan inside the 85-92% IDEAL band was reporting LOW @ 144.7%, and
+    sparse 25-bullet plans were reporting HIGH @ 102%. This inverts the Truth-Engine
+    intent. We now mirror fit_loop's `_estimate_util_from_html` math element-for-
+    element — same ELEM (mm) constants, same CHARS_PER_LINE=120, same PAGE_HEIGHT=
+    271.6mm — so the strategy-review % aligns with the post-render util the user
+    sees later. HIGH/MEDIUM/LOW bands also match the IDEAL band (85-92%).
     """
-    # Total bullets across included companies (each bullet ≈ 1 line at target band)
+    # Mirror fit_loop.py ELEM dict (single source of truth for resume geometry).
+    # Note: cannot directly call fit_loop._estimate_util_from_html() — that operates
+    # on rendered HTML, which doesn't exist yet at strategy-review time. Instead we
+    # replicate the same per-element constants and operate on the structured plan.
+    ELEM = {
+        "header_block":   21.34,
+        "summary_line":    4.02,
+        "section_title":   7.68,
+        "section_spacing": 4.0,
+        "entry_header":    4.44,
+        "entry_subhead":   5.24,
+        "entry_spacing":   2.5,
+        "bullet_line":     4.52,
+        "skills_line":     4.0,
+    }
+    PAGE_HEIGHT_MM = 271.6
+    CHARS_PER_LINE = 120  # MED #2: was 75; corrected per fit_loop.py:62 +
+                          #          memory feedback_width_band_one_line_per_bullet.
+    SUMMARY_CHARS_EST = 220  # target summary length (PRD)
+
     included = distribution.get("included_companies") or []
     bullets_total = sum(int(c.get("bullets") or 0) for c in included)
-
-    # Per-section line estimates
-    # - Header: 4 lines (name, contact, location) — fixed
-    # - Summary: 3 lines (target 220 chars / ~75 chars/line)
-    # - Experience: 2 lines per role (header + dates) + bullets_total
-    # - Education: ~1 line per entry + 1 header line
-    # - Skills: 3-5 lines (per memory feedback_skills_trim_before_width_fill)
-    # - Projects: 1 line per project (if section_visibility includes projects)
-    # - Awards / Voluntary: 1 line each entry (if included)
     n_roles = len(included)
     n_edu = len(parsed_resume.get("education") or [])
     n_proj = len(parsed_resume.get("projects") or [])
 
     included_sections = set(distribution.get("included_sections") or [])
-    # If section_visibility hasn't run yet, default to including all major sections
     if not included_sections:
         included_sections = {"experience", "education", "skills"}
         if n_proj > 0:
             included_sections.add("projects")
 
+    # Per-section mm — mirrors what fit_loop will measure once rendered.
     sections: list[dict] = []
-    sections.append({"name": "Header",  "lines": 4})
-    sections.append({"name": "Summary", "lines": 3})
-    if "experience" in included_sections and n_roles > 0:
-        # Each role header ~2 lines (role title + dates+location), plus bullets
-        sections.append({"name": "Experience", "lines": (2 * n_roles) + bullets_total})
-    if "education" in included_sections and n_edu > 0:
-        sections.append({"name": "Education", "lines": 1 + n_edu})
-    if "skills" in included_sections:
-        # Per memory: skills max 3-5 lines; midpoint
-        sections.append({"name": "Skills", "lines": 4})
-    if "projects" in included_sections and n_proj > 0:
-        # Projects section: 1 line header + min(3, n_projects) project rows
-        sections.append({"name": "Projects", "lines": 1 + min(3, n_proj)})
 
-    total_lines = sum(s["lines"] for s in sections)
-    PAGE_CAPACITY_LINES = 47  # heuristic — A4, 10pt Roboto, standard margins
-    fit_pct = round(100.0 * total_lines / PAGE_CAPACITY_LINES, 1)
+    # Header: always one block (name + contact rows) — height fixed at 21.34mm.
+    sections.append({"name": "Header", "mm": ELEM["header_block"]})
+
+    # Summary: NO section_title in template (raw .summary-line spans). Use
+    # the same line-count formula as fit_loop: ceil(chars / 120) * 4.02mm.
+    sum_lines = max(1, SUMMARY_CHARS_EST // CHARS_PER_LINE
+                       + (1 if SUMMARY_CHARS_EST % CHARS_PER_LINE else 0))
+    sections.append({"name": "Summary", "mm": sum_lines * ELEM["summary_line"]})
+
+    # Experience: section_title + spacing, plus per-entry (header+subhead+spacing),
+    # plus bullet_line per bullet.
+    if "experience" in included_sections and n_roles > 0:
+        exp_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                  + n_roles * (ELEM["entry_header"] + ELEM["entry_subhead"]
+                               + ELEM["entry_spacing"])
+                  + bullets_total * ELEM["bullet_line"])
+        sections.append({"name": "Experience", "mm": exp_mm})
+
+    # Education: section_title + spacing, plus per-entry header lines.
+    if "education" in included_sections and n_edu > 0:
+        edu_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                  + n_edu * (ELEM["entry_header"] + ELEM["entry_spacing"]))
+        sections.append({"name": "Education", "mm": edu_mm})
+
+    # Skills: section_title + spacing, plus 1 line per category. Pre-strategy we
+    # assume 3 categories (Skills section is capped at 3-5 lines per memory
+    # feedback_skills_trim_before_width_fill).
+    if "skills" in included_sections:
+        skills_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                     + 3 * ELEM["skills_line"])
+        sections.append({"name": "Skills", "mm": skills_mm})
+
+    # Projects: section_title + spacing, plus per-project bullet line. Cap at 3
+    # rows (matches fit_loop's E2_surface_projects bullet_budget cap).
+    if "projects" in included_sections and n_proj > 0:
+        proj_mm = (ELEM["section_title"] + ELEM["section_spacing"]
+                   + min(3, n_proj) * ELEM["bullet_line"])
+        sections.append({"name": "Projects", "mm": proj_mm})
+
+    total_mm = sum(s["mm"] for s in sections)
+    fit_pct = round(100.0 * total_mm / PAGE_HEIGHT_MM, 1)
     fit_pct_clipped = min(fit_pct, 200.0)
 
-    # Compute pct_height for each section relative to page capacity (not total) so
-    # under-filled plans surface as "75% used" instead of always summing to 100%.
+    # pct_height per section relative to page capacity (not total) so
+    # under-filled plans surface as "75% used" instead of summing to 100%.
     for s in sections:
-        s["pct_height"] = round(100.0 * s["lines"] / PAGE_CAPACITY_LINES, 1)
+        s["pct_height"] = round(100.0 * s["mm"] / PAGE_HEIGHT_MM, 1)
+        # Legacy "lines" key: divide mm by bullet_line (4.52mm) so UI can still
+        # render an integer line-count next to each section. Floor of 1 row.
+        s["lines"] = max(1, int(round(s["mm"] / ELEM["bullet_line"])))
 
-    # Fit probability bands — calibrated against existing fit_loop telemetry:
-    # 85-105% = HIGH, 80-115% = MEDIUM, else LOW.
-    if 85.0 <= fit_pct <= 105.0:
+    # HIGH/MEDIUM/LOW bands — aligned with fit_loop.py:36-38 IDEAL band (85-92%).
+    # HIGH = inside IDEAL band (strategy will land 1-page without escalation).
+    # MEDIUM = under-utilized (75-85%) OR slight overflow (92-105%) — strategy
+    #          might trigger an expand/trim retry but should converge.
+    # LOW = sparse (<75%) OR strong overflow (>105%) — strategy needs review.
+    if 85.0 <= fit_pct <= 92.0:
         fit_prob = "HIGH"
-    elif 75.0 <= fit_pct <= 115.0:
+    elif 75.0 <= fit_pct < 85.0 or 92.0 < fit_pct <= 105.0:
         fit_prob = "MEDIUM"
     else:
         fit_prob = "LOW"
 
+    # Legacy line-count keys (kept for backward-compat with existing test
+    # signatures + UI bar widths that scale to capacity).
+    page_capacity_lines = int(round(PAGE_HEIGHT_MM / ELEM["bullet_line"]))  # ≈ 60
+    total_lines = sum(s["lines"] for s in sections)
+
     return {
         "sections": sections,
-        "total_lines": total_lines,
-        "page_capacity_lines": PAGE_CAPACITY_LINES,
+        "total_mm": round(total_mm, 2),
+        "page_capacity_mm": PAGE_HEIGHT_MM,
         "fit_probability": fit_prob,
         "fit_pct": fit_pct_clipped,
-        "headroom_lines": PAGE_CAPACITY_LINES - total_lines,
+        "headroom_mm": round(PAGE_HEIGHT_MM - total_mm, 2),
+        # Backward-compat:
+        "total_lines": total_lines,
+        "page_capacity_lines": page_capacity_lines,
+        "headroom_lines": page_capacity_lines - total_lines,
     }
 
 
 def _strategy_review_gate(parsed_p12: dict, distribution: dict, parsed_resume: Optional[dict] = None) -> None:
     """S6.1 — Interactive strategy gate shown after JD analysis.
 
-    Renders a Rich Panel summarising the plan (target role, strategy type,
-    company inclusion list with bullet counts, excluded companies, top JD
-    keywords) then asks for confirmation before the expensive bullet-generation
-    phase (~60 LLM calls).
+    Renders a Rich Panel summarising the plan: target role + company inclusion
+    list with bullet counts + excluded companies (below relevance cutoff) +
+    layout-fit estimate (see UAT #39 below). Asks for confirmation before the
+    expensive bullet-generation phase (~60 LLM calls).
 
-    UAT bug #39: Now ALSO renders vertical space distribution, per-section
+    UAT bug #39: ALSO renders vertical space distribution, per-section
     economics, and 1-page fit probability so the user can spot likely-overflow
     plans BEFORE the LLM burns tokens.
+
+    Cluster C cycle 2 (MED #3): Strategy / Top JD keywords rows were trimmed —
+    `_render_jd_requirements_panel()` already shows them ~30s earlier, so the
+    duplicate scan is noise. Only company inclusion + layout fit remain here
+    (the unique-info rows).
 
     Skipped when LR_NO_PAUSE=1 (CI / non-interactive runs), matching the
     behaviour of _see_and_continue().
@@ -265,18 +332,20 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict, parsed_resume: O
 
     console = Console(theme=LR_THEME)
 
+    # MED #3 (Cluster C cycle 2): Target / Strategy / Top JD keywords are now
+    # shown by _render_jd_requirements_panel() ~30s earlier — repeating them here
+    # is noise. Keep the Companies-included + Excluded rows (new info) and the
+    # Layout fit block (the *real* purpose of the gate).
     target_role = parsed_p12.get("target_role") or parsed_p12.get("strategy_role") or "?"
-    strategy = (parsed_p12.get("strategy") or "?").upper()
     included = distribution.get("included_companies") or []
     excluded = distribution.get("excluded_companies") or []
     cutoff = distribution.get("relevance_cutoff")
-    jd_keywords = parsed_p12.get("jd_keywords") or []
 
     body = Text(overflow="fold", no_wrap=False)
-    body.append(f"  Target:    ", style="step.gold")
+    # One-line context recap (target role only) — orients the user without
+    # duplicating the JD panel.
+    body.append("  For:  ", style="step.gold")
     body.append(f"{target_role}\n", style="bold")
-    body.append(f"  Strategy:  ", style="step.gold")
-    body.append(f"{strategy}\n", style="bold")
 
     if included:
         body.append("\n  Companies to include:\n", style="step.gold")
@@ -305,13 +374,6 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict, parsed_resume: O
             body.append(f"{label}", style="dim")
             body.append(f"  relevance {rel}\n", style="text.secondary")
 
-    if jd_keywords:
-        kw_preview = ", ".join(str(k) for k in jd_keywords[:8])
-        if len(jd_keywords) > 8:
-            kw_preview += f"  (+{len(jd_keywords) - 8} more)"
-        body.append("\n  Top JD keywords:  ", style="step.gold")
-        body.append(kw_preview, style="step.accent")
-
     # UAT bug #39 — vertical-space distribution + fit probability + section economics
     if parsed_resume is not None:
         try:
@@ -333,7 +395,10 @@ def _strategy_review_gate(parsed_p12: dict, distribution: dict, parsed_resume: O
             body.append(f"{heights['fit_pct']:.1f}% of single page  ", style="bold")
             body.append(f"[{heights['fit_probability']} 1-page fit]\n", style=fit_style)
             if heights["fit_probability"] == "LOW":
-                if heights["fit_pct"] > 115:
+                # 2026-05-14 cycle 2: thresholds aligned with fit_loop IDEAL band
+                # (85-92%). >105% = page WILL overflow per fit_loop. <75% = page
+                # WILL look sparse (fit_loop will trigger EXPAND strategies).
+                if heights["fit_pct"] > 105:
                     body.append("    ", style="")
                     body.append("⚠ Likely overflow — consider reducing bullets / dropping a section\n", style="error")
                 else:

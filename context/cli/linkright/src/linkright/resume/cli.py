@@ -405,11 +405,19 @@ def tailor(resume_path: Path | None, jd_path: Path | None, mode: str | None, llm
         click.echo("\033[2m    Cache     --no-cache flag set, fresh extraction.\033[0m")
     elif cache_used:
         # UAT bug #34 — expanded cache info, also rendered in the muted block.
+        # MED #1 (Cluster C cycle 2): use the actual resolved profile_dir_for_msg
+        # path so users with custom $LINKRIGHT_HOME see their real path, not a
+        # hardcoded ~/.linkright/profile/ literal.
         n = len(cache_details)
-        profile_hint = (
-            f" (~/.linkright/profile/, inspect with `linkright profile show`)"
-            if profile_dir_for_msg else ""
-        )
+        if profile_dir_for_msg:
+            # Render the path with ~ for HOME when applicable for compactness.
+            try:
+                _pd_disp = "~/" + str(profile_dir_for_msg.relative_to(Path.home()))
+            except ValueError:
+                _pd_disp = str(profile_dir_for_msg)
+            profile_hint = f" ({_pd_disp}, inspect with `linkright profile show`)"
+        else:
+            profile_hint = ""
         click.echo(f"\033[2m    Cache     ✓ Profile cache hit — reusing {n} artifact"
                    f"{'s' if n != 1 else ''} from prior `linkright profile create`{profile_hint}\033[0m")
         click.echo("\033[2m              Saves ~30-60s of parse + extract + embed work.\033[0m")
