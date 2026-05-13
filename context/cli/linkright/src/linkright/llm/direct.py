@@ -104,8 +104,16 @@ def _log_token_usage(intent: str, usage: dict) -> None:
     dict (already normalised to prompt_tokens / completion_tokens /
     total_tokens across all providers). Silently skips if values are None
     (agent-mode or provider didn't return usage).
+
+    UAT bug #2 — terminal noise: the raw `[tokens] ...` line is internal
+    telemetry, not user-facing UX. Default-off; opt in with LR_DEBUG=1
+    (or LR_VERBOSE=1) when diagnosing pipeline LLM behaviour. Token data
+    is still captured in `usage` dict and ends up in the run telemetry
+    artifact, so we lose nothing by hiding the live print.
     """
     import sys as _sys
+    if not _debug_enabled():
+        return
     prompt = usage.get("prompt_tokens")
     completion = usage.get("completion_tokens")
     total = usage.get("total_tokens")
@@ -123,6 +131,22 @@ def _log_token_usage(intent: str, usage: dict) -> None:
         f"  [tokens] {intent}  {' | '.join(parts)}  ({provider})",
         file=_sys.stderr, flush=True,
     )
+
+
+def _debug_enabled() -> bool:
+    """True when verbose / debug telemetry should print to stderr.
+
+    Activated by either LR_DEBUG or LR_VERBOSE (alias) in the environment.
+    Default-off — keeps `linkright tailor` / `linkright profile create`
+    output clean for non-technical users. UAT bug #2.
+
+    Cycle 2 / LOW-9: accept the same truthy variants as common shell
+    conventions (`on`, `y`) in addition to `1` / `true` / `yes`. Users
+    setting `LR_DEBUG=on` or `LR_DEBUG=y` should not be silently ignored.
+    """
+    _TRUTHY = {"1", "true", "yes", "on", "y"}
+    return os.environ.get("LR_DEBUG", "").lower() in _TRUTHY \
+        or os.environ.get("LR_VERBOSE", "").lower() in _TRUTHY
 
 
 # ── Deterministic mode (Phase 2 — 2026-05-01) ──────────────────────────────
@@ -1579,7 +1603,11 @@ def tier_chat(
     # Token counter — estimate before send (4 chars ≈ 1 token, rough but instant).
     # Skipped in agent mode: the subprocess handles its own output; we'd only emit
     # the estimate with no matching actuals (agent_chat returns no usage dict).
-    if not _agent_mode:
+    # UAT bug #2: also default-skipped — only print under LR_DEBUG=1 so the
+    # interactive pipeline doesn't bury friendly progress verbs under raw
+    # telemetry. Estimate is still captured downstream via the per-call usage
+    # dict (which ends up in telemetry.json regardless).
+    if not _agent_mode and _debug_enabled():
         import sys as _sys
         _input_est = (len(system) + len(user)) // 4
         print(

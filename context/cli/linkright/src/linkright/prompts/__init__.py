@@ -378,29 +378,56 @@ def prompt_for_resume_source(
     *,
     flag_hint: str = "-r/--resume",
 ) -> tuple[str, Any]:
-    """Ask the user for the resume file path — for `profile create`.
+    """Ask the user for the resume source — for `profile create`.
 
-    UAT bug #10: previously the picker offered two options — "file" and
-    "folder (auto-detect first PDF)". The folder option added unnecessary
-    complexity for the typical user (one resume file, one path). Power users
-    who genuinely want folder mode can still pass `--from-folder` on the
-    command line; it stays available as a flag, just no longer surfaces as
-    an interactive choice.
+    UAT bug #10 history: previously offered file + folder (auto-detect first
+    PDF). The folder option added unnecessary complexity for the typical
+    one-resume-one-path user. Power users who genuinely want folder mode
+    can still pass `--from-folder` on the command line.
 
-    The legacy `--paste` flag continues to stub to a 'Day 2 — coming soon'
-    error; the text-only resume parser will wire interactive paste-mode
-    back into this prompt as a third option once that work lands.
+    UAT bug #11: restore an interactive picker — now a 2-option choice
+    (PDF / .md file  vs.  paste resume text). The paste branch drops the
+    user into a multi-line text editor and the caller routes the captured
+    text through the existing markdown ingest path. A scripted equivalent
+    is exposed as `--from-paste` at the CLI layer.
 
-    Returns:
-        ("file", Path) — single PDF / .md / .markdown path
+    Returns one of:
+        ("file",  Path)  — single PDF / .md / .markdown path the user picked
+        ("paste", str)   — multi-line resume text captured via paste editor
     """
     _ensure_tty(flag_hint)
-    path = prompt_for_existing_path(
-        "Path to your resume (PDF or .md):",
-        must_be_file=True,
+    options = [
+        {
+            "key": "file",
+            "label": "Path to my resume PDF (or .md) — recommended",
+            "recommended": True,
+        },
+        {
+            "key": "paste",
+            "label": "Paste resume text here (multi-line, Esc+Enter to submit)",
+        },
+    ]
+    pick = prompt_for_choice(
+        "How do you want to provide your resume?",
+        options,
         flag_hint=flag_hint,
     )
-    return ("file", path)
+    if pick["key"] == "file":
+        path = prompt_for_existing_path(
+            "Path to your resume (PDF or .md):",
+            must_be_file=True,
+            flag_hint=flag_hint,
+        )
+        return ("file", path)
+    # paste branch — collect multi-line text via questionary.text(multiline=True).
+    # The caller (profile/cli.py:create_cmd) materialises the text to a temp
+    # .md file and routes it through the markdown-ingest path, so we never
+    # need a dedicated text parser here.
+    body = prompt_for_paste_block(
+        "Paste your resume text below (Esc + Enter when done):",
+        flag_hint=flag_hint,
+    )
+    return ("paste", body)
 
 
 # ─────────────────────────────────────────────────────────────────────────
