@@ -176,12 +176,26 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
     meta = load_metadata(profile_dir)
     nuggets = load_nuggets(profile_dir)
 
-    header_lines = [
-        f"[bold]Profile dir:[/]  {profile_dir}",
-        f"[bold]Created:[/]      {meta.get('created_at')}" if meta else "",
-        f"[bold]Embedder:[/]     {meta.get('embedder_tier')} ({meta.get('embedder_model')}, dim={meta.get('dim')})" if meta else "",
-        f"[bold]Nuggets:[/]      {meta.get('n_nuggets')} (embedded: {meta.get('n_embedded')}, highlights: {meta.get('n_highlights')})" if meta else "",
-    ]
+    # UAT bug #7: header previously exposed internal metadata (full profile
+    # path, embedder tier+model+dim, embed counts). Users don't need these to
+    # read their profile. Default header now shows only meaningful counts +
+    # creation date; pass --full to see internal metadata.
+    if full:
+        header_lines = [
+            f"[bold]Profile dir:[/]  {profile_dir}",
+            f"[bold]Created:[/]      {meta.get('created_at')}" if meta else "",
+            f"[bold]Embedder:[/]     {meta.get('embedder_tier')} ({meta.get('embedder_model')}, dim={meta.get('dim')})" if meta else "",
+            f"[bold]Nuggets:[/]      {meta.get('n_nuggets')} (embedded: {meta.get('n_embedded')}, highlights: {meta.get('n_highlights')})" if meta else "",
+        ]
+    else:
+        n_nuggets = meta.get("n_nuggets") if meta else None
+        n_highlights = meta.get("n_highlights") if meta else None
+        created = meta.get("created_at") if meta else None
+        header_lines = [
+            f"[bold]Created:[/]      {created}" if created else "",
+            f"[bold]Nuggets:[/]      {n_nuggets}" if n_nuggets is not None else "",
+            f"[bold]Highlights:[/]   {n_highlights}" if n_highlights is not None else "",
+        ]
     console.print(Panel("\n".join(l for l in header_lines if l), title="LinkRight Profile", expand=False))
 
     if not nuggets:
@@ -211,16 +225,20 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         "[dim]Priority: [bold red]P0[/]=core  [bold yellow]P1[/]=strong  "
         "[dim italic]P2[/]=supporting  [dim italic]P3[/]=context-only[/]"
     )
-    # Only surface the --full tip when there's an actual long bullet to be
-    # truncated — otherwise it's noise that trains users to ignore tips.
+    # UAT bug #8: 120-char default was too aggressive — bullets like
+    # "Drove 20+ UX research sessions at American Express with compliance
+    # analysts across 6 regions, designing 3 AML capability UIs end-to-end"
+    # (191 chars) got cut mid-sentence, hiding the user's own data. Default
+    # bumped to 240 (sentence-length); --full still disables truncation entirely.
+    _TRUNCATE_LIMIT = 240
     has_long_bullet = any(
-        len((n.get("nugget_text") or n.get("answer", "") or "").strip()) > 120
+        len((n.get("nugget_text") or n.get("answer", "") or "").strip()) > _TRUNCATE_LIMIT
         for n in nuggets
     )
     if not full and has_long_bullet:
-        console.print("[dim]Tip:  bullets >120 chars are truncated. Run `linkright profile show --full` for full text.[/]")
+        console.print(f"[dim]Tip:  bullets >{_TRUNCATE_LIMIT} chars are truncated. Run `linkright profile show --full` for full text.[/]")
 
-    def _truncate_title(s: str, limit: int = 120) -> str:
+    def _truncate_title(s: str, limit: int = _TRUNCATE_LIMIT) -> str:
         s = s.strip()
         if full or len(s) <= limit:
             return s

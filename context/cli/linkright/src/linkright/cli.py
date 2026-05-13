@@ -586,11 +586,24 @@ def doctor_cmd(auto_fix: bool) -> None:
 
     # AR walkthrough F-PRE-2 fix: pluralization
     issue_word = "issue" if failures == 1 else "issues"
-    _con.print(
-        f"[error]{failures} {issue_word} above.[/] "
-        f"Run `linkright doctor --auto-fix` to attempt the suggested fixes "
-        f"(prompted per step), or `linkright setup` for the wizard."
+    # UAT bug #1: only suggest --auto-fix when at least one failure has an
+    # extractable fix command. Otherwise the suggestion is misleading — user
+    # runs --auto-fix, sees "no auto-fix available" for every row, loses trust.
+    fixable_count = sum(
+        1 for label, ok, detail in rows
+        if not ok and _extract_fix_command(detail)
     )
+    if fixable_count:
+        _con.print(
+            f"[error]{failures} {issue_word} above.[/] "
+            f"Run `linkright doctor --auto-fix` to attempt the {fixable_count} "
+            f"auto-fixable issue(s) (prompted per step), or `linkright setup` for the wizard."
+        )
+    else:
+        _con.print(
+            f"[error]{failures} {issue_word} above.[/] "
+            f"No auto-fix available; see the manual hints above or run `linkright setup`."
+        )
 
     if auto_fix:
         _run_doctor_auto_fix(rows)
