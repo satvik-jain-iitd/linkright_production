@@ -45,6 +45,201 @@ def profile_group() -> None:
     """
 
 
+def _is_interactive() -> bool:
+    """True when stdin appears to be an interactive TTY.
+
+    Wrapped so tests (and CliRunner-driven flows) can stub the answer
+    without monkey-patching sys.stdin (which click.testing.CliRunner
+    forcibly replaces during invoke()).
+    """
+    try:
+        return sys.stdin.isatty()
+    except Exception:
+        return False
+
+
+# ── UAT bug #6 — resume sanity heuristic ───────────────────────────────────
+
+_RESUME_KEYWORDS = (
+    # Sections / structural keywords found in essentially every resume.
+    "experience", "employment", "education", "skills", "summary",
+    "objective", "achievements", "projects", "certifications",
+    "work history", "professional experience", "career history",
+    "technical skills", "publications", "languages", "training",
+    # Date / role-cue stems that scream "resume" without being section labels.
+    "intern", "responsible for", "led ", "managed ", "designed ",
+    "developed ", "built ", "shipped ", "engineered ",
+)
+
+# Email / phone regex — repeated here instead of importing from
+# profile.pipeline because that module imports orchestrator (heavy);
+# we want the sanity check to stay zero-cost on import.
+import re as _re_uat6
+_EMAIL_RE_UAT6 = _re_uat6.compile(r"[\w.+\-]+@[\w\-]+\.[\w.\-]+")
+_PHONE_RE_UAT6 = _re_uat6.compile(r"(?:\+?\d[\d\s().\-]{8,16}\d)")
+
+
+def _read_text_for_sanity(path: Path) -> str:
+    """Return up to ~30 KB of plain text from the resume file for keyword
+    matching. PDF: use pypdf (already a required dep); MD: read directly.
+    Best-effort — any extraction failure returns "" and the caller treats
+    that as inconclusive (passes the heuristic to avoid false-rejecting
+    files we can't peek at).
+    """
+    suffix = path.suffix.lower()
+    try:
+        if suffix in (".md", ".markdown", ".txt"):
+            return path.read_text(encoding="utf-8", errors="replace")[:30000]
+        if suffix == ".pdf":
+            try:
+                from pypdf import PdfReader
+            except ImportError:
+                return ""
+            reader = PdfReader(str(path))
+            # Limit to first 5 pages — a real resume has its keyword density
+            # there; certificate PDFs that DO leak some text on page 6 won't
+            # game the check.
+            pages_text: list[str] = []
+            for p in reader.pages[:5]:
+                try:
+                    pages_text.append(p.extract_text() or "")
+                except Exception:
+                    continue
+            return "\n".join(pages_text)[:30000]
+    except Exception:
+        return ""
+    return ""
+
+
+def _looks_like_resume(path: Path) -> tuple[bool, list[str]]:
+    """Return (is_resume_like, missing_signals).
+
+    Heuristic — scores 4 signals: keyword presence (≥3 distinct hits),
+    email regex, phone regex, minimum length (≥400 chars). If 3+ pass,
+    we trust it. If <3 pass, we surface the missing signals so the user
+    can decide informedly (this is an interactive warning, not a hard
+    block — see _prompt_resume_lookalike_override).
+    """
+    text = _read_text_for_sanity(path)
+    if not text:
+        # Couldn't extract anything → don't block; the downstream PDF
+        # readability guard already catches truly corrupt files.
+        return (True, [])
+    low = text.lower()
+
+    keyword_hits = sum(1 for kw in _RESUME_KEYWORDS if kw in low)
+    has_email = bool(_EMAIL_RE_UAT6.search(text))
+    has_phone = bool(_PHONE_RE_UAT6.search(text))
+    long_enough = len(text) >= 400
+
+    signals_pass = sum([
+        keyword_hits >= 3,
+        has_email,
+        has_phone,
+        long_enough,
+    ])
+
+    missing: list[str] = []
+    if keyword_hits < 3:
+        missing.append(
+            f"only {keyword_hits} resume-shaped keyword(s) "
+            f"(expected ≥3 like 'experience', 'education', 'skills')"
+        )
+    if not has_email:
+        missing.append("no email address detected")
+    if not has_phone:
+        missing.append("no phone number detected")
+    if not long_enough:
+        missing.append(f"very short ({len(text)} chars — most resumes are ≥400)")
+
+    return (signals_pass >= 3, missing)
+
+
+def _prompt_resume_lookalike_override(path: Path, reasons: list[str]) -> bool:
+    """Interactive warning when the file doesn't pass the resume heuristic.
+
+    Returns True if the user wants to continue anyway, False to cancel.
+    Power users get override; non-resume files (certificates, cover
+    letters pasted by mistake) get caught before 30-90s of pipeline work.
+    """
+    try:
+        from linkright.ui import lr_confirm, console as _con, TEAL
+    except Exception:
+        # UI primitives missing (e.g. truncated install) — fall back to
+        # click.confirm so we still gate the bad path.
+        click.echo(
+            f"⚠ The file '{path.name}' does not look like a resume:", err=True
+        )
+        for r in reasons:
+            click.echo(f"  • {r}", err=True)
+        return click.confirm("Continue anyway?", default=False)
+
+    _con.print()
+    _con.print(
+        f"[step.warn]⚠[/]  [bold]'{path.name}' does not look like a resume.[/]"
+    )
+    for r in reasons:
+        _con.print(f"     [text.secondary]→[/]  {r}")
+    _con.print(
+        "     [text.secondary]A certificate PDF / cover letter / random doc "
+        "will produce a garbage profile.[/]"
+    )
+    return bool(lr_confirm("Continue anyway?", default=False, accent=TEAL))
+
+
+# ── UAT bug #9 — interactive overwrite picker ──────────────────────────────
+
+def _prompt_overwrite_existing(profile_dir: Path) -> str:
+    """Show a 3-option picker when a profile already exists.
+
+    Returns one of: "keep" | "overwrite" | "view".
+    Power users still have `--force` for non-interactive overwrite.
+    """
+    try:
+        from linkright.ui import lr_select, console as _con, TEAL
+        import questionary
+
+        _con.print()
+        _con.print(
+            f"[step.warn]⚠[/]  [bold]A profile already exists at[/] "
+            f"[text.secondary]{profile_dir}[/]"
+        )
+
+        choices = [
+            questionary.Choice(
+                "Keep existing (cancel) — leave my profile untouched",
+                value="keep",
+            ),
+            questionary.Choice(
+                "Overwrite — wipe and re-ingest from this resume "
+                "(existing data backed up to .backup-<ts>)",
+                value="overwrite",
+            ),
+            questionary.Choice(
+                "View existing first — show my current profile, then exit so I can decide",
+                value="view",
+            ),
+        ]
+        picked = lr_select(
+            "What would you like to do?",
+            choices=choices,
+            accent=TEAL,
+            hint="Enter to select  ·  ↑↓ to navigate  ·  Esc to cancel",
+        )
+        # Esc / Ctrl+C / cancellation defaults to the safe option (keep).
+        return picked if picked in ("keep", "overwrite", "view") else "keep"
+    except Exception:
+        # UI helpers unavailable — fall back to click prompt.
+        click.echo(f"Profile already exists at {profile_dir}.")
+        click.echo("  [1] Keep existing (cancel)")
+        click.echo("  [2] Overwrite (wipe + re-ingest)")
+        click.echo("  [3] View existing first")
+        choice = click.prompt(
+            "Choose [1/2/3]", type=click.Choice(["1", "2", "3"]), default="1"
+        )
+        return {"1": "keep", "2": "overwrite", "3": "view"}[choice]
+
+
 def _offer_enrich(profile_dir: Path) -> None:
     """Offer one round of deep enrichment after truth-engine completes.
 
@@ -97,7 +292,10 @@ def _offer_enrich(profile_dir: Path) -> None:
 @profile_group.command("create")
 @click.option("--resume", "-r", "resume_path", type=click.Path(exists=True, path_type=Path),
               required=False, help="(optional) Path to resume PDF — prompted if omitted.")
-@click.option("--paste", is_flag=True, help="Interactive paste mode — type/paste resume text. (Day 2+)")
+@click.option("--paste", "paste", is_flag=True,
+              help="(legacy) Interactive paste mode flag — alias for --from-paste.")
+@click.option("--from-paste", "from_paste", is_flag=True,
+              help="Drop into a paste editor (Esc+Enter to submit) and ingest the text as a markdown resume.")
 @click.option("--from-folder", "from_folder", type=click.Path(exists=True, file_okay=False, path_type=Path),
               required=False, help="(optional) Folder to auto-detect first PDF.")
 @click.option("--from-markdown", "from_markdown", type=click.Path(exists=True, path_type=Path),
@@ -106,11 +304,11 @@ def _offer_enrich(profile_dir: Path) -> None:
               help="Include personal-life sections (skipped by default for privacy).")
 @click.option("--yes", is_flag=True, help="Skip truth-engine confirmation; auto-lock all extracted nuggets.")
 @click.option("--force", is_flag=True, help="Overwrite existing profile without confirmation.")
-def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal, yes, force) -> None:
+def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, include_personal, yes, force) -> None:
     """One-time: parse resume, extract nuggets, embed, persist to ~/.linkright/profile/.
 
-    Run with no flags to be prompted for the resume source. Pass -r / --paste /
-    --from-folder to skip the prompt.
+    Run with no flags to be prompted for the resume source (file or paste).
+    Pass -r / --from-paste / --from-folder / --from-markdown to skip the prompt.
     """
     if not yes and sys.stdout.isatty():
         from linkright.ui import lr_banner
@@ -118,27 +316,63 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
         lr_banner(version=_ver)
     profile_dir = _profile_dir()
 
+    # Treat legacy --paste as alias for --from-paste (UAT bug #11).
+    # The flag previously dead-ended at "Day 2 — coming soon"; now it routes
+    # through the same paste-editor path as the interactive picker.
+    if paste:
+        from_paste = True
+
     # Determine whether a PDF resume pipeline is needed.
     # --from-markdown alone is valid (markdown-only ingest, no PDF required).
-    _markdown_only = from_markdown and not resume_path and not paste and not from_folder
+    _markdown_only = (
+        from_markdown
+        and not resume_path
+        and not from_folder
+        and not from_paste
+    )
 
-    # If no source flag given (and not markdown-only), prompt interactively (file / folder).
-    # The `--paste` flag still exists as a stub but is NOT surfaced in
-    # the prompt — the downstream parser is not wired yet, so offering
-    # paste interactively would dead-end the user. When the text-only
-    # parser ships, add the paste branch back to prompt_for_resume_source.
-    if not resume_path and not paste and not from_folder and not _markdown_only:
+    # If no source flag given, prompt interactively (file / paste).
+    # UAT bug #11: paste is now a first-class third option in the picker;
+    # the legacy "Day 2 coming soon" stub is gone. Folder mode stays
+    # available via --from-folder (power-user flag, hidden from picker).
+    if (
+        not resume_path
+        and not from_paste
+        and not from_folder
+        and not _markdown_only
+    ):
         from linkright.prompts import prompt_for_resume_source
         kind, value = prompt_for_resume_source()
         if kind == "file":
             resume_path = value
+        elif kind == "paste":
+            from_paste = True
+            _paste_text = value  # captured here, materialised below
         else:  # folder
             from_folder = value
 
-    # Resolve resume source
-    if paste:
-        click.echo("[paste mode] Day 2 feature — coming soon.", err=True)
-        sys.exit(2)
+    # Materialise paste text → temp .md file → markdown-ingest path.
+    # UAT bug #11: keeps the create flow generic — no dedicated text parser
+    # required, and the existing markdown ingest already handles narrative
+    # career text. The temp file is written into the staging dir so it lives
+    # alongside other inputs and gets backed up on overwrite/rebuild.
+    if from_paste:
+        import tempfile
+        if "_paste_text" not in locals():
+            # `--from-paste` flag path — picker didn't run; collect text now.
+            from linkright.prompts import prompt_for_paste_block
+            _paste_text = prompt_for_paste_block(
+                "Paste your resume text below (Esc + Enter when done):",
+                flag_hint="--from-paste",
+            )
+        if not (_paste_text and _paste_text.strip()):
+            click.echo("✗ Paste was empty — nothing to ingest.", err=True)
+            sys.exit(1)
+        _tmp_md = Path(tempfile.mkdtemp(prefix="linkright-paste-")) / "resume.md"
+        _tmp_md.write_text(_paste_text, encoding="utf-8")
+        from_markdown = _tmp_md
+        _markdown_only = True
+
     if from_folder:
         pdfs = sorted(Path(from_folder).glob("*.pdf"))
         if not pdfs:
@@ -147,7 +381,7 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
         resume_path = pdfs[0]
         click.echo(f"Detected resume: {resume_path}")
     if not resume_path and not _markdown_only:
-        click.echo("Need --resume PATH or --paste or --from-folder DIR.", err=True)
+        click.echo("Need --resume PATH, --from-paste, --from-folder DIR, or --from-markdown PATH.", err=True)
         sys.exit(2)
 
     # Auto-route .md / .markdown files to the markdown-ingest path (UAT bug #4).
@@ -180,6 +414,31 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
             )
             sys.exit(1)
 
+    # UAT bug #6 — resume sanity-check: skim the file for resume-shaped
+    # signals BEFORE running the 30-90 sec extract pipeline. Lightweight
+    # keyword + email heuristic (deterministic, no LLM call). Low-confidence
+    # files prompt the user to confirm "really proceed?" — no hard reject,
+    # so power users can still force-run on unusual layouts. Skipped for
+    # markdown-only augment mode (user already has a profile they trust).
+    if resume_path and not _markdown_only and not yes:
+        _looks, _reasons = _looks_like_resume(resume_path)
+        if not _looks:
+            _proceed = _prompt_resume_lookalike_override(resume_path, _reasons)
+            if not _proceed:
+                click.echo("Cancelled — file did not look like a resume.")
+                sys.exit(0)
+
+    # Same heuristic for markdown source — catches the obvious "I pasted my
+    # cover letter" mistake before truth-engine wastes user time. Skipped
+    # for --yes (batch / scripted creation).
+    if from_markdown and _markdown_only and not yes:
+        _looks_md, _reasons_md = _looks_like_resume(Path(from_markdown))
+        if not _looks_md:
+            _proceed_md = _prompt_resume_lookalike_override(Path(from_markdown), _reasons_md)
+            if not _proceed_md:
+                click.echo("Cancelled — file did not look like a resume.")
+                sys.exit(0)
+
     # Existing profile guard — check metadata.yaml specifically (same signal
     # as `profile show`/`status`). Avoids false-positive on empty scaffold dirs
     # (artifacts/ inputs/ logs/ from a prior failed run with no actual data).
@@ -187,13 +446,44 @@ def create_cmd(resume_path, paste, from_folder, from_markdown, include_personal,
     # Exception: --from-markdown augment mode. If only --from-markdown is passed
     # (no PDF source), the user is ADDING to an existing profile, not replacing it.
     # The guard must not block in this case — markdown ingest appends to nuggets.jsonl.
-    _augment_only = bool(from_markdown and _markdown_only)
+    _augment_only = bool(from_markdown and _markdown_only and not from_paste)
     if (profile_dir / "metadata.yaml").exists() and not _augment_only:
         if not force:
-            click.echo(f"Profile already exists at {profile_dir}.")
-            click.echo("Run `linkright profile show` to inspect, `linkright profile rebuild` to start over,")
-            click.echo("or pass `--force` to overwrite (existing data backed up to .backup-<timestamp>).")
-            sys.exit(1)
+            # UAT bug #9 — interactive overwrite. Non-technical users do not
+            # know to pass --force; previously the CLI dead-ended with a
+            # flag suggestion. Show a 3-option picker: keep (cancel),
+            # overwrite (wipe + re-ingest), or view first. Power users
+            # can still pass --force on the CLI for scripted runs.
+            #
+            # Non-TTY (CI / piped) sticks with the original error so
+            # automation behavior is unchanged — `--force` remains the
+            # explicit opt-in for unattended overwrite.
+            if not _is_interactive():
+                click.echo(f"Profile already exists at {profile_dir}.")
+                click.echo(
+                    "Run `linkright profile show` to inspect, "
+                    "`linkright profile rebuild` to start over,"
+                )
+                click.echo(
+                    "or pass `--force` to overwrite "
+                    "(existing data backed up to .backup-<timestamp>)."
+                )
+                sys.exit(1)
+            choice = _prompt_overwrite_existing(profile_dir)
+            if choice == "keep":
+                click.echo("Kept existing profile. Nothing changed.")
+                sys.exit(0)
+            if choice == "view":
+                # Show the profile inline, then bail out so the user can
+                # decide their next move (rebuild, edit-contact, etc.).
+                from .render import show_profile
+                show_profile(profile_dir, full=False)
+                click.echo(
+                    "\nViewed existing profile. Re-run `linkright profile create` "
+                    "and pick Overwrite, or `linkright profile rebuild` to replace with a new resume."
+                )
+                sys.exit(0)
+            # choice == "overwrite" — fall through to wipe + re-ingest.
         _wipe(profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
 

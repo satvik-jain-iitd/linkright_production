@@ -7,16 +7,16 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | ID | Command | Component | Issue Description | Status |
 |----|---------|-----------|-------------------|--------|
 | 1 | `linkright doctor` | CLI / UX | `linkright doctor --auto-fix` is suggested even when no auto-fixable issues exist. | **Fixed (Cluster B-small, PR #159)** |
-| 2 | Systemic | CLI / UX | Terminal output is cluttered with technical "noise" (stack traces, library reports, `[tokens]` labels). | Open |
+| 2 | Systemic | CLI / UX | Terminal output is cluttered with technical "noise" (stack traces, library reports, `[tokens]` labels). | **Fixed (Cluster B-medium)** — `[tokens]` raw telemetry now gated behind `LR_DEBUG=1` / `LR_VERBOSE=1`. |
 | 3 | Systemic | CLI / UX | CLI output suggests flag-based commands (e.g. `--auto-fix`, `-j`, `--force`) to non-technical users. | Open |
 | 4 | `linkright profile create` | Profile / Ingest | CLI claims to support `.md` files but fails with "invalid pdf header" error. | **Fixed (Cluster A)** |
 | 5 | `linkright profile create` | Truth Engine | Name extraction includes greetings (e.g., "Dear Satvik Jain"). | **Fixed (Cluster B-small + Polish hardening, PR #159 + Polish PR)** |
-| 6 | `linkright profile create` | Profile / Ingest | No validation to ensure the file is a resume (e.g., certificates create garbage profiles). | Open |
+| 6 | `linkright profile create` | Profile / Ingest | No validation to ensure the file is a resume (e.g., certificates create garbage profiles). | **Fixed (Cluster B-medium)** — heuristic warning + override before pipeline. |
 | 7 | `linkright profile show` | CLI / UX | Displays internal metadata (dir paths, embedder dimensions) in the header. | **Fixed (Cluster B-small, PR #159)** |
 | 8 | `linkright profile show` | CLI / UX | Nuggets are truncated at 120 chars by default, hiding user's own data. | **Fixed (Cluster B-small, PR #159)** |
-| 9 | `linkright profile create` | CLI / UX | Error messages suggest complex flags (`--force`) instead of interactive overwrite prompts. | Open |
+| 9 | `linkright profile create` | CLI / UX | Error messages suggest complex flags (`--force`) instead of interactive overwrite prompts. | **Fixed (Cluster B-medium)** — 3-option picker on TTY; `--force` kept for CI. |
 | 10 | `linkright profile create` | CLI / UX | "Auto-detect folder" option adds unnecessary complexity to the ingestion menu. | **Fixed (Cluster Polish)** |
-| 11 | `linkright profile create` | CLI / UX | Missing "Paste Text" option for direct profile ingestion. | Open |
+| 11 | `linkright profile create` | CLI / UX | Missing "Paste Text" option for direct profile ingestion. | **Fixed (Cluster B-medium)** — paste picker option + `--from-paste` flag (routes through markdown ingest). |
 | 12 | Systemic | Profile / Ingest | No mechanism to chunk/partition long documents, risking context limit failures. | Open |
 | 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | Open |
 | 14 | Systemic | CLI / UI | Missing structural horizontal dividers to wrap role-based interactions (input vs response). | Open |
@@ -55,7 +55,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster E1 (TUI Tokens + Iconography)** — #18, #23, #24 — **✅ MERGED** (PR #158). Foundation for E2 + E3; pure additive.
 - **Cluster B-small (Profile/UX Quick Wins)** — #1, #5, #7, #8 — **✅ MERGED** (PR #159).
 - **Cluster Polish (Loose Ends)** — #5 hardening + #10 — **✅ THIS PR**.
-- **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — Pending
+- **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — **✅ THIS PR** (changelog fragment `uat-cluster-b-medium.md`).
 - **Cluster B-truth-engine** — #13 — Pending
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — Pending (includes inline edit menu replacing Cluster A restart hint)
 - **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
@@ -67,8 +67,8 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 11 (#1, #4, #5 [+ hardening], #7, #8, #10, #18, #23, #24, #37, #40)
-- **Pending:** 28
+- **Fixed:** 15 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #18, #23, #24, #37, #40)
+- **Pending:** 24
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---

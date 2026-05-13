@@ -313,23 +313,30 @@ def test_prompt_for_resume_source_file_branch(monkeypatch, tmp_path):
     assert val == pdf.resolve()
 
 
-def test_prompt_for_resume_source_folder_branch(monkeypatch, tmp_path):
-    folder = tmp_path / "resumes"
-    folder.mkdir()
+def test_prompt_for_resume_source_paste_branch(monkeypatch, tmp_path):
+    """UAT bug #11: 'Paste resume text' is now a first-class option in the
+    interactive picker. Selecting it drops the user into a multi-line text
+    editor and returns (kind="paste", body=str).
+    """
     monkeypatch.setattr(
         "questionary.select",
-        lambda *a, **kw: FakeQ("   Folder containing my resume (auto-detect first PDF)"),
+        lambda *a, **kw: FakeQ(
+            "   Paste resume text here (multi-line, Esc+Enter to submit)"
+        ),
     )
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(str(folder)))
+    monkeypatch.setattr(
+        "questionary.text",
+        lambda *a, **kw: FakeQ("PM @ AmEx 2022-2024\nLed payments fraud-detection model.\n"),
+    )
     kind, val = prompts.prompt_for_resume_source()
-    assert kind == "folder"
-    assert val == folder.resolve()
+    assert kind == "paste"
+    assert "AmEx" in val and "fraud-detection" in val
 
 
-def test_prompt_for_resume_source_paste_option_hidden(monkeypatch, tmp_path):
-    """Per round-1 review: paste option must NOT be surfaced in the
-    interactive prompt until the downstream text-only parser is wired.
-    Surfacing it would dead-end users at the 'Day 2 — coming soon' stub.
+def test_prompt_for_resume_source_paste_option_surfaced(monkeypatch, tmp_path):
+    """UAT bug #11: paste option must be visible in the picker (alongside the
+    file option). Regression-guards the previous 'hide paste until parser is
+    wired' behaviour, which dead-ended users on a 'coming soon' stub.
     """
     real_file = tmp_path / "r.pdf"
     real_file.write_text("PDF")
@@ -349,15 +356,16 @@ def test_prompt_for_resume_source_paste_option_hidden(monkeypatch, tmp_path):
     kind, val = prompts.prompt_for_resume_source()
     assert kind == "file"  # we picked the first option (file)
 
-    # Verify only 2 choices (file + folder), no "paste"
+    # Verify exactly 2 choices (file + paste); folder is intentionally absent
+    # (power-user --from-folder flag preserved at CLI layer).
     assert captured_options.get("count") == 2, (
-        f"prompt_for_resume_source should offer only file + folder (paste hidden); "
+        f"prompt_for_resume_source should offer file + paste; "
         f"got {captured_options.get('count')} options: {captured_options.get('labels')}"
     )
-    for label in captured_options.get("labels", []):
-        assert "paste" not in label.lower(), (
-            f"Paste option must not be surfaced — found: {label}"
-        )
+    labels_joined = " | ".join(captured_options.get("labels", [])).lower()
+    assert "paste" in labels_joined, (
+        f"Paste option must be surfaced in the picker — got: {labels_joined}"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────
