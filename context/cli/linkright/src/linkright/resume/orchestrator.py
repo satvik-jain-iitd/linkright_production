@@ -892,6 +892,31 @@ def step_01_parse_resume(raw_text: str) -> dict:
     log(f"=== step_01 {usage.get('provider')} raw output ===\n{md_text}\n=== end ===\n")
     parsed = parse_resume_markdown(md_text)
 
+    # UAT bug #13 — Truth Engine: regex pre-extraction for high-confidence
+    # fields (email, phone). The RESUME_PARSE_FALLBACK prompt emits markdown
+    # only (no contact_info), and step_07 LLM may later hallucinate / mis-OCR
+    # these fields. Run deterministic regex on raw text RIGHT NOW so:
+    #   1. step_01b_verify_contact_details has a non-blank pre-fill to show
+    #      the user (was previously always blank in tailor pipeline).
+    #   2. step_07 reconciliation has a ground-truth value to compare LLM
+    #      output against (see ``reconcile_contact`` in profile.regex_extract).
+    # The values are stored under both `contact_info` (legacy consumer)
+    # AND `contact_info_regex` (provenance — never overwritten downstream).
+    try:
+        from linkright.profile.regex_extract import extract_email_phone as _regex_eep
+        _regex_hits = _regex_eep(raw_text)
+    except Exception as _e:
+        log(f"[step_01 regex pre-extract] failed: {_e}; continuing without")
+        _regex_hits = {"email": "", "phone": ""}
+
+    _existing_contact = parsed.get("contact_info") or {}
+    _merged_contact = dict(_existing_contact)
+    for _field in ("email", "phone"):
+        if _regex_hits.get(_field) and not _merged_contact.get(_field):
+            _merged_contact[_field] = _regex_hits[_field]
+    parsed["contact_info"] = _merged_contact
+    parsed["contact_info_regex"] = dict(_regex_hits)
+
     out_path = ARTIFACTS / "01_resume_parsed.json"
     out_path.write_text(json.dumps({"markdown": md_text, "parsed": parsed, "usage": usage}, indent=2), encoding="utf-8")
 
@@ -1757,6 +1782,31 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
                 parsed["profile"] = _derive_profile(parsed.get("career_level", "mid"))
         except Exception as exc:
             log(f"[step_07 low_reqs retry] failed ({exc}); keeping original")
+
+    # UAT bug #13 — Truth Engine: post-LLM regex reconciliation for contact_info.
+    # The LLM occasionally hallucinates an email domain or flips a digit in
+    # the phone number. Regex pre-extraction on raw_text is the deterministic
+    # floor: if regex finds a hit AND LLM output disagrees, regex wins and a
+    # disagreement record is stored on parsed["contact_disagreements"] so the
+    # downstream verifier (step_01b) can surface it to the user.
+    try:
+        from linkright.profile.regex_extract import reconcile_contact as _reconcile_contact
+        _llm_contact = parsed.get("contact_info") or {}
+        _final_contact, _disagreements = _reconcile_contact(_llm_contact, raw_text or "")
+        parsed["contact_info"] = _final_contact
+        if _disagreements:
+            parsed["contact_disagreements"] = _disagreements
+            logbook.append(
+                step, "eval",
+                f"Truth-engine regex reconcile: {len(_disagreements)} disagreement(s) "
+                f"between LLM and regex on contact fields",
+                body="\n".join(
+                    f"- {d['field']}: LLM={d['llm_value']!r} → regex={d['regex_value']!r}"
+                    for d in _disagreements
+                ),
+            )
+    except Exception as _e:
+        log(f"[step_07 regex reconcile] failed: {_e}; using raw LLM contact_info")
 
     # S5.3: structural contamination guard — strip jd_keywords not present in
     # the raw JD text.  The LLM sometimes leaks resume-sourced terms (e.g.
@@ -5812,7 +5862,7 @@ def main():
     logbook.append("run_start", "result", "environment + health probe summary", body="\n".join(f"- {p}" for p in probes))
 
     # ── Steps ──────────────────────────────────────────────────────────
-    from linkright.ui import step_start, step_done, step_warn, step_error
+    from linkright.ui import step_start, step_done, step_warn, step_error, step_progress
 
     step_start("Reading resume PDF", index=1, total=9)
     raw_text = step_00_ingest_pdf()
@@ -5827,10 +5877,13 @@ def main():
     step_01b_verify_contact_details(parsed)
 
     step_start("Extracting career nuggets", index=3, total=9)
+    # UAT bug #21: coral in-flight verb so the user knows we're not stuck.
+    step_progress("Smooshing resume into atomic nuggets", telemetry="LLM call · 1 batch")
     nuggets = step_02_extract_nuggets(raw_text, parsed)
     step_done(detail=f"{len(nuggets)} nuggets extracted")
 
     step_start("Embedding nuggets", index=4, total=9)
+    step_progress("Vectorising bullets", telemetry=f"{len(nuggets)} nuggets · fastembed")
     nuggets_with_emb = step_03_embed_nuggets(nuggets)
     step_done(detail=f"{sum(1 for n in nuggets_with_emb if n.get('emb'))} embedded")
 
@@ -5841,6 +5894,9 @@ def main():
     # mirrors prod worker, which uses Phase 1+2's `requirements` field for
     # covers_requirements mapping in Phase 4a verbose bullets.
     step_start("Analyzing job description", index=5, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb so the user knows
+    # we're still working through the slowest LLM call in the pipeline.
+    step_progress("Analyzing", telemetry=f"LLM call · {len(jd_text)} chars in")
     parsed_p12 = step_07_phase_1_2(jd_text, raw_text)
     step_done(detail=f"{len(parsed_p12.get('requirements', []))} requirements identified")
 
@@ -5935,6 +5991,11 @@ def main():
         })
 
     step_start("Embedding JD requirements", index=6, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb.
+    step_progress(
+        "Embedding JD",
+        telemetry=f"{len(canonical_reqs)} requirements · embedder",
+    )
     reqs_with_emb = step_05_embed_reqs(canonical_reqs)
     step_done(detail=f"{len(reqs_with_emb)} requirements embedded")
 
@@ -5951,6 +6012,14 @@ def main():
     )
 
     step_start("Scoring role alignment", index=7, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb.
+    step_progress(
+        "Scoring",
+        telemetry=(
+            f"{len(parsed.get('experiences', []))} roles × "
+            f"{len(reqs_with_emb)} reqs · cosine"
+        ),
+    )
     role_result = step_06_role_scores(
         nuggets_with_emb,
         reqs_with_emb,
@@ -6046,6 +6115,11 @@ def main():
     _strategy_review_gate(parsed_p12, distribution)
 
     step_start("Retrieving relevant nuggets per company", index=8, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb.
+    step_progress(
+        "Retrieving",
+        telemetry=f"{len(nuggets_with_emb)} nuggets · per-company top-k",
+    )
     retrieved = step_08_retrieve_per_company(parsed_p12, nuggets_with_emb)
     step_done(detail=f"{sum(len(v) for v in retrieved.values())} nuggets retrieved")
 
@@ -6077,6 +6151,16 @@ def main():
     )
 
     step_start("Writing professional summary", index=9, total=9)
+    # UAT cluster-E3 cycle 2 (MED #5): coral progress verb — this is the
+    # slowest LLM call before bullet generation, so the user is most
+    # likely to feel hung here without an in-flight signal.
+    step_progress(
+        "Summarizing",
+        telemetry=(
+            f"LLM call · "
+            f"{sum(len(v) for v in retrieved.values())} nuggets in"
+        ),
+    )
     summary = step_09_summary(parsed_p12, retrieved, raw_text)
     step_done(detail=f"{len(summary)} chars")
 

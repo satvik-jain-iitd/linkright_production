@@ -25,6 +25,11 @@ from .pipeline import (
     load_nuggets,
     nugget_key,
 )
+# UAT cluster-E3 cycle 2 — HIGH #2 fix: importance-tier rules sourced from
+# the single source of truth so the LLM extractor's classification cannot
+# drift from the user-facing legend rendered by `profile/render.py` and
+# from the sibling extractor in `resume/lib/prompts.py`.
+from .priority_legend import llm_prompt_instructions as _priority_legend_for_llm
 
 
 # ── Prompts ─────────────────────────────────────────────────────────────────
@@ -56,7 +61,8 @@ EXTRACT_USER = """The candidate was asked a follow-up question about their exist
   - Is atomic (one achievement / fact, not a list)
   - Names the metric / method / proof concretely
   - Inherits company + role from the parent nugget
-  - importance: "P0" if a numeric metric is named; "P1" if a method or proof is named but no metric; "P2" otherwise
+
+""" + _priority_legend_for_llm() + """
 
 Parent nugget (for context, do not repeat its text):
 {parent_text}
@@ -68,7 +74,7 @@ User's answer:
 {answer}
 
 Output JSON exactly:
-{{"nugget_text": "...", "company": "{company}", "role": "{role}", "importance": "P0|P1|P2", "type": "work_experience"}}"""
+{{"nugget_text": "...", "company": "{company}", "role": "{role}", "importance": "P0|P1|P2|P3", "type": "work_experience"}}"""
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -149,7 +155,13 @@ def extract_from_answer(parent: dict, question: str, answer: str) -> Optional[di
 
     data.setdefault("company", company)
     data.setdefault("role", role)
-    data.setdefault("importance", "P2")
+    # UAT cluster-E3 cycle 2 — HIGH #3 fix: P3 is the catch-all for
+    # ambiguous / generic nuggets per `priority_legend.py` (introduced
+    # cycle 1). Previously this defaulted to P2 even though P2 expects
+    # specific company/role/team context — silently mis-classifying
+    # generic ones. Defaulting to P3 routes ambiguous extractions into
+    # the audit/cleanup bucket where they belong.
+    data.setdefault("importance", "P3")
     data.setdefault("type", "work_experience")
     return data
 
@@ -255,7 +267,10 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
     import questionary
     from rich.console import Console
     from rich.panel import Panel
-    from linkright.ui import step_start, step_done, step_error, step_warn, step_detail, section_header, lr_text, TEAL
+    from linkright.ui import (
+        step_start, step_done, step_error, step_warn, step_detail,
+        section_header, lr_text, step_echo_input, TEAL,
+    )
     from linkright.ui.theme import LR_THEME
 
     profile_dir = profile_dir or _profile_dir()
@@ -302,6 +317,9 @@ def enrich_session(profile_dir: Optional[Path] = None, nugget_id: Optional[str] 
         if not answer.strip():
             continue
         answered += 1
+        # UAT bug #20: echo the user's input back with a high-contrast white
+        # '●' bullet so they can confirm what we'll feed to the extractor.
+        step_echo_input(answer.strip(), label="You answered")
         new = extract_from_answer(target, q, answer.strip())
         if new:
             new["parent_nugget_text"] = target_text
@@ -345,19 +363,65 @@ def _resolve_target_nugget(nuggets: list[dict], nugget_id: Optional[str], consol
         console.print(f"[red]No nugget found for id={nugget_id}.[/]")
         return None
 
-    # Interactive picker
-    from linkright.ui import lr_select, TEAL
-    choices = []
-    for i, n in enumerate(nuggets):
-        company = (n.get("company") or "").strip()[:22] or "(no co)"
-        text = (n.get("nugget_text") or n.get("answer", "")).strip()[:80]
-        importance = (n.get("importance") or "??").upper()
-        label = f"[{importance:>2s}] {company:<22} | {text}"
-        choices.append(questionary.Choice(title=label, value=i))
-    choices.append(questionary.Choice(title="(cancel)", value=-1))
+    # Interactive picker — UAT cluster-E3 cycle 2 (HIGH #1): wired through
+    # `lr_select_with_custom` so the user can drop into a free-text search
+    # instead of scrolling 50+ nuggets to find the one they remember.
+    # Picking "Type something…" lets them type any substring (company /
+    # role / metric / verb) and re-runs the picker filtered to matches.
+    # Cancellation paths preserved.
+    from linkright.ui import lr_select_with_custom, TEAL
 
-    pick = lr_select(f"Pick a nugget to enrich ({len(nuggets)} total):", choices=choices, accent=TEAL)
-    if pick is None or pick == -1:
-        console.print("Cancelled.")
-        return None
-    return nuggets[pick]
+    _CANCEL_SENTINEL = "__enrich_cancel__"
+
+    def _build_choices(pool: list[dict]) -> list:
+        c = []
+        for i, n in enumerate(pool):
+            company = (n.get("company") or "").strip()[:22] or "(no co)"
+            text = (n.get("nugget_text") or n.get("answer", "")).strip()[:80]
+            importance = (n.get("importance") or "??").upper()
+            label = f"[{importance:>2s}] {company:<22} | {text}"
+            c.append(questionary.Choice(title=label, value=f"idx:{i}"))
+        # "(cancel)" stays as an explicit affordance; the helper appends its
+        # own "Type something…" entry between this and the visible items.
+        c.append(questionary.Choice(title="(cancel)", value=_CANCEL_SENTINEL))
+        return c
+
+    pool = list(nuggets)
+    while True:
+        pick = lr_select_with_custom(
+            f"Pick a nugget to enrich ({len(pool)} total):",
+            choices=_build_choices(pool),
+            accent=TEAL,
+            custom_prompt="Search nuggets by company / role / text:",
+        )
+        # `lr_select_with_custom` returns:
+        #   - None on Esc OR blank type-something → treat as cancel
+        #   - "idx:<n>" when a real choice is picked
+        #   - _CANCEL_SENTINEL when the (cancel) row is picked
+        #   - the typed query string when user picks "Type something…"
+        if pick is None or pick == _CANCEL_SENTINEL:
+            console.print("Cancelled.")
+            return None
+        if isinstance(pick, str) and pick.startswith("idx:"):
+            try:
+                idx = int(pick[4:])
+            except ValueError:
+                idx = -1
+            if 0 <= idx < len(pool):
+                return pool[idx]
+            # Stale index (filtered pool changed) → reset and re-prompt
+            pool = list(nuggets)
+            continue
+        # Free-text search → filter the original nuggets list and re-prompt.
+        q = pick.strip().lower()
+        filtered = [
+            n for n in nuggets
+            if q in (n.get("company") or "").lower()
+            or q in (n.get("role") or "").lower()
+            or q in (n.get("nugget_text") or n.get("answer") or "").lower()
+        ]
+        if not filtered:
+            console.print(f"[yellow]No nuggets match '{pick.strip()}'. Showing full list.[/]")
+            pool = list(nuggets)
+        else:
+            pool = filtered

@@ -220,11 +220,11 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         else:
             section_untagged[n_type].append(n)
 
-    # Priority-badge legend (kept from prior version per AR walkthrough A.5).
-    console.print(
-        "[dim]Priority: [bold red]P0[/]=core  [bold yellow]P1[/]=strong  "
-        "[dim italic]P2[/]=supporting  [dim italic]P3[/]=context-only[/]"
-    )
+    # Priority-badge legend — quantified definitions (UAT bug #29).
+    # Single source of truth lives in `priority_legend.py` so the legend
+    # users see here matches the criteria the LLM uses to assign importance.
+    from linkright.profile.priority_legend import format_legend_inline
+    console.print(format_legend_inline())
     # UAT bug #8: 120-char default was too aggressive — bullets like
     # "Drove 20+ UX research sessions at American Express with compliance
     # analysts across 6 regions, designing 3 AML capability UIs end-to-end"
@@ -246,9 +246,10 @@ def show_profile(profile_dir: Optional[Path] = None, full: bool = False) -> None
         return f"{cut}…"
 
     def _render_nugget_leaf(parent_node, n: dict) -> None:
+        # Badge style comes from priority_legend (single source of truth).
+        from linkright.profile.priority_legend import priority_badge
         imp = (n.get("importance") or "").upper()
-        badge = {"P0": "[bold red]P0[/]", "P1": "[bold yellow]P1[/]",
-                 "P2": "[dim]P2[/]", "P3": "[dim]P3[/]"}.get(imp, "")
+        badge = priority_badge(imp)
         raw_title = _normalize(n.get("nugget_text")) or _normalize(n.get("answer", "")) or "(untitled)"
         parent_node.add(f"{badge} {_truncate_title(raw_title)}")
 

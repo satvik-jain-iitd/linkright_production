@@ -19,6 +19,15 @@ from .width_config import (
     STEP12_TARGET_MIDPOINT,
 )
 
+# UAT cluster-E3 cycle 2 — HIGH #2 fix: importance-tier rules must be
+# sourced from `linkright.profile.priority_legend` (single source of truth)
+# so the LLM extractor cannot drift from the user-facing legend rendered by
+# `profile/render.py`. Previously this file inlined a vague 4-tier
+# definition that diverged from the `profile/enrich.py` 3-tier definition
+# AND from the on-screen legend. Now the priority_legend module is the only
+# place where tier semantics live; both prompt files import from it.
+from linkright.profile.priority_legend import llm_prompt_instructions as _priority_legend_for_llm
+
 # ── Resume parse (website) ──────────────────────────────────────────────────
 
 RESUME_PARSE_FALLBACK = """You are a resume parser. Extract all sections from the resume text.
@@ -87,7 +96,7 @@ tags: <tag1, tag2, tag3>
 leadership: <none/individual/team_lead>
 
 type values: work_experience, independent_project, skill, education, certification, award
-importance: P0=career-defining (top 3 ever), P1=strong, P2=supporting, P3=background
+""" + _priority_legend_for_llm() + """
 leadership: none=solo, individual=drove decisions, team_lead=managed people
 tags: 2-5 lowercase labels for skills/themes
 
