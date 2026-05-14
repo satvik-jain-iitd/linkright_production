@@ -902,6 +902,296 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
     return True
 
 
+# ── Batch review loop (Phase 2) ──────────────────────────────────────────────
+
+def batch_review_loop(nuggets: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Walk ALL nuggets interactively for pre-persist human review.
+
+    For each nugget the user chooses:
+      [K]eep    — accept as-is
+      [E]dit    — type a correction (free text)
+      [D]rop    — mark for removal
+      [S]kip    — accept all remaining nuggets without review
+
+    Corrections and drops are collected in memory; NO LLM call per correction.
+    After the loop (or user skip), a summary is shown and the user must
+    confirm "Finalize?" before the function returns.
+
+    Returns:
+        (original_nuggets, corrections_list)
+
+    where ``corrections_list`` is a list of dicts::
+
+        {"nugget_id": str, "action": "edit"|"drop", "correction_text": str|None}
+
+    ``nugget_id`` is the stable nugget_key() for the row.
+    """
+    import questionary
+    from rich.console import Console
+    from rich.panel import Panel
+    from linkright.ui import lr_text, lr_select, step_done, TEAL as _TEAL, CORAL as _CORAL
+    from linkright.ui.theme import LR_THEME
+
+    console = Console(theme=LR_THEME)
+
+    if not nuggets:
+        return nuggets, []
+
+    console.print()
+    console.print(Panel(
+        f"[bold]Batch Review[/] — {len(nuggets)} nugget(s) extracted.\n\n"
+        f"For each: [bold green]Keep[/] (accept), "
+        f"[bold cyan]Edit[/] (correct text), "
+        f"[bold red]Drop[/] (remove), or "
+        f"[bold yellow]Skip all[/] (accept remaining as-is).",
+        title="[bold]Review Extracted Nuggets[/]",
+        border_style=_TEAL,
+        expand=False,
+    ))
+
+    corrections: list[dict] = []
+    skip_remaining = False
+
+    for i, nugget in enumerate(nuggets, 1):
+        if skip_remaining:
+            break
+
+        company = (nugget.get("company") or "").strip() or "(no company)"
+        role = (nugget.get("role") or "").strip() or "(no role)"
+        importance = (nugget.get("importance") or "??").upper()
+        # Handle both `answer` (PDF pipeline) and `nugget_text` (markdown ingest)
+        text = (nugget.get("answer") or nugget.get("nugget_text") or "(empty)").strip()
+        section = (nugget.get("source_section") or "").strip()
+
+        body_lines = [
+            f"[bold]{company}[/]  |  [italic]{role}[/]  |  [yellow]{importance}[/]",
+            "",
+            text,
+        ]
+        if section:
+            body_lines.append(f"\n[dim]Section: {section}[/]")
+
+        console.print()
+        console.print(Panel(
+            "\n".join(body_lines),
+            title=f"[bold]Nugget {i}/{len(nuggets)}[/]",
+            border_style=_TEAL,
+            expand=False,
+        ))
+
+        action = lr_select(
+            "Action?",
+            choices=["Keep", "Edit", "Drop", "Skip all remaining"],
+            accent=_TEAL,
+        )
+
+        if action is None:
+            console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes applied.[/]")
+            import sys
+            sys.exit(130)
+
+        nid = nugget_key(nugget)
+
+        if action == "Keep":
+            continue
+        elif action == "Drop":
+            corrections.append({"nugget_id": nid, "action": "drop", "correction_text": None})
+        elif action == "Edit":
+            new_text = lr_text("Corrected version:", default=text, accent=_TEAL)
+            if new_text is None:
+                console.print(f"[{_CORAL}]Aborted (Ctrl+C). No changes applied.[/]")
+                import sys
+                sys.exit(130)
+            new_text = new_text.strip()
+            if not new_text:
+                console.print("[dim]Empty text — keeping original.[/]")
+            elif new_text != text:
+                corrections.append({"nugget_id": nid, "action": "edit", "correction_text": new_text})
+        elif action == "Skip all remaining":
+            skip_remaining = True
+
+    # Summary
+    n_keep = len(nuggets) - sum(1 for c in corrections if c["action"] == "edit") - sum(1 for c in corrections if c["action"] == "drop")
+    n_edit = sum(1 for c in corrections if c["action"] == "edit")
+    n_drop = sum(1 for c in corrections if c["action"] == "drop")
+
+    console.print()
+    console.print(Panel(
+        f"  [green]Kept:[/]    {n_keep}\n"
+        f"  [cyan]Edited:[/]  {n_edit}\n"
+        f"  [red]Dropped:[/] {n_drop}",
+        title="[bold]Review Summary[/]",
+        border_style=_TEAL,
+        expand=False,
+    ))
+
+    from linkright.ui import lr_confirm
+    confirmed = lr_confirm("Finalize?", default=True, accent=_TEAL)
+    if not confirmed:
+        console.print("[dim]Review cancelled — no changes applied.[/]")
+        return nuggets, []
+
+    step_done("Review complete")
+    return nuggets, corrections
+
+
+# ── Apply corrections via LLM (Phase 3) ──────────────────────────────────────
+
+def apply_corrections_llm(nuggets: list[dict], corrections: list[dict]) -> list[dict]:
+    """Apply batch corrections via ONE LLM call.
+
+    Called only when ``corrections`` is non-empty (caller's responsibility).
+
+    The LLM receives:
+    - All original nuggets serialised as JSON
+    - All corrections from Phase 2 (edit text or drop)
+    - Instructions to: apply edits, apply drops, normalise company names
+      globally (if user edited "Amex" → "American Express", apply globally),
+      extract structured start_date/end_date from source_section strings like
+      "(April 2022 -- April 2023)", and ALWAYS output the `answer` field
+      (never `nugget_text`).
+
+    Returns the corrected nugget list in standard schema (``answer`` field).
+    Falls back to a deterministic apply (no LLM) if the LLM call fails,
+    so the pipeline is never blocked by an LLM outage.
+    """
+    import json as _json
+
+    # Build system + user prompts
+    _SYSTEM = (
+        "You are a career-data editor. You receive a JSON list of career nuggets and a list "
+        "of corrections requested by the user. Apply EVERY correction exactly as specified. "
+        "Rules:\n"
+        "1. For action='edit': replace the nugget's answer text with correction_text.\n"
+        "2. For action='drop': remove the nugget from the output list entirely.\n"
+        "3. Company normalisation: if the user edited a company name (e.g. 'Amex' → "
+        "'American Express') in ANY nugget, apply that same normalisation to ALL nuggets "
+        "that share the original company name.\n"
+        "4. Date extraction: if source_section contains a date range like "
+        "'(April 2022 -- April 2023)' or '(Jan 2020 - Dec 2021)', extract start_date and "
+        "end_date fields (format: YYYY-MM) and add them to the nugget.\n"
+        "5. Field normalisation: ALWAYS output 'answer' (never 'nugget_text'). "
+        "Preserve all other fields (company, role, importance, type, id, nugget_index, etc.).\n"
+        "6. Output ONLY a valid JSON array of corrected nuggets. No commentary, no markdown "
+        "fences, no explanation."
+    )
+
+    # Strip embeddings (large, not needed by LLM) before serialising
+    _TRANSIENT = {"emb", "_entity_resolved_by", "_new_emb"}
+    nuggets_for_llm = [
+        {k: v for k, v in n.items() if k not in _TRANSIENT}
+        for n in nuggets
+    ]
+
+    _user = (
+        f"NUGGETS:\n{_json.dumps(nuggets_for_llm, ensure_ascii=False, indent=2)}\n\n"
+        f"CORRECTIONS:\n{_json.dumps(corrections, ensure_ascii=False, indent=2)}\n\n"
+        "Apply all corrections and return the corrected nuggets as a JSON array."
+    )
+
+    try:
+        from ..llm.direct import tier_chat, extract_json, LLMError
+        raw, _usage = tier_chat(
+            system=_SYSTEM,
+            user=_user,
+            klass="B",
+            intent="profile_apply_corrections",
+            temperature=0.1,
+            max_tokens=8000,
+        )
+        cleaned = extract_json(raw)
+        result = _json.loads(cleaned)
+        if not isinstance(result, list):
+            raise ValueError(f"LLM returned {type(result).__name__}, expected list")
+
+        # Post-process: normalise nugget_text → answer for any row the LLM
+        # accidentally left with the old field name.
+        for n in result:
+            if "nugget_text" in n and "answer" not in n:
+                n["answer"] = n.pop("nugget_text")
+            elif "nugget_text" in n:
+                # Both present — keep answer, drop nugget_text
+                del n["nugget_text"]
+
+        return result
+
+    except Exception as e:
+        import sys as _sys
+        print(
+            f"⚠ LLM correction call failed ({e}); "
+            "applying corrections deterministically instead.",
+            file=_sys.stderr,
+        )
+        return _apply_corrections_deterministic(nuggets, corrections)
+
+
+def _apply_corrections_deterministic(
+    nuggets: list[dict], corrections: list[dict]
+) -> list[dict]:
+    """Deterministic fallback: apply edits/drops without LLM.
+
+    Used when apply_corrections_llm()'s LLM call fails. Also handles
+    company-name normalisation heuristically (exact string match on original
+    company field).
+
+    Always outputs `answer` field (never `nugget_text`).
+    """
+    # Build a lookup by nugget_key → correction
+    correction_map: dict[str, dict] = {c["nugget_id"]: c for c in corrections}
+
+    # First pass: identify company renames (action='edit' that also changed company)
+    # We detect this by comparing the original company in the nugget vs what the
+    # user may have typed. Since deterministic mode doesn't parse semantic intent
+    # from free text, we look for edits that are PURELY a company-name change
+    # (answer text unchanged). This is a best-effort heuristic only.
+    # Full normalisation lives in the LLM path; here we just apply the edit text.
+    company_renames: dict[str, str] = {}
+    for nid, corr in correction_map.items():
+        if corr["action"] != "edit":
+            continue
+        # Find the original nugget
+        orig = next((n for n in nuggets if nugget_key(n) == nid), None)
+        if orig is None:
+            continue
+        orig_company = (orig.get("company") or "").strip()
+        new_text = (corr.get("correction_text") or "").strip()
+        # Heuristic: if the correction is exactly a company name (short, no verb),
+        # treat it as a company rename. This is intentionally conservative.
+        if orig_company and new_text and len(new_text.split()) <= 5:
+            orig_answer = (orig.get("answer") or orig.get("nugget_text") or "").strip()
+            if new_text != orig_answer:
+                # Likely a company rename correction
+                company_renames[orig_company] = new_text
+
+    result = []
+    for n in nuggets:
+        nid = nugget_key(n)
+        corr = correction_map.get(nid)
+
+        if corr and corr["action"] == "drop":
+            continue  # drop this nugget
+
+        # Start from a copy; normalise answer field
+        row = dict(n)
+        # Normalise: always use answer, remove nugget_text
+        if "nugget_text" in row and "answer" not in row:
+            row["answer"] = row.pop("nugget_text")
+        elif "nugget_text" in row:
+            del row["nugget_text"]
+
+        if corr and corr["action"] == "edit":
+            row["answer"] = corr["correction_text"] or row.get("answer", "")
+
+        # Apply any company renames globally
+        current_company = (row.get("company") or "").strip()
+        if current_company in company_renames:
+            row["company"] = company_renames[current_company]
+
+        result.append(row)
+
+    return result
+
+
 # ── Markdown ingest (S3.4) — re-exported here for CLI import convenience ─────
 # Full implementation in markdown_ingest.py. Importing via pipeline.py keeps
 # the CLI's import surface consistent with other profile operations.

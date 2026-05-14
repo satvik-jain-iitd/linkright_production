@@ -29,6 +29,8 @@ from .pipeline import (
     load_contact,
     ingest_from_markdown,
     print_privacy_audit,
+    batch_review_loop,
+    apply_corrections_llm,
 )
 
 
@@ -801,6 +803,19 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
         click.echo("Expected wall-time: 30-90 sec depending on LLM backend.\n")
 
         result = parse_and_extract(resume_path, profile_dir)
+
+        # Phase 2 — batch human review of all extracted nuggets.
+        # Skipped entirely when --yes is set (batch/scripted flows).
+        if not yes:
+            _nuggets_before = result.get("nuggets") or []
+            _nuggets_after, _corrections = batch_review_loop(_nuggets_before)
+            if _corrections:
+                # Phase 3 — single LLM call to apply all corrections.
+                _nuggets_after = apply_corrections_llm(_nuggets_after, _corrections)
+            # Write corrected nuggets back into result so persist() sees them.
+            result["nuggets"] = _nuggets_after
+            result["n_nuggets"] = len(_nuggets_after)
+
         persist(profile_dir, resume_path, result)
 
         # UAT #28 — gap-filling notice. parse_and_extract attaches a
@@ -904,12 +919,56 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
             else:
                 click.echo("  (personal-life sections will be skipped — use --include-personal to opt in)")
 
+            # Count existing nuggets before ingest so we know the boundary
+            # after ingest (used to rewrite only the newly appended rows
+            # when batch review drops or edits some).
+            _nuggets_path = profile_dir / "nuggets.jsonl"
+            _pre_ingest_count = 0
+            if _nuggets_path.exists():
+                _pre_ingest_count = sum(
+                    1 for _l in _nuggets_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                    if _l.strip()
+                )
+
             ingest_result = ingest_from_markdown(
                 md_path=md_path,
                 profile_dir=profile_dir,
                 include_personal=include_personal,
             )
             print_privacy_audit(ingest_result)
+
+            # Phase 2 — batch human review of newly ingested markdown nuggets.
+            # Skipped when --yes is set. Only runs when new nuggets were added.
+            if not yes and ingest_result.new_nuggets:
+                _md_nuggets = list(ingest_result.new_nuggets)
+                _md_nuggets_reviewed, _md_corrections = batch_review_loop(_md_nuggets)
+                if _md_corrections:
+                    # Phase 3 — single LLM call to apply corrections.
+                    _md_nuggets_reviewed = apply_corrections_llm(
+                        _md_nuggets_reviewed, _md_corrections
+                    )
+                # Rewrite nuggets.jsonl: keep the pre-ingest rows (first
+                # _pre_ingest_count non-empty lines), then append only the
+                # reviewed/corrected new nuggets. This replaces the raw-appended
+                # rows that ingest_from_markdown wrote above.
+                if _nuggets_path.exists():
+                    _existing_lines = [
+                        _l for _l in _nuggets_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        ).splitlines() if _l.strip()
+                    ]
+                else:
+                    _existing_lines = []
+                _kept_old = _existing_lines[:_pre_ingest_count]
+                with open(_nuggets_path, "w", encoding="utf-8") as _nf:
+                    for _ol in _kept_old:
+                        _nf.write(_ol + "\n")
+                    for _nn in _md_nuggets_reviewed:
+                        _row = {k: v for k, v in _nn.items()}
+                        _row["has_embedding"] = False
+                        _nf.write(json.dumps(_row, ensure_ascii=False) + "\n")
+                # Update ingest_result counts to reflect post-review state
+                ingest_result.nuggets_added = len(_md_nuggets_reviewed)
 
             # Cycle 2 / B1: write metadata.yaml so the profile is recognised
             # by downstream commands. Without this, paste flow leaves the
