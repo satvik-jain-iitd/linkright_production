@@ -8,7 +8,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 |----|---------|-----------|-------------------|--------|
 | 1 | `linkright doctor` | CLI / UX | `linkright doctor --auto-fix` is suggested even when no auto-fixable issues exist. | **Fixed (Cluster B-small, PR #159)** |
 | 2 | Systemic | CLI / UX | Terminal output is cluttered with technical "noise" (stack traces, library reports, `[tokens]` labels). | **Fixed (Cluster B-medium)** — `[tokens]` raw telemetry now gated behind `LR_DEBUG=1` / `LR_VERBOSE=1`. |
-| 3 | Systemic | CLI / UX | CLI output suggests flag-based commands (e.g. `--auto-fix`, `-j`, `--force`) to non-technical users. | Open |
+| 3 | Systemic | CLI / UX | CLI output suggests flag-based commands (e.g. `--auto-fix`, `-j`, `--force`) to non-technical users. | **Fixed (Cluster F — THIS PR)** — runtime messages simplified to plain English; flags kept only in help text and non-TTY CI paths. |
 | 4 | `linkright profile create` | Profile / Ingest | CLI claims to support `.md` files but fails with "invalid pdf header" error. | **Fixed (Cluster A)** |
 | 5 | `linkright profile create` | Truth Engine | Name extraction includes greetings (e.g., "Dear Satvik Jain"). | **Fixed (Cluster B-small + Polish hardening, PR #159 + Polish PR)** |
 | 6 | `linkright profile create` | Profile / Ingest | No validation to ensure the file is a resume (e.g., certificates create garbage profiles). | **Fixed (Cluster B-medium)** — heuristic warning + override before pipeline. |
@@ -17,8 +17,8 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 9 | `linkright profile create` | CLI / UX | Error messages suggest complex flags (`--force`) instead of interactive overwrite prompts. | **Fixed (Cluster B-medium)** — 3-option picker on TTY; `--force` kept for CI. |
 | 10 | `linkright profile create` | CLI / UX | "Auto-detect folder" option adds unnecessary complexity to the ingestion menu. | **Fixed (Cluster Polish)** |
 | 11 | `linkright profile create` | CLI / UX | Missing "Paste Text" option for direct profile ingestion. | **Fixed (Cluster B-medium)** — paste picker option + `--from-paste` flag (routes through markdown ingest). |
-| 12 | Systemic | Profile / Ingest | No mechanism to chunk/partition long documents, risking context limit failures. | Open |
-| 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | **Fixed (Cluster B-truth-engine — ✅ THIS PR)** |
+| 12 | Systemic | Profile / Ingest | No mechanism to chunk/partition long documents, risking context limit failures. | **Fixed (Cluster F — THIS PR)** — warning-based safeguard: emits stderr warning when raw text > 15000 chars (≈3750 tokens). No truncation; user can self-remediate. Full chunking deferred. |
+| 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | **Fixed (Cluster B-truth-engine, PR #166)** |
 | 14 | Systemic | CLI / UI | Missing structural horizontal dividers to wrap role-based interactions (input vs response). | **Fixed (Cluster E2, THIS PR)** |
 | 15 | Systemic | CLI / UI | Missing a brand character/icon (e.g., octopus/robot style) to anchor the prompt area. | Open |
 | 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | **Fixed (Cluster E2, THIS PR)** |
@@ -60,15 +60,15 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ MERGED** (PR #163). Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
 - **Cluster B-truth-engine** — #13 — **✅ MERGED** (PR #166, changelog fragment `uat-cluster-b-truth-regex.md`)
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — **✅ MERGED** (PR #164)
-- **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — **✅ THIS PR**
+- **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — **✅ MERGED** (PR #165)
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
-- **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
+- **Cluster F (Misc Systemic)** — #3, #12 — **✅ THIS PR**
 
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 36 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #13, #14, #16, #18, #19, #20, #21, #22, #23, #24, #25, #26, #27, #28, #29, #30, #31, #32, #33, #34, #35, #36, #37, #38, #39, #40)
-- **Pending:** 3 (#3, #12, #17-partial)
+- **Fixed:** 38 (#1, #2, #3, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #12, #13, #14, #16, #18, #19, #20, #21, #22, #23, #24, #25, #26, #27, #28, #29, #30, #31, #32, #33, #34, #35, #36, #37, #38, #39, #40)
+- **Pending:** 1 (#17-partial)
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---

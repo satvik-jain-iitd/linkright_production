@@ -956,7 +956,7 @@ def show_cmd(show_full: bool) -> None:
     from .render import show_profile
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
-        click.echo("No profile found. Run `linkright profile create -r resume.pdf --yes` first.", err=True)
+        click.echo("No profile found. Run `linkright profile create` first.", err=True)
         sys.exit(1)
     show_profile(profile_dir, full=show_full)
 
@@ -971,7 +971,7 @@ def status_cmd(debug: bool) -> None:
     profile_dir = _profile_dir()
     meta = load_metadata(profile_dir)
     if not meta:
-        click.echo("No profile found. Run `linkright profile create -r resume.pdf --yes` first.", err=True)
+        click.echo("No profile found. Run `linkright profile create` first.", err=True)
         sys.exit(1)
     click.echo(f"Profile dir:  {profile_dir}")
     click.echo(f"Created:      {meta.get('created_at')}")
@@ -1022,7 +1022,7 @@ def edit_contact_cmd() -> None:
     """
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
-        click.echo("No profile found. Run `linkright profile create -r resume.pdf` first.", err=True)
+        click.echo("No profile found. Run `linkright profile create` first.", err=True)
         sys.exit(1)
     from .pipeline import contact_verify_loop
     contact_verify_loop(profile_dir)
@@ -1035,7 +1035,7 @@ def delete_nugget_cmd() -> None:
     """Interactive picker — select a nugget, confirm, remove from jsonl + npz."""
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
-        click.echo("No profile found. Run `linkright profile create -r resume.pdf` first.", err=True)
+        click.echo("No profile found. Run `linkright profile create` first.", err=True)
         sys.exit(1)
     delete_nugget_interactive(profile_dir)
 
@@ -1053,7 +1053,7 @@ def enrich_cmd(nugget_id: str | None) -> None:
     from .enrich import enrich_session
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
-        click.echo("No profile found. Run `linkright profile create -r resume.pdf` first.", err=True)
+        click.echo("No profile found. Run `linkright profile create` first.", err=True)
         sys.exit(1)
     enrich_session(profile_dir, nugget_id=nugget_id)
 
@@ -1067,7 +1067,7 @@ def refresh_cmd(yes) -> None:
     profile_dir = _profile_dir()
     pdf = profile_dir / "inputs" / "resume.pdf"
     if not pdf.exists():
-        click.echo(f"No staged resume.pdf at {pdf}. Use `linkright profile create -r ...` first.", err=True)
+        click.echo(f"No staged resume.pdf found. Run `linkright profile create` first.", err=True)
         sys.exit(1)
     click.echo(f"Refreshing profile from {pdf}")
     result = parse_and_extract(pdf, profile_dir)
@@ -1202,7 +1202,7 @@ def graph_cmd(force: bool) -> None:
     profile_dir = _profile_dir()
     if not (profile_dir / "metadata.yaml").exists():
         click.echo(
-            "No profile found. Run `linkright profile create -r resume.pdf` first.",
+            "No profile found. Run `linkright profile create` first.",
             err=True,
         )
         sys.exit(1)
@@ -1212,7 +1212,7 @@ def graph_cmd(force: bool) -> None:
 
     if graph_path.exists() and not force:
         click.echo(f"Graph already exists at {graph_path}")
-        click.echo("Opening existing graph. Pass --force to rebuild.")
+        click.echo("Opening existing graph. Re-run `linkright profile graph` with rebuild option to refresh.")
         webbrowser.open(html_path.as_uri())
         click.echo(f"Graph HTML: {html_path}")
         return

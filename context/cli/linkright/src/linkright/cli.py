@@ -616,7 +616,7 @@ def doctor_cmd(auto_fix: bool) -> None:
     if fixable_count:
         _con.print(
             f"[error]{failures} {issue_word} above.[/] "
-            f"Run `linkright doctor --auto-fix` to attempt the {fixable_count} "
+            f"Run `linkright doctor` with the auto-fix option to attempt the {fixable_count} "
             f"auto-fixable issue(s) (prompted per step), or `linkright setup` for the wizard."
         )
     else:
