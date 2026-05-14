@@ -36,6 +36,7 @@ from linkright.watch.cli import watch_group
 from linkright.stories.cli import stories_group
 from linkright.keys.cli import keys_group
 from linkright.evidence.cli import evidence_group
+from linkright.diary.cli import diary_group
 
 
 _EPILOG = """\
@@ -116,6 +117,7 @@ main.add_command(watch_group, name="watch")     # Sprint D — passive job-page 
 main.add_command(stories_group)         # Pillar 3 Story Bank — STAR-format career narratives
 main.add_command(keys_group)            # API key management (list/add/remove/test)
 main.add_command(evidence_group)        # Memory v2 Layer 1 — raw imported docs (Memo + RAG)
+main.add_command(diary_group)           # Memory v2 — daily journaling that compounds into Evidence
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
