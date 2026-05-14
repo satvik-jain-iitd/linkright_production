@@ -30,18 +30,18 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 22 | Systemic | CLI / UI | Secondary information (Tips) does not follow the L-shaped (`└`) muted-text branch pattern. | **Fixed (Cluster E2, THIS PR)** |
 | 23 | Systemic | CLI / UI | Standardized Iconography: Must adopt BMAD Standard (◇ for input, ● for info, 🌟 for highlights, ✓ for success). | **Fixed (Cluster E1, PR #158)** |
 | 24 | Systemic | CLI / UI | Prompt character is inconsistent. Should use a bold, clean `❯` marker. | **Fixed (Cluster E1, PR #158)** |
-| 25 | Systemic | Profile / Logic | Nugget pool pollution: Static facts (Education, Degree) are stored as generic nuggets, risking retrieval noise. | Open |
-| 26 | `linkright profile enrich` | Profile / Logic | Improper nugget ordering: New P0 nuggets appear at the bottom; list is not sorted by Priority (P0->P3). | Open |
-| 27 | Systemic | Truth Engine | Entity extraction failure: Nuggets tagged as "unknown" or "none" even when the company/school is in the text. | Open |
-| 28 | `linkright profile create` | Profile / Logic | Missing "Gap-Filling" loop: System should ask immediate follow-ups if key details (Role, Company, Dates) are missing. | Open |
-| 29 | Systemic | CLI / UI | Vague Priority Legend: P0-P3 lack clear, quantified definitions based on metrics and impact depth. | **Fixed (Cluster E3 — ✅ THIS PR)** |
-| 30 | Systemic | CLI / UI | Use "Claude Code" pattern for sub-context: render secondary details (e.g., metadata, timestamps) in muted gray text. | **Fixed (Cluster E3 — ✅ THIS PR)** |
-| 31 | Systemic | Profile / Enrichment | Generation of vague/fluff metrics: System suggests meaningless phrases like "Increased business value by 100%". | Open |
-| 32 | Systemic | Profile / Logic | Missing Nugget Audit/Cleanup Phase: No automated loop to re-analyze all nuggets for metric sharpness and reprioritize. | Open |
-| 33 | `linkright tailor` | Tailor / UX | Silent JD Analysis: The system skips showing the JD interpretation (P0/P1/P2 requirements) to the user. | **Fixed (Cluster C)** |
-| 34 | `linkright tailor` | CLI / UX | Opaque Cache Info: "Profile cache hit" message provides no detail on what is being reused or how to inspect it. | **Fixed (Cluster C)** |
-| 35 | `linkright tailor` | Tailor / Logic | Contact Info Desync: `tailor` shows "blank" contact details even if the profile was recently updated via `linkright contact`. | **Fixed (Cluster C)** |
-| 36 | `linkright tailor` | CLI / UI | Pipeline Execution screen lacks visual hierarchy; telemetry (Run ID, Output) is cluttered and lacks muted styling. | **Fixed (Cluster C)** |
+| 25 | Systemic | Profile / Logic | Nugget pool pollution: Static facts (Education, Degree) are stored as generic nuggets, risking retrieval noise. | **Fixed (Cluster D — THIS PR)** |
+| 26 | `linkright profile enrich` | Profile / Logic | Improper nugget ordering: New P0 nuggets appear at the bottom; list is not sorted by Priority (P0->P3). | **Fixed (Cluster D — THIS PR)** |
+| 27 | Systemic | Truth Engine | Entity extraction failure: Nuggets tagged as "unknown" or "none" even when the company/school is in the text. | **Fixed (Cluster D — THIS PR)** |
+| 28 | `linkright profile create` | Profile / Logic | Missing "Gap-Filling" loop: System should ask immediate follow-ups if key details (Role, Company, Dates) are missing. | **Fixed (Cluster D — THIS PR)** |
+| 29 | Systemic | CLI / UI | Vague Priority Legend: P0-P3 lack clear, quantified definitions based on metrics and impact depth. | **Fixed (Cluster E3, PR #162)** |
+| 30 | Systemic | CLI / UI | Use "Claude Code" pattern for sub-context: render secondary details (e.g., metadata, timestamps) in muted gray text. | **Fixed (Cluster E3, PR #162)** |
+| 31 | Systemic | Profile / Enrichment | Generation of vague/fluff metrics: System suggests meaningless phrases like "Increased business value by 100%". | **Fixed (Cluster D — THIS PR)** |
+| 32 | Systemic | Profile / Logic | Missing Nugget Audit/Cleanup Phase: No automated loop to re-analyze all nuggets for metric sharpness and reprioritize. | **Fixed (Cluster D — THIS PR)** |
+| 33 | `linkright tailor` | Tailor / UX | Silent JD Analysis: The system skips showing the JD interpretation (P0/P1/P2 requirements) to the user. | **Fixed (Cluster C, PR #164)** |
+| 34 | `linkright tailor` | CLI / UX | Opaque Cache Info: "Profile cache hit" message provides no detail on what is being reused or how to inspect it. | **Fixed (Cluster C, PR #164)** |
+| 35 | `linkright tailor` | Tailor / Logic | Contact Info Desync: `tailor` shows "blank" contact details even if the profile was recently updated via `linkright contact`. | **Fixed (Cluster C, PR #164)** |
+| 36 | `linkright tailor` | CLI / UI | Pipeline Execution screen lacks visual hierarchy; telemetry (Run ID, Output) is cluttered and lacks muted styling. | **Fixed (Cluster C, PR #164)** |
 | 37 | `linkright tailor` | Tailor / UX | Blocker: Verification step has no "Done/Continue" option after editing fields, trapping the user in an infinite loop. | **Fixed (Cluster A)** |
 | 38 | `linkright tailor` | Tailor / UX | JD analysis happens too late in the pipeline (step 5); should happen immediately after JD input. | **Fixed (Cluster C)** |
 | 39 | `linkright tailor` | Tailor / UX | "Strategy Review" lacks layout insights: doesn't show height distribution, section utilization, or page-fit probability. | **Fixed (Cluster C)** |
@@ -57,18 +57,18 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster Polish (Loose Ends)** — #5 hardening + #10 — **✅ MERGED** (PR #160).
 - **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — **✅ MERGED** (PR #161).
 - **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — **✅ MERGED** (PR #162).
-- **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ THIS PR**. Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
-- **Cluster B-truth-engine** — #13 — **✅ THIS PR** (changelog fragment `uat-cluster-b-truth-regex.md`)
-- **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — **✅ THIS PR** (changelog fragment `uat-cluster-c-tailor.md`)
-- **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
+- **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ MERGED** (PR #163). Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
+- **Cluster B-truth-engine** — #13 — **✅ MERGED** (PR #166, changelog fragment `uat-cluster-b-truth-regex.md`)
+- **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — **✅ MERGED** (PR #164)
+- **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — **✅ THIS PR**
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
 - **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
 
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 30 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #13, #14, #16, #18, #19, #20, #21, #22, #23, #24, #29, #30, #33, #34, #35, #36, #37, #38, #39, #40)
-- **Pending:** 9
+- **Fixed:** 36 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #13, #14, #16, #18, #19, #20, #21, #22, #23, #24, #25, #26, #27, #28, #29, #30, #31, #32, #33, #34, #35, #36, #37, #38, #39, #40)
+- **Pending:** 3 (#3, #12, #17-partial)
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---

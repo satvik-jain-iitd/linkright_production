@@ -132,12 +132,45 @@ def parse_and_extract(resume_pdf: Path, profile_dir: Optional[Path] = None) -> d
 
     nuggets_with_emb = orchestrator.step_03_embed_nuggets(nuggets)
 
+    # UAT Cluster D — pre-persist hardening on the freshly extracted batch.
+    # Order matters:
+    #   1. Entity resolution first (#27) — fills "unknown" company/role
+    #      using parsed-resume headers, so the classification step (#25)
+    #      can correctly bucket work_experience nuggets that the LLM left
+    #      ambiguous.
+    #   2. Classification (#25) — stamps nugget_class on every row.
+    #   3. Gap flag (#28) — surfaces missing fields for the CLI to prompt
+    #      the user (when interactive); attaches a non-persisted list to
+    #      the result dict.
+    # These steps NEVER delete a nugget — only enrich existing rows.
+    from .nugget_utils import (
+        resolve_entity,
+        classify_in_place,
+        gap_filling_targets,
+        _is_missing,
+    )
+    for nug in nuggets_with_emb:
+        # resolve_entity returns a copy; copy back ONLY the entity fields
+        # that started missing on the input. Preserves the orchestrator's
+        # "emb" field and never overwrites an LLM-set company/role.
+        if _is_missing(nug.get("company")) or _is_missing(nug.get("role")):
+            resolved = resolve_entity(nug, parsed=parsed, raw_text=raw_text)
+            if _is_missing(nug.get("company")) and resolved.get("company"):
+                nug["company"] = resolved["company"]
+            if _is_missing(nug.get("role")) and resolved.get("role"):
+                nug["role"] = resolved["role"]
+            if resolved.get("_entity_resolved_by"):
+                nug["_entity_resolved_by"] = resolved["_entity_resolved_by"]
+    classify_in_place(nuggets_with_emb)
+    gaps = gap_filling_targets(nuggets_with_emb)
+
     return {
         "raw_text": raw_text,
         "parsed": parsed,
         "nuggets": nuggets_with_emb,  # list of dicts including 'emb' field
         "n_nuggets": len(nuggets_with_emb),
         "n_embedded": sum(1 for n in nuggets_with_emb if n.get("emb")),
+        "gaps": gaps,  # UAT #28 — caller (CLI) decides whether to prompt user
     }
 
 
@@ -152,10 +185,28 @@ def persist(profile_dir: Path, source_pdf: Path, result: dict) -> None:
     profile_dir = profile_dir or _profile_dir()
     nuggets = result.get("nuggets") or []
 
-    # 1. nuggets.jsonl — strip embeddings, keep all other fields.
+    # UAT #26 — write nuggets ordered by priority (P0 → P1 → P2 → P3 →
+    # unknown). Stable sort preserves LLM-output order within each
+    # bucket, so the user sees their most-recent-extraction's strongest
+    # achievements at the top of `profile show`. Note: highlights.jsonl
+    # gets the same treatment below.
+    # UAT #25 — also ensure nugget_class is stamped on the persisted row;
+    # parse_and_extract() runs classify_in_place(), but a defensive second
+    # pass here means load_nuggets() always sees a populated class field
+    # even if a future caller bypasses parse_and_extract().
+    from .nugget_utils import sort_by_priority, classify_in_place
+    classify_in_place(nuggets)
+    nuggets = sort_by_priority(nuggets)
+
+    # 1. nuggets.jsonl — strip embeddings + transient audit-trail fields.
+    # LOW fix (cycle-2): `_entity_resolved_by` is an in-memory debugging
+    # signal from #27 fallback resolution; persisting it bloats every
+    # nugget row with a permanent diagnostic flag. Keep it in-memory
+    # only — re-running audit will re-set it when needed.
+    _TRANSIENT_KEYS = {"emb", "_entity_resolved_by"}
     with open(profile_dir / "nuggets.jsonl", "w", encoding="utf-8") as f:
         for n in nuggets:
-            row = {k: v for k, v in n.items() if k != "emb"}
+            row = {k: v for k, v in n.items() if k not in _TRANSIENT_KEYS}
             row["has_embedding"] = bool(n.get("emb"))
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -173,6 +224,10 @@ def persist(profile_dir: Path, source_pdf: Path, result: dict) -> None:
     # 3. highlights.jsonl — P0/P1 importance subset (truth-engine-locked).
     # Day 1 (--yes mode): we treat all nuggets as locked. Day 2's truth-engine
     # loop will filter this set based on user Lock decisions.
+    #
+    # UAT #26 — highlights are already in priority order because the
+    # parent `nuggets` list was sorted above. sort_by_priority is stable,
+    # so within the P0 bucket we preserve LLM extraction order.
     highlights = [n for n in nuggets if str(n.get("importance", "")).upper() in ("P0", "P1")]
     with open(profile_dir / "highlights.jsonl", "w", encoding="utf-8") as f:
         for n in highlights:
