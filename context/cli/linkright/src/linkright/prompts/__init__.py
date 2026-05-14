@@ -225,17 +225,14 @@ def _format_choice_label(opt: dict) -> str:
 def _tab_picker_eligible(options: Sequence[dict]) -> bool:
     """Return True iff a horizontal Tab-bar picker fits the option set.
 
-    UAT #17 wiring: `tab_navigate` from `linkright.ui.layout` is a horizontal
-    keyboard-navigated picker. It only renders well when the option count is
-    small AND the labels are short — otherwise the bar overflows the row.
-    Constraint: ≤ 4 options AND each label ≤ 30 chars (post-stripping markup).
+    UAT #17 — two-tier label design: options carry a short ``label`` (≤15 chars
+    for the tab bar) and an optional ``description`` (shown below on focus).
+    The old 30-char flat-label gate is removed; callers keep labels concise by
+    design. Only hard limit: ≤ 6 options (more overflows any terminal width).
+    Set ``LR_PICKER_STYLE=list`` to force questionary vertical picker.
     """
-    if not options or len(options) > 4:
+    if not options or len(options) > 6:
         return False
-    for opt in options:
-        label = (opt.get("label") or opt.get("key") or "")
-        if len(label) > 30:
-            return False
     return True
 
 
@@ -250,17 +247,19 @@ def prompt_for_choice(
 
     Mirrors setup_wizard._pick exactly — moved here as the canonical
     helper so setup_wizard can re-export and other commands can share.
-    Each option dict shape: {"key": str, "label": str, "recommended": bool}.
 
-    UAT #17 — opt-in horizontal Tab picker
-    --------------------------------------
-    When the env var ``LR_PICKER_STYLE=tabs`` is set AND the option set is
-    small (≤4 short labels), the prompt switches to ``tab_navigate`` from
-    ``linkright.ui.layout`` — Tab / Shift-Tab / Left / Right / h / l keys.
-    This wires UAT #17's horizontal-navigation primitive into the canonical
-    multi-step picker call site (setup_wizard's 3 sequential picks +
-    `prompt_for_resume_source` + `prompt_for_jd_input`). Default UX (arrow
-    keys via questionary) is unchanged unless the env var is set.
+    Option dict shape:
+        {"key": str, "label": str, "description": str (optional), "recommended": bool}
+
+    UAT #17 — two-tier Tab picker (now default)
+    -------------------------------------------
+    ``tab_navigate`` is used by default for eligible option sets (≤6 options).
+    Each option's short ``label`` appears in the tab bar; its ``description``
+    (if present) is rendered on the line below the bar when that tab is
+    focused — progressive disclosure without losing detail.
+
+    Set env var ``LR_PICKER_STYLE=list`` to force the questionary vertical
+    picker (arrow-key navigation) for all pickers.
     """
     _ensure_tty(flag_hint)
     if not options:
@@ -271,16 +270,19 @@ def prompt_for_choice(
         else options[0]
     )
 
-    # ── UAT #17 — opt-in horizontal Tab picker ──────────────────────────
-    if os.environ.get("LR_PICKER_STYLE") == "tabs" and _tab_picker_eligible(options):
+    # ── UAT #17 — horizontal Tab picker (default for eligible sets) ─────
+    force_list = os.environ.get("LR_PICKER_STYLE") == "list"
+    if not force_list and _tab_picker_eligible(options):
         from linkright.ui.layout import tab_navigate
         default_idx = options.index(default)
         labels = [(o.get("label") or o.get("key") or "") for o in options]
+        descs = [(o.get("description") or "") for o in options]
         try:
             picked = tab_navigate(
                 labels,
+                descriptions=descs if any(descs) else None,
                 start_idx=default_idx,
-                hint=f"{message}  ·  Tab/Shift-Tab to switch · Enter to select",
+                hint=f"{message}  ·  Tab/Shift-Tab · Enter to select",
             )
         except KeyboardInterrupt:
             _ctrl_c_exit()
@@ -394,12 +396,12 @@ def prompt_for_jd_input(
     """
     _ensure_tty(flag_hint)
     options = [
-        {"key": "file", "label": "Path to a JD file (.md / .txt) — recommended", "recommended": True},
-        {"key": "paste", "label": "Paste the JD here (multi-line, Esc+Enter to submit)"},
+        {"key": "file", "label": "File", "description": ".md / .txt path — recommended", "recommended": True},
+        {"key": "paste", "label": "Paste", "description": "multi-line JD, Esc+Enter to submit"},
     ]
     if allow_discovery:
         options.append(
-            {"key": "discovery", "label": "Pick from saved jobs (`linkright jobs find` results)"}
+            {"key": "discovery", "label": "Saved jobs", "description": "from linkright jobs find results"}
         )
     pick = prompt_for_choice("How do you want to provide the JD?", options, flag_hint=flag_hint)
     if pick["key"] == "file":
@@ -444,12 +446,14 @@ def prompt_for_resume_source(
     options = [
         {
             "key": "file",
-            "label": "Path to my resume PDF (or .md) — recommended",
+            "label": "File",
+            "description": "PDF or .md path — recommended",
             "recommended": True,
         },
         {
             "key": "paste",
-            "label": "Paste resume text here (multi-line, Esc+Enter to submit)",
+            "label": "Paste",
+            "description": "multi-line text, Esc+Enter to submit",
         },
     ]
     pick = prompt_for_choice(

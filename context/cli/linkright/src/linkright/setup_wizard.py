@@ -75,21 +75,24 @@ def _plural(count: int, singular: str, plural_form: str | None = None) -> str:
 EMBEDDER_OPTIONS = [
     {
         "key": "fastembed",
-        "label": "fastembed  (~130 MB local, fast CPU, free, recommended)",
+        "label": "fastembed",
+        "description": "~130 MB local · fast CPU · free",
         "pip": "fastembed",
         "import_check": "fastembed",
         "recommended": True,
     },
     {
         "key": "sentence_transformers",
-        "label": "sentence-transformers  (~700 MB torch, higher quality, slower install)",
+        "label": "SentenceT",
+        "description": "~700 MB · torch · higher quality · slower install",
         "pip": "sentence-transformers",
         "import_check": "sentence_transformers",
         "recommended": False,
     },
     {
         "key": "oracle",
-        "label": "Oracle Ollama  (advanced — needs your own Oracle URL + secret)",
+        "label": "Oracle",
+        "description": "advanced — needs Oracle URL + secret",
         "pip": None,
         "import_check": None,
         "recommended": False,
@@ -99,12 +102,14 @@ EMBEDDER_OPTIONS = [
 PDF_OPTIONS = [
     {
         "key": "playwright",
-        "label": "Yes — install Playwright Chromium  (~80 MB, recommended)",
+        "label": "Playwright",
+        "description": "~80 MB · Chromium · full PDF render",
         "recommended": True,
     },
     {
         "key": "skip",
-        "label": "No — HTML only  (skip PDF render)",
+        "label": "HTML only",
+        "description": "skip PDF render — lighter install",
         "recommended": False,
     },
 ]
@@ -324,9 +329,9 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
     print()
 
     MODE_OPTIONS = [
-        {"key": "interactive", "label": "Add keys interactively  (guided, ~2 min)", "recommended": True},
-        {"key": "agent",       "label": "Skip — I'll use Agent mode only (Claude Code / Cursor)"},
-        {"key": "later",       "label": "Skip — I'll add keys later via `linkright keys`"},
+        {"key": "interactive", "label": "Add keys", "description": "guided setup, ~2 min", "recommended": True},
+        {"key": "agent",       "label": "Agent only", "description": "Claude Code / Cursor — no keys needed"},
+        {"key": "later",       "label": "Skip", "description": "add keys later via linkright keys"},
     ]
     mode = _pick("How would you like to add API keys?", MODE_OPTIONS)
     if mode["key"] != "interactive":

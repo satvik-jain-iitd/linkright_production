@@ -249,12 +249,19 @@ def tab_bar(
 def tab_navigate(
     items: Sequence[str],
     *,
+    descriptions: "Sequence[str] | None" = None,
     start_idx: int = 0,
     accent: str = "tui.cyan",
     hint: str = "Tab / Shift-Tab to switch · Enter to select · Esc to cancel",
     console: "Console | None" = None,
 ) -> int | None:
     """Interactive horizontal tab navigator — returns selected index.
+
+    Each tab shows a short ``label`` in the bar.  When ``descriptions`` is
+    provided (parallel list, same length as ``items``), the focused tab's
+    description is rendered on the line below the bar — progressive
+    disclosure so the tab bar stays scannable while full detail is still
+    accessible.
 
     Keybindings
     -----------
@@ -279,13 +286,18 @@ def tab_navigate(
 
     n = len(items)
     start_idx = max(0, min(start_idx, n - 1))
+    descs: list[str] = list(descriptions) if descriptions else [""] * n
+
+    def _desc(idx: int) -> str:
+        return descs[idx] if idx < len(descs) else ""
 
     # ── Non-TTY fallback ────────────────────────────────────────────────
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         con.print(f"\n[{accent}]◇[/]  [bold]Choose a tab:[/]")
         for i, label in enumerate(items, 1):
             marker = "[brand.primary]›[/]" if (i - 1) == start_idx else " "
-            con.print(f"  {marker} [brand.primary]{i}.[/] {label}")
+            desc_str = f"  [tui.muted]{_desc(i - 1)}[/]" if _desc(i - 1) else ""
+            con.print(f"  {marker} [brand.primary]{i}.[/] {label}{desc_str}")
         con.print(f"  [tui.muted]{hint}[/]\n")
         try:
             raw = input("  > ").strip()
@@ -299,7 +311,6 @@ def tab_navigate(
                 return idx
         except ValueError:
             pass
-        # Letter / unknown input → cancel
         return None
 
     # ── Interactive prompt_toolkit application ──────────────────────────
@@ -311,21 +322,24 @@ def tab_navigate(
         from prompt_toolkit.layout.containers import HSplit, Window
         from prompt_toolkit.layout.controls import FormattedTextControl
     except Exception:
-        # If prompt_toolkit blows up for any reason, fall back gracefully.
         return start_idx
 
     state = {"idx": start_idx, "result": None}
 
     def _render():
-        # Build a coloured tab-bar line as prompt_toolkit FormattedText.
         out: list[tuple[str, str]] = [("class:muted", "  ← ")]
         for i, label in enumerate(items):
             if i == state["idx"]:
                 out.append(("class:current", f" ⊗ {label} "))
             else:
                 out.append(("class:inactive", f" □ {label} "))
-        out.append(("class:muted", " → "))
-        out.append(("", "\n  "))
+        out.append(("class:muted", " →\n  "))
+        desc = _desc(state["idx"])
+        if desc:
+            out.append(("class:desc", f"└ {desc}"))
+            out.append(("", "\n  "))
+        else:
+            out.append(("", "\n  "))
         out.append(("class:hint", hint))
         return out
 
@@ -363,21 +377,23 @@ def tab_navigate(
     try:
         from prompt_toolkit.styles import Style
 
+        has_desc = any(descs)
         style = Style.from_dict(
             {
                 "current": "fg:#06B6D4 bold",
                 "inactive": "fg:#8E8E93",
                 "muted": "fg:#8E8E93",
+                "desc": "fg:#8E8E93",
                 "hint": "fg:#8E8E93 italic",
             }
         )
+        height = 3 if has_desc else 2
         layout = Layout(
-            HSplit([Window(FormattedTextControl(_render), height=2, always_hide_cursor=True)])
+            HSplit([Window(FormattedTextControl(_render), height=height, always_hide_cursor=True)])
         )
         app = Application(layout=layout, key_bindings=kb, style=style, full_screen=False)
         app.run()
     except Exception:
-        # Catch broken-TTY edge cases (e.g. closed stdin mid-run).
         return state["idx"]
 
     return state["result"]
