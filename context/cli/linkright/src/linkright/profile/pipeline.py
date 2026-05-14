@@ -112,6 +112,20 @@ def parse_and_extract(resume_pdf: Path, profile_dir: Optional[Path] = None) -> d
 
     # step_00 reads orchestrator.INPUTS / "resume.pdf" and returns text.
     raw_text = orchestrator.step_00_ingest_pdf()
+
+    # Bug #12 — long-document safety net: warn if raw text is very long.
+    # Does NOT truncate or refuse — user can self-remediate. 15000 chars ≈ 3750
+    # tokens (conservative estimate), which approaches LLM context limits for
+    # small free-tier models. Warn early so the user knows why extraction may
+    # be incomplete if the LLM drops trailing content silently.
+    _RAW_TEXT_WARN_CHARS = 15000
+    if raw_text and len(raw_text) > _RAW_TEXT_WARN_CHARS:
+        print(
+            f"⚠ Document is long ({len(raw_text)} chars). If extraction is incomplete, "
+            "consider shortening your resume or using a trimmed plain-text version.",
+            file=sys.stderr,
+        )
+
     parsed = orchestrator.step_01_parse_resume(raw_text)
     nuggets = orchestrator.step_02_extract_nuggets(raw_text, parsed)
 
