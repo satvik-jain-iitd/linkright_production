@@ -1,9 +1,18 @@
 """Shared fixtures for LinkRight tests."""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Insert the in-tree src/ ahead of any editable install so tests always use
+# the local working copy. Without this, running pytest after `pip install -e`
+# from a *different* worktree would silently import that worktree's version.
+_SRC = Path(__file__).resolve().parent.parent / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 import pytest
 import yaml
-from pathlib import Path
 
 from linkright.schemas.career_signals import CareerSignals
 from linkright.schemas.jd_analysis import JDAnalysis, JDKeyword

@@ -150,9 +150,19 @@ _DATE_RE = re.compile(
 )
 
 
+_COUNTRY_CODE_PREFIX_RE = re.compile(r"^\+\d{1,3}[\s\-.]?")
+
+
 def _is_date_like(s: str) -> bool:
-    """True if the candidate string looks like a date."""
-    return bool(_DATE_RE.match(s.strip()))
+    """True if the candidate string looks like a date.
+
+    Strips an optional country-code prefix (+91-, +1-, +880-, etc.) before
+    matching so that +91-2024-03-15 is correctly rejected as a phone number
+    (it is a country-code followed by a date, not a phone).
+    """
+    s = s.strip()
+    s = _COUNTRY_CODE_PREFIX_RE.sub("", s)
+    return bool(_DATE_RE.match(s))
 
 
 def _digit_count(s: str) -> int:
