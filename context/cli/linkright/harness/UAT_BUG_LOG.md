@@ -60,7 +60,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ THIS PR**. Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
 - **Cluster B-truth-engine** — #13 — **✅ THIS PR** (changelog fragment `uat-cluster-b-truth-regex.md`)
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — **✅ THIS PR** (changelog fragment `uat-cluster-c-tailor.md`)
-- **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
+- **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending [test branch edit — ignore]
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
 - **Cluster F (Misc Systemic)** — #3, #12 — Pending (#10 fixed in Polish PR)
 
