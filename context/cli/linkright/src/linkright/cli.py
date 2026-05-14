@@ -37,6 +37,8 @@ from linkright.stories.cli import stories_group
 from linkright.keys.cli import keys_group
 from linkright.evidence.cli import evidence_group
 from linkright.diary.cli import diary_group
+from linkright.onboard.cli import onboard as onboard_cmd
+from linkright.profile.v2_inspect_cli import facts_group, signals_group
 
 
 _EPILOG = """\
@@ -118,6 +120,9 @@ main.add_command(stories_group)         # Pillar 3 Story Bank — STAR-format ca
 main.add_command(keys_group)            # API key management (list/add/remove/test)
 main.add_command(evidence_group)        # Memory v2 Layer 1 — raw imported docs (Memo + RAG)
 main.add_command(diary_group)           # Memory v2 — daily journaling that compounds into Evidence
+main.add_command(onboard_cmd)           # Memory v2 — first-run resume → CareerProfile (replaces profile create)
+main.add_command(facts_group)           # Memory v2 Layer 2 — fact inspection
+main.add_command(signals_group)         # Memory v2 Layer 3 — signal inspection
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
