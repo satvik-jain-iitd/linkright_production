@@ -39,6 +39,7 @@ from linkright.evidence.cli import evidence_group
 from linkright.diary.cli import diary_group
 from linkright.onboard.cli import onboard as onboard_cmd
 from linkright.profile.v2_inspect_cli import facts_group, signals_group
+from linkright.enrich.cli import enrich as enrich_cmd
 
 
 _EPILOG = """\
@@ -123,6 +124,7 @@ main.add_command(diary_group)           # Memory v2 — daily journaling that co
 main.add_command(onboard_cmd)           # Memory v2 — first-run resume → CareerProfile (replaces profile create)
 main.add_command(facts_group)           # Memory v2 Layer 2 — fact inspection
 main.add_command(signals_group)         # Memory v2 Layer 3 — signal inspection
+main.add_command(enrich_cmd)            # Memory v2 — gap-driven RAG enrichment loop
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
