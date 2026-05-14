@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.9.4] - 2026-05-14
+
+### Fixed
+- **Startup crash after v0.9.3 — harness scorecard types moved into src:** `linkright` crashed on startup with `ModuleNotFoundError: No module named 'harness'` because `harness/` was gitignored in the previous release but `linkright.jobsearch.evaluator`, `linkright.jobsearch.scorecard`, `linkright.resume.scorecard`, `linkright.content.scorecard`, and `linkright.interview.scorecard` all imported `Dimension`, `DimensionResult`, `Scorecard`, and `grade_from_score` from `harness.scorecard` at module load time. Fix: moved these types into `src/linkright/_scorecard_base.py` (canonical new home) and updated all five import sites. Removed `harness*` from `pyproject.toml` package discovery — `where` is now `["src"]` only. No behaviour changes.
+
+
 ## [0.9.3] - 2026-05-14
 
 ### Added
