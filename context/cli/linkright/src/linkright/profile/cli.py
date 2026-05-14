@@ -41,7 +41,7 @@ def profile_group() -> None:
     \b
     Quick aliases:
       ec  → edit-contact      n  → delete-nugget
-      e   → enrich            r  → refresh
+                              r  → refresh
 
     Tip: prefix matching works. `linkright profile sh` → show, `cr` → create.
     """
@@ -470,50 +470,22 @@ def _write_markdown_only_metadata(profile_dir: Path, ingest_result, *, source_hi
 
 
 def _offer_enrich(profile_dir: Path) -> None:
-    """Offer one round of deep enrichment after truth-engine completes.
+    """Memory v2 (Phase 4): legacy in-line enrichment removed.
 
-    Non-blocking: Ctrl+C or "Skip" exits cleanly. Any nuggets added are
-    persisted immediately inside enrich_session. Caller does not need to
-    re-run persist().
+    The pre-v2 enrich_session() generated 3 follow-up questions per nugget
+    interactively. Replaced by `linkright enrich` (Phase 3) which runs
+    gap-driven RAG over the full Evidence layer instead. Print a one-line
+    nudge so users coming through `profile create` know about the new path.
     """
-    import questionary
-    from rich.console import Console
-    from rich.panel import Panel
-    from linkright.ui.theme import LR_THEME
-
-    _TEAL = "#0FBEAF"
-    console = Console(theme=LR_THEME)
-
     nuggets = load_nuggets(profile_dir)
     if not nuggets:
         return
-
-    console.print()
-    console.print(Panel(
-        f"[{_TEAL}]Deep Enrichment[/] — pick one achievement and answer 3 follow-up questions.\n"
-        "Each answer becomes a new nugget with richer detail → better resume tailoring.\n"
-        "[dim]Takes ~30–60 sec per nugget. You can run more later: `linkright profile enrich`[/]",
-        title="[bold]Optional: Deepen an Achievement[/]",
-        border_style=_TEAL,
-        expand=False,
-    ))
-
-    try:
-        from linkright.ui import lr_confirm, TEAL
-        do_enrich = lr_confirm("Add depth to a nugget now?", default=False, accent=TEAL)
-    except KeyboardInterrupt:
-        console.print("[dim]Enrichment skipped (Ctrl+C).[/]")
-        return
-    if not do_enrich:
-        return
-
-    try:
-        from .enrich import enrich_session
-        enrich_session(profile_dir)
-    except KeyboardInterrupt:
-        console.print("[dim]Enrichment cancelled — profile saved as-is.[/]")
-    except Exception as e:
-        console.print(f"[dim]Enrichment failed: {e} — profile saved as-is.[/]")
+    import click
+    click.echo()
+    click.echo(
+        "Tip: run `linkright enrich` to discover gaps and propose new facts "
+        "from your Evidence layer (diary entries, additional info docs)."
+    )
 
 
 # ── create ──────────────────────────────────────────────────────────────────
@@ -834,8 +806,8 @@ def create_cmd(resume_path, paste, from_paste, from_folder, from_markdown, inclu
                 missing = ", ".join(g.get("missing") or [])
                 preview = g.get("answer_preview") or ""
                 click.echo(f"   • [missing: {missing}] {preview}")
-            click.echo("  Tip: run `linkright profile enrich` to add details, "
-                       "or `linkright profile audit` to clean up.")
+            click.echo("  Tip: run `linkright enrich` to discover gaps and "
+                       "propose new facts, or `linkright profile audit` to clean up.")
 
     if not _markdown_only:
         meta = load_metadata(profile_dir) or {}
@@ -1099,22 +1071,13 @@ def delete_nugget_cmd() -> None:
     delete_nugget_interactive(profile_dir)
 
 
-# ── enrich ──────────────────────────────────────────────────────────────────
-
-@profile_group.command("enrich")
-@click.argument("nugget_id", required=False)
-def enrich_cmd(nugget_id: str | None) -> None:
-    """Generate 3 follow-up questions for a nugget; user answers → new nuggets persisted.
-
-    NUGGET_ID is optional — pass an integer index or nugget_index field to skip
-    the picker. With no arg, an interactive picker lists all nuggets.
-    """
-    from .enrich import enrich_session
-    profile_dir = _profile_dir()
-    if not (profile_dir / "metadata.yaml").exists():
-        click.echo("No profile found. Run `linkright profile create` first.", err=True)
-        sys.exit(1)
-    enrich_session(profile_dir, nugget_id=nugget_id)
+# ── enrich (removed in Memory v2 Phase 4) ───────────────────────────────────
+# The legacy `linkright profile enrich` command (interactive 3-question follow-up
+# per nugget) has been replaced by the top-level `linkright enrich` command
+# which runs gap-driven RAG over the entire Evidence layer (Phase 3). The new
+# command produces structurally better proposals at lower per-fact cost and
+# integrates with diary, additional-info evidence, and signal-recurrence updates.
+# See ~/.claude/plans/okay-what-i-want-elegant-cook.md (Part F).
 
 
 # ── refresh ─────────────────────────────────────────────────────────────────
@@ -1229,8 +1192,8 @@ profile_group.add_aliases({
     # delete-nugget / dn / n
     "dn":      "delete-nugget",
     "n":       "delete-nugget",
-    # enrich / e
-    "e":       "enrich",
+    # enrich subcommand removed in Memory v2 Phase 4 — use top-level
+    # `linkright enrich` instead (gap-driven RAG over Evidence layer).
     # refresh / r
     "r":       "refresh",
     # rebuild / rb
