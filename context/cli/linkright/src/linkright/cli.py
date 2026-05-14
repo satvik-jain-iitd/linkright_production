@@ -35,6 +35,7 @@ from linkright.coverletter.cli import coverletter_group
 from linkright.watch.cli import watch_group
 from linkright.stories.cli import stories_group
 from linkright.keys.cli import keys_group
+from linkright.evidence.cli import evidence_group
 
 
 _EPILOG = """\
@@ -114,6 +115,7 @@ main.add_command(coverletter_group, name="cl")  # top-level alias
 main.add_command(watch_group, name="watch")     # Sprint D — passive job-page capture via Chrome CDP
 main.add_command(stories_group)         # Pillar 3 Story Bank — STAR-format career narratives
 main.add_command(keys_group)            # API key management (list/add/remove/test)
+main.add_command(evidence_group)        # Memory v2 Layer 1 — raw imported docs (Memo + RAG)
 
 
 # ── Top-level shortcuts (skip the `resume` group prefix) ────────────────
