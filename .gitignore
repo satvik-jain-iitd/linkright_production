@@ -92,3 +92,7 @@ playwright_automation/
 worker/tests/prompts/.env.local
 worker/tests/prompts/reports/
 worker/tests/prompts/fixtures/career_text_local.txt
+
+# Planning / documentation (not run-critical)
+specs/
+context/cli/linkright/harness/
