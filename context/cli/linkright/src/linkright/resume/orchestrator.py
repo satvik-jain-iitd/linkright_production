@@ -2000,7 +2000,30 @@ def step_07_phase_1_2(jd_text: str, raw_text: str) -> dict:
 
     strategies_json = P.STRATEGIES_JSON  # vendored
     system = P.PHASE_1_2_SYSTEM.replace("{strategies_json}", strategies_json)
-    user = llm.subst(P.PHASE_1_2_USER, jd_text=jd_text, career_text=raw_text, qa_context="")
+
+    # UAT bug #13 — Truth Engine: surface regex-extracted contact hits to
+    # the LLM as a "ground truth" hint so the model is biased toward the
+    # deterministic values rather than autocompleting a plausible-but-wrong
+    # email domain (eg. flipping iitdalumni.com → gmail.com) or phone digit.
+    # Post-LLM `reconcile_contact` still wins on disagreement (regex is the
+    # deterministic floor); this hint just reduces the disagreement rate.
+    _qa_context = ""
+    try:
+        from linkright.profile.regex_extract import extract_email_phone as _regex_eep_p12
+        _hint = _regex_eep_p12(raw_text or "")
+        if _hint.get("email") or _hint.get("phone"):
+            _qa_context = (
+                "\n\n## Truth Engine — Regex-extracted contact hints (HIGH CONFIDENCE)\n"
+                "The following email/phone values were deterministically extracted "
+                "from the raw resume text. Use them VERBATIM in `contact_info` unless "
+                "they are obviously wrong; do not invent a different domain or digit.\n"
+                f"- regex_email: {_hint.get('email') or '(none found)'}\n"
+                f"- regex_phone: {_hint.get('phone') or '(none found)'}\n"
+            )
+    except Exception as _e:
+        log(f"[step_07 regex hint] failed to build hint: {_e}; continuing without")
+
+    user = llm.subst(P.PHASE_1_2_USER, jd_text=jd_text, career_text=raw_text, qa_context=_qa_context)
 
     def _call_phase_1_2(extra_retry_note: str = "") -> tuple[dict, dict]:
         user_msg = user + (f"\n\n{extra_retry_note}" if extra_retry_note else "")

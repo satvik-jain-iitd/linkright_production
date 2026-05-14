@@ -18,7 +18,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 | 10 | `linkright profile create` | CLI / UX | "Auto-detect folder" option adds unnecessary complexity to the ingestion menu. | **Fixed (Cluster Polish)** |
 | 11 | `linkright profile create` | CLI / UX | Missing "Paste Text" option for direct profile ingestion. | **Fixed (Cluster B-medium)** — paste picker option + `--from-paste` flag (routes through markdown ingest). |
 | 12 | Systemic | Profile / Ingest | No mechanism to chunk/partition long documents, risking context limit failures. | Open |
-| 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | Open |
+| 13 | Systemic | Truth Engine | Missing Regex-based pre-extraction for high-confidence fields (Email, Phone). | **Fixed (Cluster B-truth-engine — ✅ THIS PR)** |
 | 14 | Systemic | CLI / UI | Missing structural horizontal dividers to wrap role-based interactions (input vs response). | **Fixed (Cluster E2, THIS PR)** |
 | 15 | Systemic | CLI / UI | Missing a brand character/icon (e.g., octopus/robot style) to anchor the prompt area. | Open |
 | 16 | Systemic | CLI / UI | Lack of sticky footer with semantic coloring (Gold/Orange for Tier, Mint/Teal for Mode, Muted for Status). | **Fixed (Cluster E2, THIS PR)** |
@@ -58,7 +58,7 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 - **Cluster B-medium (Profile UX cont.)** — #2, #6, #9, #11 — **✅ MERGED** (PR #161).
 - **Cluster E3 (Pickers + progress + insight)** — #19, #20, #21, #29, #30 — **✅ MERGED** (PR #162).
 - **Cluster E2 (Layout primitives)** — #14, #16, #22 fully fixed + #17 partial (primitive shipped, full wiring deferred) — **✅ THIS PR**. Adds `horizontal_divider`, `sticky_footer`, `tab_bar`/`tab_navigate`, `l_branch_tip`/`l_branch_group` in `linkright/ui/layout.py`.
-- **Cluster B-truth-engine** — #13 — Pending
+- **Cluster B-truth-engine** — #13 — **✅ THIS PR** (changelog fragment `uat-cluster-b-truth-regex.md`)
 - **Cluster C (Tailor UX Redesign)** — #33, #34, #35, #36, #38, #39 — **✅ THIS PR** (changelog fragment `uat-cluster-c-tailor.md`)
 - **Cluster D (Profile Logic)** — #25, #26, #27, #28, #31, #32 — Pending
 - **Cluster E4 (Brand mascot)** — #15 — Deferred Q3 per memory `feedback_cli_ui_patterns.md`
@@ -67,8 +67,8 @@ This file tracks issues found during end-to-end testing of the LinkRight CLI.
 ## Progress
 
 - **Total bugs:** 40
-- **Fixed:** 29 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #14, #16, #18, #19, #20, #21, #22, #23, #24, #29, #30, #33, #34, #35, #36, #37, #38, #39, #40)
-- **Pending:** 10
+- **Fixed:** 30 (#1, #2, #4, #5 [+ hardening], #6, #7, #8, #9, #10, #11, #13, #14, #16, #18, #19, #20, #21, #22, #23, #24, #29, #30, #33, #34, #35, #36, #37, #38, #39, #40)
+- **Pending:** 9
 - **Deferred (Q3):** 1 (#15 mascot)
 
 ---
