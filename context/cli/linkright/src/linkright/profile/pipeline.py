@@ -287,8 +287,25 @@ def load_metadata(profile_dir: Optional[Path] = None) -> Optional[dict]:
 
 
 def load_nuggets(profile_dir: Optional[Path] = None) -> list[dict]:
-    """Read nuggets.jsonl. Returns empty list if profile doesn't exist."""
+    """Return nugget-shaped dicts for legacy consumers.
+
+    Phase 4 (Memory v2): facts.jsonl is the canonical source. When present,
+    return Facts converted to legacy nugget shape via the adapter
+    (profile/legacy_adapter.py). Falls back to nuggets.jsonl only when v2
+    facts are absent — preserves any pre-onboard dev profile that was
+    created via the old `profile create` flow.
+
+    Existing consumers (orchestrator.py, coverletter/pipeline.py,
+    jd_matcher.py, profile_facts.py) keep working without code changes.
+    """
     profile_dir = profile_dir or _profile_dir()
+
+    # v2 path: derive nuggets from facts.jsonl
+    from .legacy_adapter import facts_as_nuggets, has_v2_facts
+    if has_v2_facts(profile_dir):
+        return facts_as_nuggets(profile_dir)
+
+    # Legacy fallback: read nuggets.jsonl directly
     p = profile_dir / "nuggets.jsonl"
     if not p.exists():
         return []
