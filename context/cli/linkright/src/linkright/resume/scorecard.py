@@ -10,7 +10,7 @@ _HARNESS = Path(__file__).resolve().parents[3] / "harness"
 if str(_HARNESS.parent) not in sys.path:
     sys.path.insert(0, str(_HARNESS.parent))
 
-from harness.scorecard import Dimension, Scorecard  # noqa: E402
+from linkright._scorecard_base import Dimension, Scorecard  # noqa: E402
 
 
 _METRIC_RE = re.compile(r"(\d+%?|\$\d+|\d+x|\d+\+)")

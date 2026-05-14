@@ -24,7 +24,7 @@ from ..llm.direct import LLMError, chat_with_fallback, extract_json, gemini_chat
 from .scorecard import DIMENSIONS_10, JobSearchScorecard
 
 # Import grade_from_score via scorecard module (adds harness/ to sys.path)
-from harness.scorecard import DimensionResult, grade_from_score  # noqa: E402
+from linkright._scorecard_base import DimensionResult, grade_from_score  # noqa: E402
 
 
 SYSTEM_PROMPT = (

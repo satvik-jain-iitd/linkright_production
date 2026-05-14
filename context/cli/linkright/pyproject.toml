@@ -102,16 +102,10 @@ dev = [
 linkright = ["resume/lib/*.mjs", "resume/templates/**", "resume/data/**", "templates/**"]
 
 [tool.setuptools.packages.find]
-# Industry pattern: src-layout for the main package + companion top-level
-# `harness/` directory (iteration / scorecard utilities). Both are required
-# at runtime — `linkright.jobsearch.evaluator` does `from harness.scorecard
-# import ...` at module load time.
-#
-# Long-term plan (v0.2.0): move harness/ to src/linkright/harness/ to avoid
-# top-level-name pollution. For now (v0.1.x) ship as a sibling package.
-where = ["src", "."]
-include = ["linkright*", "harness*"]
-exclude = ["harness.runs*", "harness.test*", "tests*"]
+# src-layout — harness/ scorecard types moved into src/linkright/_scorecard_base.py
+where = ["src"]
+include = ["linkright*"]
+exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 # Ensure pytest collection imports the worktree's src/linkright/ before any
