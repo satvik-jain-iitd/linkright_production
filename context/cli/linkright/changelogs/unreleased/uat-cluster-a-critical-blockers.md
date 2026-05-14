@@ -1,7 +1,0 @@
-## [type: Fixed]
-
-- **UAT #4 — `profile create` `.md` file rejected as "invalid pdf header":** Auto-route `.md` and `.markdown` files passed via `-r/--resume` into the existing markdown-ingest path. Users no longer need to remember which flag matches which extension; the CLI infers from file extension. Fix in `profile/cli.py:155` before the PDF readability guard.
-
-- **UAT #37 — `linkright tailor` contact-verify infinite loop:** The exit option in the contact-verification menu was labeled `"s — skip all (keep as-is)"`, which users read as "discard my edits" rather than "I'm done". Renamed to `"✓  All correct — save & continue"` and placed at the top of the choice list with a visual checkmark; also clarified the prompt copy and the input() fallback hint. The underlying `value="s"` is preserved so the existing exit logic at `orchestrator.py:1042` is untouched. Fix in `resume/orchestrator.py:1024-1035` and the input-fallback at `:1058-1061`.
-
-- **UAT #40 — Destructive "No" on continue prompts kills pipeline with traceback:** Replaced `click.confirm(..., abort=True)` at two gate sites (`_see_and_continue` line 53, `_strategy_review_gate` line 134) with `abort=False` + a clean `sys.exit(0)` and an informative restart hint. Pressing "No" now feels like pausing the pipeline rather than triggering a self-destruct error. The inline edit-and-retry menu (Cluster C) will replace the restart hint in a follow-up PR.
