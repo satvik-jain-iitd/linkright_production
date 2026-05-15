@@ -182,15 +182,16 @@ def test_sticky_footer_stacks_on_narrow_terminal():
 
 # ── UAT #17: tab bar (display) ─────────────────────────────────────────────
 
-def test_tab_bar_marks_current_with_circled_x():
+def test_tab_bar_marks_current_with_box_marker():
     from linkright.ui.layout import tab_bar
     con = _recording_console(width=80)
     tab_bar(["Resume", "Tailor", "Profile"], current_idx=1, console=con)
     text = con.export_text()
-    assert "⊗ Tailor" in text, "current tab must be marked with ⊗"
+    # All tabs use □; active tab is distinguished by ANSI styling (bold+bg), not symbol
+    assert "□ Tailor" in text, "current tab must use □ marker"
     assert "□ Resume" in text, "inactive tab must use □ marker"
     assert "□ Profile" in text
-    # Navigation hints `←` / `→`
+    # Navigation hint `←` and submit chip `→`
     assert "←" in text and "→" in text
 
 
@@ -206,7 +207,7 @@ def test_tab_bar_first_tab_is_current_by_default():
     con = _recording_console()
     tab_bar(["Alpha", "Beta"], console=con)
     text = con.export_text()
-    assert "⊗ Alpha" in text
+    assert "□ Alpha" in text
     assert "□ Beta" in text
 
 
@@ -370,8 +371,8 @@ def test_prompt_for_choice_uses_tab_by_default(monkeypatch):
     assert picked["key"] == "b", "returns option at the index tab_navigate returned"
 
 
-def test_prompt_for_choice_list_env_forces_questionary(monkeypatch):
-    """``LR_PICKER_STYLE=list`` bypasses tabs and forces questionary regardless
+def test_prompt_for_choice_list_env_forces_lr_select(monkeypatch):
+    """``LR_PICKER_STYLE=list`` bypasses tabs and forces lr_select regardless
     of option count or label length.
     """
     from linkright import prompts as _prompts
@@ -379,7 +380,7 @@ def test_prompt_for_choice_list_env_forces_questionary(monkeypatch):
     monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
     monkeypatch.setenv("LR_PICKER_STYLE", "list")
 
-    invoked = {"tab": False, "questionary": False}
+    invoked = {"tab": False, "lr_select": False}
 
     def _fake_tab_navigate(*_a, **_kw):
         invoked["tab"] = True
@@ -388,14 +389,12 @@ def test_prompt_for_choice_list_env_forces_questionary(monkeypatch):
     from linkright.ui import layout as _layout
     monkeypatch.setattr(_layout, "tab_navigate", _fake_tab_navigate)
 
-    class _FakeQSelect:
-        def __init__(self, *a, **kw):
-            invoked["questionary"] = True
-            self._return = a[1][0] if len(a) > 1 and a[1] else "fallback"
-        def ask(self):
-            return self._return
+    def _fake_lr_select(*a, **kw):
+        invoked["lr_select"] = True
+        choices = kw.get("choices", a[1] if len(a) > 1 else [])
+        return choices[0] if choices else None
 
-    monkeypatch.setattr("questionary.select", _FakeQSelect)
+    monkeypatch.setattr("linkright.prompts.lr_select", _fake_lr_select)
 
     options = [
         {"key": "a", "label": "Option A", "recommended": True},
@@ -406,17 +405,17 @@ def test_prompt_for_choice_list_env_forces_questionary(monkeypatch):
     except Exception:
         pass
     assert invoked["tab"] is False, "tab_navigate must NOT fire when LR_PICKER_STYLE=list"
-    assert invoked["questionary"] is True, "questionary must be used when LR_PICKER_STYLE=list"
+    assert invoked["lr_select"] is True, "lr_select must be used when LR_PICKER_STYLE=list"
 
 
-def test_prompt_for_choice_too_many_options_falls_back_to_questionary(monkeypatch):
-    """7 options exceeds the ≤6 tab-eligible gate — questionary is used instead."""
+def test_prompt_for_choice_too_many_options_falls_back_to_lr_select(monkeypatch):
+    """7 options exceeds the ≤6 tab-eligible gate — lr_select is used instead."""
     from linkright import prompts as _prompts
     monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
     monkeypatch.setattr("sys.stdout.isatty", lambda: True, raising=False)
     monkeypatch.delenv("LR_PICKER_STYLE", raising=False)
 
-    invoked = {"tab": False, "questionary": False}
+    invoked = {"tab": False, "lr_select": False}
 
     def _fake_tab_navigate(*_a, **_kw):
         invoked["tab"] = True
@@ -425,14 +424,12 @@ def test_prompt_for_choice_too_many_options_falls_back_to_questionary(monkeypatc
     from linkright.ui import layout as _layout
     monkeypatch.setattr(_layout, "tab_navigate", _fake_tab_navigate)
 
-    class _FakeQSelect:
-        def __init__(self, *a, **kw):
-            invoked["questionary"] = True
-            self._labels = kw.get("choices") or (a[1] if len(a) > 1 else [])
-        def ask(self):
-            return self._labels[0] if self._labels else None
+    def _fake_lr_select(*a, **kw):
+        invoked["lr_select"] = True
+        choices = kw.get("choices", a[1] if len(a) > 1 else [])
+        return choices[0] if choices else None
 
-    monkeypatch.setattr("questionary.select", _FakeQSelect)
+    monkeypatch.setattr("linkright.prompts.lr_select", _fake_lr_select)
 
     options = [{"key": str(i), "label": f"Opt {i}"} for i in range(7)]
     options[0]["recommended"] = True
@@ -441,7 +438,7 @@ def test_prompt_for_choice_too_many_options_falls_back_to_questionary(monkeypatc
     except Exception:
         pass
     assert invoked["tab"] is False, "tab_navigate must NOT fire for 7 options (> 6 limit)"
-    assert invoked["questionary"] is True, "questionary fallback fires for 7 options"
+    assert invoked["lr_select"] is True, "lr_select fallback fires for 7 options"
 
 
 def test_tab_picker_eligible_predicate():
@@ -583,6 +580,6 @@ def test_layout_primitives_callable_via_ui_namespace():
     assert "─" in out
     assert "user" in out
     assert "[v1]" in out
-    assert "⊗ A" in out
+    assert "□ A" in out
     assert "└ Tip: hello" in out
     assert "├ x" in out and "└ y" in out

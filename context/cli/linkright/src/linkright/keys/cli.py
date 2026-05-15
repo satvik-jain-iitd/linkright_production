@@ -5,7 +5,7 @@ import sys
 from typing import Optional
 
 import click
-import questionary
+from linkright.ui import lr_password, lr_confirm, lr_text, lr_select
 
 from linkright.keys.catalogue import PROVIDERS, PROVIDER_MAP, resilience_score
 from linkright.keys.env_writer import read_all_managed, write_keys, remove_key, mask_key
@@ -87,18 +87,12 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
     if not unconfigured:
         return  # all providers filled
 
-    add_more = questionary.confirm(
-        "  Add keys for another provider?", default=False
-    ).ask()
+    add_more = lr_confirm("  Add keys for another provider?", default=False)
     if not add_more:
         return
 
     choices = [f"{p.key:<12}  {p.name}" for p in unconfigured]
-    selected = questionary.select(
-        "Which provider?",
-        choices=choices,
-        instruction="(↑/↓ to navigate, enter to confirm)",
-    ).ask()
+    selected = lr_select("Which provider?", choices=choices)
     if selected is None:
         return
     next_provider_key = selected.split()[0].strip()
@@ -123,7 +117,7 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
             break
         key_num = added + 1
         label = "primary key" if slot == next_spec.primary_env else f"key #{key_num} (rotation slot)"
-        key_val = questionary.password(f"Paste {next_spec.name} {label}:").ask()
+        key_val = lr_password(f"Paste {next_spec.name} {label}:")
         if key_val is None:
             click.echo("  Aborted.")
             break
@@ -134,20 +128,19 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
         ok, msg = _validate_key_format(next_spec, key_val)
         if not ok:
             click.echo(f"\n  {RED}Format warning: {msg}{RST}")
-            proceed = questionary.confirm("Save anyway?", default=False).ask()
+            proceed = lr_confirm("Save anyway?", default=False)
             if not proceed:
                 click.echo("  Key not saved.")
                 break
         updates: dict[str, str] = {slot: key_val}
         if next_spec.paired_env and slot == next_spec.primary_env:
-            account_id = questionary.text(
-                "Cloudflare Account ID (find at dash.cloudflare.com → profile):").ask()
+            account_id = lr_text("Cloudflare Account ID (find at dash.cloudflare.com → profile):")
             if account_id:
                 updates[next_spec.paired_env] = account_id.strip()
         elif next_spec.paired_env and slot in next_spec.extra_envs:
             slot_idx = next_spec.extra_envs.index(slot) + 1
             pair_var = f"{next_spec.paired_env}_{slot_idx}"
-            account_id = questionary.text(f"Cloudflare Account ID for this key ({pair_var}):").ask()
+            account_id = lr_text(f"Cloudflare Account ID for this key ({pair_var}):")
             if account_id:
                 updates[pair_var] = account_id.strip()
         _warn_if_duplicate_value(key_val, slot)
@@ -160,10 +153,10 @@ def _offer_more_providers(completed_spec: "ProviderSpec") -> None:  # noqa: F821
         if next_slot is None:
             click.echo(f"  All {_plural(len(next_spec.all_env_vars), 'slot')} for {next_spec.name} filled.")
             break
-        add_another = questionary.confirm(
+        add_another = lr_confirm(
             f"  Add another key for {next_spec.name}? ({next_slot} is next open slot)",
             default=False,
-        ).ask()
+        )
         if not add_another:
             break
 
@@ -292,11 +285,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
     """
     if not provider:
         choices = [f"{p.key:<12}  {p.name}" for p in PROVIDERS]
-        selected = questionary.select(
-            "Which provider?",
-            choices=choices,
-            instruction="(↑/↓ to navigate, enter to confirm)",
-        ).ask()
+        selected = lr_select("Which provider?", choices=choices)
         if selected is None:
             sys.exit(1)
         provider = selected.split()[0].strip()
@@ -391,9 +380,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         for k in fresh_env_keys:
             click.echo(f"    {DIM}{k[:8]}…{k[-4:]}{RST}")
         click.echo("")
-        do_import = questionary.confirm(
-            f"  Import all {_plural(len(fresh_env_keys), 'key')} now?", default=True
-        ).ask()
+        do_import = lr_confirm(f"  Import all {_plural(len(fresh_env_keys), 'key')} now?", default=True)
         if do_import:
             imported = 0
             for raw_key in fresh_env_keys:
@@ -425,7 +412,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
 
         key_num = added + 1
         label = "primary key" if slot == spec.primary_env else f"key #{key_num} (rotation slot)"
-        key_val = questionary.password(f"Paste {spec.name} {label}:").ask()
+        key_val = lr_password(f"Paste {spec.name} {label}:")
         if key_val is None:
             click.echo("  Aborted.")
             break
@@ -437,7 +424,7 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         ok, msg = _validate_key_format(spec, key_val)
         if not ok:
             click.echo(f"\n  {RED}Format warning: {msg}{RST}")
-            proceed = questionary.confirm("Save anyway?", default=False).ask()
+            proceed = lr_confirm("Save anyway?", default=False)
             if not proceed:
                 click.echo("  Key not saved.")
                 break
@@ -446,14 +433,13 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
 
         # Cloudflare needs a paired account ID per key
         if spec.paired_env and slot == spec.primary_env:
-            account_id = questionary.text(
-                "Cloudflare Account ID (find at dash.cloudflare.com → profile):").ask()
+            account_id = lr_text("Cloudflare Account ID (find at dash.cloudflare.com → profile):")
             if account_id:
                 updates[spec.paired_env] = account_id.strip()
         elif spec.paired_env and slot in spec.extra_envs:
             slot_idx = spec.extra_envs.index(slot) + 1
             pair_var = f"{spec.paired_env}_{slot_idx}"
-            account_id = questionary.text(f"Cloudflare Account ID for this key ({pair_var}):").ask()
+            account_id = lr_text(f"Cloudflare Account ID for this key ({pair_var}):")
             if account_id:
                 updates[pair_var] = account_id.strip()
 
@@ -470,10 +456,10 @@ def keys_add(provider: str, key_value: str, bulk: bool) -> None:
         if next_slot is None:
             click.echo(f"  All {_plural(len(spec.all_env_vars), 'slot')} for {spec.name} filled.")
             break
-        add_another = questionary.confirm(
+        add_another = lr_confirm(
             f"  Add another key for {spec.name}? ({next_slot} is next open slot)",
             default=False,
-        ).ask()
+        )
         if not add_another:
             break
 
@@ -539,9 +525,7 @@ def keys_import(dry_run: bool) -> None:
         click.echo("")
         return
 
-    proceed = questionary.confirm(
-        f"  Import {_plural(len(found_rows), 'key')} into ~/.linkright/.env?", default=True
-    ).ask()
+    proceed = lr_confirm(f"  Import {_plural(len(found_rows), 'key')} into ~/.linkright/.env?", default=True)
     if not proceed:
         click.echo("  Aborted — no keys saved.")
         return
@@ -583,11 +567,7 @@ def keys_remove(provider: str) -> None:
 
     choices = [f"{var}  ({mask_key(val)})" for var, val in configured]
     choices.append("Cancel")
-    selected = questionary.select(
-        f"Which key to remove from {spec.name}?",
-        choices=choices,
-        instruction="(↑/↓ to navigate, enter to confirm)",
-    ).ask()
+    selected = lr_select(f"Which key to remove from {spec.name}?", choices=choices)
     if selected is None or selected == "Cancel":
         click.echo("  Cancelled.")
         sys.exit(0)

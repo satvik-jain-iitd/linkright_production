@@ -44,7 +44,7 @@ dependencies = [
     "pypdf>=4.0",
     "numpy>=1.24",
     "rich>=13.0",
-    "questionary>=2.0",
+    "inquirerpy>=0.3.4",
     "websockets>=12.0",  # Sprint D: `linkright watch` CDP WebSocket client
 ]
 

@@ -175,11 +175,8 @@ def test_bug_35_step_01b_merges_contact_yaml_over_parsed(monkeypatch, tmp_path):
     # outside tmp_path (defensive — we don't trigger an edit in this test).
     monkeypatch.setattr(pp, "save_contact", lambda *a, **k: None, raising=False)
 
-    # Patch questionary to bail immediately after first prompt (action="s")
-    fake_q = MagicMock()
-    fake_q.select.return_value.ask.return_value = "s"
-    fake_q.Choice = MagicMock(side_effect=lambda label, value: MagicMock(label=label, value=value))
-    monkeypatch.setitem(sys.modules, "questionary", fake_q)
+    # Mock lr_select in linkright.ui so the local import inside step_01b sees it
+    monkeypatch.setattr("linkright.ui.lr_select", lambda *a, **kw: "s")
 
     # Force tty so we hit the interactive branch
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True, raising=False)

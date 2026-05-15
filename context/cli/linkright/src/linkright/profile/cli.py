@@ -316,8 +316,8 @@ def _prompt_overwrite_existing(profile_dir: Path) -> str:
     pass.
     """
     try:
+        from InquirerPy.base.control import Choice as IQChoice
         from linkright.ui import lr_select, console as _con, TEAL
-        import questionary
 
         _con.print()
         _con.print(
@@ -326,17 +326,17 @@ def _prompt_overwrite_existing(profile_dir: Path) -> str:
         )
 
         choices = [
-            questionary.Choice(
-                "Keep existing (cancel) — leave my profile untouched",
+            IQChoice(
+                name="Keep existing (cancel) — leave my profile untouched",
                 value="keep",
             ),
-            questionary.Choice(
-                "Overwrite — wipe and re-ingest from this resume "
+            IQChoice(
+                name="Overwrite — wipe and re-ingest from this resume "
                 "(existing data backed up to .backup-<ts>)",
                 value="overwrite",
             ),
-            questionary.Choice(
-                "View existing first — show my current profile, then exit so I can decide",
+            IQChoice(
+                name="View existing first — show my current profile, then exit so I can decide",
                 value="view",
             ),
         ]
