@@ -135,7 +135,7 @@ def test_prompt_for_existing_path_ctrl_c_exits_130(monkeypatch):
     assert exc.value.code == 130
 
 
-def test_prompt_for_existing_path_questionary_returns_none_exits_130(monkeypatch):
+def test_prompt_for_existing_path_lr_text_returns_none_exits_130(monkeypatch):
     # lr_text returning None (Esc / Ctrl+C) → _ctrl_c_exit() → sys.exit(130)
     monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: None)
     with pytest.raises(SystemExit) as exc:
