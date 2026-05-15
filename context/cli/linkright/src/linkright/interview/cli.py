@@ -86,6 +86,17 @@ def interview_group() -> None:
     """Pillar 3 — Interview prep + mock sessions."""
 
 
+# ── coach (Memory v2 Phase 6) ─────────────────────────────────────────────
+# Registered eagerly so `linkright interview coach` works without import side
+# effects in the existing schedule/prep/mock/debrief commands.
+def _register_coach() -> None:
+    from linkright.coach.cli import coach_cmd
+    interview_group.add_command(coach_cmd, name="coach")
+
+
+_register_coach()
+
+
 @interview_group.command("schedule")
 @click.option("--company", required=False, default=None,
               help="(optional) Company name — prompted if omitted")
