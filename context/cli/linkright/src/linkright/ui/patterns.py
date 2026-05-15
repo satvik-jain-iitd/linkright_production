@@ -174,12 +174,12 @@ def append_type_something(choices: Sequence[Any]) -> list[Any]:
     what the caller will receive back when the user picks it; the displayed
     label is ``TYPE_SOMETHING_LABEL``.
 
-    Callers that build questionary Choice objects directly (rather than plain
-    strings) can compose the sentinel themselves:
+    Callers that build IQChoice objects directly (rather than plain strings)
+    can compose the sentinel themselves:
 
-        from questionary import Choice
-        choices = [Choice("Resume PDF", value="pdf"),
-                   Choice(TYPE_SOMETHING_LABEL, value=TYPE_SOMETHING)]
+        from InquirerPy.base.control import Choice as IQChoice
+        choices = [IQChoice(name="Resume PDF", value="pdf"),
+                   IQChoice(name=TYPE_SOMETHING_LABEL, value=TYPE_SOMETHING)]
 
     For plain string lists this helper preserves order: existing choices
     first, custom-entry last. We deliberately never re-order existing options
@@ -193,31 +193,26 @@ def append_type_something(choices: Sequence[Any]) -> list[Any]:
     if TYPE_SOMETHING in out or TYPE_SOMETHING_LABEL in out:
         return out
 
-    # questionary.Choice idempotency check — Choice objects don't compare equal
-    # to plain strings, so the `in` check above misses them. Walk the list and
-    # detect by `.value` / `.title` attributes (duck-typed; safe for any object
-    # exposing those attrs). Without this, a caller that pre-composed a Choice
-    # with value=TYPE_SOMETHING would have a plain-string sentinel appended on
-    # top → questionary chokes on the mixed list.
+    # IQChoice/duck-typed idempotency — Choice objects don't compare equal to
+    # plain strings, so the `in` check above misses them. Walk and detect by
+    # `.name` (IQChoice) or `.title` (legacy questionary.Choice compat) + `.value`.
     for c in out:
+        name = getattr(c, "name", None)
         title = getattr(c, "title", None)
         value = getattr(c, "value", None)
-        if title == TYPE_SOMETHING_LABEL or value == TYPE_SOMETHING:
+        if name == TYPE_SOMETHING_LABEL or title == TYPE_SOMETHING_LABEL or value == TYPE_SOMETHING:
             return out
 
     # Detect whether the caller is using Choice objects so we append a matching
-    # Choice (not a bare string, which would break the homogeneous-type
-    # invariant questionary expects).
+    # IQChoice (not a bare string, to keep a homogeneous list).
     has_choice_objects = any(
-        hasattr(c, "title") and hasattr(c, "value") for c in out
+        (hasattr(c, "name") and hasattr(c, "value")) or
+        (hasattr(c, "title") and hasattr(c, "value"))
+        for c in out
     )
     if has_choice_objects:
-        try:
-            from questionary import Choice
-            out.append(Choice(title=TYPE_SOMETHING_LABEL, value=TYPE_SOMETHING))
-        except ImportError:
-            # Fallback — questionary unavailable in test contexts.
-            out.append(TYPE_SOMETHING_LABEL)
+        from InquirerPy.base.control import Choice as IQChoice
+        out.append(IQChoice(value=TYPE_SOMETHING, name=TYPE_SOMETHING_LABEL))
     else:
         out.append(TYPE_SOMETHING_LABEL)
     return out
@@ -250,7 +245,7 @@ def lr_select_with_custom(
     if pick is None:
         return None
     # Match against label OR sentinel — supports plain-string lists AND
-    # questionary.Choice objects whose `.value` was set to TYPE_SOMETHING.
+    # IQChoice objects whose `.value` was set to TYPE_SOMETHING.
     if pick == TYPE_SOMETHING_LABEL or pick == TYPE_SOMETHING:
         typed = lr_text(custom_prompt, default=custom_default, accent=use_accent)
         # Empty/cancelled type-something falls through as None — callers

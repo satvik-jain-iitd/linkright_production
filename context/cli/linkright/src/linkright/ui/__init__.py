@@ -1,11 +1,15 @@
-"""LinkRight terminal UI primitives — BMAD + Claude Code hybrid style."""
+"""LinkRight terminal UI primitives — Claude Code terminal pattern with LinkRight palette."""
 from __future__ import annotations
+import sys
 import shutil
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
-import questionary
-from questionary import Style as QStyle
+
+from InquirerPy import inquirer as _inquirer
+from InquirerPy.base.control import Choice as IQChoice
+from InquirerPy.separator import Separator as IQSeparator
+from InquirerPy.utils import get_style as _iq_get_style
 
 from linkright.ui.theme import LR_THEME
 from linkright.ui.patterns import (  # noqa: F401 — re-exported for callers
@@ -116,18 +120,75 @@ def lr_banner(version: str = "", subtitle: str = "Your local-first career OS  ·
     console.print(f"\n  [step.accent]{'─' * rule_w}[/]\n")
 
 
-def qs_style(accent: str = TEAL) -> QStyle:
-    return QStyle([
-        ("qmark",        f"fg:{accent} bold"),
-        ("question",     "fg:white bold"),
-        ("pointer",      f"fg:{accent} bold"),
-        ("highlighted",  f"fg:{accent} bold"),
-        ("selected",     f"fg:{accent}"),
-        ("answer",       f"fg:{accent} bold"),
-        ("instruction",  "fg:#666666"),
-        ("text",         "fg:white"),
-        ("disabled",     "fg:#666666 italic"),
-    ])
+# ─────────────────────────────────────────────────────────────────────────────
+# InquirerPy-based interactive primitives (Claude Code terminal pattern)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _lr_style(accent: str = TEAL):
+    """Build an InquirerPy style with the LinkRight colour palette."""
+    return _iq_get_style({
+        "questionmark": "#E5B80B bold",
+        "answermark": accent,
+        "answer": f"{accent} bold",
+        "input": "white",
+        "question": "bold",
+        "answered_question": "white",
+        "instruction": "#8E8E93 italic",
+        "long_instruction": "#8E8E93",
+        "pointer": f"{accent} bold",
+        "checkbox": accent,
+        "separator": "#8E8E93",
+        "skipped": "#8E8E93",
+        "validator": "#EA4335 bold",
+        "marker": "#E5B80B",
+        "fuzzy_prompt": accent,
+        "fuzzy_info": "#8E8E93",
+    }, style_override=False)
+
+
+def _build_lr_choices(choices: list, descriptions: list[str] | None = None) -> list:
+    """Convert a mixed choice list to InquirerPy-compatible format.
+
+    Plain strings get a "N. label" numbered display name. IQChoice and
+    IQSeparator objects pass through unchanged. Duck-typed objects with
+    .title + .value (legacy questionary.Choice compat) are converted.
+    Optional descriptions list injects a muted IQSeparator after each choice.
+    """
+    result = []
+    choice_num = 0
+    desc_idx = 0
+    for item in choices:
+        if isinstance(item, IQSeparator):
+            result.append(item)
+            continue
+        if isinstance(item, IQChoice):
+            result.append(item)
+            if descriptions and desc_idx < len(descriptions) and descriptions[desc_idx]:
+                result.append(IQSeparator(f"   {descriptions[desc_idx]}"))
+            desc_idx += 1
+            continue
+        # Duck-typed legacy compat: questionary.Choice has .title and .value
+        title = getattr(item, "title", None)
+        value = getattr(item, "value", None)
+        if title is not None and value is not None:
+            result.append(IQChoice(value=value, name=str(title)))
+            if descriptions and desc_idx < len(descriptions) and descriptions[desc_idx]:
+                result.append(IQSeparator(f"   {descriptions[desc_idx]}"))
+            desc_idx += 1
+            continue
+        # Plain string — number it
+        choice_num += 1
+        s = str(item)
+        result.append(IQChoice(value=s, name=f"{choice_num}. {s}"))
+        if descriptions and desc_idx < len(descriptions) and descriptions[desc_idx]:
+            result.append(IQSeparator(f"   {descriptions[desc_idx]}"))
+        desc_idx += 1
+    return result
+
+
+def _ctrl_c_exit_ui() -> None:
+    console.print()
+    sys.exit(130)
 
 
 def lr_select(
@@ -138,21 +199,27 @@ def lr_select(
     active_tab: int = 0,
     hint: str = "Enter to select  ·  ↑↓ to navigate  ·  Esc to cancel",
     default: object = None,
+    descriptions: list[str] | None = None,
 ):
-    """AskUserQuestion-style single select with optional tab chips."""
+    """CC AskUserQuestion-style single-select with InquirerPy and LinkRight palette."""
     if tabs:
-        chips = "  ".join(
-            f"[{accent}]■ {t}[/]" if i == active_tab else f"[dim]□ {t}[/]"
-            for i, t in enumerate(tabs)
-        )
-        console.print(f"\n  {chips}  [dim]✓ Done →[/]")
-    console.print(f"\n  [{accent}]◇[/]  [bold]{question}[/]")
-    console.print(f"  [dim]{hint}[/]\n")
-    # Pass " " as questionary question to suppress duplicate print
-    kwargs: dict = {"choices": choices, "style": qs_style(accent)}
-    if default is not None:
-        kwargs["default"] = default
-    return questionary.select(" ", **kwargs).ask()
+        from linkright.ui.layout import tab_bar
+        tab_bar(tabs, active_tab, console=console)
+    iq_choices = _build_lr_choices(choices, descriptions)
+    try:
+        result = _inquirer.select(
+            message=question,
+            choices=iq_choices,
+            default=default,
+            style=_lr_style(accent),
+            qmark="◆",
+            long_instruction=hint,
+            mandatory=False,
+        ).execute()
+    except KeyboardInterrupt:
+        _ctrl_c_exit_ui()
+        return None
+    return result
 
 
 def lr_multi_select(
@@ -160,21 +227,76 @@ def lr_multi_select(
     choices: list,
     accent: str = TEAL,
     hint: str = "Space to toggle  ·  Enter to confirm  ·  Esc to cancel",
+    descriptions: list[str] | None = None,
 ) -> list:
-    console.print(f"\n  [{accent}]◇[/]  [bold]{question}[/]")
-    console.print(f"  [dim]{hint}[/]\n")
-    result = questionary.checkbox(" ", choices=choices, style=qs_style(accent)).ask()
+    """CC AskUserQuestion-style multi-select (checkbox) with InquirerPy."""
+    iq_choices = _build_lr_choices(choices, descriptions)
+    try:
+        result = _inquirer.checkbox(
+            message=question,
+            choices=iq_choices,
+            style=_lr_style(accent),
+            qmark="◆",
+            long_instruction=hint,
+            mandatory=False,
+        ).execute()
+    except KeyboardInterrupt:
+        _ctrl_c_exit_ui()
+        return []
     return result or []
 
 
 def lr_confirm(question: str, default: bool = False, accent: str = TEAL):
-    console.print(f"\n  [{accent}]◇[/]  [bold]{question}[/]")
-    return questionary.confirm(" ", default=default, style=qs_style(accent)).ask()
+    """CC AskUserQuestion-style Yes/No picker. Returns True/False/None (cancelled)."""
+    default_label = "Yes" if default else "No"
+    try:
+        result = _inquirer.select(
+            message=question,
+            choices=["Yes", "No"],
+            default=default_label,
+            style=_lr_style(accent),
+            qmark="◆",
+            long_instruction="Enter to select  ·  Esc to cancel",
+            mandatory=False,
+        ).execute()
+    except KeyboardInterrupt:
+        _ctrl_c_exit_ui()
+        return None
+    if result is None:
+        return None
+    return result == "Yes"
 
 
-def lr_text(prompt: str, default: str = "", accent: str = TEAL):
-    console.print(f"\n  [{accent}]◇[/]  [bold]{prompt}[/]")
-    return questionary.text(" ", default=default, style=qs_style(accent)).ask()
+def lr_text(prompt: str, default: str = "", accent: str = TEAL, multiline: bool = False):
+    """CC AskUserQuestion-style text input. Returns str or None (cancelled)."""
+    try:
+        result = _inquirer.text(
+            message=prompt,
+            default=default,
+            style=_lr_style(accent),
+            qmark="◆",
+            mandatory=False,
+            multiline=multiline,
+        ).execute()
+    except KeyboardInterrupt:
+        _ctrl_c_exit_ui()
+        return None
+    return result
+
+
+def lr_password(prompt: str, accent: str = TEAL):
+    """CC-style masked password input. Returns str or None (cancelled)."""
+    try:
+        result = _inquirer.secret(
+            message=prompt,
+            style=_lr_style(accent),
+            qmark="◆",
+            mandatory=False,
+        ).execute()
+    except KeyboardInterrupt:
+        _ctrl_c_exit_ui()
+        return None
+    return result
 
 
 def step_start(label: str, accent: str = TEAL, index: int | None = None, total: int | None = None) -> None:

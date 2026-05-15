@@ -35,8 +35,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
 import click
-import questionary
-from questionary import Choice
+from InquirerPy.base.control import Choice as IQChoice
+from linkright.ui import lr_text, lr_select, lr_confirm
 
 
 __all__ = [
@@ -130,10 +130,7 @@ def prompt_for_existing_path(
     _ensure_tty(flag_hint)
     default_str = str(default) if default else ""
     while True:
-        try:
-            raw = questionary.text(message, default=default_str).ask()
-        except KeyboardInterrupt:
-            _ctrl_c_exit()
+        raw = lr_text(message, default=default_str)
         if raw is None:
             _ctrl_c_exit()
         cleaned = _sanitize_path_input(raw)
@@ -177,10 +174,7 @@ def prompt_for_text(
     _ensure_tty(flag_hint)
     default_str = default or ""
     while True:
-        try:
-            raw = questionary.text(message, default=default_str).ask()
-        except KeyboardInterrupt:
-            _ctrl_c_exit()
+        raw = lr_text(message, default=default_str)
         if raw is None:
             _ctrl_c_exit()
         s = raw.strip()
@@ -202,10 +196,7 @@ def prompt_for_paste_block(
     questionary's multiline submission gesture.
     """
     _ensure_tty(flag_hint)
-    try:
-        raw = questionary.text(message, multiline=True).ask()
-    except KeyboardInterrupt:
-        _ctrl_c_exit()
+    raw = lr_text(message, multiline=True)
     if raw is None:
         _ctrl_c_exit()
     return raw.strip()
@@ -290,15 +281,11 @@ def prompt_for_choice(
             _ctrl_c_exit()
         return options[picked]
 
-    try:
-        choice_label = questionary.select(
-            message,
-            choices=[_format_choice_label(o) for o in options],
-            default=_format_choice_label(default),
-            instruction="(↑/↓ to navigate, enter to confirm)",
-        ).ask()
-    except KeyboardInterrupt:
-        _ctrl_c_exit()
+    choice_label = lr_select(
+        message,
+        choices=[_format_choice_label(o) for o in options],
+        default=_format_choice_label(default),
+    )
     if choice_label is None:
         _ctrl_c_exit()
     for o in options:
@@ -315,26 +302,19 @@ def prompt_for_select(
     allow_cancel: bool = True,
     flag_hint: str = "the choice flag",
 ) -> Any:
-    """Generic questionary.select wrapper. Returns the .value of the picked Choice.
+    """Select wrapper. Returns the .value of the picked Choice.
 
-    Accepts either Choice objects (with .title + .value) or plain strings.
-    With allow_cancel=True, appends a '(cancel)' Choice and returns None on pick.
+    Accepts either IQChoice objects or plain strings.
+    With allow_cancel=True, appends a '(cancel)' choice and returns None on pick.
     Mirrors profile/pipeline.py:571-584 (delete-nugget picker).
     """
     _ensure_tty(flag_hint)
     if not choices:
         raise ValueError("prompt_for_select requires at least one choice")
-    chs: list[Choice | str] = list(choices)
+    chs: list = list(choices)
     if allow_cancel:
-        chs.append(Choice(title="(cancel)", value=None))
-    try:
-        picked = questionary.select(
-            message,
-            choices=chs,
-            default=default,
-        ).ask()
-    except KeyboardInterrupt:
-        _ctrl_c_exit()
+        chs.append(IQChoice(name="(cancel)", value=None))
+    picked = lr_select(message, choices=chs, default=default)
     if picked is None and not allow_cancel:
         _ctrl_c_exit()
     return picked
@@ -359,12 +339,9 @@ def prompt_for_id_from_list(
     if not items:
         return None
     _ensure_tty(flag_hint)
-    choices = [Choice(title=label_fn(item), value=i) for i, item in enumerate(items)]
-    choices.append(Choice(title="(cancel)", value=None))
-    try:
-        picked_idx = questionary.select(message, choices=choices).ask()
-    except KeyboardInterrupt:
-        _ctrl_c_exit()
+    choices = [IQChoice(name=label_fn(item), value=i) for i, item in enumerate(items)]
+    choices.append(IQChoice(name="(cancel)", value=None))
+    picked_idx = lr_select(message, choices=choices)
     if picked_idx is None:
         return None
     return id_fn(items[picked_idx])
@@ -484,12 +461,9 @@ def prompt_for_resume_source(
 # ─────────────────────────────────────────────────────────────────────────
 
 def prompt_for_yes_no(message: str, *, default: bool = False) -> bool:
-    """Thin questionary.confirm wrapper with Ctrl+C → sys.exit(130)."""
+    """Yes/No picker with Ctrl+C → sys.exit(130)."""
     _ensure_tty("y/n flag")
-    try:
-        ans = questionary.confirm(message, default=default).ask()
-    except KeyboardInterrupt:
-        _ctrl_c_exit()
+    ans = lr_confirm(message, default=default)
     if ans is None:
         _ctrl_c_exit()
     return bool(ans)
@@ -505,10 +479,7 @@ def prompt_for_iso_datetime(
     _ensure_tty(flag_hint)
     default_str = default or ""
     while True:
-        try:
-            raw = questionary.text(message, default=default_str).ask()
-        except KeyboardInterrupt:
-            _ctrl_c_exit()
+        raw = lr_text(message, default=default_str)
         if raw is None:
             _ctrl_c_exit()
         s = raw.strip()

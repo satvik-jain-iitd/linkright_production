@@ -231,7 +231,8 @@ def tab_bar(
     """Render a horizontal tab bar — display only (no interaction).
 
     Output (current = index 1):
-        ``←  □ Tab A  ⊗ Tab B  □ Tab C  →``
+        ``←  □ Tab A  □ Tab B  □ Tab C  ✓ Done →``
+    (active tab is styled bold+accent+bg via ANSI; □ marker is the same for all)
     """
     con = _con(console)
     if not items:
@@ -239,10 +240,10 @@ def tab_bar(
     parts: list[str] = ["[tui.muted]←[/]"]
     for i, label in enumerate(items):
         if i == current_idx:
-            parts.append(f"[{accent} bold]⊗ {label}[/]")
+            parts.append(f"[bold {accent} on #0D2137] □ {label} [/]")
         else:
             parts.append(f"[tui.muted]□ {label}[/]")
-    parts.append("[tui.muted]→[/]")
+    parts.append("[#34A853 bold]✓ Done →[/]")
     con.print(f"{' ' * indent}{'  '.join(parts)}")
 
 
@@ -330,10 +331,11 @@ def tab_navigate(
         out: list[tuple[str, str]] = [("class:muted", "  ← ")]
         for i, label in enumerate(items):
             if i == state["idx"]:
-                out.append(("class:current", f" ⊗ {label} "))
+                out.append(("class:current", f" □ {label} "))
             else:
                 out.append(("class:inactive", f" □ {label} "))
-        out.append(("class:muted", " →\n  "))
+        out.append(("class:submit", " ✓ Done → "))
+        out.append(("", "\n  "))
         desc = _desc(state["idx"])
         if desc:
             out.append(("class:desc", f"└ {desc}"))
@@ -380,9 +382,10 @@ def tab_navigate(
         has_desc = any(descs)
         style = Style.from_dict(
             {
-                "current": "fg:#06B6D4 bold",
+                "current": "fg:#0FBEAF bold bg:#0D2137",
                 "inactive": "fg:#8E8E93",
                 "muted": "fg:#8E8E93",
+                "submit": "fg:#34A853 bold",
                 "desc": "fg:#8E8E93",
                 "hint": "fg:#8E8E93 italic",
             }

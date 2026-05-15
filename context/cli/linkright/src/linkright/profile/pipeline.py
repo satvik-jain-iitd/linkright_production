@@ -469,7 +469,7 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
     Reads existing `contact.yaml` (if previously saved) — pre-fills defaults.
     Otherwise extracts via regex from raw resume text.
     """
-    import questionary
+    from InquirerPy.base.control import Choice as IQChoice
     from rich.console import Console
     from rich.panel import Panel
     from linkright.ui import (
@@ -542,10 +542,10 @@ def contact_verify_loop(profile_dir: Optional[Path] = None,
         ))
 
         _CONFIRM = "__confirm__"
-        choices = [questionary.Choice("✓  All correct — save and continue", value=_CONFIRM)]
+        choices = [IQChoice(name="✓  All correct — save and continue", value=_CONFIRM)]
         for key, label in fields:
             val = confirmed.get(key) or "(blank)"
-            choices.append(questionary.Choice(f"   Edit: {label}  [{val}]", value=key))
+            choices.append(IQChoice(name=f"   Edit: {label}  [{val}]", value=key))
 
         try:
             # NOTE (UAT cluster-E3 cycle 2, HIGH #1): this picker INTENTIONALLY
@@ -636,7 +636,6 @@ def truth_engine_loop(profile_dir: Optional[Path] = None) -> dict:
 
     Aborts with exit 130 on Ctrl+C (no partial state saved).
     """
-    import questionary  # imported here so non-interactive paths don't pay the cost
     from rich.console import Console
     from rich.panel import Panel
     from linkright.ui import lr_select, lr_text, step_done, step_warn, TEAL as _TEAL, CORAL as _CORAL
@@ -789,7 +788,7 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
     embeddings.npz, highlights.jsonl, metadata.yaml. Returns True on delete,
     False on cancel.
     """
-    import questionary
+    from InquirerPy.base.control import Choice as IQChoice
     from rich.console import Console
     from linkright.ui.theme import LR_THEME
 
@@ -815,8 +814,8 @@ def delete_nugget_interactive(profile_dir: Optional[Path] = None) -> bool:
             text = (n.get("nugget_text") or n.get("answer", "")).strip()[:80]
             importance = (n.get("importance") or "??").upper()
             label = f"[{importance:>2s}] {company:<22} | {role:<20} | {text}"
-            c.append(questionary.Choice(title=label, value=f"idx:{i}"))
-        c.append(questionary.Choice(title="(cancel)", value=_CANCEL_SENTINEL))
+            c.append(IQChoice(name=label, value=f"idx:{i}"))
+        c.append(IQChoice(name="(cancel)", value=_CANCEL_SENTINEL))
         return c
 
     pool = list(nuggets)
@@ -943,7 +942,6 @@ def batch_review_loop(nuggets: list[dict]) -> tuple[list[dict], list[dict]]:
 
     ``nugget_id`` is the stable nugget_key() for the row.
     """
-    import questionary
     from rich.console import Console
     from rich.panel import Panel
     from linkright.ui import lr_text, lr_select, step_done, TEAL as _TEAL, CORAL as _CORAL

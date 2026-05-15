@@ -693,34 +693,37 @@ def test_med5_step_progress_covers_long_running_steps():
         )
 
 
-def test_high1_append_type_something_handles_questionary_choice():
+def test_high1_append_type_something_handles_iqchoice():
     """HIGH #1 fix surface bug: `append_type_something` must be safe to call
-    against a list of questionary.Choice objects (which the enrich + delete
-    pickers use). Pre-fix this would append a bare string onto a Choice list
-    and break questionary's homogeneous-type invariant.
+    against a list of IQChoice objects (which the enrich + delete pickers use).
+    Pre-fix this would append a bare string onto a Choice list and break the
+    homogeneous-type invariant.
     """
-    import questionary
+    from InquirerPy.base.control import Choice as IQChoice
     from linkright.ui.patterns import (
         append_type_something, TYPE_SOMETHING, TYPE_SOMETHING_LABEL,
     )
     original = [
-        questionary.Choice(title="Alpha", value="a"),
-        questionary.Choice(title="Beta", value="b"),
+        IQChoice(name="Alpha", value="a"),
+        IQChoice(name="Beta", value="b"),
     ]
     out = append_type_something(original)
     assert len(out) == 3
-    # The new sentinel must be a Choice (not a bare string) so questionary
-    # doesn't choke on mixed types.
+    # The new sentinel must be an IQChoice (not a bare string) so lr_select
+    # doesn't receive a mixed-type list.
     last = out[-1]
-    assert hasattr(last, "title") and hasattr(last, "value"), (
-        "append_type_something appended a bare string onto a Choice list — "
-        "questionary will reject the mixed-type list."
+    assert (hasattr(last, "name") or hasattr(last, "title")) and hasattr(last, "value"), (
+        "append_type_something appended a bare string onto an IQChoice list — "
+        "lr_select will reject the mixed-type list."
     )
     assert getattr(last, "value") == TYPE_SOMETHING
-    assert getattr(last, "title") == TYPE_SOMETHING_LABEL
-    # Idempotent against Choice lists
+    assert (
+        getattr(last, "name", None) == TYPE_SOMETHING_LABEL
+        or getattr(last, "title", None) == TYPE_SOMETHING_LABEL
+    )
+    # Idempotent against IQChoice lists
     out2 = append_type_something(out)
     assert len(out2) == 3, (
-        "append_type_something must be idempotent when the Choice-typed "
+        "append_type_something must be idempotent when the IQChoice-typed "
         "sentinel is already present."
     )

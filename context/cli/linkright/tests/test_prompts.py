@@ -1,8 +1,13 @@
 """Unit tests for linkright.prompts shared interactive helpers.
 
-Pattern: monkey-patch the underlying questionary functions to return
-canned values, plus monkey-patch sys.stdin.isatty() to True (or False
-for the non-TTY guard tests). No real prompt_toolkit interaction needed.
+Pattern: monkey-patch the LR UI wrapper functions (lr_text / lr_select /
+lr_confirm) that prompts imports, plus monkey-patch sys.stdin.isatty() to
+True (or False for the non-TTY guard tests). No real prompt_toolkit
+interaction needed.
+
+For prompt_for_choice tests we also set LR_PICKER_STYLE=list so the code
+takes the lr_select path instead of the tab_navigate path (which would
+require mocking prompt_toolkit internals).
 """
 from __future__ import annotations
 
@@ -12,24 +17,6 @@ import click
 import pytest
 
 from linkright import prompts
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Helper class — fake questionary "Question" object that .ask() returns canned vals
-# ─────────────────────────────────────────────────────────────────────────
-
-class FakeQ:
-    def __init__(self, *vals):
-        self._vals = list(vals)
-        self._idx = 0
-
-    def ask(self):
-        v = self._vals[self._idx]
-        if self._idx < len(self._vals) - 1:
-            self._idx += 1
-        if isinstance(v, BaseException):
-            raise v
-        return v
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +32,7 @@ def _force_tty(monkeypatch):
 def test_prompt_for_existing_path_returns_resolved_path(monkeypatch, tmp_path):
     real_file = tmp_path / "r.pdf"
     real_file.write_text("PDF")
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(str(real_file)))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: str(real_file))
 
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve()
@@ -55,10 +42,8 @@ def test_prompt_for_existing_path_loops_until_valid(monkeypatch, tmp_path):
     real_file = tmp_path / "r.pdf"
     real_file.write_text("PDF")
     answers = iter(["/nonexistent/path/foo.pdf", str(real_file)])
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ(next(answers)),
-    )
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: next(answers))
+
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve()
 
@@ -68,7 +53,7 @@ def test_prompt_for_existing_path_handles_drag_drop_escaped_path(monkeypatch, tm
     real_file.write_text("PDF")
     # macOS Finder drag-drop produces escaped spaces: /tmp/.../My\ Resume.pdf
     escaped = str(real_file).replace(" ", "\\ ")
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(escaped))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: escaped)
 
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve()
@@ -78,7 +63,7 @@ def test_prompt_for_existing_path_strips_quotes(monkeypatch, tmp_path):
     real_file = tmp_path / "x.md"
     real_file.write_text("md")
     quoted = f'"{real_file}"'
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(quoted))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: quoted)
 
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve()
@@ -93,7 +78,7 @@ def test_prompt_for_existing_path_quoted_path_with_spaces(monkeypatch, tmp_path)
     real_file = tmp_path / "My Resume 2025.pdf"
     real_file.write_text("PDF")
     quoted = f'"{real_file}"'
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(quoted))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: quoted)
 
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve(), (
@@ -111,7 +96,7 @@ def test_prompt_for_existing_path_bare_unquoted_path_with_spaces(monkeypatch, tm
     real_file = tmp_path / "Ruch_ Dubey_Resume.pdf"
     real_file.write_text("PDF")
     bare = str(real_file)  # no quotes, no backslashes — plain path with spaces
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(bare))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: bare)
 
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve(), (
@@ -124,7 +109,7 @@ def test_prompt_for_existing_path_expands_tilde(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     real_file = tmp_path / "y.pdf"
     real_file.write_text("PDF")
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ("~/y.pdf"))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: "~/y.pdf")
 
     p = prompts.prompt_for_existing_path("Path?", must_be_file=True)
     assert p == real_file.resolve()
@@ -136,29 +121,23 @@ def test_prompt_for_existing_path_must_be_dir_rejects_file(monkeypatch, tmp_path
     real_dir = tmp_path / "subdir"
     real_dir.mkdir()
     answers = iter([str(real_file), str(real_dir)])
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ(next(answers)),
-    )
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: next(answers))
 
     p = prompts.prompt_for_existing_path("Dir?", must_be_dir=True)
     assert p == real_dir.resolve()
 
 
 def test_prompt_for_existing_path_ctrl_c_exits_130(monkeypatch):
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ(KeyboardInterrupt()),
-    )
+    # lr_text returns None when user presses Ctrl+C or Esc (mandatory=False)
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: None)
     with pytest.raises(SystemExit) as exc:
         prompts.prompt_for_existing_path("Path?")
     assert exc.value.code == 130
 
 
 def test_prompt_for_existing_path_questionary_returns_none_exits_130(monkeypatch):
-    # questionary.text(...).ask() returns None on user-Esc / Ctrl+C in some
-    # questionary versions; we treat both the same way.
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(None))
+    # lr_text returning None (Esc / Ctrl+C) → _ctrl_c_exit() → sys.exit(130)
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: None)
     with pytest.raises(SystemExit) as exc:
         prompts.prompt_for_existing_path("Path?")
     assert exc.value.code == 130
@@ -176,23 +155,20 @@ def test_prompt_for_existing_path_in_non_tty_raises_usage_error(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 def test_prompt_for_text_returns_stripped(monkeypatch):
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ("  hello world  "))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: "  hello world  ")
     s = prompts.prompt_for_text("Q?")
     assert s == "hello world"
 
 
 def test_prompt_for_text_loops_on_empty_when_disallowed(monkeypatch):
     answers = iter(["", "   ", "real value"])
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ(next(answers)),
-    )
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: next(answers))
     s = prompts.prompt_for_text("Q?", allow_empty=False)
     assert s == "real value"
 
 
 def test_prompt_for_text_returns_empty_when_allowed(monkeypatch):
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(""))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: "")
     s = prompts.prompt_for_text("Q?", allow_empty=True)
     assert s == ""
 
@@ -207,11 +183,10 @@ def test_prompt_for_choice_returns_recommended_default(monkeypatch):
         {"key": "b", "label": "Beta", "recommended": True},
         {"key": "c", "label": "Gamma"},
     ]
-    # Simulate user just hitting Enter — questionary returns the default label
-    monkeypatch.setattr(
-        "questionary.select",
-        lambda *a, **kw: FakeQ(f"⭐ Beta"),
-    )
+    # Force list mode so lr_select is called instead of tab_navigate
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    # Simulate user just hitting Enter — lr_select returns the recommended label
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: "⭐ Beta")
     pick = prompts.prompt_for_choice("Pick?", options)
     assert pick["key"] == "b"
 
@@ -221,7 +196,8 @@ def test_prompt_for_choice_returns_user_pick(monkeypatch):
         {"key": "a", "label": "Alpha"},
         {"key": "b", "label": "Beta", "recommended": True},
     ]
-    monkeypatch.setattr("questionary.select", lambda *a, **kw: FakeQ("   Alpha"))
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: "   Alpha")
     pick = prompts.prompt_for_choice("Pick?", options)
     assert pick["key"] == "a"
 
@@ -240,8 +216,8 @@ def test_prompt_for_id_from_list_picks_by_index(monkeypatch):
         {"id": "uid1", "name": "alpha"},
         {"id": "uid2", "name": "beta"},
     ]
-    # Simulate user picking the SECOND item (index=1)
-    monkeypatch.setattr("questionary.select", lambda *a, **kw: FakeQ(1))
+    # lr_select returns the IQChoice value — here the item index (1 = second item)
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: 1)
     picked_id = prompts.prompt_for_id_from_list(
         items,
         label_fn=lambda i: i["name"],
@@ -252,7 +228,7 @@ def test_prompt_for_id_from_list_picks_by_index(monkeypatch):
 
 def test_prompt_for_id_from_list_returns_none_on_cancel(monkeypatch):
     items = [{"id": "x"}]
-    monkeypatch.setattr("questionary.select", lambda *a, **kw: FakeQ(None))
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: None)
     picked = prompts.prompt_for_id_from_list(items, label_fn=lambda i: "x")
     assert picked is None
 
@@ -271,10 +247,9 @@ def test_prompt_for_jd_input_routes_file_branch(monkeypatch, tmp_path):
     jd_file = tmp_path / "jd.md"
     jd_file.write_text("Senior PM")
 
-    selects = iter([f"⭐ Path to a JD file (.md / .txt) — recommended"])
-    texts = iter([str(jd_file)])
-    monkeypatch.setattr("questionary.select", lambda *a, **kw: FakeQ(next(selects)))
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(next(texts)))
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: "⭐ File")
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: str(jd_file))
 
     kind, val = prompts.prompt_for_jd_input()
     assert kind == "file"
@@ -282,13 +257,11 @@ def test_prompt_for_jd_input_routes_file_branch(monkeypatch, tmp_path):
 
 
 def test_prompt_for_jd_input_routes_paste_branch(monkeypatch):
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: "   Paste")
     monkeypatch.setattr(
-        "questionary.select",
-        lambda *a, **kw: FakeQ("   Paste the JD here (multi-line, Esc+Enter to submit)"),
-    )
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ("This is the pasted JD body\nMulti-line ok"),
+        "linkright.prompts.lr_text",
+        lambda *a, **kw: "This is the pasted JD body\nMulti-line ok",
     )
 
     kind, val = prompts.prompt_for_jd_input()
@@ -303,11 +276,9 @@ def test_prompt_for_jd_input_routes_paste_branch(monkeypatch):
 def test_prompt_for_resume_source_file_branch(monkeypatch, tmp_path):
     pdf = tmp_path / "r.pdf"
     pdf.write_text("PDF")
-    monkeypatch.setattr(
-        "questionary.select",
-        lambda *a, **kw: FakeQ("⭐ Path to my resume PDF (or .md) — recommended"),
-    )
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(str(pdf)))
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: "⭐ File")
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: str(pdf))
     kind, val = prompts.prompt_for_resume_source()
     assert kind == "file"
     assert val == pdf.resolve()
@@ -318,15 +289,11 @@ def test_prompt_for_resume_source_paste_branch(monkeypatch, tmp_path):
     interactive picker. Selecting it drops the user into a multi-line text
     editor and returns (kind="paste", body=str).
     """
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    monkeypatch.setattr("linkright.prompts.lr_select", lambda *a, **kw: "   Paste")
     monkeypatch.setattr(
-        "questionary.select",
-        lambda *a, **kw: FakeQ(
-            "   Paste resume text here (multi-line, Esc+Enter to submit)"
-        ),
-    )
-    monkeypatch.setattr(
-        "questionary.text",
-        lambda *a, **kw: FakeQ("PM @ AmEx 2022-2024\nLed payments fraud-detection model.\n"),
+        "linkright.prompts.lr_text",
+        lambda *a, **kw: "PM @ AmEx 2022-2024\nLed payments fraud-detection model.\n",
     )
     kind, val = prompts.prompt_for_resume_source()
     assert kind == "paste"
@@ -343,15 +310,15 @@ def test_prompt_for_resume_source_paste_option_surfaced(monkeypatch, tmp_path):
 
     captured_options = {}
 
-    def fake_select(message, choices, **kw):
+    def fake_lr_select(message, choices, **kw):
         captured_options["count"] = len(choices)
         captured_options["labels"] = list(choices)
         # Pick the first option (file) so the call returns cleanly
-        return FakeQ(choices[0])
+        return choices[0]
 
-    monkeypatch.setattr("questionary.select", fake_select)
-    # Provide a REAL file so prompt_for_existing_path doesn't infinite-loop
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(str(real_file)))
+    monkeypatch.setenv("LR_PICKER_STYLE", "list")
+    monkeypatch.setattr("linkright.prompts.lr_select", fake_lr_select)
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: str(real_file))
 
     kind, val = prompts.prompt_for_resume_source()
     assert kind == "file"  # we picked the first option (file)
@@ -374,7 +341,7 @@ def test_prompt_for_resume_source_paste_option_surfaced(monkeypatch, tmp_path):
 
 def test_prompt_for_iso_datetime_loops_on_bad_input(monkeypatch):
     answers = iter(["not a date", "2026-05-09 14:00"])
-    monkeypatch.setattr("questionary.text", lambda *a, **kw: FakeQ(next(answers)))
+    monkeypatch.setattr("linkright.prompts.lr_text", lambda *a, **kw: next(answers))
     s = prompts.prompt_for_iso_datetime()
     assert s == "2026-05-09 14:00"
 
@@ -384,10 +351,10 @@ def test_prompt_for_iso_datetime_loops_on_bad_input(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 def test_prompt_for_yes_no_returns_true(monkeypatch):
-    monkeypatch.setattr("questionary.confirm", lambda *a, **kw: FakeQ(True))
+    monkeypatch.setattr("linkright.prompts.lr_confirm", lambda *a, **kw: True)
     assert prompts.prompt_for_yes_no("OK?") is True
 
 
 def test_prompt_for_yes_no_returns_false(monkeypatch):
-    monkeypatch.setattr("questionary.confirm", lambda *a, **kw: FakeQ(False))
+    monkeypatch.setattr("linkright.prompts.lr_confirm", lambda *a, **kw: False)
     assert prompts.prompt_for_yes_no("OK?") is False

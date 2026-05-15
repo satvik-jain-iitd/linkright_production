@@ -1360,26 +1360,27 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
     _changed: dict = {}
 
     try:
-        import questionary as _q
+        from InquirerPy.base.control import Choice as IQChoice
+        from linkright.ui import lr_select, lr_text
 
         # UAT bug #37: previously the exit option read "s — skip all (keep as-is)"
         # which users mistook for "discard my edits". Result: trapped in the loop.
         # Renamed to "All correct — save & continue" with a checkmark and
         # placed at the top so it's the obvious terminal action.
         _choices = [
-            _q.Choice("✓  All correct — save & continue", value="s"),
-            _q.Choice("   Edit email",                    value="e"),
-            _q.Choice("   Edit LinkedIn",                 value="l"),
-            _q.Choice("   Edit phone",                    value="p"),
-            _q.Choice("   Edit portfolio / website",      value="w"),
+            IQChoice(name="✓  All correct — save & continue", value="s"),
+            IQChoice(name="   Edit email",                    value="e"),
+            IQChoice(name="   Edit LinkedIn",                 value="l"),
+            IQChoice(name="   Edit phone",                    value="p"),
+            IQChoice(name="   Edit portfolio / website",      value="w"),
         ]
 
         while True:
             try:
-                action = _q.select(
+                action = lr_select(
                     "Pick a field to edit, or confirm details are correct:",
                     choices=_choices,
-                ).ask()
+                )
             except KeyboardInterrupt:
                 click.echo("  Skipping contact verification (Ctrl+C).")
                 break
@@ -1390,7 +1391,7 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
             key, label = _field_map[action]
             current = contact.get(key) or ""
             try:
-                new_val = _q.text(f"  {label}:", default=current).ask()
+                new_val = lr_text(f"  {label}:", default=current)
             except KeyboardInterrupt:
                 click.echo("  Edit cancelled.")
                 continue
@@ -1398,7 +1399,7 @@ def step_01b_verify_contact_details(parsed: dict, no_pause: bool = False) -> dic
                 contact[key] = new_val.strip()
                 _changed[key] = new_val.strip()
 
-    except (ImportError, EOFError):
+    except EOFError:
         # Fallback: plain input() prompts
         # UAT bug #37: same relabeling as questionary path — Enter or "s"
         # means "details are correct, save & continue".

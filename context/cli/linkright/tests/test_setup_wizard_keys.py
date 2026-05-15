@@ -20,14 +20,10 @@ def isolated_env(tmp_path, monkeypatch):
 # ── All-skip path ─────────────────────────────────────────────────────────
 
 def test_all_skip_agent_mode_no_env_changes(isolated_env):
-    """User picks 'Skip — Agent mode'. No .env changes."""
+    """User picks 'Agent only' mode. No .env changes."""
     from linkright.setup_wizard import run_api_keys_step
 
-    with patch("questionary.select") as mock_select:
-        mock_answer = MagicMock()
-        mock_answer.ask.return_value = "   Skip — I'll use Agent mode only (Claude Code / Cursor)"
-        mock_select.return_value = mock_answer
-
+    with patch("linkright.setup_wizard._pick", return_value={"key": "agent"}):
         updates = run_api_keys_step()
 
     assert updates == {}
@@ -36,14 +32,10 @@ def test_all_skip_agent_mode_no_env_changes(isolated_env):
 
 
 def test_all_skip_later_no_env_changes(isolated_env):
-    """User picks 'Skip — add later'. No .env changes."""
+    """User picks 'Skip' mode. No .env changes."""
     from linkright.setup_wizard import run_api_keys_step
 
-    with patch("questionary.select") as mock_select:
-        mock_answer = MagicMock()
-        mock_answer.ask.return_value = "   Skip — I'll add keys later via `linkright keys`"
-        mock_select.return_value = mock_answer
-
+    with patch("linkright.setup_wizard._pick", return_value={"key": "later"}):
         updates = run_api_keys_step()
 
     assert updates == {}
@@ -57,35 +49,14 @@ def test_existing_groq_key_pre_populated(isolated_env):
 
     existing = "gsk_" + "a" * 40
 
-    # Simulate: mode=interactive, then for all providers: Groq pre-filled (confirm False),
-    # remaining 6 providers all answered with "Skip"
-    select_returns = iter([
-        "⭐ Add keys interactively  (guided, ~2 min)",  # step 1: mode
-        # Providers 2-7: _pick returns "Skip <provider>" — matches second option
-        "   Skip Cerebras",
-        "   Skip SambaNova",
-        "   Skip Cloudflare Workers AI",
-        "   Skip Z.ai (Zhipu AI)",
-        "   Skip Gemini (Google AI Studio)",
-        "   Skip OpenRouter",
-    ])
+    # mode=interactive, then 6 providers (Groq pre-filled → no _pick, just lr_confirm)
+    pick_iter = iter(
+        [{"key": "interactive"}]           # mode
+        + [{"key": "skip"}] * 6           # Cerebras, SambaNova, Cloudflare, Z.ai, Gemini, OpenRouter
+    )
 
-    def mock_select_side_effect(question, choices=None, **kwargs):
-        m = MagicMock()
-        try:
-            val = next(select_returns)
-        except StopIteration:
-            val = (choices[-1] if choices else "   skip")
-        m.ask.return_value = val
-        return m
-
-    def mock_confirm_side_effect(question, **kwargs):
-        m = MagicMock()
-        m.ask.return_value = False  # no to "add fallback?"
-        return m
-
-    with patch("questionary.select", side_effect=mock_select_side_effect), \
-         patch("questionary.confirm", side_effect=mock_confirm_side_effect):
+    with patch("linkright.setup_wizard._pick", side_effect=pick_iter), \
+         patch("linkright.setup_wizard.lr_confirm", return_value=False):
         updates = run_api_keys_step(existing_groq_key=existing)
 
     # Pre-populated key should be in updates dict
@@ -100,34 +71,15 @@ def test_full_add_path_writes_env(isolated_env):
 
     groq_key = "gsk_" + "z" * 40
 
-    call_count = [0]
-    def mock_select_side_effect(question, choices=None, **kwargs):
-        m = MagicMock()
-        call_count[0] += 1
-        if call_count[0] == 1:
-            # Mode → interactive
-            m.ask.return_value = "⭐ Add keys interactively  (guided, ~2 min)"
-        else:
-            # Provider actions — for Groq: "Add primary key", rest: skip
-            if choices and any("Add primary key for Groq" in str(c) for c in (choices or [])):
-                m.ask.return_value = str(choices[0])  # Add
-            else:
-                m.ask.return_value = str(choices[-1]) if choices else "   Skip"
-        return m
+    # mode=interactive, Groq=add, remaining 6 providers=skip
+    pick_iter = iter(
+        [{"key": "interactive"}, {"key": "add"}]   # mode + Groq
+        + [{"key": "skip"}] * 6                    # Cerebras…OpenRouter
+    )
 
-    def mock_password_side_effect(prompt, **kwargs):
-        m = MagicMock()
-        m.ask.return_value = groq_key
-        return m
-
-    def mock_confirm_side_effect(question, **kwargs):
-        m = MagicMock()
-        m.ask.return_value = False  # no fallbacks
-        return m
-
-    with patch("questionary.select", side_effect=mock_select_side_effect), \
-         patch("questionary.password", side_effect=mock_password_side_effect), \
-         patch("questionary.confirm", side_effect=mock_confirm_side_effect), \
+    with patch("linkright.setup_wizard._pick", side_effect=pick_iter), \
+         patch("linkright.setup_wizard.lr_password", return_value=groq_key), \
+         patch("linkright.setup_wizard.lr_confirm", return_value=False), \
          patch("linkright.keys.env_writer.write_keys") as mock_write:
         updates = run_api_keys_step()
 

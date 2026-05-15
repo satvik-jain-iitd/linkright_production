@@ -56,7 +56,7 @@ _warnings_setup.filterwarnings(
     message=r".*HF_TOKEN.*",
     category=UserWarning,
 )
-import questionary
+from linkright.ui import lr_password, lr_confirm, lr_text
 import yaml
 
 
@@ -226,7 +226,7 @@ def _ask_groq_key() -> tuple[str, bool, str]:
     print("  Get a free key at: https://console.groq.com → API Keys → Create key")
     print("  (Free tier: 14,400 req/day — enough for hundreds of resumes)")
     print()
-    key = questionary.password("Paste your Groq API key:").ask()
+    key = lr_password("Paste your Groq API key:")
     if key is None:
         sys.exit(1)
     key = key.strip()
@@ -374,9 +374,7 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
         if updates.get(spec.primary_env):
             masked = mask_key(updates[spec.primary_env])
             print(f"  Primary key already set: {masked}")
-            add_more = questionary.confirm(
-                f"  Add a fallback key for {spec.name}?", default=False
-            ).ask()
+            add_more = lr_confirm(f"  Add a fallback key for {spec.name}?", default=False)
             if not add_more:
                 continue
             # Find next slot for fallback
@@ -392,9 +390,7 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
                 updates.update(new_updates)
                 if not ok:
                     break
-                add_another = questionary.confirm(
-                    f"  Add another fallback key for {spec.name}?", default=False
-                ).ask()
+                add_another = lr_confirm(f"  Add another fallback key for {spec.name}?", default=False)
                 if not add_another:
                     break
                 fallback_count += 1
@@ -419,10 +415,10 @@ def run_api_keys_step(existing_groq_key: str = "") -> dict[str, str]:
         for fb_num, slot_var in enumerate(spec.extra_envs, start=1):
             if fb_num > 3:
                 break
-            add_fb = questionary.confirm(
+            add_fb = lr_confirm(
                 f"  Add fallback key {fb_num} for {spec.name}? (helps avoid rate limits)",
                 default=False,
-            ).ask()
+            )
             if not add_fb:
                 break
             ok, new_updates = _prompt_key_for_slot(spec, slot_var, fb_num, updates)
@@ -484,9 +480,7 @@ def _prompt_key_for_slot(
     from linkright.keys.env_writer import mask_key
 
     slot_label = "primary key" if slot_num == 0 else f"fallback key {slot_num}"
-    key_val = questionary.password(
-        f"  Paste {spec.name} {slot_label}:"
-    ).ask()
+    key_val = lr_password(f"  Paste {spec.name} {slot_label}:")
     if key_val is None:
         return False, {}
     key_val = key_val.strip()
@@ -496,7 +490,7 @@ def _prompt_key_for_slot(
     ok, msg = _validate_key_format(spec, key_val)
     if not ok:
         print(f"  \033[33m⚠ Format warning: {msg}\033[0m")
-        proceed = questionary.confirm("  Save anyway?", default=False).ask()
+        proceed = lr_confirm("  Save anyway?", default=False)
         if not proceed:
             print("  Skipped — key not saved.")
             return False, {}
@@ -510,9 +504,7 @@ def _prompt_key_for_slot(
             pair_var = spec.paired_env
         else:
             pair_var = f"{spec.paired_env}_{slot_num}"
-        acct_id = questionary.text(
-            f"  Cloudflare Account ID (find at dash.cloudflare.com → Overview → Account ID):"
-        ).ask()
+        acct_id = lr_text("  Cloudflare Account ID (find at dash.cloudflare.com → Overview → Account ID):")
         if acct_id and acct_id.strip():
             updates[pair_var] = acct_id.strip()
             print(f"  ✓  {pair_var} saved")
@@ -552,10 +544,7 @@ def run_wizard() -> int:
         print("⚠ Detected: your existing config uses agent mode (claude/opencode/gemini-cli).")
         print("  v0.4.0 default is direct mode (free Groq llama-3.1-8b — 14,400 req/day).")
         print()
-        migrate = questionary.confirm(
-            "Switch to direct mode? (recommended)",
-            default=True,
-        ).ask()
+        migrate = lr_confirm("Switch to direct mode? (recommended)", default=True)
         if migrate is None:
             sys.exit(1)
         if migrate:

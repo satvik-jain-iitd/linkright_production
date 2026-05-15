@@ -61,12 +61,10 @@ def test_keys_list_shows_resilience_score(runner, isolated_env):
 
 def test_keys_add_groq_writes_env(runner, isolated_env):
     """Providing a valid Groq key writes it to .env."""
-    from unittest.mock import patch, MagicMock
     fake_key = "gsk_" + "z" * 40
-
-    mock_pw = MagicMock()
-    mock_pw.ask.return_value = fake_key
-    with patch("questionary.password", return_value=mock_pw),          patch("questionary.confirm", return_value=MagicMock(**{"ask.return_value": False})):
+    with patch("linkright.keys.cli._detect_env_keys", return_value=[]), \
+         patch("linkright.keys.cli.lr_password", return_value=fake_key), \
+         patch("linkright.keys.cli.lr_confirm", return_value=False):
         result = runner.invoke(keys_group, ["add", "groq"])
     assert result.exit_code == 0, f"Output: {result.output}"
     managed = ew.read_all_managed(env_path=isolated_env)
@@ -81,13 +79,12 @@ def test_keys_add_unknown_provider(runner, isolated_env):
 
 def test_keys_add_fills_next_slot(runner, isolated_env):
     """Second `keys add groq` fills slot GROQ_API_KEY_1 (first extra slot after primary)."""
-    from unittest.mock import patch, MagicMock
     # Pre-populate primary
     ew.write_keys({"GROQ_API_KEY": "gsk_" + "a" * 40}, env_path=isolated_env)
     fake_key2 = "gsk_" + "y" * 40
-    mock_pw = MagicMock()
-    mock_pw.ask.return_value = fake_key2
-    with patch("questionary.password", return_value=mock_pw),          patch("questionary.confirm", return_value=MagicMock(**{"ask.return_value": False})):
+    with patch("linkright.keys.cli._detect_env_keys", return_value=[]), \
+         patch("linkright.keys.cli.lr_password", return_value=fake_key2), \
+         patch("linkright.keys.cli.lr_confirm", return_value=False):
         result = runner.invoke(keys_group, ["add", "groq"])
     assert result.exit_code == 0, f"Output: {result.output}"
     managed = ew.read_all_managed(env_path=isolated_env)
@@ -117,12 +114,9 @@ def test_keys_add_rejects_when_all_slots_full(runner, isolated_env):
 # ── keys remove ──────────────────────────────────────────────────────────
 
 def test_keys_remove_groq(runner, isolated_env):
-    from unittest.mock import patch, MagicMock
     ew.write_keys({"GROQ_API_KEY": "gsk_" + "a" * 40}, env_path=isolated_env)
-    # Mock questionary.select to return the first available key choice
-    mock_select = MagicMock()
-    mock_select.ask.return_value = "GROQ_API_KEY  (gsk_aa••••••••a)"
-    with patch("questionary.select", return_value=mock_select):
+    # lr_select returns the value directly (not a question object)
+    with patch("linkright.keys.cli.lr_select", return_value="GROQ_API_KEY  (gsk_aa••••••••a)"):
         result = runner.invoke(keys_group, ["remove", "groq"])
     assert result.exit_code == 0, f"Output: {result.output}"
     managed = ew.read_all_managed(env_path=isolated_env)
@@ -212,7 +206,7 @@ def test_all_slots_used_message_shows_correct_count(runner, isolated_env):
             f"Provider {spec.name!r}: expected '{expected_count}' in message, "
             f"got: {result.output!r}"
         )
-        assert f"All {expected_count} slot(s) for {spec.name}" in result.output, (
+        assert f"All {expected_count} slots for {spec.name}" in result.output, (
             f"Provider {spec.name!r}: full message not found in output:\n{result.output}"
         )
 
@@ -306,9 +300,7 @@ def test_keys_import_saves_on_confirm(runner, isolated_env, monkeypatch):
     """keys import saves env keys when user confirms."""
     fake_key = "gsk_" + "z" * 40
     monkeypatch.setenv("GROQ_API_KEY", fake_key)
-    mock_confirm = MagicMock()
-    mock_confirm.ask.return_value = True
-    with patch("questionary.confirm", return_value=mock_confirm):
+    with patch("linkright.keys.cli.lr_confirm", return_value=True):
         result = runner.invoke(keys_group, ["import"])
     assert result.exit_code == 0, f"Output: {result.output}"
     managed = ew.read_all_managed(env_path=isolated_env)
