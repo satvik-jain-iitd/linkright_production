@@ -45,6 +45,15 @@ def login(method: str | None) -> None:
       jwt    — paste a JWT you copied from browser DevTools (advanced)
     """
     from linkright.auth import save_session
+    from linkright.ui import console as _ui_console, pip as _pip
+
+    if _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "let's get you signed in.",
+            pose="listening",
+            sub="we save a JWT in ~/.linkright/session.json — never your password.",
+        ))
+        _ui_console.print()
 
     if method is None:
         click.echo("How would you like to log in?")

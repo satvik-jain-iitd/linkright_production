@@ -82,11 +82,21 @@ def onboard(resume: Path, archetype: str, top_facts: int) -> None:
     root cause of v1 attribution loss. Roles are confirmed BEFORE facts so
     every fact carries role_id from creation.
     """
-    click.echo("━━━ LinkRight Onboarding ━━━")
-    click.echo(f"  Resume: {resume.name}")
-    if archetype:
-        click.echo(f"  Target archetype: {archetype}")
-    click.echo()
+    from linkright.ui import console as _ui_console, pip as _pip
+
+    if _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "tell me where you want to be seen.",
+            pose="pointing",
+            sub=f"resume: {resume.name}" + (f"  ·  archetype: {archetype}" if archetype else ""),
+        ))
+        _ui_console.print()
+    else:
+        click.echo("━━━ LinkRight Onboarding ━━━")
+        click.echo(f"  Resume: {resume.name}")
+        if archetype:
+            click.echo(f"  Target archetype: {archetype}")
+        click.echo()
 
     # Step 1 — Ingest resume as Evidence
     click.echo("→ Step 1: Ingesting resume as Evidence (tier=resume_canonical)...")

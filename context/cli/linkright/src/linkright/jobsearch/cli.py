@@ -121,6 +121,17 @@ def find(top_n: int, location: str | None, grade: str | None, refresh: bool, as_
         pretty_source,
         CapturesUnavailable,
     )
+    from linkright.ui import console as _ui_console, pip as _pip
+
+    # Pip mascot — coffee pose for the long-running scan. Skipped under --json
+    # so the JSON payload stays parseable.
+    if not as_json and _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "brewing matches…",
+            pose="coffee",
+            sub="merging sync.linkright.in feed + local Oracle-PG captures.",
+        ))
+        _ui_console.print()
 
     # ── Source 1: Supabase via website API (scored feed) ────────────────────
     supabase_rows: list[dict] = []

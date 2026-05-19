@@ -648,6 +648,13 @@ def fill_metrics_cmd(run_id: str | None, dry_run: bool) -> None:
     """
     require_profile()
     require_tailor_run()
+    from linkright.ui import console as _ui_console, pip as _pip
+    if _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "your call. metrics first.",
+            pose="thinking",
+        ))
+        _ui_console.print()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:
@@ -680,6 +687,13 @@ def practice_cmd(run_id: str | None, non_interactive: bool) -> None:
     """
     require_profile()
     require_tailor_run()
+    from linkright.ui import console as _ui_console, pip as _pip
+    if _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "interview prep — one bullet at a time.",
+            pose="interview",
+        ))
+        _ui_console.print()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:
@@ -743,6 +757,13 @@ def critique_cmd(run_id: str | None) -> None:
     """
     require_profile()
     require_tailor_run()
+    from linkright.ui import console as _ui_console, pip as _pip
+    if _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "the honest mirror. nothing fatal here.",
+            pose="flat",
+        ))
+        _ui_console.print()
     import sys as _sys
     _HARNESS_PARENT = Path(__file__).resolve().parents[3]
     if str(_HARNESS_PARENT) not in _sys.path:

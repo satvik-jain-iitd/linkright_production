@@ -28,7 +28,11 @@ from linkright.ui.patterns import (  # noqa: F401 — re-exported for callers
     progress_verb,
     muted_detail,
     claude_metadata,
+    # Cluster E4 additions (Pip mascot rollout):
+    cheat_sheet_grid,
+    scoring_grid,
 )
+from linkright.ui import pip  # noqa: F401 — mascot module, used via `pip.render_pip(...)`
 from linkright.ui.layout import (  # noqa: F401 — Cluster E2 layout primitives
     horizontal_divider,
     turn_divider,
