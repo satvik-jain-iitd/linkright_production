@@ -377,3 +377,97 @@ def claude_metadata(
     parts = [f"{k}: {v}" for k, v in pairs]
     line = sep.join(parts)
     con.print(f"{' ' * indent}[tui.muted]· {line}[/]")
+
+
+# ── 11. cheat_sheet_grid — boot-surface 2-column command grid ────────────────
+
+def cheat_sheet_grid(
+    items: Sequence[tuple[str, str]],
+    *,
+    columns: int = 2,
+    indent: int = 2,
+    console: "Console | None" = None,
+) -> None:
+    """N-column grid of ``(command, blurb)`` pairs for the boot cheat sheet.
+
+    Replaces the long ``linkright tldr`` dump on bare ``linkright`` invocation
+    with a curated 6-cell grid — mirrors `linkright tailor / linkright cl / …`
+    from the design board's CliBootArtboard.
+
+    Renders one row at a time, ``columns`` cells wide, each cell formatted as::
+
+        teal-command   muted-blurb
+
+    No header, no box — just a tabular layout via ``rich.table.Table``.
+    """
+    from rich.table import Table
+
+    con = _con(console)
+    table = Table(show_header=False, box=None, padding=(0, 1), pad_edge=False)
+    for _ in range(columns):
+        table.add_column(no_wrap=True)
+        table.add_column(no_wrap=True)
+
+    # Walk items row-by-row, breadth-first across columns.
+    n = len(items)
+    rows = (n + columns - 1) // columns
+    for r in range(rows):
+        cells: list[str] = []
+        for c in range(columns):
+            idx = r + c * rows
+            if idx < n:
+                cmd, blurb = items[idx]
+                cells.append(f"[tui.cyan]{cmd}[/]")
+                cells.append(f"[tui.muted]{blurb}[/]")
+            else:
+                cells.extend(["", ""])
+        table.add_row(*cells)
+
+    if indent:
+        con.print(" " * indent, end="")
+    con.print(table)
+
+
+# ── 12. scoring_grid — practice-surface rubric grid (UAT mock for E4) ────────
+
+def scoring_grid(
+    dims: Sequence[tuple[str, float, str]],
+    *,
+    max_score: float = 10.0,
+    indent: int = 2,
+    console: "Console | None" = None,
+) -> None:
+    """Render an interview-rubric scoring grid: dimension · bar · score · verdict.
+
+    Each ``dim`` is ``(label, score, verdict_color)``::
+
+        scoring_grid([
+            ("Metric clarity",          8.0, "tui.green"),
+            ("Tradeoff depth",          6.0, "tui.gold"),
+            ("Operational specificity", 9.0, "tui.green"),
+            ("Executive framing",       5.0, "tui.coral"),
+        ])
+
+    Bar uses block-fill (``█`` filled, ``░`` empty) of width 10 cells. Verdict
+    colour is caller-provided so the rubric can encode pass/warn/fail per row
+    without this primitive owning a thresholding rule.
+    """
+    from rich.table import Table
+
+    con = _con(console)
+    table = Table(show_header=False, box=None, padding=(0, 2), pad_edge=False)
+    table.add_column(no_wrap=True)  # label
+    table.add_column(no_wrap=True)  # bar
+    table.add_column(no_wrap=True, justify="right")  # score/10
+
+    bar_width = 10
+    for label, score, color in dims:
+        clamped = max(0.0, min(float(max_score), float(score)))
+        filled = round((clamped / max_score) * bar_width)
+        bar = f"[{color}]{'█' * filled}[/][tui.muted]{'░' * (bar_width - filled)}[/]"
+        score_str = f"[{color}]{score:.0f}[/][tui.muted] / {max_score:.0f}[/]"
+        table.add_row(f"[bold]{label}[/]", bar, score_str)
+
+    if indent:
+        con.print(" " * indent, end="")
+    con.print(table)

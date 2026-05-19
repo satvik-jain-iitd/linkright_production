@@ -6207,7 +6207,14 @@ def main():
 
     # ── Steps ──────────────────────────────────────────────────────────
     from linkright.ui import step_start, step_done, step_warn, step_error, step_progress
+    from linkright.ui import pip as _pip, console as _ui_console
 
+    def _pip_phase(line: str, pose: str) -> None:
+        """Emit a per-phase Pip lozenge (no-op in non-TTY contexts)."""
+        if _pip.is_tty_capable():
+            _ui_console.print(_pip.pip_note(line, pose=pose))
+
+    _pip_phase("scanning the resume…", pose="focus")
     step_start("Reading resume PDF", index=1, total=9)
     raw_text = step_00_ingest_pdf()
     step_done(detail=f"{len(raw_text)} chars extracted")
@@ -6228,6 +6235,7 @@ def main():
     # is safe; step_06 (role scoring) still runs after step_03 (embed nuggets).
     jd_text = (INPUTS / "jd.md").read_text(encoding="utf-8")
 
+    _pip_phase("matching the JD…", pose="reading_jd")
     step_start("Analyzing job description", index=3, total=9)
     # UAT cluster-E3 cycle 2 (MED #5): coral progress verb on the slowest LLM call.
     step_progress("Analyzing", telemetry=f"LLM call · {len(jd_text)} chars in")
@@ -6333,12 +6341,14 @@ def main():
     # No dependency on jd_text inside step_02/step_03; safe to defer until here.
     # Reasoning: showing JD interpretation immediately gives the user instant
     # feedback (~3-5s) while these steps (~30-60s of LLM + embed work) crunch.
+    _pip_phase("building the evidence index…", pose="building")
     step_start("Extracting career nuggets", index=4, total=9)
     # UAT cluster-E3 cycle 2 (MED #5): coral progress verb on slow LLM step.
     step_progress("Smooshing resume into atomic nuggets", telemetry="LLM call · 1 batch")
     nuggets = step_02_extract_nuggets(raw_text, parsed)
     step_done(detail=f"{len(nuggets)} nuggets extracted")
 
+    _pip_phase("LLM in the loop…", pose="ai_thinking")
     step_start("Embedding nuggets", index=5, total=9)
     # UAT cluster-E3 cycle 2 (MED #5): coral progress verb on embed step.
     step_progress("Vectorising bullets", telemetry=f"{len(nuggets)} nuggets · fastembed")
@@ -6507,6 +6517,7 @@ def main():
         f"{len(retrieved)} companies.",
     )
 
+    _pip_phase("shipping your summary…", pose="with_star")
     step_start("Writing professional summary", index=9, total=9)
     # UAT cluster-E3 cycle 2 (MED #5): coral progress verb — this is the
     # slowest LLM call before bullet generation, so the user is most

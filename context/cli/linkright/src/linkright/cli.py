@@ -80,9 +80,78 @@ def main(ctx: click.Context) -> None:
     # the alphabetical command list stays one keystroke away as
     # `linkright --help` for users who want the full surface.
     if ctx.invoked_subcommand is None:
-        from linkright.ui import lr_banner, sticky_footer
+        from linkright.ui import (
+            lr_banner,
+            sticky_footer,
+            cheat_sheet_grid,
+            console as _ui_console,
+            pip,
+        )
+        from rich.columns import Columns
+        from rich.table import Table
+
+        def _build_cheat_sheet_panel(items: list[tuple[str, str]]) -> Table:
+            """Build a 2-column grid renderable for placement beside Pip.
+
+            Same content shape as `cheat_sheet_grid` but returns the rich.Table
+            instead of printing — needed so `Columns([pip, panel])` can lay it
+            out beside the mascot.
+            """
+            cols = 2
+            n = len(items)
+            rows = (n + cols - 1) // cols
+            table = Table(show_header=False, box=None, padding=(0, 1), pad_edge=False)
+            for _ in range(cols):
+                table.add_column(no_wrap=True)
+                table.add_column(no_wrap=True)
+            for r in range(rows):
+                cells: list[str] = []
+                for c in range(cols):
+                    idx = r + c * rows
+                    if idx < n:
+                        cmd, blurb = items[idx]
+                        cells.append(f"[tui.cyan]{cmd}[/]")
+                        cells.append(f"[tui.muted]{blurb}[/]")
+                    else:
+                        cells.extend(["", ""])
+                table.add_row(*cells)
+            return table
+
         lr_banner(version=__version__)
-        click.echo(_TLDR)
+
+        # ── Pip + curated cheat sheet (boot surface, per Pip mascot design board)
+        # Full `linkright tldr` cheat sheet stays one keystroke away — this is the
+        # short version that mirrors industry convention (git, kubectl, docker).
+        _CHEAT_ITEMS: list[tuple[str, str]] = [
+            ("linkright tailor",     "tailor resume to JD"),
+            ("linkright cl",         "cover letter from JD"),
+            ("linkright critique",   "LLM critique · 5 fixes"),
+            ("linkright fill",       "fill metric gaps"),
+            ("linkright practice",   "mock interview prep"),
+            ("linkright jobs scout", "scan boards · top jobs"),
+        ]
+        if pip.is_tty_capable():
+            _ui_console.print(
+                Columns(
+                    [pip.render_pip("idle"), _build_cheat_sheet_panel(_CHEAT_ITEMS)],
+                    padding=(0, 4),
+                    expand=False,
+                )
+            )
+            _ui_console.print(
+                "  [tui.muted]tip · [/][tui.cyan]linkright tldr[/][tui.muted]"
+                " for the full cheat sheet · [/][tui.cyan]linkright --help[/]"
+                "[tui.muted] for every command[/]"
+            )
+        else:
+            # Non-TTY (CI, pipes, NO_COLOR): no mascot, no colors — keep the
+            # grid via cheat_sheet_grid which still respects theme.
+            cheat_sheet_grid(_CHEAT_ITEMS)
+            _ui_console.print(
+                "  tip · `linkright tldr` for the full cheat sheet · "
+                "`linkright --help` for every command"
+            )
+
         # Silent version-check: hits PyPI (cached 24h) + appends a small
         # update-available notice. Fully fail-silent on offline / PyPI down /
         # cache corruption. See linkright.lib.version_check for design.
@@ -199,15 +268,88 @@ _register_top_level_shortcuts()
 # ── Ops commands ────────────────────────────────────────────────────────
 
 @main.command("init")
-def init_cmd() -> None:
-    """Bootstrap ~/.linkright/ + MongoDB collections + indices."""
+@click.option("--json", "json_output", is_flag=True,
+              help="Emit raw JSON status dict (preserves pre-v0.12 behaviour for scripts).")
+def init_cmd(json_output: bool) -> None:
+    """Bootstrap ~/.linkright/ + MongoDB collections + indices.
+
+    Default rendering: Pip wave + per-step status_event rows + a success_card
+    summary. Pass --json for the original machine-readable status dict.
+    """
     from linkright.db.migrations import init as run_init
     status = run_init(verbose=False)
-    click.echo(json.dumps(status, indent=2))
+
+    if json_output:
+        click.echo(json.dumps(status, indent=2))
+        if not status.get("mongo_ok"):
+            click.echo("\n⚠ MongoDB unreachable. Install MongoDB 8 CE and start `mongod`.", err=True)
+            sys.exit(1)
+        click.echo("\n✓ LinkRight initialized.")
+        return
+
+    # ── TUI rendering (default) ─────────────────────────────────────────
+    from linkright.ui import (
+        console as _ui_console,
+        pip as _pip,
+        status_event,
+        success_card,
+        TEAL,
+    )
+
+    if _pip.is_tty_capable():
+        _ui_console.print(_pip.pip_note(
+            "welcome — bootstrapping ~/.linkright/ …",
+            pose="wave",
+        ))
+
+    home = status.get("home", "~/.linkright")
+    collections = status.get("collections") or []
+    created = [c.split(":", 1)[1] for c in collections if c.startswith("created:")]
+    existed = [c.split(":", 1)[1] for c in collections if c.startswith("exists:")]
+
+    status_event("~/.linkright/ directories ready", True, home, console=_ui_console)
+    status_event(
+        "MongoDB reachable",
+        bool(status.get("mongo_ok")),
+        status.get("warning", "localhost:27017"),
+        console=_ui_console,
+    )
+    if status.get("mongo_ok"):
+        status_event(
+            "Collections",
+            True,
+            f"{len(created)} created · {len(existed)} already existed",
+            console=_ui_console,
+        )
+        status_event(
+            "Vector indices",
+            True,
+            str(status.get("vector_indices", "attempted")),
+            console=_ui_console,
+        )
+
     if not status.get("mongo_ok"):
-        click.echo("\n⚠ MongoDB unreachable. Install MongoDB 8 CE and start `mongod`.", err=True)
+        _ui_console.print()
+        _ui_console.print(
+            "  [error]⚠ MongoDB unreachable.[/] "
+            "Install MongoDB 8 CE and start `mongod`, then re-run `linkright init`."
+        )
         sys.exit(1)
-    click.echo("\n✓ LinkRight initialized.")
+
+    success_card(
+        title="LinkRight initialized",
+        fields=[
+            ("Home",        home),
+            ("Collections", f"{len(created) + len(existed)} ready"),
+            ("Next",        "linkright setup"),
+        ],
+        next_steps=[
+            ("linkright setup",          "interactive LLM / embedder / PDF wizard"),
+            ("linkright profile create", "build career profile from a resume"),
+            ("linkright doctor",         "verify everything looks green"),
+        ],
+        accent=TEAL,
+    )
 
 
 # ── tldr — quick reference cheat sheet ────────────────────────────────────
@@ -596,11 +738,15 @@ def doctor_cmd(auto_fix: bool) -> None:
     # 11. Render the table
     from linkright.ui import console as _con, horizontal_divider, l_branch_tip, sticky_footer
     from linkright.ui.patterns import status_event
+    from linkright.ui import pip as _pip
     label_width = max(len(label) for label, _, _ in rows)
     # UAT #14: structural horizontal divider wraps the role-based output
     # (user invoked `doctor` → assistant responds with health table below).
     _con.print()
     horizontal_divider(console=_con)
+    if _pip.is_tty_capable():
+        _con.print(_pip.pip_note("scanning your install…", pose="scout"))
+        _con.print()
     _con.print("LinkRight doctor — environment & deps check\n")
     failures = 0
     for label, ok, detail in rows:
