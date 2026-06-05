@@ -39,6 +39,32 @@ def draft_cmd(topic: str, kind: str, length: str) -> None:
     click.echo(md)
 
 
+@content_group.command("compose")
+@click.option("--topic", required=True)
+@click.option("--kind", type=click.Choice(["linkedin_post", "twitter_thread", "blog_outline"]),
+              default="linkedin_post", show_default=True)
+@click.option("--length", type=click.Choice(["short", "medium", "long"]), default="medium", show_default=True)
+@click.option("--max-iters", type=int, default=3, show_default=True)
+@click.option("--threshold", type=float, default=75.0, show_default=True)
+@click.option("--no-ground", is_flag=True, help="Skip career-memory grounding.")
+@click.option("--json", "as_json", is_flag=True, help="Emit the full result as JSON.")
+def compose_cmd(topic: str, kind: str, length: str, max_iters: int,
+                threshold: float, no_ground: bool, as_json: bool) -> None:
+    """Ground, draft, gate, score, and self-correct a piece end to end."""
+    from linkright.content.loop import run_content_loop
+    result = run_content_loop(
+        topic, kind=kind, length=length, max_iters=max_iters,
+        threshold=threshold, ground=not no_ground,
+    )
+    if as_json:
+        from dataclasses import asdict
+        click.echo(json.dumps(asdict(result), indent=2, default=str))
+        return
+    click.echo(result.summary())
+    click.echo("")
+    click.echo(result.draft)
+
+
 @content_group.command("schedule")
 @click.argument("content_id")
 @click.option("--platform", required=True)
