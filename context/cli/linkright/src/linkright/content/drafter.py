@@ -62,9 +62,17 @@ def _system_for(kind: str, voice: dict, length: str) -> str:
     return base + "\nWrite a short piece in markdown."
 
 
-def draft_content(topic: str, kind: str, voice: dict, length: str = "medium") -> str:
-    """Generate a draft, normalize via Oracle if available, persist, return markdown."""
+def draft_content(topic: str, kind: str, voice: dict, length: str = "medium",
+                  evidence: str | None = None) -> str:
+    """Generate a draft, normalize via Oracle if available, persist, return markdown.
+
+    ``evidence`` is an optional career-grounding block (see content.grounding). When
+    present it is appended to the system prompt so the draft stands on real facts.
+    Omitting it preserves the original behaviour exactly.
+    """
     system = _system_for(kind, voice, length)
+    if evidence:
+        system = system + "\n\n" + evidence
     user = f"Topic: {topic}"
     try:
         draft, _usage = chat_with_fallback(system, user, temperature=0.6, max_tokens=2500)
