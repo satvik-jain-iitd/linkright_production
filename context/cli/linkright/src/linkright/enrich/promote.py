@@ -28,6 +28,7 @@ from linkright.profile.v2_store import (
     next_fact_id,
     rebuild_facts_embeddings,
     rebuild_signals_embeddings,
+    refresh_markdown_export,
     save_canonical_profile,
     write_signals,
 )
@@ -116,6 +117,10 @@ def promote_accepted_proposals(
     if profile and (profile_changed or new_facts):
         profile.identity_version += 1 if profile_changed else 0
         save_canonical_profile(profile, snapshot=True)
+
+    # 6. Keep the skills' derived markdown memory in lockstep with this write.
+    if new_facts or signals_updated or profile_changed:
+        refresh_markdown_export()
 
     return {
         "facts_added": len(new_facts),
