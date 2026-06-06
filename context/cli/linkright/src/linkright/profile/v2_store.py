@@ -271,3 +271,32 @@ def rebuild_signals_embeddings(profile_dir: Optional[Path], embed_fn) -> tuple[i
         vecs.append(vec)
     save_embeddings(profile_dir, "signals", ids, vecs)
     return len(ids), (len(vecs[0]) if vecs else 0)
+
+
+def refresh_markdown_export(profile_dir: Optional[Path] = None) -> None:
+    """Best-effort: regenerate the skills' derived markdown memory from this
+    canonical store.
+
+    The linkright-mem skill ships ``export_from_cli.py``, which reads
+    ~/.linkright/profile and writes the human-readable ~/.linkright/memory the
+    skills consume. Call this after a canonical write (onboard, enrich promote)
+    so that derived view never goes stale.
+
+    Never raises. If the export script is absent (no skills install) it is a
+    no-op, and the script itself leaves the markdown untouched when there is no
+    canonical store.
+    """
+    script = (
+        Path.home() / ".claude" / "skills" / "linkright-mem"
+        / "scripts" / "export_from_cli.py"
+    )
+    if not script.exists():
+        return
+    args = ["python3", str(script)]
+    if profile_dir is not None:
+        args += ["--profile", str(profile_dir)]
+    try:
+        import subprocess
+        subprocess.run(args, timeout=30, capture_output=True)
+    except Exception:
+        pass

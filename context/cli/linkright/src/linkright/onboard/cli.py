@@ -45,6 +45,7 @@ from ..profile.v2_store import (
     next_fact_id,
     rebuild_facts_embeddings,
     rebuild_signals_embeddings,
+    refresh_markdown_export,
     save_canonical_profile,
     write_metadata,
     write_signals,
@@ -237,6 +238,8 @@ def onboard(resume: Path, archetype: str, top_facts: int) -> None:
         embedder_tier="fastembed",
         onboarded_at=_now_iso(),
     )
+    # Keep the skills' derived markdown memory in lockstep with this write.
+    refresh_markdown_export()
 
     # Embeddings — facts + signals
     click.echo()
