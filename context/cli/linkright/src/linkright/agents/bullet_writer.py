@@ -15,6 +15,7 @@ from linkright.tools.measure_width import measure_width, MeasureWidthInput
 from linkright.tools.suggest_synonyms import suggest_synonyms, SynonymInput
 from linkright.tools.track_verbs import track_verbs, TrackVerbsInput, TrackVerbsState
 from linkright.tools.score_bullets import ScoredBullet
+from linkright.tools.bullet_quality import check_bullet
 
 
 SYSTEM_PROMPT = """You are a resume bullet point writer. You write in XYZ format:
@@ -41,6 +42,13 @@ REVISE_PROMPT = """The bullet you wrote is {status}. Current fill: {fill}% (targ
 {suggestions}
 
 Rewrite the bullet to be {direction}. Keep XYZ format and the same meaning.
+Return ONLY the revised bullet text (with <b> tags)."""
+
+
+CONTENT_REVISE_PROMPT = """The bullet fits the width but has content weaknesses:
+{issues}
+
+Rewrite it to fix these, keeping XYZ format, the same meaning, and a similar length.
 Return ONLY the revised bullet text (with <b> tags)."""
 
 
@@ -105,41 +113,45 @@ def write_bullets(
         if bullet_html.startswith("- "):
             bullet_html = bullet_html[2:]
 
-        # Width-check loop (max 3 attempts)
+        # Width + content check loop (max 3 attempts)
         for attempt in range(3):
             width_result = measure_width(
                 MeasureWidthInput(text_html=bullet_html, line_type="bullet"),
                 template_config=template_config,
             )
+            content_gate = check_bullet(bullet_html)
 
-            if width_result.status == "PASS":
+            # Both must pass to ship the bullet.
+            if width_result.status == "PASS" and content_gate.passed:
                 break
 
-            # Get synonym suggestions
-            direction = "expand" if width_result.status == "TOO_SHORT" else "trim"
-            syn_result = suggest_synonyms(SynonymInput(
-                text=width_result.rendered_text,
-                current_width=width_result.weighted_total,
-                target_width=width_result.target_95,
-                direction=direction,
-            ))
+            if width_result.status != "PASS":
+                # Width revise (existing path): synonym-guided expand or trim.
+                direction = "expand" if width_result.status == "TOO_SHORT" else "trim"
+                syn_result = suggest_synonyms(SynonymInput(
+                    text=width_result.rendered_text,
+                    current_width=width_result.weighted_total,
+                    target_width=width_result.target_95,
+                    direction=direction,
+                ))
 
-            # Build revision suggestions
-            suggestions = ""
-            if syn_result.suggestions:
-                top_3 = syn_result.suggestions[:3]
-                suggestions = "Synonym suggestions:\n" + "\n".join(
-                    f"  - Replace '{s.original_word}' with '{s.replacement_word}' (delta: {s.width_delta:+.1f})"
-                    for s in top_3
+                suggestions = ""
+                if syn_result.suggestions:
+                    top_3 = syn_result.suggestions[:3]
+                    suggestions = "Synonym suggestions:\n" + "\n".join(
+                        f"  - Replace '{s.original_word}' with '{s.replacement_word}' (delta: {s.width_delta:+.1f})"
+                        for s in top_3
+                    )
+
+                revise_msg = REVISE_PROMPT.format(
+                    status=width_result.status,
+                    fill=width_result.fill_percentage,
+                    suggestions=suggestions,
+                    direction="longer (add detail/context)" if direction == "expand" else "shorter (tighten language)",
                 )
-
-            # Ask Claude to revise
-            revise_msg = REVISE_PROMPT.format(
-                status=width_result.status,
-                fill=width_result.fill_percentage,
-                suggestions=suggestions,
-                direction="longer (add detail/context)" if direction == "expand" else "shorter (tighten language)",
-            )
+            else:
+                # Width is fine, content is weak: targeted content revise.
+                revise_msg = CONTENT_REVISE_PROMPT.format(issues=content_gate.as_feedback())
 
             response = client.messages.create(
                 model="claude-sonnet-4-20250514",
