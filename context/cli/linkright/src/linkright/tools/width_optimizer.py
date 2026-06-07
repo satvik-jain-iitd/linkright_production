@@ -176,29 +176,45 @@ def _optimize_uncached(
 ) -> OptResult:
     """Tune one bullet into the width band, keeping content and metrics intact.
 
-    Strategy follows the reliable-direction asymmetry: compression is
-    deterministic, expansion is not. So a bullet that starts below the band is
-    first expanded to a loose overshoot band (100-110, an easy target), then
-    deterministically compressed down to the ideal 95-100. A bullet already in or
-    over the band goes straight to a single compress-to-ideal pass. Never returns
-    a bullet worse than the input.
-    """
-    start = _measure(html, template_config)
+    Rules-first: a cheap rules-only pass runs before any model call. If rules
+    alone land the bullet in the ok band (90-100) and clean, we stop, no network.
+    Only when rules cannot reach the band do we spend the local model.
 
-    if start.fill_percentage < ok[0]:
-        # Below band, two-phase, overshoot then compress.
-        over, u1, t1 = _tune(html, template_config, metric_ref=html,
-                             target=overshoot, ok=overshoot,
-                             llm_fn=llm_fn, max_iters=max_iters)
-        best_html, u2, t2 = _tune(over, template_config, metric_ref=html,
-                                  target=ideal, ok=ok,
+    When the model is needed, strategy follows the reliable-direction asymmetry:
+    compression is deterministic, expansion is not. So a bullet below the band is
+    first expanded to a loose overshoot band (100-110, an easy target), then
+    deterministically compressed to the ideal 95-100. A bullet in or over the band
+    takes a single compress-to-ideal pass. Never returns a bullet worse than input.
+    """
+    # Phase 0, rules only, no network. Most production bullets land here.
+    rules_html, _, t0 = _tune(html, template_config, metric_ref=html,
+                              target=ideal, ok=ok, llm_fn=None, max_iters=max_iters)
+    rm = _measure(rules_html, template_config)
+    if check_bullet(rules_html).passed and ok[0] <= rm.fill_percentage <= ok[1]:
+        best_html, used_llm, tried = rules_html, False, t0
+    elif llm_fn is not None:
+        # Rules fell short, escalate to the model.
+        start = _measure(html, template_config)
+        if start.fill_percentage < ok[0]:
+            over, _u1, t1 = _tune(html, template_config, metric_ref=html,
+                                  target=overshoot, ok=overshoot,
                                   llm_fn=llm_fn, max_iters=max_iters)
-        used_llm, tried = (u1 or u2), (t1 + t2)
+            llm_html, _u2, t2 = _tune(over, template_config, metric_ref=html,
+                                      target=ideal, ok=ok,
+                                      llm_fn=llm_fn, max_iters=max_iters)
+            tried = t0 + t1 + t2
+        else:
+            llm_html, _u3, t3 = _tune(html, template_config, metric_ref=html,
+                                      target=ideal, ok=ok,
+                                      llm_fn=llm_fn, max_iters=max_iters)
+            tried = t0 + t3
+        # Keep whichever is better, rules result or the model result.
+        if _score(rules_html, template_config, ideal, ok)[0] >= _score(llm_html, template_config, ideal, ok)[0]:
+            best_html, used_llm = rules_html, False
+        else:
+            best_html, used_llm = llm_html, True
     else:
-        # In or over the band, single compress-to-ideal pass.
-        best_html, used_llm, tried = _tune(html, template_config, metric_ref=html,
-                                           target=ideal, ok=ok,
-                                           llm_fn=llm_fn, max_iters=max_iters)
+        best_html, used_llm, tried = rules_html, False, t0
 
     # Never regress below the original.
     if _score(html, template_config, ideal, ok)[0] > _score(best_html, template_config, ideal, ok)[0]:
