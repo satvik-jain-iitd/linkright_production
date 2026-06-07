@@ -216,7 +216,7 @@ def _run_round(session: CoachSession, *, embed_fn) -> None:
 
 def _handle_practice_turn(session: CoachSession, question: str, bundle: rag.RetrievalBundle) -> None:
     """Generate ideal answer, display, log, wait for `next`."""
-    prose, structured = answer_gen.generate_ideal_answer(
+    prose, structured = answer_gen.generate_ideal_answer_checked(
         profile=session.profile, round_type=session.round_type,
         company=session.company, role=session.role,
         question=question, bundle=bundle,
@@ -266,7 +266,7 @@ def _handle_sim_turn(
         if answer.lower() == "done":
             session.force_exit = True
         # Treat empty as skip
-        prose, structured = answer_gen.generate_ideal_answer(
+        prose, structured = answer_gen.generate_ideal_answer_checked(
             profile=session.profile, round_type=session.round_type,
             company=session.company, role=session.role,
             question=question, bundle=bundle,
@@ -290,7 +290,7 @@ def _handle_sim_turn(
     session.history.append({"q": question, "a": answer, "mode": "sim"})
 
     # Background: feedback + ideal + inference (all write to log silently)
-    prose, structured = answer_gen.generate_ideal_answer(
+    prose, structured = answer_gen.generate_ideal_answer_checked(
         profile=session.profile, round_type=session.round_type,
         company=session.company, role=session.role,
         question=question, bundle=bundle,
