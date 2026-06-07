@@ -82,10 +82,15 @@ def write_bullets(
     verb_state = TrackVerbsState()
     written = []
 
-    # Local-first width tuner. Generates candidates from the VPS gemma3:1b when
+    # Local-first width tuner. Generates candidates from the VPS local model when
     # rules cannot reach the band; on any Oracle failure it returns nothing and
     # the optimizer falls back to rules plus accept-relaxed, fully local.
-    width_llm = make_oracle_llm_fn()
+    # Tuned for the noisy shared VPS: the 1.2b variant reloads cold in ~1.5s vs
+    # the 2.6B's 16-33s, so its p95 tail under live traffic is far shorter; n=2
+    # since extra candidates did not move band-hit; 5s fail-fast on eviction.
+    width_llm = make_oracle_llm_fn(
+        n=2, timeout_s=5.0, model="LiquidAI/lfm2.5-1.2b-instruct:latest",
+    )
 
     # Take top N scored bullets
     to_write = scored_bullets[:max_bullets]

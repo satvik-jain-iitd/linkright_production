@@ -93,7 +93,36 @@ def _score(html: str, cfg: dict, ideal, ok):
     return (passed, in_ideal, in_ok, -abs(mid - fill)), fill, m
 
 
+_CACHE: dict = {}
+
+
 def optimize_bullet(
+    html: str,
+    template_config: dict,
+    *,
+    llm_fn: Optional[Callable[[str, object], list[str]]] = None,
+    ideal: tuple[float, float] = (95.0, 100.0),
+    ok: tuple[float, float] = (90.0, 100.0),
+    relaxed: tuple[float, float] = (85.0, 105.0),
+    max_iters: int = 4,
+    use_cache: bool = True,
+) -> OptResult:
+    """Cached entry point. The same bullet and bands returns the prior result,
+    skipping recompute and a repeat model call. Pass use_cache=False to force.
+    """
+    key = (html, ideal, ok, relaxed, max_iters)
+    if use_cache and key in _CACHE:
+        return _CACHE[key]
+    result = _optimize_uncached(
+        html, template_config, llm_fn=llm_fn, ideal=ideal, ok=ok,
+        relaxed=relaxed, max_iters=max_iters,
+    )
+    if use_cache:
+        _CACHE[key] = result
+    return result
+
+
+def _optimize_uncached(
     html: str,
     template_config: dict,
     *,

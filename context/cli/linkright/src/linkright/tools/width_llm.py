@@ -43,12 +43,25 @@ def make_oracle_llm_fn(
     from linkright.llm.oracle import oracle_rewrite, OracleUnavailable
 
     def llm_fn(html: str, m) -> list[str]:
-        direction = "shorter" if getattr(m, "status", "") == "OVERFLOW" else "longer"
+        status = getattr(m, "status", "")
         pct = round(getattr(m, "fill_percentage", 0.0))
+        if status == "OVERFLOW":
+            ask = (
+                f"This bullet is too long, at {pct}% of the line. Shorten it to land at "
+                "95 to 100%. Cut filler and tighten the phrasing. Keep every number and "
+                "every <b> tag exactly as they are."
+            )
+        else:
+            ask = (
+                f"This bullet is too short, at {pct}% of the line. Lengthen it to land at "
+                "95 to 100% by adding the method, the context, or the scope in words. "
+                "Do NOT add any number or metric that is not already in the bullet. Keep "
+                "the existing numbers and <b> tags exactly as they are."
+            )
         user = (
-            f"This bullet is at {pct}% of the line. Make it {direction} so it lands at 95 to 100%.\n"
+            f"{ask}\n"
             f"Bullet: {html}\n"
-            "Return up to 3 rewrites, one per line, each with the same numbers and <b> tags."
+            "Return up to 3 rewrites, one per line, no commentary."
         )
         try:
             resp = oracle_rewrite(user=user, system=_SYSTEM,
