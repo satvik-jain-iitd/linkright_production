@@ -1,11 +1,13 @@
 """Local-model candidate generator for the width optimizer.
 
-Produces rewrite candidates from the local gemma3:1b on the Oracle VPS via
-oracle_rewrite (/lifeos/rewrite). One call returns up to N variants near the
-target width; the optimizer then measures, gates, and picks. The model never
-decides width, it only proposes language. Numbers and banned words are caught
-downstream by the optimizer's metric guard and content gate, so a weak 1b is
-safe here.
+Produces rewrite candidates from a local model on the Oracle VPS via
+oracle_rewrite (/lifeos/rewrite). The backend default is LFM2 (Liquid AI's small,
+CPU-efficient model); pass ``model`` to route to a different allow-listed local
+model, which is how we benchmark LFM variants against each other. One call
+returns up to N variants near the target width; the optimizer then measures,
+gates, and picks. The model never decides width, it only proposes language.
+Numbers and banned words are caught downstream by the optimizer's metric guard
+and content gate, so a small model is safe here.
 
 Returns an ``llm_fn(html, measure_result) -> list[str]`` to inject into
 optimize_bullet. On any Oracle failure it returns an empty list, so the optimizer
@@ -31,8 +33,13 @@ def make_oracle_llm_fn(
     temperature: float = 0.3,
     timeout_s: float = 8.0,
     n: int = 3,
+    model: "str | None" = None,
 ) -> Callable[[str, object], list[str]]:
-    """Build an llm_fn that asks the local model for width-targeted rewrites."""
+    """Build an llm_fn that asks the local model for width-targeted rewrites.
+
+    ``model`` is None for the backend default (LFM2), or an allow-listed model
+    tag to benchmark a specific variant.
+    """
     from linkright.llm.oracle import oracle_rewrite, OracleUnavailable
 
     def llm_fn(html: str, m) -> list[str]:
@@ -45,7 +52,8 @@ def make_oracle_llm_fn(
         )
         try:
             resp = oracle_rewrite(user=user, system=_SYSTEM,
-                                  temperature=temperature, timeout_s=timeout_s)
+                                  temperature=temperature, timeout_s=timeout_s,
+                                  model=model)
         except OracleUnavailable:
             return []
         out: list[str] = []
