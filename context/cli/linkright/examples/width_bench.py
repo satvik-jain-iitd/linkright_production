@@ -37,11 +37,26 @@ CORPUS = [
     "Reduced onboarding time from 14 days to 6 days by redesigning the driver setup wizard end to end",
 ]
 
+# Production regime: bullets as the writer actually produces them, near full line
+# length, needing only a small nudge. This is what the optimizer really sees, the
+# CORPUS above is an adversarial stress set (fragments needing 8x expansion that
+# the writer never emits). Measure band-hit here for the production-relevant number.
+REALISTIC_CORPUS = [
+    "Reduced Walmart Spark driver churn by <b>18%</b> by redesigning the multi step onboarding flow across <b>100K+</b> drivers",
+    "Drove <b>$2.3M</b> in annual savings by owning the Sprinklr CRR data pipeline across <b>4</b> partner teams end to end",
+    "Cut bid turnaround <b>40%</b> by building an AI measurement tool that processed <b>1000+</b> properties every month",
+    "Launched the Navii retention cohort model and weekly readout that lifted activation <b>22%</b> for new consumer users",
+    "Shipped a fabrication guard and evaluation framework for <b>9</b> self hosted models, cutting bad outputs to near zero",
+    "Owned the Use Case Hub roadmap and shipped <b>12</b> features that raised qualified pipeline by <b>2x</b> in two quarters",
+    "Built the GenAI root cause pipeline for Walmart, turning <b>7 day</b> analysis into same day insight on 100K contacts",
+    "Led the Qatar Sharek launch and onboarded <b>40+</b> ministry stakeholders onto a single governed product workflow now",
+]
 
-def run(llm_fn=None, label="rules-only"):
+
+def run(llm_fn=None, label="rules-only", corpus=None):
     rows = []
     lat = []
-    for b in CORPUS:
+    for b in (corpus or CORPUS):
         before = _measure(b, CFG)
         t = time.perf_counter()
         r = optimize_bullet(b, CFG, llm_fn=llm_fn)

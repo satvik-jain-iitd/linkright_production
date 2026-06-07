@@ -25,13 +25,13 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)                                  # width_bench
 sys.path.insert(0, os.path.join(_HERE, "..", "src"))      # linkright package
 
-from width_bench import run  # noqa: E402
+from width_bench import run, REALISTIC_CORPUS  # noqa: E402
 from linkright.tools.width_llm import make_oracle_llm_fn  # noqa: E402
 
 
 def _bench_model(model):
     tag = model or "backend default (LFM2)"
-    fn = make_oracle_llm_fn(timeout_s=8.0, n=3, model=model)
+    fn = make_oracle_llm_fn(timeout_s=5.0, n=2, model=model)
     # Warm once so the first bullet does not pay cold-start (8-12s).
     try:
         fn("Cut churn <b>18%</b>",
@@ -39,7 +39,9 @@ def _bench_model(model):
         print(f"warmed {tag}")
     except Exception as e:
         print(f"warmup skipped for {tag}: {e}")
-    run(llm_fn=fn, label=f"hybrid, model = {tag}")
+    # Production regime, the small-nudge corpus the writer actually emits.
+    run(llm_fn=fn, label=f"hybrid (realistic regime), model = {tag}",
+        corpus=REALISTIC_CORPUS)
 
 
 if __name__ == "__main__":
