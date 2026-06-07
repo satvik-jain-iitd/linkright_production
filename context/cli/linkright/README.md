@@ -56,6 +56,11 @@ cd linkright_production/context/cli/linkright
 pip install -e '.[full,dev]'                 # editable + extras + dev tools
 ```
 
+### Uninstall
+```bash
+pip uninstall linkright
+```
+
 ### Optional — MongoDB (only for DB-backed flows)
 ```bash
 brew tap mongodb/brew

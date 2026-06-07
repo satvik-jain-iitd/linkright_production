@@ -43,3 +43,13 @@ class AliasedGroup(click.Group):
         # Use the real command's canonical name in help / error messages
         _, cmd, args = super().resolve_command(ctx, args)
         return cmd.name, cmd, args
+
+    def format_help(self, ctx, formatter):
+        """Print LinkRight ASCII banner before the standard Click help."""
+        try:
+            from linkright import __version__
+            from linkright.ui import lr_banner
+            lr_banner(version=__version__)
+        except Exception:
+            pass
+        super().format_help(ctx, formatter)

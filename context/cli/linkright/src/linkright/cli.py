@@ -45,23 +45,20 @@ from linkright.coaching_kb.cli import coaching_kb_group
 
 _EPILOG = """\
 \b
-Common workflow:
-  linkright tailor -j jd.md       1. Generate tailored resume
-  linkright cl -j jd.md           2. Generate cover letter (same JD)
-  linkright critique              3. LLM review → issues + fixes
-  linkright fill                  4. Resolve missing-metric gaps
-  linkright practice              5. Interview prep cards
+Job-search workflow:
+  linkright onboard               1. Build career profile from resume (first run)
+  linkright jobs find             2. Browse today's top scored job matches
+  linkright tailor                3. Tailor resume to a JD
+  linkright cl                    4. Generate cover letter (same JD)
+  linkright critique              5. LLM review → issues + fixes
+  linkright fill                  6. Resolve missing-metric gaps
+  linkright practice              7. Interview prep cards
+  linkright interview coach       8. Live mock interview session
 
 \b
 Quick reference:
-  linkright tldr                  cheat sheet
+  linkright tldr                  cheat sheet (7 commands)
   linkright doctor                health check (config + keys + deps)
-
-\b
-Pillars (full names — short aliases also work):
-  linkright resume {tailor | score | improve | practice | critique | fill | plan}
-  linkright cover-letter -j <jd.md>   (alias: cl)
-  linkright profile {create | show | edit-contact | enrich | delete-nugget}
 """
 
 
@@ -123,12 +120,14 @@ def main(ctx: click.Context) -> None:
         # Full `linkright tldr` cheat sheet stays one keystroke away — this is the
         # short version that mirrors industry convention (git, kubectl, docker).
         _CHEAT_ITEMS: list[tuple[str, str]] = [
+            ("linkright onboard",    "build career profile · first run"),
+            ("linkright jobs find",  "today's top scored matches"),
             ("linkright tailor",     "tailor resume to JD"),
             ("linkright cl",         "cover letter from JD"),
             ("linkright critique",   "LLM critique · 5 fixes"),
             ("linkright fill",       "fill metric gaps"),
-            ("linkright practice",   "mock interview prep"),
-            ("linkright jobs scout", "scan boards · top jobs"),
+            ("linkright practice",   "interview prep cards"),
+            ("linkright interview",  "live mock interview"),
         ]
         if pip.is_tty_capable():
             _ui_console.print(
@@ -355,74 +354,21 @@ def init_cmd(json_output: bool) -> None:
 # ── tldr — quick reference cheat sheet ────────────────────────────────────
 
 _TLDR = """\
-LinkRight — Quick Reference (cheat sheet)
+LinkRight — cheat sheet  (linkright --help for every command)
 
-✨ Every command works WITHOUT flags. Just type the command — you'll be
-prompted for anything missing (resume / JD / IDs). Flags below are
-optional shortcuts for power users who don't want the prompts.
+Job-search workflow (most users only need these):
 
-🚀 Common workflow (most users only need these 5):
-  linkright tailor                 Generate tailored resume (prompts for resume + JD)
-  linkright cl                     Generate cover letter (prompts for JD)
-  linkright critique               LLM review → 5 actionable issues
-  linkright fill                   Resolve missing-metric gaps (interactive)
-  linkright practice               Interview prep cards from your resume
+  linkright onboard                First run: build career profile from resume
+  linkright jobs find              Today's top scored job matches
+  linkright tailor                 Tailor resume to a JD
+  linkright cl                     Generate cover letter for a JD
+  linkright critique               LLM review → 5 actionable fixes
+  linkright fill                   Fill metric gaps interactively
+  linkright practice               Interview prep cards
+  linkright interview coach        Live mock interview session
 
-📝 Pillar 1 — Cover letter:
-  linkright cl                                 Prompts for JD (file path or paste)
-  linkright cl --tone formal                   (optional) Formal tone
-  linkright cl --tone enthusiastic             (optional) Enthusiastic tone
-  linkright cl --pdf                           (optional) Also render PDF
-  linkright cl -j jd.md                        (power-user: skip prompt)
-  linkright cover-letter --help                Full option list
-
-🔍 Pillar 2 — Job feed (daily workflow):
-  linkright auth login             Log in to sync.linkright.in (once)
-  linkright auth status            Show current session
-  linkright jobs find              Today's top-10 scored job matches
-  linkright jobs find --top 20     (optional) See more results
-  linkright jobs show              Picker over today's top-20 jobs
-  linkright jobs apply             Pick a job → tailor resume + mark applied
-  linkright jobs status            Pick a job + new state interactively
-  linkright jobs import            Prompts for CSV path
-
-🎯 First-time setup (run once):
-  linkright setup                  Pick LLM / embedder / PDF — guided wizard
-  linkright profile create         Prompts for resume source (file/paste/folder)
-  linkright contact                Verify phone / email / LinkedIn
-
-🔍 Resume inspect:
-  linkright score                  Quality scorecard for latest run
-  linkright profile show           Career memory tree
-  linkright practice -n            Non-interactive prep packet (pipe-friendly)
-
-🛠  Drill into a specific quality dim:
-  linkright improve --target-dim <dim>
-  linkright plan                   Strategy review — confirm bullet plan pre-gen
-
-⚡ Shortcuts (single letter — when you don't want to type):
-  t   tailor       imp / i  improve     fill / f  fill-metrics
-  c   critique     prac / p practice    r         strategy-review
-  s   score        cl       cover-letter          ec / contact edit-contact
-  (jobs group)  jobs f → find    jobs s → status
-
-🩺 Health:
-  linkright doctor                 Check config + API keys + deps
-  linkright --version              Print version
-
-📚 Full reference:
-  linkright --help                 Top-level groups + commands
-  linkright resume --help          All resume subcommands
-  linkright jobs --help            All jobsearch subcommands
-  linkright auth --help            Auth subcommands
-  linkright profile --help         All profile subcommands
-
-Power-user tip: pass flags (-r, -j, --pdf, etc.) to skip prompts —
-useful for CI scripts or when you're cycling through many JDs.
-
-Tip: prefix matching works (git-style) — `linkright tail` resolves to `tailor`
-if no other tail* exists. Aliases never override exact names; long names
-always work too.
+Every command prompts for anything missing — no flags required.
+Re-run `linkright setup` to change LLM / embedder / PDF settings.
 """
 
 

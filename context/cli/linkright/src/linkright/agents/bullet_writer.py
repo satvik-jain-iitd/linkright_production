@@ -16,6 +16,8 @@ from linkright.tools.suggest_synonyms import suggest_synonyms, SynonymInput
 from linkright.tools.track_verbs import track_verbs, TrackVerbsInput, TrackVerbsState
 from linkright.tools.score_bullets import ScoredBullet
 from linkright.tools.bullet_quality import check_bullet
+from linkright.tools.width_optimizer import optimize_bullet
+from linkright.tools.width_llm import make_oracle_llm_fn
 
 
 SYSTEM_PROMPT = """You are a resume bullet point writer. You write in XYZ format:
@@ -80,6 +82,11 @@ def write_bullets(
     verb_state = TrackVerbsState()
     written = []
 
+    # Local-first width tuner. Generates candidates from the VPS gemma3:1b when
+    # rules cannot reach the band; on any Oracle failure it returns nothing and
+    # the optimizer falls back to rules plus accept-relaxed, fully local.
+    width_llm = make_oracle_llm_fn()
+
     # Take top N scored bullets
     to_write = scored_bullets[:max_bullets]
 
@@ -113,106 +120,26 @@ def write_bullets(
         if bullet_html.startswith("- "):
             bullet_html = bullet_html[2:]
 
-        # Width + content check loop (max 3 attempts)
-        for attempt in range(3):
-            width_result = measure_width(
-                MeasureWidthInput(text_html=bullet_html, line_type="bullet"),
-                template_config=template_config,
+        # Width + content tuning: local-first hybrid (rule swaps, then VPS
+        # gemma3:1b candidates), deterministic measure + content gate + metric
+        # guard pick the winner, never-regress, accept-relaxed fallback.
+        # Replaces the old Claude revise loop. See tools/width_optimizer.py.
+        opt = optimize_bullet(bullet_html, template_config, llm_fn=width_llm)
+        bullet_html = opt.html
+        if opt.status == "failed":
+            logger.warning(
+                "Bullet outside width band (%.1f%% fill, path=%s): %s",
+                opt.fill, opt.path, bullet_html[:80],
             )
-            content_gate = check_bullet(bullet_html)
+        elif opt.status == "relaxed":
+            logger.info("Bullet accepted at relaxed width (%.1f%%): %s",
+                        opt.fill, bullet_html[:80])
 
-            # Both must pass to ship the bullet.
-            if width_result.status == "PASS" and content_gate.passed:
-                break
-
-            if width_result.status != "PASS":
-                # Width revise (existing path): synonym-guided expand or trim.
-                direction = "expand" if width_result.status == "TOO_SHORT" else "trim"
-                syn_result = suggest_synonyms(SynonymInput(
-                    text=width_result.rendered_text,
-                    current_width=width_result.weighted_total,
-                    target_width=width_result.target_95,
-                    direction=direction,
-                ))
-
-                suggestions = ""
-                if syn_result.suggestions:
-                    top_3 = syn_result.suggestions[:3]
-                    suggestions = "Synonym suggestions:\n" + "\n".join(
-                        f"  - Replace '{s.original_word}' with '{s.replacement_word}' (delta: {s.width_delta:+.1f})"
-                        for s in top_3
-                    )
-
-                revise_msg = REVISE_PROMPT.format(
-                    status=width_result.status,
-                    fill=width_result.fill_percentage,
-                    suggestions=suggestions,
-                    direction="longer (add detail/context)" if direction == "expand" else "shorter (tighten language)",
-                )
-            else:
-                # Width is fine, content is weak: targeted content revise.
-                revise_msg = CONTENT_REVISE_PROMPT.format(issues=content_gate.as_feedback())
-
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=300,
-                system=SYSTEM_PROMPT,
-                messages=[
-                    {"role": "user", "content": user_msg},
-                    {"role": "assistant", "content": bullet_html},
-                    {"role": "user", "content": revise_msg},
-                ],
-            )
-
-            bullet_html = response.content[0].text.strip().strip('"').strip("'").strip("`")
-            if bullet_html.startswith("- "):
-                bullet_html = bullet_html[2:]
-
-        # Final width measurement
+        # Final measurement for the WrittenBullet record.
         final_width = measure_width(
             MeasureWidthInput(text_html=bullet_html, line_type="bullet"),
             template_config=template_config,
         )
-
-        # ── Width fallback: handle bullets that failed the 3-attempt loop ──
-        if final_width.status != "PASS":
-            fill = final_width.fill_percentage
-            if 85 <= fill <= 105:
-                # Relaxed range — accept with warning
-                logger.warning(
-                    "Bullet accepted at relaxed range (%.1f%% fill, target 90-100%%): %s",
-                    fill, final_width.rendered_text[:80],
-                )
-                # Override status so downstream doesn't flag it
-                # final_width.status remains as-is for transparency in reporting
-            elif fill > 105:
-                # Too long — hard truncate to fit target width
-                logger.error(
-                    "Bullet OVER 105%% fill (%.1f%%) — truncating to fit: %s",
-                    fill, final_width.rendered_text[:80],
-                )
-                # Iteratively remove trailing words until within 105%
-                words = bullet_html.split()
-                while len(words) > 3:
-                    words.pop(-1)
-                    candidate = " ".join(words)
-                    # Ensure we don't break mid-tag
-                    if "<b>" in candidate and "</b>" not in candidate:
-                        candidate += "</b>"
-                    check = measure_width(
-                        MeasureWidthInput(text_html=candidate, line_type="bullet"),
-                        template_config=template_config,
-                    )
-                    if check.fill_percentage <= 100:
-                        bullet_html = candidate
-                        final_width = check
-                        break
-            else:
-                # Too short (<85%) — log error, keep as-is (no good automated fix)
-                logger.error(
-                    "Bullet UNDER 85%% fill (%.1f%%) — no automated fix available: %s",
-                    fill, final_width.rendered_text[:80],
-                )
 
         # Extract and register the leading verb
         first_word = final_width.rendered_text.split()[0].lower() if final_width.rendered_text else "unknown"

@@ -2263,3 +2263,472 @@ context: pdf pass; 1 pages; 234877 bytes
 
 **Gaps:**
 - none
+
+```text
+[2026-05-19T07:09:39Z] step_11_rank — starting
+context: scoring every verbose paragraph using a simplified BRS: specificity (#numbers), proof signal match count, JD-keyword hits, verb strength. Range 0-1. no clusters (legacy) | S3.1 signal-weights: career_level='mid' | S5.1 alignment: brs_only
+```
+
+```text
+[2026-05-19T07:09:39Z] step_11_rank — eval
+context: rank partial; 2 paragraphs scored; clusters=none; mode=brs_only; reqs_embedded=0
+```
+
+**Artifact:** `artifacts/11_ranked_bullets.json`
+
+**Scores:** min=0.55, max=0.70, count=2
+**Distribution:** {0.6: 1, 0.7: 1}
+**S3.2 Clusters:** clusters=none
+**S5.1 Alignment:** mode=brs_only; reqs_embedded=0
+
+**Evaluation:** PARTIAL
+
+**Gaps:**
+- BRS spread is compressed (0.15) — scorer is under-discriminating
+
+```text
+[2026-05-19T07:10:00Z] step_01b_verify_contact_details — result
+context: contact verified; email_ok=True; linkedin_ok=True; fields_edited=[]
+```
+
+```text
+[2026-05-19T12:28:32Z] step_11_rank — starting
+context: scoring every verbose paragraph using a simplified BRS: specificity (#numbers), proof signal match count, JD-keyword hits, verb strength. Range 0-1. no clusters (legacy) | S3.1 signal-weights: career_level='mid' | S5.1 alignment: brs_only
+```
+
+```text
+[2026-05-19T12:28:32Z] step_11_rank — eval
+context: rank partial; 2 paragraphs scored; clusters=none; mode=brs_only; reqs_embedded=0
+```
+
+**Artifact:** `artifacts/11_ranked_bullets.json`
+
+**Scores:** min=0.55, max=0.70, count=2
+**Distribution:** {0.6: 1, 0.7: 1}
+**S3.2 Clusters:** clusters=none
+**S5.1 Alignment:** mode=brs_only; reqs_embedded=0
+
+**Evaluation:** PARTIAL
+
+**Gaps:**
+- BRS spread is compressed (0.15) — scorer is under-discriminating
+
+```text
+[2026-05-19T12:28:32Z] step_00_ingest_pdf — starting
+context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, email + phone present
+```
+
+```text
+[2026-05-19T12:28:32Z] step_00_ingest_pdf — starting
+context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, email + phone present
+```
+
+```text
+[2026-05-19T12:28:32Z] step_00_ingest_pdf — starting
+context: extracting plain text from inputs/resume.pdf via pypdf; expecting > 1.5KB text, email + phone present
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — eval
+context: extraction fail; 0 chars; gaps=3
+```
+
+**Artifact:** `artifacts/00_resume_raw_text.txt` (0 chars)
+
+**Metrics:**
+- Character count: 0
+- Email extracted: `NONE`
+- Phone extracted: `NONE`
+- Bullet chars (• or ●): 0
+- pypdf corruption hits (acronym-splitting artifacts): 0
+- Sample corruption: `[]`
+- Expected profile name loaded: `NONE`
+
+**Evaluation:** FAIL
+
+**Gaps found:**
+- text length 0 < 1500 (PDF may be image-based or extract failed)
+- no email pattern detected
+- no phone pattern detected
+
+**Root-cause hypothesis:**
+pypdf is inserting a space after certain capital letters (M, L, etc.) when the source
+PDF uses bold or kerned glyphs. This is a KNOWN limitation of pypdf vs. production's
+`unpdf` (JS library) — we need to verify whether unpdf handles this better, or if the
+LLM in Step 1 handles "AM L" as "AML" via context. If the LLM cannot recover, this is
+a P0 upstream finding that corrupts every downstream phase (nuggets extracted as
+"AM L" won't cosine-match JD requirement "AML" or "anti money laundering").
+
+**First 500 chars of extracted text:**
+```
+
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:33Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:28:33Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:28:50Z] step_01b_verify_contact_details — result
+context: contact verified; email_ok=True; linkedin_ok=True; fields_edited=[]
+```
+
+```text
+[2026-05-19T12:30:43Z] step_11_rank — starting
+context: scoring every verbose paragraph using a simplified BRS: specificity (#numbers), proof signal match count, JD-keyword hits, verb strength. Range 0-1. no clusters (legacy) | S3.1 signal-weights: career_level='mid' | S5.1 alignment: brs_only
+```
+
+```text
+[2026-05-19T12:30:43Z] step_11_rank — eval
+context: rank partial; 2 paragraphs scored; clusters=none; mode=brs_only; reqs_embedded=0
+```
+
+**Artifact:** `artifacts/11_ranked_bullets.json`
+
+**Scores:** min=0.55, max=0.70, count=2
+**Distribution:** {0.6: 1, 0.7: 1}
+**S3.2 Clusters:** clusters=none
+**S5.1 Alignment:** mode=brs_only; reqs_embedded=0
+
+**Evaluation:** PARTIAL
+
+**Gaps:**
+- BRS spread is compressed (0.15) — scorer is under-discriminating
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:43Z] step_00_ingest_pdf — cache_hit
+context: reusing 00_resume_raw_text.txt (0 bytes)
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — starting
+context: calling Groq 70B with vendored RESUME_PARSE_FALLBACK prompt (same prompt as website /api/onboarding/parse-resume Langfuse key 'resume-parse-structured'); input is 0-char text from Step 0; temp=0.2; expecting markdown with ## EDUCATION / ## SKILLS / ## EXPERIENCE / ## PROJECTS sections
+```
+
+```text
+[2026-05-19T12:30:43Z] step_01_parse_resume — error
+context: LLM call failed across all tier-A providers
+```
+
+```
+No LLM API keys configured. Run `linkright setup` to add a free Groq key (https://console.groq.com — covers ~14,400 tailoring requests/day on the llama-3.1-8b free tier).
+```
+
+```text
+[2026-05-19T12:30:56Z] step_01b_verify_contact_details — result
+context: contact verified; email_ok=True; linkedin_ok=True; fields_edited=[]
+```

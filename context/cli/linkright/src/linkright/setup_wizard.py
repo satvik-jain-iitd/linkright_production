@@ -518,11 +518,18 @@ def _prompt_key_for_slot(
 
 def run_wizard() -> int:
     """Returns shell exit code (0 OK, 1 user-cancel, 2 install/smoke fail)."""
-    print()
-    print("╔════════════════════════════════════════════════════╗")
-    print("║   LinkRight setup wizard                           ║")
-    print("╚════════════════════════════════════════════════════╝")
-    print()
+    from linkright import __version__
+    from linkright.ui import (
+        lr_banner, horizontal_divider, sticky_footer, step_start, step_done,
+        step_warn, step_error, console as _con,
+    )
+    from linkright.ui.layout import tab_bar
+
+    _TABS = ["1 · Embedder", "2 · PDF render", "3 · API keys", "4 · Install"]
+    _HINT = "Enter to select  ·  ↑↓ navigate  ·  Ctrl-C cancel"
+
+    lr_banner(version=__version__, subtitle="Setup wizard — get to a working state in ~1 minute")
+    horizontal_divider(console=_con)
 
     # ── Detect existing config (for migration prompt) ──────────────
     cfg_path = Path.home() / ".linkright" / "config.yaml"
@@ -541,62 +548,73 @@ def run_wizard() -> int:
     # Groq key prompt entirely (no point asking for a key they won't use).
     migrate = True  # default for new installs / non-agent configs
     if old_mode == "agent":
-        print("⚠ Detected: your existing config uses agent mode (claude/opencode/gemini-cli).")
-        print("  v0.4.0 default is direct mode (free Groq llama-3.1-8b — 14,400 req/day).")
-        print()
+        _con.print()
+        _con.print("  [step.warn]⚠[/]  Existing config uses agent mode (claude/opencode/gemini-cli).")
+        _con.print("     v0.4.0 default is direct mode (free Groq llama-3.1-8b — 14,400 req/day).")
+        _con.print()
         migrate = lr_confirm("Switch to direct mode? (recommended)", default=True)
         if migrate is None:
             sys.exit(1)
         if migrate:
             existing.pop("agent_backend", None)
             existing.pop("default_skill_mode", None)
-            print("  ✓ Migrating to direct mode (your old agent_backend is removed).")
-            print()
+            step_done("Migrating to direct mode — agent_backend removed.")
         else:
-            print("  ✓ Keeping agent mode. Skipping Groq key step.")
-            # UAT #22: muted L-branch tip line (replaces raw print).
+            step_done("Keeping agent mode. Skipping Groq key step.")
             try:
                 from linkright.ui import l_branch_tip
                 l_branch_tip("edit ~/.linkright/config.yaml to switch later.")
             except Exception:
-                print("  Tip: edit ~/.linkright/config.yaml to switch later.")
-            print()
+                pass
 
     needs_groq = not (old_mode == "agent" and not migrate)
-    # Total visible steps: embedder + pdf + api-keys (Groq is now inside api-keys)
-    total_steps = 3
-    print(f"You'll see {total_steps} quick choices: embedder \u2022 PDF render \u2022 API keys")
-    print("\u2b50 = recommended choice")
-    print()
 
     # ── No dedicated Groq step — Groq appears as first provider in API keys step ──
     groq_key, ok_groq, msg_groq = "", True, "skipped (enter in API keys step)"
 
-    # ── Decision 1: Embedder ───────────────────────────────────────
-    embedder = _pick(f"1/{total_steps} \u2014 Which embedder?", EMBEDDER_OPTIONS)
-    print()  # visual separator between decisions
+    # ── Step 1: Embedder ───────────────────────────────────────────
+    _con.print()
+    tab_bar(_TABS, current_idx=0, console=_con)
+    _con.print()
+    step_start("Which embedder?")
+    _con.print(f"  [tui.muted]{_HINT}[/]")
+    _con.print()
+    embedder = _pick("Embedder", EMBEDDER_OPTIONS)
+    horizontal_divider(console=_con)
 
-    # ── Decision 2: PDF render ─────────────────────────────────────
-    pdf = _pick(f"2/{total_steps} \u2014 Render PDFs from generated resumes?", PDF_OPTIONS)
+    # ── Step 2: PDF render ─────────────────────────────────────────
+    _con.print()
+    tab_bar(_TABS, current_idx=1, console=_con)
+    _con.print()
+    step_start("Render PDFs from generated resumes?")
+    _con.print(f"  [tui.muted]{_HINT}[/]")
+    _con.print()
+    pdf = _pick("PDF render", PDF_OPTIONS)
+    horizontal_divider(console=_con)
 
-    # ── Decision 4 (hidden): Skill mode (legacy — defaults to "auto") ─
-    skill_mode_key = "auto"
+    # ── Review: show picks before committing ────────────────────────────
+    _con.print()
+    mode_label = "direct (Groq)" if needs_groq else "agent (kept)"
+    emb_display = embedder["key"].replace("_", "-")
+    _con.print(
+        f"  [step.gold]◆[/]  Review  —  "
+        f"embedder: [tui.cyan]{emb_display}[/]  ·  "
+        f"PDF: [tui.cyan]{pdf['key']}[/]  ·  "
+        f"LLM: [tui.cyan]{mode_label}[/]"
+    )
+    _con.print()
 
-    print()
-    print("──────────────────────────────────────────────────────")
-    mode_label = "direct (Groq)" if needs_groq else "agent (kept from 0.3.0)"
-    emb_display = embedder['key'].replace("_", "-")
-    print(f"Picks so far  \u2192  LLM: {mode_label}  \u2022  embedder: {emb_display}  \u2022  PDF: {pdf['key']}")
-    print("──────────────────────────────────────────────────────")
-
-    # ── Decision 5: Multi-provider API keys ───────────────────────
-    # S-6 fix: always pass groq_key so step 4 does not re-prompt for it.
-    # ok_groq failing (smoke/network) must not erase what the user already typed.
+    # ── Step 3: Multi-provider API keys ─────────────────────────────────
+    tab_bar(_TABS, current_idx=2, console=_con)
+    _con.print()
     api_key_updates = run_api_keys_step(existing_groq_key=groq_key if groq_key else "")
+    horizontal_divider(console=_con)
 
-    print()
-    print("──────────────────────────────────────────────────────")
-    print("Installing missing pieces (pip, models, browsers)…")
+    # ── Step 4: Install ──────────────────────────────────────────────────
+    _con.print()
+    tab_bar(_TABS, current_idx=3, console=_con)
+    _con.print()
+    step_start("Installing missing pieces (pip, models, browsers)…")
     failures: list[str] = []
 
     # Embedder pip
@@ -604,81 +622,81 @@ def run_wizard() -> int:
         if embedder.get("import_check") and not _try_import(embedder["import_check"]):
             large_pkg = embedder.get("key") == "sentence_transformers"
             if large_pkg:
-                print(f"  ⬇  Installing {embedder['pip']} (~700 MB, ~2-3 min)…")
+                _con.print(f"  [tui.muted]⬇[/]  Installing {embedder['pip']} (~700 MB, ~2-3 min)…")
             else:
-                print(f"  ⬇  pip install {embedder['pip']}  …")
+                _con.print(f"  [tui.muted]⬇[/]  pip install {embedder['pip']}  …")
             if not _pip_install(embedder["pip"], stream=large_pkg):
                 failures.append(f"pip install {embedder['pip']}")
-                print("     ✗ failed — see install hint at end")
+                step_error(f"pip install {embedder['pip']} failed")
             else:
-                print("     ✓ done")
+                step_done(f"{embedder['pip']} installed")
         else:
-            print(f"  ✓  {embedder['pip']} already installed")
+            step_done(f"{embedder['pip']} already installed")
 
     # PDF render
     if pdf["key"] == "playwright":
-        # Try import; if missing pip install playwright first
         if not _try_import("playwright"):
-            print("  ⬇  pip install playwright  …")
+            _con.print("  [tui.muted]⬇[/]  pip install playwright  …")
             if not _pip_install("playwright"):
                 failures.append("pip install playwright")
-                print("     ✗ failed")
-        # Browser
+                step_error("pip install playwright failed")
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
                 p.chromium.launch().close()
-            print("  ✓  Playwright Chromium ready")
+            step_done("Playwright Chromium ready")
         except Exception:
-            print("  ⬇  playwright install chromium  (~80 MB, ~30 s)…")
+            _con.print("  [tui.muted]⬇[/]  playwright install chromium  (~80 MB, ~30 s)…")
             if not _playwright_install():
                 failures.append("playwright install chromium")
-                print("     ✗ failed")
+                step_error("playwright install chromium failed")
             else:
-                print("     ✓ done")
+                step_done("Chromium installed")
 
-    print()
-    print("Smoke-testing your picks…")
-    print(f"  Groq API key:        {'✓ valid' if ok_groq else '✗'}  {msg_groq if not ok_groq else ''}")
+    # ── Smoke tests ───────────────────────────────────────────────────────
+    _con.print()
+    step_start("Smoke-testing your picks…")
     # Lead-in only on fresh setup — the wizard path may trigger a model
-    # download. `linkright setup --check` (which also calls _smoke_embedder
-    # at line ~733) hits the cache, so we don't claim a download there.
-    # Cache path matches fastembed's `define_cache_dir()`:
-    # FASTEMBED_CACHE_PATH env var > tempfile.gettempdir()/fastembed_cache
-    # (NOT ~/.cache/fastembed — fastembed never writes there by default).
+    # download. `linkright setup --check` hits the cache, so we don't
+    # claim a download there.
     if embedder["key"] == "fastembed":
         _fastembed_cache = Path(
             os.getenv("FASTEMBED_CACHE_PATH")
             or os.path.join(tempfile.gettempdir(), "fastembed_cache")
         )
-        # OSError-safe: permission denied, race, etc. → assume not cached
-        # so we print the lead-in (better to over-explain than silent pause).
         try:
             _cached = _fastembed_cache.exists() and any(_fastembed_cache.iterdir())
         except OSError:
             _cached = False
         if not _cached:
-            print("  Downloading fastembed model from HuggingFace (~67 MB, one-time)…")
+            _con.print("  [tui.muted]⬇[/]  Downloading fastembed model from HuggingFace (~67 MB, one-time)…")
     ok_emb, msg_emb = _smoke_embedder(embedder)
-    print(f"  Embedder ({embedder['key']}): {'✓' if ok_emb else '✗'}  {msg_emb}")
+    if ok_emb:
+        step_done(f"Embedder ({embedder['key']})", detail=msg_emb)
+    else:
+        step_error(f"Embedder ({embedder['key']}): {msg_emb}")
+
     if pdf["key"] == "playwright":
         ok_pdf, msg_pdf = _smoke_pdf()
-        print(f"  PDF (playwright):    {'✓' if ok_pdf else '✗'}  {msg_pdf}")
+        if ok_pdf:
+            step_done("PDF (playwright)", detail=msg_pdf)
+        else:
+            step_error(f"PDF (playwright): {msg_pdf}")
     else:
         ok_pdf = True
-        print("  PDF:                 — skipped (HTML-only output)")
+        step_done("PDF", detail="skipped (HTML-only output)")
 
     # ── Write API keys atomically ────────────────────────────────────
     if api_key_updates:
         try:
             from linkright.keys.env_writer import write_keys
             write_keys(api_key_updates)
-            print(f"  ✓  API keys → ~/.linkright/.env")
+            step_done("API keys → ~/.linkright/.env")
         except Exception as e:
-            print(f"  ✗  Failed to write API keys: {e}")
+            step_error(f"Failed to write API keys: {e}")
             failures.append("api-key write")
 
-    # ── Write config (existing/old_mode/migrate detected earlier in flow) ──
+    # ── Write config ─────────────────────────────────────────────────────
     update_dict = {
         "user_id": existing.get("user_id", "local"),
         "embedder_tier": embedder["key"],
@@ -690,43 +708,46 @@ def run_wizard() -> int:
         update_dict["default_llm_mode"] = "direct"
     existing.update(update_dict)
     cfg_path.write_text(yaml.safe_dump(existing, sort_keys=False))
-    print()
-    print(f"Saved config →  {cfg_path}")
+    step_done("Config saved", detail=str(cfg_path))
+    horizontal_divider(console=_con)
 
-    # ── Final report ────────────────────────────────────────────────
-    print()
+    # ── Final report ───────────────────────────────────────────────────
+    _con.print()
     if failures or not ok_groq or not ok_emb or not ok_pdf:
-        print("⚠️  Setup completed with warnings.")
+        step_warn("Setup completed with warnings.")
         if not ok_groq:
             if "format invalid" in msg_groq:
-                print("   • Groq key format invalid — re-run `linkright setup` with a valid gsk_... key.")
+                _con.print("  [tui.muted]└[/]  Groq key format invalid — re-run `linkright setup` with a valid gsk_... key.")
             else:
-                print(f"   • Groq smoke test failed ({msg_groq}). Key is saved — try `linkright setup --check` once network is available.")
+                _con.print(f"  [tui.muted]└[/]  Groq smoke test failed ({msg_groq}). Key is saved — try `linkright setup --check` once network is available.")
         if not ok_emb:
-            print(f"   • Embedder `{embedder['key']}` smoke failed.")
+            _con.print(f"  [tui.muted]└[/]  Embedder `{embedder['key']}` smoke failed.")
         if not ok_pdf:
-            print("   • PDF render not ready — try `python -m playwright install chromium`")
-        print()
-        print("Once those are fixed, you can run resumes. Smoke check anytime with:")
-        print("   linkright setup --check")
+            _con.print("  [tui.muted]└[/]  PDF render not ready — try `python -m playwright install chromium`")
+        _con.print()
+        _con.print("  Once fixed, run resumes normally. Smoke check anytime:")
+        _con.print("  [tui.cyan]linkright setup --check[/]")
+        sticky_footer(tier=f"v{__version__}", mode="setup", status="completed with warnings", console=_con)
         return 2
 
-    print("✅  Setup complete.")
-    print()
-    print("Recommended next step (one-time, ~30s):")
-    print("   linkright profile create")
-    print("   → caches your resume so every tailor run is 30-60s faster")
-    print()
-    print("Then tailor for any job:")
-    print("   linkright tailor -j path/to/jd.md")
-    print("   (profile cache means -r is optional after first setup)")
-    print()
-    print("To re-run the wizard later:  linkright setup")
-    print("To check current setup:      linkright setup --check")
-    print("To manage API keys:          linkright keys")
+    from linkright.ui import success_card, TEAL
+    success_card(
+        title="Setup complete",
+        fields=[
+            ("Embedder", emb_display),
+            ("PDF",       pdf["key"]),
+            ("LLM mode",  mode_label),
+            ("Config",    str(cfg_path)),
+        ],
+        next_steps=[
+            ("linkright onboard",       "build career profile from your resume (one-time, ~30s)"),
+            ("linkright tailor",        "tailor resume to a JD"),
+            ("linkright setup --check", "verify config anytime"),
+        ],
+        accent=TEAL,
+    )
+    sticky_footer(tier=f"v{__version__}", mode="setup", status="all systems green", console=_con)
     return 0
-
-
 def run_check() -> int:
     """Non-interactive smoke check of current config — `linkright setup --check`."""
     cfg_path = Path.home() / ".linkright" / "config.yaml"

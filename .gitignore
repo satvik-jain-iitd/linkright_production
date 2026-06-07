@@ -96,3 +96,7 @@ worker/tests/prompts/fixtures/career_text_local.txt
 # Planning / documentation (not run-critical)
 specs/
 context/cli/linkright/harness/
+
+# CC frontend reference (extracted strings dump — too big for git)
+cc-frontend-design/_raw_strings.txt
+.gstack/
