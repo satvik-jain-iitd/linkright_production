@@ -15,18 +15,58 @@ from linkright.config import LINKRIGHT_HOME
 SESSION_PATH = LINKRIGHT_HOME / "session.json"
 LINKRIGHT_API = "https://sync.linkright.in"
 
+# B2 (encryption-at-rest): the session JWT is a credential. By default we store
+# it in the OS keychain (macOS Keychain / Linux Secret Service / Windows
+# Credential Manager) via `keyring`, never plaintext on disk. On headless/CI
+# boxes with no keychain backend we fall back to a chmod-600 file (prior
+# behavior — still the CLI norm, cf. aws/gh). Opt out with LR_NO_KEYRING=1.
+_KEYRING_SERVICE = "linkright"
+_KEYRING_USER = "session"
+
 
 def _session_path() -> Path:
     return SESSION_PATH
 
 
-def load_session() -> dict | None:
-    """Return parsed session dict or None if missing / expired."""
-    p = _session_path()
-    if not p.exists():
+def _keyring():
+    """Return a usable keyring module, or None if no real backend is available."""
+    if os.environ.get("LR_NO_KEYRING", "").strip().lower() in ("1", "true", "yes"):
         return None
     try:
-        data = json.loads(p.read_text())
+        import keyring
+        kr = keyring.get_keyring()
+        name = (type(kr).__module__ + "." + type(kr).__name__).lower()
+        if "fail" in name or "null" in name:  # placeholder backends can't store
+            return None
+        return keyring
+    except Exception:
+        return None
+
+
+def load_session() -> dict | None:
+    """Return parsed session dict or None if missing / expired.
+
+    Reads the OS keychain first; falls back to a plaintext file (legacy install
+    or no keychain backend). Either source gets the same expiry check.
+    """
+    blob: str | None = None
+    kr = _keyring()
+    if kr is not None:
+        try:
+            blob = kr.get_password(_KEYRING_SERVICE, _KEYRING_USER)
+        except Exception:
+            blob = None
+    if blob is None:
+        p = _session_path()
+        if p.exists():
+            try:
+                blob = p.read_text()
+            except Exception:
+                blob = None
+    if not blob:
+        return None
+    try:
+        data = json.loads(blob)
     except Exception:
         return None
     expires_at = data.get("expires_at")
@@ -48,16 +88,44 @@ def save_session(data: dict) -> None:
         os.chmod(LINKRIGHT_HOME, 0o700)
     except OSError:
         pass  # some filesystems (FAT32, network mounts) don't support chmod
-    _session_path().write_text(json.dumps(data, indent=2))
-    # Restrict session file to owner read/write only (0o600) — JWT is a credential;
-    # world-readable would allow other users on the same machine to steal the token.
-    os.chmod(_session_path(), 0o600)
+    blob = json.dumps(data, indent=2)
+    kr = _keyring()
+    if kr is not None:
+        try:
+            kr.set_password(_KEYRING_SERVICE, _KEYRING_USER, blob)
+            # Migrated to the keychain — remove any stale plaintext session file.
+            p = _session_path()
+            if p.exists():
+                try:
+                    p.write_text("")  # truncate first: a failed unlink leaves no stale credential
+                    p.unlink()
+                except OSError:
+                    pass
+            return
+        except Exception:
+            pass  # keychain write failed → fall back to chmod-600 file
+    # Fallback: owner read/write only (0o600) — JWT is a credential; world-readable
+    # would let other users on the same machine steal the token.
+    _session_path().write_text(blob)
+    try:
+        os.chmod(_session_path(), 0o600)
+    except OSError:
+        pass
 
 
 def clear_session() -> None:
+    kr = _keyring()
+    if kr is not None:
+        try:
+            kr.delete_password(_KEYRING_SERVICE, _KEYRING_USER)
+        except Exception:
+            pass
     p = _session_path()
     if p.exists():
-        p.unlink()
+        try:
+            p.unlink()
+        except OSError:
+            pass
 
 
 def require_session() -> dict:
