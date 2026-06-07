@@ -93,7 +93,7 @@ def _cosine_scores(query_vec: np.ndarray, ids: np.ndarray,
 
 def _embed_query(topic: str) -> Optional[np.ndarray]:
     try:
-        from linkright.resume.lib.embedder import embed
+        from linkright.embeddings import embed
         vec, _meta = embed(topic)
         if not vec:
             return None

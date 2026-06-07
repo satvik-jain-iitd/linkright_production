@@ -219,12 +219,31 @@ def embed(text: str) -> tuple[Optional[list[float]], dict]:
 
 
 def embed_batch(texts: list[str]) -> list[tuple[Optional[list[float]], dict]]:
-    """Sequential batch (single-call API for upstream compatibility).
-
-    fastembed natively supports batched encoding (faster than one-by-one).
-    Future optimization: add a batched code path here when tier=fastembed.
+    """Embed many texts. Uses fastembed's native batched encoding when that is
+    the active tier (W6 — markedly faster than one-by-one); otherwise falls back
+    to sequential single-text calls. Output order matches input order.
     """
-    out: list[tuple[Optional[list[float]], dict]] = []
+    if not texts:
+        return []
+    if _detect_tier() == "fastembed":
+        try:
+            model = _fastembed_init()
+            t0 = time.time()
+            vecs = list(model.embed(list(texts)))  # one native batched pass
+            dt = round(time.time() - t0, 3)
+            out: list[tuple[Optional[list[float]], dict]] = []
+            for v in vecs:
+                vec = [float(x) for x in v]
+                out.append((vec, {
+                    "tier": "fastembed", "model": "BAAI/bge-small-en-v1.5",
+                    "dim": len(vec), "latency_s": dt, "batched": True,
+                }))
+            if len(out) == len(texts):
+                return out
+        except Exception as e:
+            import sys as _sys
+            print(f"[embedder] batch tier=fastembed failed, falling back: {e}", file=_sys.stderr)
+    out = []
     for t in texts:
         out.append(embed(t))
     return out
