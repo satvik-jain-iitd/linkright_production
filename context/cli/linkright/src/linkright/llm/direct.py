@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import time
 from typing import Optional
@@ -18,7 +19,9 @@ import httpx
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GEMINI_URL_TMPL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    # B1 (key-leak fix): the API key is sent via the x-goog-api-key HEADER, never
+    # in the URL — so it can't surface in a traceback, log, or httpx exception.
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 )
 CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -83,9 +86,36 @@ def _is_cooling(provider: str) -> bool:
     return cool_until > time.time()
 
 
-def _mark_cooling(provider: str, reason: str = "429") -> None:
-    """Mark provider as cooling for _COOLDOWN_SECS. Called on 429/quota error."""
-    _PROVIDER_COOLDOWNS[provider] = time.time() + _COOLDOWN_SECS
+def _retry_after_secs(resp) -> Optional[float]:
+    """Parse a Retry-After header (integer-seconds form) if present and sane.
+
+    HTTP-date form is intentionally unsupported — returns None so the caller
+    falls back to the default jittered cooldown.
+    """
+    raw = resp.headers.get("Retry-After") if resp is not None else None
+    if not raw:
+        return None
+    try:
+        secs = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return secs if secs >= 0 else None
+
+
+def _mark_cooling(provider: str, reason: str = "429", retry_after: Optional[float] = None) -> None:
+    """Mark provider as cooling. Called on 429/quota error.
+
+    B3 (thundering-herd fix): 100k independent CLI processes that 429 at the same
+    instant must NOT all retry at the same instant. We (a) honor the server's
+    Retry-After when given — capped, so a hostile value can't freeze us forever —
+    and (b) apply random jitter so retries spread across a window instead of
+    synchronizing into a stampede against an already-rate-limited provider.
+    """
+    base = _COOLDOWN_SECS
+    if retry_after is not None:
+        base = min(retry_after, _COOLDOWN_SECS * 5)  # honor server, cap runaway
+    delay = random.uniform(base, base * 1.5)   # jitter UP only — never retry before Retry-After
+    _PROVIDER_COOLDOWNS[provider] = time.time() + delay
 
 
 def _clear_cooling(provider: str) -> None:
@@ -269,7 +299,7 @@ def gemini_chat(
     """Single Gemini generateContent call. Returns (text, usage_dict)."""
     api_key = os.environ["GEMINI_API_KEY"]
     model = model or os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-    url = GEMINI_URL_TMPL.format(model=model, key=api_key)
+    url = GEMINI_URL_TMPL.format(model=model)
     # Gemini uses a single contents array; system prompt goes in systemInstruction.
     payload = {
         "systemInstruction": {"role": "system", "parts": [{"text": system}]},
@@ -280,7 +310,7 @@ def gemini_chat(
             "responseMimeType": "text/plain",
         },
     }
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     t0 = time.time()
     with httpx.Client(timeout=120.0) as client:
         resp = client.post(url, json=payload, headers=headers)
@@ -380,7 +410,7 @@ def _gemini_call(
     When provided, Gemini guarantees the response is a valid JSON object matching
     the schema. Eliminates commentary leaks ("I can only generate..." prose).
     """
-    url = GEMINI_URL_TMPL.format(model=model, key=api_key)
+    url = GEMINI_URL_TMPL.format(model=model)
     gen_config: dict = {
         "temperature": temperature,
         "maxOutputTokens": max_output_tokens,
@@ -394,7 +424,7 @@ def _gemini_call(
         "generationConfig": gen_config,
     }
     det_applied = _apply_deterministic_overrides(payload, gemini_shape=True)
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
     t0 = time.time()
     with httpx.Client(timeout=180.0) as client:
         resp = client.post(url, json=payload, headers=headers)
@@ -817,6 +847,12 @@ def openrouter_chat(
     matching the pattern used by Groq/Cerebras/SambaNova/Z.ai. On per-key 429 or
     402-credits-exhausted, marks that key cooling and tries the next one.
     """
+    # W1 ($0-promise guard): OpenRouter is the ONLY paid provider in the cascade.
+    # Default is free-only — paid must be explicitly opted into (LR_ALLOW_PAID=1),
+    # and even then a rolling monthly budget caps spend. Fails closed so 100k
+    # users never get a surprise bill on their own key.
+    from .budget import ensure_paid_allowed, record_spend
+    ensure_paid_allowed("openrouter")
     keys = _collect_keys("OPENROUTER_API_KEY")
     if not keys:
         raise LLMError("OPENROUTER_API_KEY not set; cannot call OpenRouter")
@@ -862,7 +898,7 @@ def openrouter_chat(
                     continue
             dt = time.time() - t0
             if resp.status_code == 429:
-                _mark_cooling(tag, "429")
+                _mark_cooling(tag, "429", retry_after=_retry_after_secs(resp))
                 last_err = LLMError(f"OpenRouter {tag} 429: rate limited")
                 continue
             if resp.status_code != 200:
@@ -881,6 +917,9 @@ def openrouter_chat(
                 "deterministic_applied": det_applied,
                 "deterministic_seed_supported": True,
             }
+            record_spend("openrouter", model,
+                         usage.get("prompt_tokens") or 0,
+                         usage.get("completion_tokens") or 0)
             return text, usage
         except LLMError:
             raise

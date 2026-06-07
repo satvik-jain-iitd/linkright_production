@@ -46,6 +46,7 @@ dependencies = [
     "rich>=13.0",
     "inquirerpy>=0.3.4",
     "websockets>=12.0",  # Sprint D: `linkright watch` CDP WebSocket client
+    "keyring>=24",       # B2: OS-keychain storage for the session JWT (file fallback)
 ]
 
 [project.urls]
