@@ -41,10 +41,18 @@ def oracle_rewrite(
     system: str = "",
     temperature: float = 0.2,
     timeout_s: float = 60.0,
+    model: Optional[str] = None,
 ) -> LLMResponse:
-    """Short-form rewrite via /lifeos/rewrite (gemma3:1b). Used for bullet width trim."""
+    """Short-form rewrite via /lifeos/rewrite. Used for bullet width tuning.
+
+    The backend default is the local LFM2 model (see oracle-backend REWRITE_MODEL).
+    Pass ``model`` to route to a different allow-listed local model, e.g. to
+    benchmark an LFM variant against the default.
+    """
     url, secret = _oracle_config()
     payload = {"prompt": user, "system": system, "temperature": temperature}
+    if model:
+        payload["model"] = model
     t0 = time.time()
     with httpx.Client(timeout=timeout_s) as client:
         resp = client.post(
