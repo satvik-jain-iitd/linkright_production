@@ -451,8 +451,11 @@ def collect(run_dir: Path, retry_map: Optional[dict[str, int]] = None) -> dict:
                             "est_cost_usd": 0.0,
                         })
                         p_fail["failed"] += 1
-                        # Shorten error for trace
-                        err_short = err[:60] + "…" if len(err) > 60 else err
+                        # W3: provider error text can echo the prompt (PII).
+                        # Drop quoted spans before shortening for the trace.
+                        import re as _re
+                        _safe = _re.sub(r'["\'].*?["\']', '"…"', err)
+                        err_short = _safe[:60] + "…" if len(_safe) > 60 else _safe
                         chain_trace.append(f"{ep} ✗ ({err_short})")
                     else:
                         chain_trace.append(f"{ep} ✓")

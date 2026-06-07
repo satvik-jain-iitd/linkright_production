@@ -36,6 +36,27 @@ def _oracle_config() -> tuple[str, str]:
     return url, secret
 
 
+def _post_retry(endpoint: str, payload: dict, headers: dict, timeout_s: float,
+                attempts: int = 2) -> "httpx.Response":
+    """POST to an Oracle endpoint, retrying transient NETWORK errors (W2).
+
+    Retries only httpx network errors (timeouts, connection resets) with a short
+    backoff — never a non-200 HTTP status, which is deterministic. The shared VPS
+    occasionally blips under co-tenant load; one retry absorbs that. Low ceiling
+    + linear backoff so this never becomes its own retry storm.
+    """
+    last: Optional[Exception] = None
+    for i in range(attempts):
+        try:
+            with httpx.Client(timeout=timeout_s) as client:
+                return client.post(endpoint, json=payload, headers=headers)
+        except httpx.RequestError as e:
+            last = e
+            if i < attempts - 1:
+                time.sleep(0.4 * (i + 1))
+    raise OracleUnavailable(f"Oracle network error after {attempts} attempts: {last}")
+
+
 def oracle_rewrite(
     user: str,
     system: str = "",
@@ -54,12 +75,8 @@ def oracle_rewrite(
     if model:
         payload["model"] = model
     t0 = time.time()
-    with httpx.Client(timeout=timeout_s) as client:
-        resp = client.post(
-            f"{url}/lifeos/rewrite",
-            json=payload,
-            headers={"Authorization": f"Bearer {secret}"},
-        )
+    resp = _post_retry(f"{url}/lifeos/rewrite", payload,
+                       {"Authorization": f"Bearer {secret}"}, timeout_s)
     if resp.status_code != 200:
         raise OracleUnavailable(f"Oracle rewrite {resp.status_code}: {resp.text[:300]}")
     data = resp.json()
@@ -81,12 +98,8 @@ def oracle_generate(
     url, secret = _oracle_config()
     payload = {"prompt": user, "system": system, "temperature": temperature}
     t0 = time.time()
-    with httpx.Client(timeout=timeout_s) as client:
-        resp = client.post(
-            f"{url}/lifeos/generate",
-            json=payload,
-            headers={"Authorization": f"Bearer {secret}"},
-        )
+    resp = _post_retry(f"{url}/lifeos/generate", payload,
+                       {"Authorization": f"Bearer {secret}"}, timeout_s)
     if resp.status_code != 200:
         raise OracleUnavailable(f"Oracle generate {resp.status_code}: {resp.text[:300]}")
     data = resp.json()
@@ -103,12 +116,8 @@ def oracle_embed(texts: list[str], timeout_s: float = 60.0) -> list[list[float]]
     url, secret = _oracle_config()
     endpoint = "embed-batch" if len(texts) > 1 else "embed"
     payload = {"texts": texts} if len(texts) > 1 else {"text": texts[0]}
-    with httpx.Client(timeout=timeout_s) as client:
-        resp = client.post(
-            f"{url}/lifeos/{endpoint}",
-            json=payload,
-            headers={"Authorization": f"Bearer {secret}"},
-        )
+    resp = _post_retry(f"{url}/lifeos/{endpoint}", payload,
+                       {"Authorization": f"Bearer {secret}"}, timeout_s)
     if resp.status_code != 200:
         raise OracleUnavailable(f"Oracle embed {resp.status_code}: {resp.text[:300]}")
     data = resp.json()
