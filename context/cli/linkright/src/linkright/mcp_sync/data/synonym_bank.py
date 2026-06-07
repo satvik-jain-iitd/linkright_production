@@ -1,55 +1,70 @@
 """Synonym bank for width optimization.
 
-Contains word replacements with delta widths (in digit character-units).
-Positive delta = expansion, negative delta = compression.
+Word replacements with delta widths in digit character-units.
+Positive delta = expansion (use when a bullet is too short).
+Negative delta = compression (use when a bullet is too long).
 
-Extracted from Section 3.4 of SPEC-v2-resume-mcp.
+Deltas are computed from data/roboto_weights.py (the same table measure_width
+uses), so they stay consistent with the measurer. Regenerate via the helper in
+tools/build_synonym_bank notes if the font table changes.
+
+House rules: no banned words here. The bank never suggests a replacement that the
+content gate (tools/bullet_quality.py) would reject, e.g. utilize or spearhead.
+Replacements stay ATS-readable, no aggressive abbreviations like "x-func".
 """
 
 SYNONYM_BANK = {
     "expand": [
         # (original, replacement, delta_digit_units)
-        ("led", "directed", 3.5),
-        ("cut", "reduced", 2.3),
-        ("ran", "managed", 2.8),
-        ("built", "developed", 3.1),
-        ("set", "established", 5.8),
-        ("got", "acquired", 3.9),
-        ("for", "enabling", 3.9),
-        ("via", "through", 2.1),
-        ("by", "through", 3.1),
-        ("use", "utilize", 2.8),
-        ("big", "significant", 5.2),
-        ("key", "critical", 2.9),
-        ("new", "innovative", 4.8),
-        ("top", "premier", 2.6),
-        ("fix", "remediate", 4.1),
-        ("own", "spearhead", 4.8),
-        ("aid", "facilitate", 4.5),
-        ("drop", "reduction", 3.2),
-        ("make", "develop", 2.4),
-        ("grow", "accelerate", 4.2),
+        ("use", "deploy", 2.73),
+        ("led", "directed", 4.38),
+        ("cut", "reduced", 4.07),
+        ("ran", "managed", 5.08),
+        ("built", "developed", 4.97),
+        ("set", "established", 6.96),
+        ("got", "obtained", 4.59),
+        ("big", "significant", 6.07),
+        ("key", "critical", 2.58),
+        ("new", "innovative", 5.37),
+        ("fix", "resolved", 5.07),
+        ("aid", "supported", 6.08),
+        ("grew", "accelerated", 5.65),
+        ("made", "developed", 4.06),
+        ("own", "operated", 4.07),
+        ("top", "leading", 3.23),
+        ("drop", "reduction", 4.17),
+        ("ship", "delivered", 4.24),
+        ("plan", "designed", 4.0),
+        ("help", "enabled", 3.07),
+        ("cut", "decreased", 5.86),
+        ("won", "secured", 3.06),
+        ("ran", "operated", 4.87),
+        ("set up", "established", 4.31),
     ],
     "trim": [
-        ("implementation", "launch", -5.5),
-        ("orchestrated", "led", -5.2),
-        ("development", "dev work", -3.2),
-        ("approximately", "~", -7.0),
-        ("across the organization", "org-wide", -6.1),
-        ("in collaboration with", "with", -9.5),
-        ("was responsible for", "managed", -8.7),
-        ("resulting in", "yielding", -1.8),
-        ("contributing to", "driving", -3.4),
-        ("significant", "key", -5.2),
-        ("comprehensive", "full", -6.2),
-        ("subsequently", "then", -4.8),
-        ("establishing", "setting", -2.8),
-        ("transformation", "shift", -6.0),
-        ("infrastructure", "systems", -4.8),
-        ("demonstrated", "showed", -3.6),
-        ("stakeholders", "leaders", -3.2),
-        ("cross-functional", "x-func", -4.5),
-        ("improvement", "gain", -4.8),
-        ("performance", "output", -3.2),
+        ("implementation", "rollout", -7.78),
+        ("orchestrated", "led", -8.26),
+        ("approximately", "about", -7.15),
+        ("in collaboration with", "with", -13.55),
+        ("was responsible for", "led", -13.63),
+        ("resulting in", "yielding", -2.83),
+        ("contributing to", "driving", -6.91),
+        ("significant", "major", -3.88),
+        ("comprehensive", "full", -10.23),
+        ("subsequently", "later", -7.42),
+        ("establishing", "building", -3.38),
+        ("transformation", "overhaul", -5.23),
+        ("infrastructure", "systems", -4.56),
+        ("demonstrated", "showed", -5.4),
+        ("stakeholders", "partners", -3.72),
+        ("improvement", "gain", -7.65),
+        ("performance", "results", -5.02),
+        ("utilization", "use", -5.45),
+        ("additional", "extra", -3.96),
+        ("prior to", "before", -0.83),
+        ("numerous", "many", -3.73),
+        ("responsible for", "led", -9.87),
+        ("cross-functional", "cross-team", -4.09),
+        ("development", "build-out", -3.49),
     ],
 }
