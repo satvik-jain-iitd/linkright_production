@@ -147,6 +147,7 @@ def generate_ideal_answer(
     question: str,
     bundle: RetrievalBundle,
     model: Optional[str] = None,
+    feedback: str = "",
 ) -> tuple[str, str]:
     """Returns (display_prose, structured_table_md).
 
@@ -154,6 +155,10 @@ def generate_ideal_answer(
                    aloud. Prefixed with ⚑ note when bundle.has_non_resume_tier.
     structured_table_md: 2-column intent | script table — for coaching log
                          only, NEVER displayed on screen.
+
+    ``feedback`` is an optional revision note (from the self-correct loop in
+    generate_ideal_answer_checked). When present it is appended to the prompt so
+    the model fixes the named issues. Omitting it preserves original behaviour.
     """
     facts_block = _facts_block(bundle)
     atoms_block = _atoms_block(bundle)
@@ -183,6 +188,11 @@ def generate_ideal_answer(
         f"SUPPORTING ATOMS (deeper context):\n{atoms_block}\n\n"
         "Generate the ideal answer JSON."
     )
+    if feedback:
+        user += (
+            "\n\nThe previous draft failed these checks, fix them while keeping "
+            "every claim grounded in the candidate facts above:\n" + feedback
+        )
 
     schema = {
         "type": "object",
@@ -209,6 +219,43 @@ def generate_ideal_answer(
             "they'll probe it fresh.\n\n" + prose
         )
 
+    return prose, table
+
+
+def generate_ideal_answer_checked(
+    *,
+    profile: SessionProfile,
+    round_type: str,
+    company: str,
+    role: str,
+    question: str,
+    bundle: RetrievalBundle,
+    model: Optional[str] = None,
+    max_iters: int = 2,
+) -> tuple[str, str]:
+    """Self-correcting ideal answer.
+
+    Generates the answer, runs the deterministic per-answer gate against the
+    candidate's grounding facts, and revises up to ``max_iters`` until the answer
+    clears the gate or iterations run out. Same (prose, table) return shape as
+    generate_ideal_answer, so callers can swap it in directly.
+    """
+    from .answer_quality import check_ideal_answer
+
+    grounding = _facts_block(bundle) + "\n" + _atoms_block(bundle)
+    prose, table = generate_ideal_answer(
+        profile=profile, round_type=round_type, company=company, role=role,
+        question=question, bundle=bundle, model=model,
+    )
+    for _ in range(max_iters):
+        gate = check_ideal_answer(prose, grounding)
+        if gate.passed:
+            break
+        prose, table = generate_ideal_answer(
+            profile=profile, round_type=round_type, company=company, role=role,
+            question=question, bundle=bundle, model=model,
+            feedback=gate.as_feedback(),
+        )
     return prose, table
 
 
