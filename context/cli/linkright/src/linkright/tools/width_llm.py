@@ -53,10 +53,11 @@ def make_oracle_llm_fn(
             )
         else:
             ask = (
-                f"This bullet is too short, at {pct}% of the line. Lengthen it to land at "
-                "95 to 100% by adding the method, the context, or the scope in words. "
-                "Do NOT add any number or metric that is not already in the bullet. Keep "
-                "the existing numbers and <b> tags exactly as they are."
+                f"This bullet is too short, at {pct}% of the line. Lengthen it so it lands "
+                "slightly OVER the line, in the 100 to 110% range, by adding the method, "
+                "the context, or the scope in words. Writing a little long is good, it will "
+                "be tightened afterward. Do NOT add any number or metric that is not already "
+                "in the bullet. Keep the existing numbers and <b> tags exactly as they are."
             )
         user = (
             f"{ask}\n"

@@ -122,31 +122,20 @@ def optimize_bullet(
     return result
 
 
-def _optimize_uncached(
-    html: str,
-    template_config: dict,
-    *,
-    llm_fn: Optional[Callable[[str, object], list[str]]] = None,
-    ideal: tuple[float, float] = (95.0, 100.0),
-    ok: tuple[float, float] = (90.0, 100.0),
-    relaxed: tuple[float, float] = (85.0, 105.0),
-    max_iters: int = 4,
-) -> OptResult:
-    """Tune one bullet into the width band, keeping content and metrics intact.
-
-    Tracks a global best and never returns a bullet worse than the input. Each
-    iteration the current best plus its fresh candidates compete on the same
-    key; the loop stops when nothing beats the current best.
+def _tune(start, template_config, *, metric_ref, target, ok, llm_fn, max_iters):
+    """Move ``start`` toward the ``target`` band. Global-best, never-regress,
+    metric-safe against ``metric_ref`` (the true original, not an intermediate).
+    Returns (best_html, used_llm, candidates_tried).
     """
-    cur = html
-    best_key, _, _ = _score(html, template_config, ideal, ok)
-    best_html = html
+    cur = start
+    best_key, _, _ = _score(start, template_config, target, ok)
+    best_html = start
     tried = 0
     used_llm = False
 
     for _ in range(max_iters):
-        key, fill, m = _score(cur, template_config, ideal, ok)
-        if key[0] == 1 and key[1] == 1:   # content clean and ideal width
+        key, fill, m = _score(cur, template_config, target, ok)
+        if key[0] == 1 and key[1] == 1:   # content clean and inside target
             best_html, best_key = cur, key
             break
 
@@ -161,16 +150,59 @@ def _optimize_uncached(
             candidates += [c for c in llm_cands if c and c != cur]
         tried += len(candidates)
 
-        # Compete the current bullet against every metric-safe candidate.
-        pool = [cur] + [c for c in candidates if _metrics_preserved(html, c)]
-        ranked = sorted(((_score(c, template_config, ideal, ok)[0], c) for c in pool),
+        pool = [cur] + [c for c in candidates if _metrics_preserved(metric_ref, c)]
+        ranked = sorted(((_score(c, template_config, target, ok)[0], c) for c in pool),
                         key=lambda x: x[0], reverse=True)
         top_key, top_html = ranked[0]
         if top_key > best_key:
             best_key, best_html = top_key, top_html
         if top_html == cur:
-            break          # no candidate beat the current, stop
+            break
         cur = top_html
+
+    return best_html, used_llm, tried
+
+
+def _optimize_uncached(
+    html: str,
+    template_config: dict,
+    *,
+    llm_fn: Optional[Callable[[str, object], list[str]]] = None,
+    ideal: tuple[float, float] = (95.0, 100.0),
+    ok: tuple[float, float] = (90.0, 100.0),
+    relaxed: tuple[float, float] = (85.0, 105.0),
+    overshoot: tuple[float, float] = (100.0, 110.0),
+    max_iters: int = 4,
+) -> OptResult:
+    """Tune one bullet into the width band, keeping content and metrics intact.
+
+    Strategy follows the reliable-direction asymmetry: compression is
+    deterministic, expansion is not. So a bullet that starts below the band is
+    first expanded to a loose overshoot band (100-110, an easy target), then
+    deterministically compressed down to the ideal 95-100. A bullet already in or
+    over the band goes straight to a single compress-to-ideal pass. Never returns
+    a bullet worse than the input.
+    """
+    start = _measure(html, template_config)
+
+    if start.fill_percentage < ok[0]:
+        # Below band, two-phase, overshoot then compress.
+        over, u1, t1 = _tune(html, template_config, metric_ref=html,
+                             target=overshoot, ok=overshoot,
+                             llm_fn=llm_fn, max_iters=max_iters)
+        best_html, u2, t2 = _tune(over, template_config, metric_ref=html,
+                                  target=ideal, ok=ok,
+                                  llm_fn=llm_fn, max_iters=max_iters)
+        used_llm, tried = (u1 or u2), (t1 + t2)
+    else:
+        # In or over the band, single compress-to-ideal pass.
+        best_html, used_llm, tried = _tune(html, template_config, metric_ref=html,
+                                           target=ideal, ok=ok,
+                                           llm_fn=llm_fn, max_iters=max_iters)
+
+    # Never regress below the original.
+    if _score(html, template_config, ideal, ok)[0] > _score(best_html, template_config, ideal, ok)[0]:
+        best_html = html
 
     # Classify the global best, fully local fallback chain.
     m = _measure(best_html, template_config)
